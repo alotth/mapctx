@@ -17,12 +17,14 @@ README-DEV.md
 # Logs
 .logs/
 
-# Development scripts
-scripts/
-
 # tasks-sync local state/build artifacts
 .tasks-sync/
 task-sync/dist/
+
+# local sync state/config
+.kanban-sync-engine/
+*.local.json
+*.dev.local.json
 
 # temp files
 temp/
