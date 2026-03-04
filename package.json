@@ -1,5 +1,5 @@
 {
-  "name": "mapctx",
+  "name": "mapctx-monorepo",
   "private": true,
   "workspaces": [
     "packages/*"

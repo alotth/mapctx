@@ -13,10 +13,10 @@ export function loadConfig(options: SyncOptions = {}): { config: SyncConfig; con
   const cwd = process.cwd();
   const configPath = options.configPath
     ? path.resolve(cwd, options.configPath)
-    : path.resolve(cwd, 'kanban-sync-engine.config.json');
+    : path.resolve(cwd, 'mapcs.config.json');
 
   if (!fs.existsSync(configPath)) {
-    throw new Error(`Config not found: ${configPath}. Create kanban-sync-engine.config.json from kanban-sync-engine/kanban-sync-engine.config.example.json.`);
+    throw new Error(`Config not found: ${configPath}. Create mapcs.config.json from mapcs.config.example.json.`);
   }
 
   const raw = fs.readFileSync(configPath, 'utf8');

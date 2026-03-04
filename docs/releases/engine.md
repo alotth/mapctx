@@ -22,8 +22,8 @@ Release target: npm package `@mapctx/sync-engine`.
 3. Create and push tag:
 
    ```bash
-   git tag sync-v0.1.3
-   git push origin sync-v0.1.3
+   git tag sync-v0.0.1
+   git push origin sync-v0.0.1
    ```
 
 ## Required Secrets

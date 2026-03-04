@@ -1,4 +1,4 @@
-# kanban-sync-engine Cheat Sheet
+# mapcs Cheat Sheet
 
 ## Auth
 
@@ -10,36 +10,36 @@ gh auth refresh -h github.com -s repo,read:project,project
 ## Daily flow
 
 ```bash
-kanban-sync-engine pull
-kanban-sync-engine status
-kanban-sync-engine push
+mapcs pull
+mapcs status
+mapcs push
 ```
 
 ## Safe preview
 
 ```bash
-kanban-sync-engine pull --dry-run
-kanban-sync-engine push --dry-run
+mapcs pull --dry-run
+mapcs push --dry-run
 ```
 
 ## Reconciliation
 
 ```bash
-kanban-sync-engine reconcile --list
-kanban-sync-engine reconcile T-002
-kanban-sync-engine reconcile T-002 --accept local
-kanban-sync-engine reconcile T-002 --accept remote
-kanban-sync-engine push
+mapcs reconcile --list
+mapcs reconcile T-002
+mapcs reconcile T-002 --accept local
+mapcs reconcile T-002 --accept remote
+mapcs push
 ```
 
 ## Bootstrap
 
 ```bash
-kanban-sync-engine bootstrap --from local --dry-run --confirm
-kanban-sync-engine bootstrap --from local --confirm
+mapcs bootstrap --from local --dry-run --confirm
+mapcs bootstrap --from local --confirm
 
-kanban-sync-engine bootstrap --from github --dry-run
-kanban-sync-engine bootstrap --from github
+mapcs bootstrap --from github --dry-run
+mapcs bootstrap --from github
 ```
 
 ## Project setup (GitHub)

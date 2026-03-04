@@ -57,6 +57,19 @@ Each task must follow this format:
   - Values: `Easy`, `Normal`, `Hard`, `Extreme`
   - Kanban display: 🟢 Easy, 🟡 Normal, 🔴 Hard, 🔴🔴 Extreme
 
+- **`type`**: Work item type (Epic stack)
+  - Values: `epic`, `feature`, `task`, `bug`, `chore`
+  - Use `epic` for parent initiatives and `feature/task/bug/chore` for execution items
+
+- **`parent`**: Parent task ID for hierarchy (Epic stack)
+  - Format: `T-XXX`
+  - Example: `T-120`
+  - Use when a task belongs to an epic
+
+- **`subIssueProgress`**: Aggregated child progress (Epic stack)
+  - Example: `3/8`
+  - Usually read-mostly when synced from remote systems
+
 - **`milestone`**: Milestone or marker the task belongs to
   - Suggested format: `sprint-year-month_number` (e.g., `sprint-26-1_1` for January 2026, sprint 1)
   - Can use custom strings (e.g., `reconciliation-nn`, `timezone-utc`)
@@ -236,4 +249,3 @@ When creating or modifying tasks as an AI agent:
 - See `example-tasks/TASKS.md` for complete examples
 - See `example-tasks/tasks/` for detail file examples
 - See `example-tasks/README.md` for detailed documentation
-

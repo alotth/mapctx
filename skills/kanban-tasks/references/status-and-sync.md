@@ -29,6 +29,10 @@ When custom statuses exist, keep transitions explicit and deterministic for that
 - If source is local-first, keep `externalId: null` until linked.
 - Use provider-agnostic external mapping format: `<provider>:<entity>:<id>`.
 - Recommended GitHub format: `github:issue:<number>`.
+- Recommended Epic stack mapping:
+  - `type` <-> issue label `type:<value>` (for example `type:epic`, `type:feature`).
+  - `parent` <-> parent issue relationship (or temporary metadata fallback when hierarchy API is not configured).
+  - `subIssueProgress` is usually remote-derived/read-mostly and should not drive status transitions.
 - Keep provider-specific payload out of `TASKS.md`.
 
 ## Validation Checklist

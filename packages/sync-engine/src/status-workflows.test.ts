@@ -9,7 +9,7 @@ import { bootstrapCommand, pullCommand, pushCommand, statusCommand } from './syn
 import { SyncConfig, TaskBoard } from './types';
 
 function makeTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'kanban-sync-engine-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'mapcs-'));
 }
 
 function writeConfig(tempDir: string, config: Partial<SyncConfig>): string {
@@ -26,7 +26,7 @@ function writeConfig(tempDir: string, config: Partial<SyncConfig>): string {
     },
     ...config
   };
-  const configPath = path.resolve(tempDir, 'kanban-sync-engine.config.json');
+  const configPath = path.resolve(tempDir, 'mapcs.config.json');
   fs.writeFileSync(configPath, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
   return configPath;
 }

@@ -339,6 +339,54 @@
   - updated: 2026-03-03
   - detail: ./tasks/T-019.md
 
+### [T-020] Add iteration and assignees support with low-risk compatibility in sync engine and UIs
+
+  - id: T-020
+  - status: backlog
+  - priority: high
+  - workload: Hard
+  - tags: [github-projects, phase-2]
+  - touch: [SYNC, WEBVIEW, EXTENSION, DOCS]
+  - dependsOn: [T-002, T-012]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-03-04
+  - detail: ./tasks/T-020.md
+
+### [T-021] Replace metadata fallback with GitHub Projects GraphQL sub-issue progress mapping
+
+  - id: T-021
+  - status: backlog
+  - priority: high
+  - workload: Hard
+  - tags: [github-projects, epic-stack]
+  - touch: [SYNC, DOCS]
+  - dependsOn: [T-020]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-03-04
+  - detail: ./tasks/T-021.md
+
+### [T-022] Add migration and compatibility coverage for iteration assignees and GraphQL progress
+
+  - id: T-022
+  - status: backlog
+  - priority: medium
+  - workload: Normal
+  - tags: [migration, compatibility]
+  - touch: [SYNC, PARSER, CI, DOCS]
+  - dependsOn: [T-020, T-021]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-03-04
+  - detail: ./tasks/T-022.md
+
 ## Notes
 
 

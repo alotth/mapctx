@@ -7,9 +7,9 @@ Use bootstrap to initialize mapping between local `TASKS.md` and GitHub.
 Use when local board exists and GitHub project/issues should be created from it.
 
 ```bash
-kanban-sync-engine bootstrap --from local --dry-run --confirm
-kanban-sync-engine bootstrap --from local --confirm
-kanban-sync-engine status
+mapcs bootstrap --from local --dry-run --confirm
+mapcs bootstrap --from local --confirm
+mapcs status
 ```
 
 Expected preview summary:
@@ -23,9 +23,9 @@ Expected preview summary:
 Use when GitHub project/issues already exist and local files should be materialized.
 
 ```bash
-kanban-sync-engine bootstrap --from github --dry-run
-kanban-sync-engine bootstrap --from github
-kanban-sync-engine status
+mapcs bootstrap --from github --dry-run
+mapcs bootstrap --from github
+mapcs status
 ```
 
 Expected preview summary:

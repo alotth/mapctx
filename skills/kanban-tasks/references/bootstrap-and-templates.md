@@ -39,6 +39,9 @@ Values below are examples. Replace with real project values.
 
   - id: T-001
   - status: backlog
+  - type: null
+  - parent: null
+  - subIssueProgress: null
   - priority: null
   - workload: null
   - touch: []

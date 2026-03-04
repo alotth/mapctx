@@ -1,6 +1,6 @@
 {
   "name": "@mapctx/sync-engine",
-  "version": "0.1.2",
+  "version": "0.0.1",
   "description": "Sync TASKS.md with GitHub Issues and Projects v2",
   "type": "commonjs",
   "main": "./dist/index.js",
@@ -14,7 +14,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "kanban-sync-engine": "./dist/cli.js"
+    "mapcs": "./dist/cli.js"
   },
   "files": [
     "dist",
@@ -26,9 +26,9 @@
     "clean": "rm -rf dist",
     "pack:check": "npm pack --dry-run",
     "prepack": "npm run clean && npm run build",
-    "dev:status": "npm run build && node dist/cli.js status --config kanban-sync-engine.dev.json",
-    "dev:pull": "npm run build && node dist/cli.js pull --dry-run --config kanban-sync-engine.dev.json",
-    "dev:push": "npm run build && node dist/cli.js push --dry-run --config kanban-sync-engine.dev.json"
+    "dev:status": "npm run build && node dist/cli.js status --config mapcs.dev.json",
+    "dev:pull": "npm run build && node dist/cli.js pull --dry-run --config mapcs.dev.json",
+    "dev:push": "npm run build && node dist/cli.js push --dry-run --config mapcs.dev.json"
   },
   "repository": {
     "type": "git",
@@ -52,9 +52,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "dependencies": {
-    "@mapctx/core": "file:../core"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^24.5.2",
     "typescript": "^5.9.2"

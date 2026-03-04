@@ -41,11 +41,11 @@ function resolveTasksFile(configPath: string, config: SyncConfig, options: SyncO
 }
 
 function resolveSyncStatePath(tasksFilePath: string): string {
-  return path.resolve(path.dirname(tasksFilePath), '.kanban-sync-engine', 'state.json');
+  return path.resolve(path.dirname(tasksFilePath), '.mapcs', 'state.json');
 }
 
 function resolveConflictsDir(tasksFilePath: string): string {
-  return path.resolve(path.dirname(tasksFilePath), '.kanban-sync-engine', 'conflicts');
+  return path.resolve(path.dirname(tasksFilePath), '.mapcs', 'conflicts');
 }
 
 function readDetailContent(task: Task, tasksFilePath: string): string {
@@ -133,9 +133,9 @@ function writeConflictFile(args: {
     '',
     '## Resolution',
     '',
-    '- Keep local version: kanban-sync-engine reconcile <task-id> --accept local',
-    '- Keep remote version: kanban-sync-engine reconcile <task-id> --accept remote',
-    '- Then run: kanban-sync-engine push',
+    '- Keep local version: mapcs reconcile <task-id> --accept local',
+    '- Keep remote version: mapcs reconcile <task-id> --accept remote',
+    '- Then run: mapcs push',
     ''
   ].join('\n');
   fs.writeFileSync(filePath, content, 'utf8');
@@ -783,7 +783,7 @@ export function reconcileCommand(taskId: string, options: SyncOptions = {}): voi
   }
 
   console.log(`reconcile resolved for ${taskId} using '${options.accept}'.`);
-  console.log('Run kanban-sync-engine push to apply final state.');
+  console.log('Run mapcs push to apply final state.');
 }
 
 export function listConflictsCommand(options: SyncOptions = {}): void {

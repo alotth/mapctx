@@ -1,11 +1,10 @@
 import { SyncConfig, Task } from './types';
-import { normalizeStatusLoose } from '@mapctx/core';
 
 export const DEFAULT_ALLOWED_STATUSES = ['backlog', 'doing', 'review', 'done', 'paused'];
 export const DEFAULT_COMPLETION_STATUSES = ['done'];
 
 export function normalizeStatus(value: string | null | undefined): string {
-  return normalizeStatusLoose(value);
+  return String(value || '').trim().toLowerCase();
 }
 
 function normalizeStatusList(values: string[]): string[] {

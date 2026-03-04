@@ -43,6 +43,7 @@ For operational GitHub sync commands (`status`, `pull`, `push`, `bootstrap`, `re
 
 5. Enforce V2 contract.
    - Keep exact field order and types from `./references/field-types-and-contract.md`.
+   - When hierarchy is used, keep Epic stack fields deterministic: `type`, `parent`, `subIssueProgress`.
    - Keep dates as `YYYY-MM-DD`.
    - Keep `externalId` provider-agnostic (`<provider>:<entity>:<id>`), or `null`.
 

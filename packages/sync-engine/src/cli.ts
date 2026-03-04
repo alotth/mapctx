@@ -36,15 +36,15 @@ function parseArgs(argv: string[]): { command: string; options: SyncOptions; fro
 }
 
 function printHelp(): void {
-  console.log('kanban-sync-engine CLI');
+  console.log('mapcs CLI');
   console.log('');
   console.log('Commands:');
-  console.log('  kanban-sync-engine status [--json] [--config path] [--tasks-file path]');
-  console.log('  kanban-sync-engine pull [--dry-run] [--config path] [--tasks-file path]');
-  console.log('  kanban-sync-engine push [--dry-run] [--force] [--config path] [--tasks-file path]');
-  console.log('  kanban-sync-engine bootstrap --from <local|github> [--dry-run] [--confirm] [--config path] [--tasks-file path]');
-  console.log('  kanban-sync-engine reconcile <task-id> [--accept <local|remote>] [--config path] [--tasks-file path]');
-  console.log('  kanban-sync-engine reconcile --list [--json] [--config path] [--tasks-file path]');
+  console.log('  mapcs status [--json] [--config path] [--tasks-file path]');
+  console.log('  mapcs pull [--dry-run] [--config path] [--tasks-file path]');
+  console.log('  mapcs push [--dry-run] [--force] [--config path] [--tasks-file path]');
+  console.log('  mapcs bootstrap --from <local|github> [--dry-run] [--confirm] [--config path] [--tasks-file path]');
+  console.log('  mapcs reconcile <task-id> [--accept <local|remote>] [--config path] [--tasks-file path]');
+  console.log('  mapcs reconcile --list [--json] [--config path] [--tasks-file path]');
 }
 
 function main(): void {

@@ -22,7 +22,7 @@ README-DEV.md
 task-sync/dist/
 
 # local sync state/config
-.kanban-sync-engine/
+.mapcs/
 *.local.json
 *.dev.local.json
 

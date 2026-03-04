@@ -1,3 +1,9 @@
+## [0.0.1] (2026-03-04)
+
+### Chore
+
+* **chore:** reset extension versioning for MapCtx-first release line
+
 ## [1.0.2] (2025-06-04)
 
 ### Features

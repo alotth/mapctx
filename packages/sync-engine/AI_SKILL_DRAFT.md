@@ -1,6 +1,6 @@
-# AI Skill Draft - kanban-sync-engine
+# AI Skill Draft - mapcs
 
-This draft describes an AI workflow skill for using `kanban-sync-engine` safely in dynamic sessions.
+This draft describes an AI workflow skill for using `mapcs` safely in dynamic sessions.
 
 ## Purpose
 
@@ -8,15 +8,15 @@ Enable an AI agent to run sync operations with low risk, low token usage, and cl
 
 ## Trigger situations
 
-- Session starts and project has `kanban-sync-engine.config.json`
+- Session starts and project has `mapcs.config.json`
 - User asks to update roadmap from GitHub
 - User asks to publish local task changes
 - User asks to diagnose divergence/conflicts
 
 ## Default policy
 
-1. Run `kanban-sync-engine status` first.
-2. If remote differs, run `kanban-sync-engine pull` before any push.
+1. Run `mapcs status` first.
+2. If remote differs, run `mapcs pull` before any push.
 3. Use `--dry-run` before bootstrap or large updates.
 4. Explain impact before write operations.
 
@@ -24,30 +24,30 @@ Enable an AI agent to run sync operations with low risk, low token usage, and cl
 
 ### Session start
 
-1. `kanban-sync-engine status`
-2. If remote changes exist: `kanban-sync-engine pull`
+1. `mapcs status`
+2. If remote changes exist: `mapcs pull`
 3. Confirm local file updated, then continue planning/editing
 
 ### Before publishing
 
-1. `kanban-sync-engine status`
-2. If stale relative to remote: `kanban-sync-engine pull`
-3. `kanban-sync-engine push`
-4. `kanban-sync-engine status` to confirm convergence
+1. `mapcs status`
+2. If stale relative to remote: `mapcs pull`
+3. `mapcs push`
+4. `mapcs status` to confirm convergence
 
 ### New project bootstrap (local-first)
 
-1. `kanban-sync-engine bootstrap --from local --dry-run`
+1. `mapcs bootstrap --from local --dry-run`
 2. Show summary (issues to create, statuses to map, links to write)
-3. `kanban-sync-engine bootstrap --from local`
-4. `kanban-sync-engine status`
+3. `mapcs bootstrap --from local`
+4. `mapcs status`
 
 ### Existing GitHub project bootstrap (remote-first)
 
-1. `kanban-sync-engine bootstrap --from github --dry-run`
+1. `mapcs bootstrap --from github --dry-run`
 2. Show summary (tasks to create/update locally)
-3. `kanban-sync-engine bootstrap --from github`
-4. `kanban-sync-engine status`
+3. `mapcs bootstrap --from github`
+4. `mapcs status`
 
 ## Guardrails
 

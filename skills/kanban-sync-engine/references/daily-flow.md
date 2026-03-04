@@ -14,42 +14,42 @@ gh auth refresh -h github.com -s repo,read:project,project
 Check if the CLI is installed:
 
 ```bash
-command -v kanban-sync-engine
+command -v mapcs
 ```
 
 If not installed, prefer non-invasive execution first:
 
 ```bash
-npx -y kanban-sync-engine@latest status
+npx --yes --package @mapctx/sync-engine mapcs status
 ```
 
 Global install is optional and should require explicit user confirmation:
 
 ```bash
-npm install -g kanban-sync-engine
-kanban-sync-engine status
+npm install -g @mapctx/sync-engine
+mapcs status
 ```
 
 ## Session Start
 
 ```bash
-kanban-sync-engine status
+mapcs status
 ```
 
 If remote has changes or state is stale:
 
 ```bash
-kanban-sync-engine pull
-kanban-sync-engine status
+mapcs pull
+mapcs status
 ```
 
 ## Before Publishing
 
 ```bash
-kanban-sync-engine status
-kanban-sync-engine pull
-kanban-sync-engine push
-kanban-sync-engine status
+mapcs status
+mapcs pull
+mapcs push
+mapcs status
 ```
 
 Safety rule: always run `pull` before `push` in the same session.
@@ -57,8 +57,8 @@ Safety rule: always run `pull` before `push` in the same session.
 ## Safe Preview
 
 ```bash
-kanban-sync-engine pull --dry-run
-kanban-sync-engine push --dry-run
+mapcs pull --dry-run
+mapcs push --dry-run
 ```
 
 ## Common Flags

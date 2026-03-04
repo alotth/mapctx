@@ -105,6 +105,9 @@ When `detail: ./tasks/T-XXX.md` is specified, create the file:
 |----------|----------|--------|---------|
 | `id` | ✅ Yes | `T-XXX` | `T-001` |
 | `tags` | ❌ No | `[tag1, tag2]` | `[backend, frontend]` |
+| `type` | ❌ No | `epic\|feature\|task\|bug\|chore` | `epic` |
+| `parent` | ❌ No | `T-XXX` | `T-120` |
+| `subIssueProgress` | ❌ No | `x/y` | `3/8` |
 | `priority` | ❌ No | `high\|medium\|low` | `high` |
 | `workload` | ❌ No | `Easy\|Normal\|Hard\|Extreme` | `Hard` |
 | `milestone` | ❌ No | string | `sprint-26-1_1` |
@@ -291,4 +294,3 @@ See `example-tasks/` directory for:
 4. **Use milestones** to group related tasks for sprints or features
 5. **Update `updated`** every time you touch a task - it helps track activity
 6. **Set `defaultExpanded: true`** for critical tasks that need immediate attention
-

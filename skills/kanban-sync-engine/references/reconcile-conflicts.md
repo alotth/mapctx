@@ -17,32 +17,32 @@ If LOCAL and REMOTE changed concurrently, push is blocked and conflict artifacts
 List conflicts:
 
 ```bash
-kanban-sync-engine reconcile --list
+mapcs reconcile --list
 ```
 
 Generate/update conflict doc for one task:
 
 ```bash
-kanban-sync-engine reconcile T-002
+mapcs reconcile T-002
 ```
 
 Resolve with local content:
 
 ```bash
-kanban-sync-engine reconcile T-002 --accept local
+mapcs reconcile T-002 --accept local
 ```
 
 Resolve with remote content:
 
 ```bash
-kanban-sync-engine reconcile T-002 --accept remote
+mapcs reconcile T-002 --accept remote
 ```
 
 Publish after resolving:
 
 ```bash
-kanban-sync-engine push
-kanban-sync-engine status
+mapcs push
+mapcs status
 ```
 
 ## Guardrails

@@ -6,12 +6,15 @@ Use this reference to keep deterministic structure for `TASKS.md` and detail fil
 
 Use exactly this order in every task block:
 
-`id`, `status`, `priority`, `workload`, `touch`, `dependsOn`, `start`, `due`, `completed`, `externalId`, `updated`, `detail`.
+`id`, `status`, `type`, `parent`, `subIssueProgress`, `priority`, `workload`, `touch`, `dependsOn`, `start`, `due`, `completed`, `externalId`, `updated`, `detail`.
 
 ## `TASKS.md` Field Types and Meanings
 
 - `id` (`string`, required): unique ID `T-XXX` (example: `T-001`).
 - `status` (`string`, required): default set is `backlog | doing | review | done | paused`; custom project statuses are allowed when explicitly defined.
+- `type` (`enum | null`, required key): `epic | feature | task | bug | chore | null`.
+- `parent` (`string | null`, required key): parent task ID (for hierarchy), usually an epic ID, or `null`.
+- `subIssueProgress` (`string | null`, required key): aggregated progress text for children (for example `3/8`), or `null`.
 - `priority` (`enum | null`, required key): `high | medium | low | null`.
 - `workload` (`enum | null`, required key): `Easy | Normal | Hard | Extreme | null`.
 - `touch` (`string[] | null`, required key): coarse component names for conflict checks.
@@ -51,6 +54,9 @@ Use exactly this order in every task block:
 
   - id: T-001
   - status: backlog
+  - type: null
+  - parent: null
+  - subIssueProgress: null
   - priority: null
   - workload: null
   - touch: []

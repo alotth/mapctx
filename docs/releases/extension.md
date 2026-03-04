@@ -20,8 +20,8 @@ Release target: Visual Studio Marketplace + Open VSX.
 3. Create and push tag:
 
    ```bash
-   git tag ext-v2.0.5
-   git push origin ext-v2.0.5
+   git tag ext-v0.0.1
+   git push origin ext-v0.0.1
    ```
 
 ## Required Secrets

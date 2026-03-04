@@ -17,7 +17,7 @@ Custom options may fully replace default options.
 
 ## Required Config Entries
 
-Set these in `kanban-sync-engine.config.json`:
+Set these in `mapcs.config.json`:
 
 - `projectId`
 - `statusFieldId`

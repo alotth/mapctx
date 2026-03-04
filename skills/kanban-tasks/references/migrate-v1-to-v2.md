@@ -21,7 +21,7 @@ Use this reference to convert legacy section-based boards to V2 single-list form
 1. Read all tasks and preserve task order by ID when possible.
 2. Move all task blocks into one `## Tasks` section.
 3. Add/normalize canonical V2 fields in this order:
-   - `id`, `status`, `priority`, `workload`, `touch`, `dependsOn`, `start`, `due`, `completed`, `externalId`, `updated`, `detail`.
+   - `id`, `status`, `type`, `parent`, `subIssueProgress`, `priority`, `workload`, `touch`, `dependsOn`, `start`, `due`, `completed`, `externalId`, `updated`, `detail`.
 4. Keep every canonical key present.
    - Use `null` for unknown scalar values.
    - Use `[]` for known-empty list values.

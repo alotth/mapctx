@@ -22,8 +22,8 @@ npm run build:opencode-plugin
 ## Example Tag
 
 ```bash
-git tag plugin-v0.1.0
-git push origin plugin-v0.1.0
+git tag plugin-v0.0.1
+git push origin plugin-v0.0.1
 ```
 
 ## Required Secrets

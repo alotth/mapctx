@@ -26,17 +26,20 @@ Use this fixed order in every task block:
 
 1. `id`
 2. `status`
-3. `priority`
-4. `workload`
-5. `touch`
-6. `dependsOn`
-7. `start`
-8. `due`
-9. `completed` (`null` or date)
-10. `externalId` (`null` or `<provider>:<entity>:<id>`)
-11. `externalLinks` (optional array for multi-provider mapping)
-12. `updated`
-13. `detail`
+3. `type` (`epic|feature|task|bug|chore|null`)
+4. `parent` (`T-XXX` or `null`)
+5. `subIssueProgress` (`x/y` or `null`)
+6. `priority`
+7. `workload`
+8. `touch`
+9. `dependsOn`
+10. `start`
+11. `due`
+12. `completed` (`null` or date)
+13. `externalId` (`null` or `<provider>:<entity>:<id>`)
+14. `externalLinks` (optional array for multi-provider mapping)
+15. `updated`
+16. `detail`
 
 ## External mapping strategy
 
@@ -80,5 +83,8 @@ Recommended mapping:
 
 - `externalId` <-> issue number
 - `status` <-> project status field
+- `type` <-> issue label (`type:epic`, `type:feature`, ...)
+- `parent` <-> parent issue relationship
+- `subIssueProgress` <-> derived from child issues (read-mostly)
 - `priority/workload/tags` <-> labels
 - `milestone` <-> issue milestone
