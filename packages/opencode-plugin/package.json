@@ -1,0 +1,11 @@
+{
+  "name": "@mapctx/opencode-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "OpenCode plugin assets and entrypoint for MapCtx workspace",
+  "type": "module",
+  "scripts": {
+    "build": "node ../../scripts/build-opencode-plugin.mjs",
+    "install:local": "node ../../scripts/install-opencode-plugin.mjs"
+  }
+}

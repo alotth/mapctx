@@ -1,0 +1,30 @@
+{
+  "owner": "alotth",
+  "repo": "mapctx",
+  "projectId": "PVT_kwHOAcgr-s4BPKSM",
+  "statusFieldId": "PVTSSF_lAHOAcgr-s4BPKSMzg9psWk",
+  "statusMap": {
+    "backlog": "Backlog",
+    "doing": "Doing",
+    "review": "Review",
+    "done": "Done",
+    "paused": "Paused"
+  },
+  "tasksFile": "./TASKS.md",
+  "bootstrap": {
+    "createMissingDetailFiles": true,
+    "defaultStatusForImportedIssues": "backlog",
+    "requireConfirmFlag": true
+  },
+  "remoteWinsFields": [
+    "status",
+    "tags",
+    "priority",
+    "workload",
+    "milestone"
+  ],
+  "localWinsFields": [
+    "detail",
+    "defaultExpanded"
+  ]
+}

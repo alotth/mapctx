@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.DS_Store
+.kanban-sync-engine/
+.tasks-sync/
+*.log
+.env

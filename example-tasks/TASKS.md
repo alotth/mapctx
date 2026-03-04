@@ -1,176 +1,93 @@
-# Tasks - example-project
+# Tasks - markdown-kanban-roadmap-v2
 
-## Backlog
+## Components
 
-### 1 Implement n:n reconciliation between multiple sources
+- PARSER: markdown parser and serialization
+- WEBVIEW: kanban webview rendering and interaction
+- ROADMAP: roadmap timeline and progress
+- CI: validation, checks, workflow automation
+- DOCS: rules, examples, and migration docs
+
+## Tasks
+
+### [T-001] Support status-based single-list parser mode
 
   - id: T-001
-  - tags: [reconciliation, multiple-sources, n-to-n, backend, database]
+  - status: doing
   - priority: high
   - workload: Hard
-  - milestone: sprint-26-1_1
-  - start: 2026-01-05
-  - due: 2026-01-30
+  - touch: [PARSER, ROADMAP]
+  - dependsOn: []
+  - start: 2026-02-12
+  - due: 2026-02-18
+  - completed: null
+  - externalId: null
+  - updated: 2026-02-12
   - detail: ./tasks/T-001.md
-  - defaultExpanded: false
 
-### Extract data by category type
+### [T-002] Migrate legacy section boards to single-list format
 
   - id: T-002
-  - tags: [extraction, data-processing, backend, api]
+  - status: backlog
   - priority: high
-  - milestone: sprint-26-1_1
-  - start: 2026-01-01
-  - due: 2026-01-20
+  - workload: Normal
+  - touch: [PARSER, DOCS]
+  - dependsOn: [T-001]
+  - start: 2026-02-19
+  - due: 2026-02-22
+  - completed: null
+  - externalId: null
+  - updated: 2026-02-12
   - detail: ./tasks/T-002.md
 
-### Implement user authentication system
-
-  - id: T-010
-  - tags: [authentication, security, backend, frontend]
-  - priority: high
-  - workload: Hard
-  - milestone: sprint-26-1_2
-  - start: 2026-01-15
-  - due: 2026-02-15
-
-### Create dashboard analytics view
-
-  - id: T-011
-  - tags: [frontend, dashboard, analytics, visualization]
-  - priority: medium
-  - milestone: sprint-26-1_2
-  - start: 2026-01-15
-  - due: 2026-02-10
-
-### Optimize database query performance
-
-  - id: T-012
-  - tags: [database, performance, optimization, backend]
-  - priority: high
-  - milestone: sprint-26-2_1
-  - start: 2026-02-01
-  - due: 2026-02-28
-
-### Implement real-time notifications
-
-  - id: T-013
-  - tags: [frontend, backend, real-time, websocket]
-  - priority: medium
-  - workload: Hard
-  - milestone: sprint-26-2_1
-  - start: 2026-02-01
-  - due: 2026-03-01
-
-### Improve code documentation and add inline comments
-
-  - id: T-017
-  - tags: [documentation, code-quality, maintenance]
-  - priority: low
-  - start: 2026-02-15
-  - due: 2026-03-01
-
-## Doing
-
-## Done
-
-### Standardize date/time handling with UTC timezone
-
-  - id: T-004
-  - tags: [backend, frontend, timezone, date, time, standardization]
-  - priority: high
-  - updated: 2025-12-23
-  - milestone: sprint-25-12_2
-  - start: 2025-12-16
-  - detail: ./tasks/T-004.md
-
-### Replace window.alert and confirm with standard dialog modals
-
-  - id: T-005
-  - tags: [frontend, ui, components, user-experience]
-  - priority: medium
-  - milestone: sprint-25-12_2
-  - start: 2025-12-16
-  - detail: ./tasks/T-005.md
-
-### Sort transactions by time proximity in the database
-
-  - id: T-006
-  - tags: [frontend, database, performance, reconciliation]
-  - priority: medium
-  - milestone: sprint-25-12_2
-  - start: 2025-12-16
-  - detail: ./tasks/T-006.md
-
-### Remove backend script dependencies
-
-  - id: T-007
-  - tags: [backend, refactoring, architecture]
-  - priority: high
-  - workload: Hard
-  - milestone: sprint-26-1_1
-  - start: 2026-01-01
-  - detail: ./tasks/T-007.md
-
-### Setup project infrastructure
-
-  - id: T-008
-  - tags: [infrastructure, setup, devops, backend]
-  - priority: high
-  - milestone: sprint-25-11_1
-  - start: 2025-11-01
-
-### Create initial database schema
-
-  - id: T-009
-  - tags: [database, schema, backend, architecture]
-  - priority: high
-  - milestone: sprint-25-11_1
-  - start: 2025-11-01
-
-### Implement basic CRUD operations
-
-  - id: T-014
-  - tags: [backend, api, crud, database]
-  - priority: high
-  - milestone: sprint-25-11_2
-  - start: 2025-11-15
-
-### Design and implement UI components library
-
-  - id: T-015
-  - tags: [frontend, ui, components, design-system]
-  - priority: medium
-  - workload: Hard
-  - milestone: sprint-25-11_2
-  - start: 2025-11-15
-
-### Add input validation and error handling
-
-  - id: T-016
-  - tags: [backend, frontend, validation, error-handling]
-  - priority: medium
-  - milestone: sprint-25-12_2
-  - start: 2025-12-16
-
-## Paused
-
-### Validate transaction codes in external API
+### [T-003] Build conflict and parallelization analyzer
 
   - id: T-003
-  - tags: [validation, transactions, api-integration, backend]
-  - priority: high
-  - updated: 2025-12-19
-  - milestone: sprint-26-1_1
-  - start: 2026-01-01
-  - due: 2026-01-25
+  - status: review
+  - priority: medium
+  - workload: Hard
+  - touch: [PARSER, CI]
+  - dependsOn: [T-001]
+  - start: 2026-02-10
+  - due: 2026-02-16
+  - completed: null
+  - externalId: github:issue:203
+  - updated: 2026-02-12
   - detail: ./tasks/T-003.md
 
-## Review
+### [T-004] Render kanban columns from task status values
 
-## Notas
+  - id: T-004
+  - status: backlog
+  - priority: high
+  - workload: Hard
+  - touch: [WEBVIEW]
+  - dependsOn: [T-001]
+  - start: 2026-02-20
+  - due: 2026-02-25
+  - completed: null
+  - externalId: null
+  - updated: 2026-02-12
+  - detail: ./tasks/T-004.md
 
-### This file is automatically updated by AI based on rules in [../RULES.md](../RULES.md)
+### [T-005] Add schema guardrails for tasks metadata
 
-  - id: 37q28yud7
+  - id: T-005
+  - status: done
+  - priority: medium
+  - workload: Normal
+  - touch: [CI, DOCS]
+  - dependsOn: []
+  - start: 2026-02-08
+  - due: 2026-02-11
+  - completed: 2026-02-11
+  - externalId: github:issue:205
+  - updated: 2026-02-11
+  - detail: ./tasks/T-005.md
 
+## Notes
+
+- `touch` drives fast conflict checks with minimal token use.
+- Detail files hold rich context and volatile metadata.
+- Keep updates in `TASKS.md` small and deterministic.
+- Use `externalId` as provider-agnostic mapping key (`<provider>:<entity>:<id>`).

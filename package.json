@@ -1,118 +1,30 @@
 {
-  "name": "markdown-kanban-roadmap",
-  "displayName": "Markdown Kanban Roadmap",
-  "description": "Kanban board for Markdown files",
-  "publisher": "alotth",
-  "version": "2.0.4",
-  "engines": {
-    "vscode": "^1.74.0"
-  },
-  "categories": [
-    "Other"
+  "name": "mapctx",
+  "private": true,
+  "workspaces": [
+    "packages/*"
   ],
-  "keywords": [
-    "markdown",
-    "kanban",
-    "task management",
-    "project management",
-    "todo",
-    "productivity",
-    "cursor available",
-    "看板",
-    "任务管理"
-  ],
-  "icon": "./imgs/logo.png",
-  "activationEvents": [
-    "onStartupFinished",
-    "onLanguage:markdown",
-    "onCommand:markdown-kanban.openKanban",
-    "onCommand:markdown-kanban.openRoadmap",
-    "onCommand:markdown-kanban.disableFileListener"
-  ],
-  "main": "./dist/extension.js",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/alotth/markdown-kanban-roadmap"
-  },
-  "contributes": {
-    "commands": [
-      {
-        "command": "markdown-kanban.openKanban",
-        "title": ".md Kanban",
-        "category": "Markdown Kanban"
-      },
-      {
-        "command": "markdown-kanban.openRoadmap",
-        "title": ".md Roadmap",
-        "category": "Markdown Kanban"
-      },
-      {
-        "command": "markdown-kanban.disableFileListener",
-        "title": "Enable/Disable File Switcher",
-        "category": "Markdown Kanban"
-      }
-    ],
-    "menus": {
-      "editor/title": [
-        {
-          "command": "markdown-kanban.openKanban",
-          "when": "resourceExtname == .md && markdownKanbanActive",
-          "group": "navigation"
-        },
-        {
-          "command": "markdown-kanban.openRoadmap",
-          "when": "resourceExtname == .md && markdownKanbanActive",
-          "group": "navigation"
-        }
-      ]
-    },
-    "configuration": {
-      "type": "object",
-      "title": "Markdown Kanban",
-      "properties": {
-        "markdown-kanban.taskHeader": {
-          "type": "string",
-          "enum": [
-            "title",
-            "list"
-          ],
-          "default": "title",
-          "description": "Choose how tasks are formatted in the markdown file. 'title' uses ### headers, 'list' uses - bullet points."
-        }
-      }
-    }
-  },
   "scripts": {
-    "vscode:prepublish": "npm run package",
-    "compile": "npm run check-types && npm run lint && node esbuild.js",
-    "watch": "npm-run-all -p watch:*",
-    "watch:esbuild": "node esbuild.js --watch",
-    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run check-types && npm run lint && node esbuild.js --production",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
-    "check-types": "tsc --noEmit",
-    "lint": "eslint",
-    "test": "vscode-test",
-    "test:parser": "tsx scripts/test-parser.ts",
-    "dev:standalone": "tsx scripts/dev-mode.ts",
-    "watch:logs": "bash scripts/watch-logs.sh",
-    "logs": "tail -f .logs/extension.log",
-    "prepare-publish": "node scripts/prepare-publish.js"
-  },
-  "devDependencies": {
-    "@types/mocha": "^10.0.6",
-    "@types/node": "18.x",
-    "@types/vscode": "^1.74.0",
-    "@typescript-eslint/eslint-plugin": "^6.15.0",
-    "@typescript-eslint/parser": "^6.15.0",
-    "@vscode/test-cli": "^0.0.4",
-    "@vscode/test-electron": "^2.5.2",
-    "esbuild": "^0.19.10",
-    "eslint": "^8.56.0",
-    "npm-run-all": "^4.1.5",
-    "tsx": "^4.21.0",
-    "typescript": "^5.3.3"
+    "vscode:prepublish": "npm run vscode:prepublish --workspace mapctx",
+    "compile": "npm run compile --workspace mapctx",
+    "watch": "npm run watch --workspace mapctx",
+    "watch:esbuild": "npm run watch:esbuild --workspace mapctx",
+    "watch:tsc": "npm run watch:tsc --workspace mapctx",
+    "package": "npm run package --workspace mapctx",
+    "compile-tests": "npm run compile-tests --workspace mapctx",
+    "watch-tests": "npm run watch-tests --workspace mapctx",
+    "check-types": "npm run check-types --workspace mapctx",
+    "lint": "npm run lint --workspace mapctx",
+    "test": "npm run test --workspace mapctx",
+    "test:parser": "npm run test:parser --workspace mapctx --",
+    "dev:standalone": "npm run dev:standalone --workspace mapctx",
+    "watch:logs": "npm run watch:logs --workspace mapctx",
+    "logs": "npm run logs --workspace mapctx",
+    "prepare-publish": "npm run prepare-publish --workspace mapctx",
+    "build:opencode-plugin": "node scripts/build-opencode-plugin.mjs",
+    "install:opencode-plugin": "node scripts/install-opencode-plugin.mjs",
+    "build:core": "npm run build --workspace @mapctx/core",
+    "build:sync-engine": "npm run build:core && npm run build --workspace @mapctx/sync-engine",
+    "test:sync-engine": "npm run build:core && npm run test --workspace @mapctx/sync-engine"
   }
 }

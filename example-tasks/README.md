@@ -1,193 +1,84 @@
-# Example Tasks - Markdown Kanban
+# Example Tasks Model
 
-This directory contains example tasks formatted in the Markdown Kanban standard to demonstrate the extension's features.
+This folder demonstrates a low-conflict, AI-friendly tasks model ready for a shared sync engine.
 
-## 📋 TASKS.md File Structure
+## Design goals
 
-The `TASKS.md` file follows the Kanban format with the following sections:
+- Keep `TASKS.md` highly dynamic and lightweight.
+- Minimize merge conflicts by reducing multi-line edits per task.
+- Keep enough global data for parallel planning with low token cost.
+- Store rich context in `tasks/T-XXX.md` detail files.
+- Keep external mapping generic so sync can support multiple platforms.
 
-- **Backlog**: Tasks that haven't been started yet
-- **Doing**: Tasks in progress
-- **Review**: Tasks awaiting review
-- **Done**: Completed tasks
-- **Paused**: Temporarily paused tasks
-- **Notas**: General project notes
+## Core rules
 
-## 🏷️ Task Metadata
+1. Move a task by editing only `status:`.
+2. Add new tasks at the end of `## Tasks`.
+3. Keep fixed field order for every task block.
+4. Use `touch` as coarse components (not per-file paths).
+5. Put long descriptions and detailed test plans in detail files.
+6. Keep `completed` always present. Use `null` until the task is done.
+7. Keep `externalId` always present. Use `null` when not linked yet.
 
-Each task can contain the following metadata:
+## TASKS.md field contract
 
-### Basic Metadata
+Use this fixed order in every task block:
 
-- **`id`**: Unique task identifier (e.g., `T-001`, `T-002`)
-  - Format: `T-XXX` where XXX is a sequential number
-  - Used to reference the task in other places
+1. `id`
+2. `status`
+3. `priority`
+4. `workload`
+5. `touch`
+6. `dependsOn`
+7. `start`
+8. `due`
+9. `completed` (`null` or date)
+10. `externalId` (`null` or `<provider>:<entity>:<id>`)
+11. `externalLinks` (optional array for multi-provider mapping)
+12. `updated`
+13. `detail`
 
-- **`tags`**: Tags for task categorization
-  - Format: `[tag1, tag2, tag3]` (array of tags)
-  - Example: `[backend, frontend, ui, components]`
-  - Allows filtering tasks by category
+## External mapping strategy
 
-- **`priority`**: Task priority level
-  - Possible values: `high`, `medium`, `low`
-  - Visually displayed in Kanban:
-    - 🔴 High
-    - 🟡 Medium
-    - 🟢 Low
+- Use `externalId` as neutral mapping key.
+- For GitHub Issues use: `github:issue:<number>`.
+- This keeps the model open for other backends later (for example `jira:issue:<key>`).
+- Use `externalLinks` only when the same task is synced to multiple platforms.
+- Keep `externalLinks` optional to keep diffs small in most projects.
 
-- **`workload`**: Estimated effort required
-  - Possible values: `Easy`, `Medium`, `Hard`, `Extreme`
-  - Visually displayed in Kanban:
-    - 🟢 Easy
-    - 🟡 Medium
-    - 🔴 Hard
-    - 🔴🔴 Extreme
+Provider data note:
 
-### Date Metadata
+- Avoid storing provider payload blobs in markdown files.
+- Keep provider-specific sync state in local cache/state files managed by the sync engine.
 
-- **`start`**: Task start date
-  - Format: `YYYY-MM-DD`
-  - Example: `2025-12-01`
-  - Indicates when the task was started
+## GitHub payload examples to design sync
 
-- **`updated`**: Last update date
-  - Format: `YYYY-MM-DD`
-  - Example: `2025-12-19`
-  - Updated whenever the task is modified
+Issue payload shape (REST):
 
-- **`completed`**: Task completion date
-  - Format: `YYYY-MM-DD`
-  - Example: `2025-12-23`
-  - Filled when the task is moved to "Done"
-
-- **`due`**: Due date (optional)
-  - Format: `YYYY-MM-DD`
-  - Example: `2024-01-15`
-  - Indicates the deadline for completion
-
-### Organization Metadata
-
-- **`milestone`**: Milestone or marker the task belongs to
-  - Format: Suggested format `sprint-year-month_number` (e.g., `sprint-26-1_1` for January 2026, sprint 1)
-  - Can also use custom strings (e.g., `reconciliation-nn`, `timezone-utc`)
-  - Used to group related tasks
-
-- **`detail`**: Path to the task details file
-  - Format: `./tasks/T-XXX.md`
-  - Example: `./tasks/T-001.md`
-  - Points to a markdown file with detailed description
-
-- **`defaultExpanded`**: Defines if the task should be expanded by default
-  - Values: `true` or `false`
-  - When `true`, the task shows all details when loaded
-
-### Steps (Sub-tasks)
-
-Tasks can contain a list of steps (sub-tasks) in the details file:
-
-```markdown
-- steps:
-    - [ ] Step 1 (not completed)
-    - [x] Step 2 (completed)
-    - [ ] Step 3 (not completed)
+```json
+{
+  "number": 203,
+  "title": "Build local conflict and parallelization analyzer",
+  "state": "open",
+  "labels": [{ "name": "priority:medium" }, { "name": "workload:hard" }],
+  "milestone": { "title": "v2-intelligence" },
+  "body": "..."
+}
 ```
 
-- Format: Markdown checkbox list
-- `- [ ]` indicates uncompleted step
-- `- [x]` indicates completed step
-- Allows tracking progress within a task
+Project v2 item payload shape (GraphQL):
 
-## 📝 Task Format in TASKS.md
-
-### Basic Example
-
-```markdown
-### Task Name
-
-  - id: T-001
-  - tags: [backend, frontend]
-  - priority: high
-  - workload: Hard
-  - start: 2025-12-01
-  - detail: ./tasks/T-001.md
+```json
+{
+  "itemId": "PVTI_xxx",
+  "content": { "number": 203 },
+  "status": "Review"
+}
 ```
 
-### Example with Inline Description
+Recommended mapping:
 
-```markdown
-### Task Name
-
-  - id: T-001
-  - tags: [backend, frontend]
-  - priority: high
-    ```md
-    Detailed task description here.
-    Can contain multiple lines and markdown formatting.
-    ```
-```
-
-### Complete Example
-
-```markdown
-### Implement n:n reconciliation between multiple sources
-
-  - id: T-001
-  - tags: [reconciliation, multiple-sources, n-to-n, backend, database]
-  - priority: medium
-  - milestone: reconciliation-nn
-  - start: 2025-12-01
-  - updated: 2025-12-19
-  - workload: Hard
-  - detail: ./tasks/T-001.md
-```
-
-## 📄 Detail Files (tasks/T-XXX.md)
-
-Detail files contain the complete task description:
-
-```markdown
-# T-001
-
-  - steps:
-      - [ ] Step 1
-      - [x] Step 2
-    ```md
-    Detailed task description.
-    Can include context, requirements, examples, etc.
-    ```
-```
-
-## 🚀 How to Test the Extension Locally
-
-To test the Markdown Kanban extension with these examples:
-
-1. **Install dependencies:**
-
-   ```bash
-   npm install
-   ```
-
-2. **Run in debug mode:**
-   - Press `F5` or go to `Run > Start Debugging`
-   - Or use the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) → "Debug: Start Debugging"
-
-3. **Open the example-tasks folder:**
-   - A new VS Code window will open
-   - Navigate to the `example-tasks` folder and open it
-   - Or select "Open Folder" and choose the `example-tasks` folder
-
-4. **View the Kanban:**
-   - Open the `TASKS.md` file
-   - Right-click → "Kanban" or use the Command Palette → "Open Kanban Board"
-   - Explore the features:
-     - Drag & drop between columns
-     - Tag filters
-     - Sorting
-     - Expand/collapse tasks
-     - View priorities and workloads
-
-## 📚 Additional Resources
-
-- See the [main README](../README.md) for more information about the extension
-- Check the example files in `tasks/` to see different task formats
-- Explore the `TASKS.md` file to see examples of all supported metadata
+- `externalId` <-> issue number
+- `status` <-> project status field
+- `priority/workload/tags` <-> labels
+- `milestone` <-> issue milestone

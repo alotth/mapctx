@@ -1,0 +1,207 @@
+:root {
+  --bg: #0f1522;
+  --panel: #151d2e;
+  --panel-2: #1b2439;
+  --line: #2b395b;
+  --text: #dbe4ff;
+  --muted: #95a2c8;
+  --accent: #5bb5ff;
+  --accent-2: #7cde9f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  color: var(--text);
+  background: radial-gradient(1200px 700px at 10% -10%, #24375f 0%, var(--bg) 55%);
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(15, 21, 34, 0.92);
+  backdrop-filter: blur(6px);
+}
+
+.title-group h1 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mode-badge {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--muted);
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.mode-v2-status {
+  border-color: #4aa3ff;
+  color: #9dd4ff;
+}
+
+.mode-legacy-sections {
+  border-color: #b3a17f;
+  color: #f0ddb4;
+}
+
+.mode-mixed {
+  border-color: #c98df2;
+  color: #e7c8ff;
+}
+
+#board-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.view-switcher {
+  display: flex;
+  gap: 8px;
+}
+
+.tab {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.tab.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(91, 181, 255, 0.2);
+}
+
+.view {
+  display: none;
+  padding: 14px;
+}
+
+.view.active {
+  display: block;
+}
+
+.kanban-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 12px;
+}
+
+.col {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.col-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.col-head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.count {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+.open-link {
+  border: 0;
+  background: transparent;
+  color: var(--accent-2);
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+}
+
+.roadmap-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.roadmap-table th,
+.roadmap-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-size: 12px;
+}
+
+.roadmap-table th {
+  background: var(--panel-2);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 13px;
+}

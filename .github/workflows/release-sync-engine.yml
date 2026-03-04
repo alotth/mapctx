@@ -1,0 +1,39 @@
+name: Release Sync Engine
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "sync-v*.*.*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build:sync-engine
+
+      - name: Check package contents
+        run: npm run pack:check --workspace @mapctx/sync-engine
+
+      - name: Publish to npm
+        working-directory: packages/sync-engine
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

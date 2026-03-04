@@ -1,8 +1,8 @@
-# Markdown Kanban & Roadmap
+# MapCtx - Multi-Agent Project Context
 
-A powerful VS Code extension that transforms Markdown files into interactive Kanban boards, supporting task management, drag-and-drop operations, and rich task attributes.
+A multi-agent project context workspace for Markdown tasks, roadmap visualization, and sync workflows.
 
-**[📦 Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=alotth.markdown-kanban-roadmap)**
+**[📦 Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=alotth.mapctx)**
 
 ## 🎯 Philosophy
 
@@ -40,10 +40,10 @@ This will ensure AI assistants understand the task format and maintain compatibi
 ## ✨ Features
 
 ### Kanban Board View
-![Kanban Board](./imgs/image-kanban.png)
+![Kanban Board](./packages/vscode-extension/imgs/image-kanban.png)
 
 ### Roadmap View
-![Roadmap](./imgs/image-roadmap.png)
+![Roadmap](./packages/vscode-extension/imgs/image-roadmap.png)
 
 The Roadmap view provides a timeline visualization of your project, perfect for:
 - **Large Project Planning**: Visualize hundreds of tasks across time
@@ -194,6 +194,41 @@ To test the extension locally during development:
 
 > 💡 **Tip**: The `example-tasks` folder contains complete examples of tasks with all supported metadata. See the [example-tasks README](./example-tasks/README.md) to understand the complete task format.
 
+## OpenCode GUI Plugin
+
+This repository also includes a working OpenCode GUI plugin package, so you can maintain the VSCode extension and OpenCode plugin in one place without mixing code paths.
+
+- VS Code extension workspace: [`packages/vscode-extension/`](./packages/vscode-extension/)
+- Plugin workspace: [`packages/opencode-plugin/`](./packages/opencode-plugin/)
+- Plugin config source: [`packages/opencode-plugin/kanban-roadmap.plugin.ts`](./packages/opencode-plugin/kanban-roadmap.plugin.ts)
+- Build plugin assets: `npm run build:opencode-plugin`
+- Install to global OpenCode plugins path: `npm run install:opencode-plugin`
+
+The install script copies these required files to `~/.config/opencode/plugins/kanban-roadmap/`:
+
+- `index.html`
+- `kanban-roadmap.css`
+- `kanban-roadmap.js`
+
+It also installs plugin entry file:
+
+- `~/.config/opencode/plugins/kanban-roadmap.js`
+
+## Release Tags
+
+Monorepo release workflows are split by tag prefix:
+
+- `ext-vX.Y.Z` for VS Code extension release
+- `sync-vX.Y.Z` for `@mapctx/sync-engine` npm release
+- `plugin-vX.Y.Z` for OpenCode plugin npm release
+
+Release runbooks:
+
+- [`docs/releases/tag-strategy.md`](./docs/releases/tag-strategy.md)
+- [`docs/releases/extension.md`](./docs/releases/extension.md)
+- [`docs/releases/engine.md`](./docs/releases/engine.md)
+- [`docs/releases/opencode-plugin.md`](./docs/releases/opencode-plugin.md)
+
 ## 🛠️ Development
 
 ### Prerequisites
@@ -224,11 +259,11 @@ To test the extension locally during development:
    - Run type checking
    - Run linting
    - Build the extension for production
-   - Create a `.vsix` file in the project root
+   - Create extension build output in `packages/vscode-extension/dist`
 
 4. **Install locally for testing:**
    ```bash
-   code --install-extension markdown-kanban-roadmap-*.vsix
+   code --install-extension mapctx-*.vsix
    ```
 
 ### Available Scripts
@@ -248,7 +283,7 @@ For publishing instructions, see [PUBLISH.md](./PUBLISH.md).
 ## 🚀 Quick Start
 
 ### Installation
-1. **[Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=alotth.markdown-kanban-roadmap)**
+1. **[Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=alotth.mapctx)**
    - Or search for "Markdown Kanban" in the VS Code Extension Marketplace
    - Click Install
 
@@ -299,7 +334,7 @@ For publishing instructions, see [PUBLISH.md](./PUBLISH.md).
 
 #### 2. Open Kanban View
 
-![How to Open Kanban](./imgs/image-to-open.png)
+![How to Open Kanban](./packages/vscode-extension/imgs/image-to-open.png)
 
 You have three ways to open the Kanban board:
 
@@ -326,4 +361,3 @@ You have three ways to open the Kanban board:
 
 #### 6. Enable or Disable File Switching
 - **Change the setting**: Use the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`) → Type "Enable/Disable File Switcher"
-

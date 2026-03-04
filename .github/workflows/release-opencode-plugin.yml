@@ -1,0 +1,47 @@
+name: Release OpenCode Plugin
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "plugin-v*.*.*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build plugin assets
+        run: npm run build:opencode-plugin
+
+      - name: Read package privacy flag
+        id: pkgmeta
+        run: |
+          IS_PRIVATE=$(node -e "const p=require('./packages/opencode-plugin/package.json');process.stdout.write(p.private ? 'true' : 'false')")
+          echo "is_private=$IS_PRIVATE" >> "$GITHUB_OUTPUT"
+
+      - name: Skip publish while package is private
+        if: ${{ steps.pkgmeta.outputs.is_private == 'true' }}
+        run: echo "packages/opencode-plugin is private; skipping npm publish."
+
+      - name: Publish package
+        if: ${{ steps.pkgmeta.outputs.is_private != 'true' }}
+        working-directory: packages/opencode-plugin
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

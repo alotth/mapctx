@@ -10,11 +10,11 @@
 			"type": "extensionHost",
 			"request": "launch",
 			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--extensionDevelopmentPath=${workspaceFolder}/packages/vscode-extension",
 				"${workspaceFolder}/example-tasks"
 			],
 			"outFiles": [
-				"${workspaceFolder}/dist/**/*.js"
+				"${workspaceFolder}/packages/vscode-extension/dist/**/*.js"
 			],
 			"internalConsoleOptions": "openOnSessionStart",
 			"preLaunchTask": "watch",

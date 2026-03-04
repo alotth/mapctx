@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Workspace V2</title>
+    <link rel="stylesheet" href="workspaceV2.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="title-group">
+            <h1 id="board-title">Workspace V2</h1>
+            <span id="board-mode" class="mode-badge">Model: unknown</span>
+            <span id="board-meta"></span>
+        </div>
+        <div class="view-switcher">
+            <button id="tab-kanban" class="tab active" type="button">Kanban</button>
+            <button id="tab-roadmap" class="tab" type="button">Roadmap</button>
+        </div>
+    </header>
+
+    <main>
+        <section id="kanban-view" class="view active"></section>
+        <section id="roadmap-view" class="view"></section>
+    </main>
+
+    <script src="workspaceV2.js"></script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+{
+  "name": "mapctx",
+  "private": true,
+  "displayName": "MapCtx",
+  "description": "Multi-agent project context for tasks, status, and roadmap",
+  "publisher": "alotth",
+  "version": "2.0.0",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "markdown",
+    "project context",
+    "task management",
+    "roadmap",
+    "multi-agent",
+    "productivity"
+  ],
+  "icon": "./imgs/logo.png",
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./dist/extension.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alotth/mapctx"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "mapctx.openKanban",
+        "title": ".md Kanban",
+        "category": "MapCtx"
+      },
+      {
+        "command": "mapctx.openRoadmap",
+        "title": ".md Roadmap",
+        "category": "MapCtx"
+      },
+      {
+        "command": "mapctx.openWorkspaceV2",
+        "title": ".md Workspace V2",
+        "category": "MapCtx"
+      },
+      {
+        "command": "mapctx.disableFileListener",
+        "title": "Enable/Disable File Switcher",
+        "category": "MapCtx"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "mapctx.openKanban",
+          "when": "resourceExtname == .md && mapctxActive",
+          "group": "navigation"
+        },
+        {
+          "command": "mapctx.openRoadmap",
+          "when": "resourceExtname == .md && mapctxActive",
+          "group": "navigation"
+        },
+        {
+          "command": "mapctx.openWorkspaceV2",
+          "when": "resourceExtname == .md && mapctxActive",
+          "group": "navigation@1"
+        }
+      ]
+    },
+    "configuration": {
+      "type": "object",
+      "title": "MapCtx",
+      "properties": {
+        "mapctx.taskHeader": {
+          "type": "string",
+          "enum": [
+            "title",
+            "list"
+          ],
+          "default": "title",
+          "description": "Choose how tasks are formatted in the markdown file. 'title' uses ### headers, 'list' uses - bullet points."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "npm run build --workspace @mapctx/core && tsc --noEmit",
+    "lint": "eslint",
+    "test": "vscode-test",
+    "test:parser": "tsx ../../scripts/test-parser.ts",
+    "dev:standalone": "tsx ../../scripts/dev-mode.ts",
+    "watch:logs": "bash ../../scripts/watch-logs.sh",
+    "logs": "tail -f ../../.logs/extension.log",
+    "prepare-publish": "node ../../scripts/prepare-publish.js"
+  },
+  "dependencies": {
+    "@mapctx/core": "file:../core",
+    "@mapctx/sync-engine": "file:../sync-engine"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "18.x",
+    "@types/vscode": "^1.74.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "@vscode/test-cli": "^0.0.4",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.19.10",
+    "eslint": "^8.56.0",
+    "npm-run-all": "^4.1.5",
+    "tsx": "^4.21.0",
+    "typescript": "^5.3.3"
+  }
+}

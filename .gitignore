@@ -19,3 +19,10 @@ README-DEV.md
 
 # Development scripts
 scripts/
+
+# tasks-sync local state/build artifacts
+.tasks-sync/
+task-sync/dist/
+
+# temp files
+temp/
