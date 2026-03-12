@@ -3,7 +3,7 @@
   "checkpoint_id": "2ec5da3a1506",
   "strategy": "manual-commit",
   "branch": "chore/mapctx-monorepo-migration",
-  "checkpoints_count": 6,
+  "checkpoints_count": 7,
   "files_touched": [
     "packages/core/src/detail.ts",
     "packages/sync-engine/README.md",
@@ -21,6 +21,13 @@
       "context": "/2e/c5da3a1506/0/context.md",
       "content_hash": "/2e/c5da3a1506/0/content_hash.txt",
       "prompt": "/2e/c5da3a1506/0/prompt.txt"
+    },
+    {
+      "metadata": "/2e/c5da3a1506/1/metadata.json",
+      "transcript": "/2e/c5da3a1506/1/full.jsonl",
+      "context": "",
+      "content_hash": "/2e/c5da3a1506/1/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
