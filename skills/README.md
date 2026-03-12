@@ -4,9 +4,9 @@ This directory contains reusable skill packs for AI-assisted workflows.
 
 ## Available Skills
 
-- `kanban-tasks`: maintain single-list `TASKS.md` (V2 status model)
-- `kanban-sync-engine`: run safe TASKS <-> GitHub sync operations
-- `tasks-md-v1`: maintain legacy section-based boards
+- `mapctx-tasks`: maintain single-list `TASKS.md` (V2 status model)
+- `mapctx-sync-engine`: run safe TASKS <-> GitHub sync operations
+- `mapctx-ralph-tasks`: run Ralph task-loop workflow from `/mapctx-ralph-tasks`
 
 ## Intended Use
 
@@ -18,3 +18,5 @@ This directory contains reusable skill packs for AI-assisted workflows.
 
 - Skills are versioned with the monorepo.
 - When task format contracts change, update both skill docs and package docs in the same PR.
+- Task ID convention is prefix-based: use `E-XXX` for `type: epic` and `T-XXX` for all other task types.
+- Detail files should follow `./tasks/<ID>.md` (for example `./tasks/E-001.md`, `./tasks/T-014.md`).
