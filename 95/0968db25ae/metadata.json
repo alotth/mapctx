@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "950968db25ae",
+  "strategy": "manual-commit",
+  "branch": "chore/mapctx-monorepo-migration",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "skills/README.md",
+    "skills/mapctx-ralph-tasks/SKILL.md",
+    "skills/mapctx-ralph-tasks/references/flow.md",
+    "skills/mapctx-ralph-tasks/references/prompt-contract.md",
+    "skills/mapctx-ralph-tasks/references/retry-policy.md",
+    "skills/mapctx-tasks/SKILL.md",
+    "skills/mapctx-tasks/references/bootstrap-and-templates.md",
+    "skills/mapctx-tasks/references/custom-statuses.md",
+    "skills/mapctx-tasks/references/field-types-and-contract.md",
+    "skills/mapctx-tasks/references/status-and-sync.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/95/0968db25ae/0/metadata.json",
+      "transcript": "/95/0968db25ae/0/full.jsonl",
+      "context": "/95/0968db25ae/0/context.md",
+      "content_hash": "/95/0968db25ae/0/content_hash.txt",
+      "prompt": "/95/0968db25ae/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 192761,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1222656,
+    "output_tokens": 9828,
+    "api_call_count": 45
+  }
+}
