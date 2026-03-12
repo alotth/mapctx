@@ -1,0 +1,110 @@
+acha que as tasks estao bem descritas? outra estao no status correto?
+
+---
+
+soo, we are working in another repo that was a fork, but I did too much to stay on that repo, and I created this one, a new one monorepo with all that agregates this ecosystem to work managing the projects, but this tasks are old, we have to review what have to stay, that is a good idea for this project, and whats is not
+
+---
+
+sync reliability, task UX, GitHub Projects integration, docs, skills and hooks/plugins, now im working on plugin of the opencode ( @.opencode/plugins/mapcs-session-sync.ts and @packages/opencode-plugin )
+Called the Read tool with the following input: {"filePath":"/Users/alt/repos/mapctx/.opencode/plugins/mapcs-session-sync.ts"}
+<path>/Users/alt/repos/mapctx/.opencode/plugins/mapcs-session-sync.ts</path>
+<type>file</type>
+<content>1: const CLI_RELATIVE_PATH = "packages/sync-engine/dist/cli.js";
+2: const CONFIG_RELATIVE_PATH = "sync.config.json";
+3: const TASKS_RELATIVE_PATH = "TASKS.md";
+4: declare const Bun: any;
+5: 
+6: type LogLevel = "debug" | "info" | "warn" | "error";
+7: 
+8: async function log(client: any, level: LogLevel, message: string, extra: Record<string, unknown> = {}): Promise<void> {
+9:   if (!client?.app?.log) return;
+10:   await client.app.log({
+11:     body: {
+12:       service: "mapcs-session-sync",
+13:       level,
+14:       message,
+15:       extra,
+16:     },
+17:   });
+18: }
+19: 
+20: async function runMapcs($: any, cliPath: string, configPath: string, tasksPath: string, command: string): Promise<void> {
+21:   await $`node ${cliPath} ${command} --config ${configPath} --tasks-file ${tasksPath}`;
+22: }
+23: 
+24: export const MapcsSessionSyncPlugin = async ({ client, $, worktree }: any) => {
+25:   return {
+26:     "session.created": async () => {
+27:       const shouldPull = process.env.MAPCS_AUTO_PULL !== "0";
+28:       const cliPath = `${worktree}/${CLI_RELATIVE_PATH}`;
+29:       const configPath = `${worktree}/${CONFIG_RELATIVE_PATH}`;
+30:       const tasksPath = `${worktree}/${TASKS_RELATIVE_PATH}`;
+31: 
+32:       const hasCli = await Bun.file(cliPath).exists();
+33:       const hasConfig = await Bun.file(configPath).exists();
+34:       const hasTasks = await Bun.file(tasksPath).exists();
+35: 
+36:       if (!hasCli || !hasConfig || !hasTasks) {
+37:         await log(client, "warn", "Skipping session auto sync: required files missing", {
+38:           hasCli,
+39:           hasConfig,
+40:           hasTasks,
+41:           cliPath,
+42:           configPath,
+43:           tasksPath,
+44:         });
+45:         return;
+46:       }
+47: 
+48:       try {
+49:         await log(client, "info", "Running mapcs status before auto pull");
+50:         await runMapcs($, cliPath, configPath, tasksPath, "status");
+51: 
+52:         if (shouldPull) {
+53:           await log(client, "info", "Running mapcs pull on session start");
+54:           await runMapcs($, cliPath, configPath, tasksPath, "pull");
+55:           await runMapcs($, cliPath, configPath, tasksPath, "status");
+56:         } else {
+57:           await log(client, "info", "Skipping pull by MAPCS_AUTO_PULL=0");
+58:         }
+59:       } catch (error) {
+60:         await log(client, "error", "Session auto sync failed", {
+61:           error: String(error),
+62:         });
+63:       }
+64:     },
+65:   };
+66: };
+
+(End of file - total 66 lines)
+</content>
+Called the Read tool with the following input: {"filePath":"/Users/alt/repos/mapctx/packages/opencode-plugin"}
+<path>/Users/alt/repos/mapctx/packages/opencode-plugin</path>
+<type>directory</type>
+<entries>
+dist/
+kanban-roadmap.js
+kanban-roadmap.plugin.ts
+package.json
+README.md
+src/
+
+(6 entries)
+</entries>
+
+---
+
+you can exclude the packages/sync-engine/TASKS.md + example-tasks/TASKS.md
+
+---
+
+podemos apagar ao inves de arquivar, e a 18 podemos simplificar, so para a ideia de que temos a intensao de criar um sync com vault obsidian como epico
+
+---
+
+isso remova tasks/T-XXX.md tambem
+
+---
+
+sim faca, e ja renumere, para t-001 e ai por diante
