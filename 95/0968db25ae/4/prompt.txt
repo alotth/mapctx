@@ -1,0 +1,389 @@
+vamos subir as skills atualizadas para global
+
+---
+
+o que faz o rsync -a --delete?
+
+---
+
+ok, agora na config global tem uma rule, me traga a ideia dela
+
+---
+
+essa parte de tasks ta bem diferente da @rules/AGENTS.md ? 
+Called the Read tool with the following input: {"filePath":"/Users/alt/repos/mapctx/rules/AGENTS.md"}
+<path>/Users/alt/repos/mapctx/rules/AGENTS.md</path>
+<type>file</type>
+<content>1: # MapCtx Tasks Rules for AI Agents
+2: 
+3: These rules define how agents should create and maintain `TASKS.md` and `tasks/T-XXX.md` files in this repository.
+4: 
+5: ## TASKS.md structure
+6: 
+7: Use one single list model:
+8: 
+9: ```markdown
+10: # Tasks - <project-name>
+11: 
+12: ## Components
+13: 
+14: - COMPONENT: short scope description
+15: 
+16: ## Tasks
+17: 
+18: ### [T-001] Task title
+19: 
+20:   - id: T-001
+21:   - status: backlog
+22:   - type: task
+23:   - parent: null
+24:   - subIssueProgress: null
+25:   - priority: medium
+26:   - workload: Normal
+27:   - tags: []
+28:   - touch: []
+29:   - dependsOn: []
+30:   - start: null
+31:   - due: null
+32:   - completed: null
+33:   - externalId: null
+34:   - updated: 2026-03-06
+35:   - detail: ./tasks/T-001.md
+36: 
+37: ## Notes
+38: 
+39: - Optional project notes
+40: ```
+41: 
+42: Do not use section-based columns like `## Backlog`, `## Doing`, `## Review`, `## Done`, `## Paused`.
+43: Status is always represented by `status:` in each task.
+44: 
+45: ## Required task fields
+46: 
+47: Every task in `## Tasks` must include these keys in this exact order:
+48: 
+49: 1. `id`
+50: 2. `status`
+51: 3. `type`
+52: 4. `parent`
+53: 5. `subIssueProgress`
+54: 6. `priority`
+55: 7. `workload`
+56: 8. `tags`
+57: 9. `touch`
+58: 10. `dependsOn`
+59: 11. `start`
+60: 12. `due`
+61: 13. `completed`
+62: 14. `externalId`
+63: 15. `updated`
+64: 16. `detail`
+65: 
+66: Rules:
+67: 
+68: - `type` is required and should be one of `epic|feature|task|bug|chore`.
+69: - `parent` is required as a key. Use parent task ID for subtasks, otherwise `null`.
+70: - `subIssueProgress` is required as a key. Use for epics when known (for example `3/8`), otherwise `null`.
+71: - Dates must use `YYYY-MM-DD`.
+72: - Unknown scalar values use `null`.
+73: - Empty list values should use `[]`.
+74: 
+75: ## Optional extension fields
+76: 
+77: Add only when needed by project workflow or sync setup. If used, append after `detail`:
+78: 
+79: - `iteration`: cycle/sprint identifier
+80: - `assignees`: list of assignee handles (for GitHub, prefer login names)
+81: - `externalLinks`: multi-provider external references
+82: - `milestone`: optional release marker
+83: 
+84: Do not use `defaultExpanded`.
+85: 
+86: ## Status flow
+87: 
+88: Default status lifecycle:
+89: 
+90: - `backlog -> doing`
+91: - `doing -> review`
+92: - `review -> done`
+93: - `doing -> paused`
+94: - `paused -> doing`
+95: 
+96: Custom statuses are allowed when explicitly defined by the project.
+97: 
+98: When status changes:
+99: 
+100: - Always update `updated`.
+101: - Set `completed` when entering completion state (`done` by default).
+102: - Reset `completed: null` when moving out of completion state.
+103: 
+104: ## Detail file format (`tasks/T-XXX.md`)
+105: 
+106: Use this metadata-first format:
+107: 
+108: ```markdown
+109: # T-001
+110: 
+111:   - role: feature
+112:   - impact: high
+113:   - estimatedEffort: 2d
+114:   - prerequisites: []
+115:   - blocking: []
+116:   - filesAffected: []
+117:   - testsRequired: []
+118:   - summary: One-line objective.
+119:   - description: |
+120:       ## Acceptance
+121:       - [ ] Define acceptance criteria.
+122: 
+123:       ## Steps
+124:       - [ ] Define implementation steps.
+125: 
+126:       ## Notes
+127:       Additional context and constraints.
+128: ```
+129: 
+130: Rules:
+131: 
+132: - File heading must match task ID (`# T-XXX`).
+133: - Keep `description` as the last metadata key.
+134: - Put acceptance/steps/notes inside `description: |`.
+135: - Do not use fenced ```md blocks for task description format.
+136: 
+137: ## Project management patterns for agents
+138: 
+139: Use these planning rules by default:
+140: 
+141: 1. Start with outcomes, then execution.
+142:    - Create epics for major outcomes.
+143:    - Create feature/task/bug/chore items for execution.
+144:    - Add subtasks only when decomposition improves delivery clarity.
+145: 
+146: 2. Keep task size delivery-friendly.
+147:    - Prefer tasks that can be completed in a few days.
+148:    - Split oversized tasks before moving them to `doing`.
+149: 
+150: 3. Keep WIP low.
+151:    - Avoid many concurrent `doing` tasks.
+152:    - Finish in-progress work before opening new streams.
+153: 
+154: 4. Make dependencies explicit and minimal.
+155:    - Use `dependsOn` only for real blocking relationships.
+156:    - Avoid dependency chains that are longer than needed.
+157: 
+158: 5. Keep definitions of done testable.
+159:    - Use clear acceptance checklists in detail files.
+160:    - Keep `testsRequired` current with real validation commands.
+161: 
+162: 6. Preserve low-conflict edits.
+163:    - Prefer editing only the target task block.
+164:    - During status transitions, prefer changing `status`, `updated`, and `completed` only.
+165: 
+166: ## Agent execution checklist
+167: 
+168: When creating or editing tasks:
+169: 
+170: 1. Scan existing IDs and use the next sequential `T-XXX`.
+171: 2. Keep required field order exact.
+172: 3. Keep task ordering stable; append new tasks at end of `## Tasks`.
+173: 4. Update `updated` for every touched task.
+174: 5. Validate no duplicate IDs.
+175: 6. Ensure every referenced `detail` file exists (or set `detail: null`).
+
+(End of file - total 175 lines)
+</content>
+
+---
+
+eh q na verdade a minha ideia com as @rules eh esse do que esta no global, puxe o que esta em global para @rules/AGENTS.md , somente a parte relacionada ao TASKS
+Called the Read tool with the following input: {"filePath":"/Users/alt/repos/mapctx/rules"}
+<path>/Users/alt/repos/mapctx/rules</path>
+<type>directory</type>
+<entries>
+.cursorrules
+AGENTS.md
+CLAUDE.md
+
+(3 entries)
+</entries>
+Called the Read tool with the following input: {"filePath":"/Users/alt/repos/mapctx/rules/AGENTS.md"}
+<path>/Users/alt/repos/mapctx/rules/AGENTS.md</path>
+<type>file</type>
+<content>1: # MapCtx Tasks Rules for AI Agents
+2: 
+3: These rules define how agents should create and maintain `TASKS.md` and `tasks/T-XXX.md` files in this repository.
+4: 
+5: ## TASKS.md structure
+6: 
+7: Use one single list model:
+8: 
+9: ```markdown
+10: # Tasks - <project-name>
+11: 
+12: ## Components
+13: 
+14: - COMPONENT: short scope description
+15: 
+16: ## Tasks
+17: 
+18: ### [T-001] Task title
+19: 
+20:   - id: T-001
+21:   - status: backlog
+22:   - type: task
+23:   - parent: null
+24:   - subIssueProgress: null
+25:   - priority: medium
+26:   - workload: Normal
+27:   - tags: []
+28:   - touch: []
+29:   - dependsOn: []
+30:   - start: null
+31:   - due: null
+32:   - completed: null
+33:   - externalId: null
+34:   - updated: 2026-03-06
+35:   - detail: ./tasks/T-001.md
+36: 
+37: ## Notes
+38: 
+39: - Optional project notes
+40: ```
+41: 
+42: Do not use section-based columns like `## Backlog`, `## Doing`, `## Review`, `## Done`, `## Paused`.
+43: Status is always represented by `status:` in each task.
+44: 
+45: ## Required task fields
+46: 
+47: Every task in `## Tasks` must include these keys in this exact order:
+48: 
+49: 1. `id`
+50: 2. `status`
+51: 3. `type`
+52: 4. `parent`
+53: 5. `subIssueProgress`
+54: 6. `priority`
+55: 7. `workload`
+56: 8. `tags`
+57: 9. `touch`
+58: 10. `dependsOn`
+59: 11. `start`
+60: 12. `due`
+61: 13. `completed`
+62: 14. `externalId`
+63: 15. `updated`
+64: 16. `detail`
+65: 
+66: Rules:
+67: 
+68: - `type` is required and should be one of `epic|feature|task|bug|chore`.
+69: - `parent` is required as a key. Use parent task ID for subtasks, otherwise `null`.
+70: - `subIssueProgress` is required as a key. Use for epics when known (for example `3/8`), otherwise `null`.
+71: - Dates must use `YYYY-MM-DD`.
+72: - Unknown scalar values use `null`.
+73: - Empty list values should use `[]`.
+74: 
+75: ## Optional extension fields
+76: 
+77: Add only when needed by project workflow or sync setup. If used, append after `detail`:
+78: 
+79: - `iteration`: cycle/sprint identifier
+80: - `assignees`: list of assignee handles (for GitHub, prefer login names)
+81: - `externalLinks`: multi-provider external references
+82: - `milestone`: optional release marker
+83: 
+84: Do not use `defaultExpanded`.
+85: 
+86: ## Status flow
+87: 
+88: Default status lifecycle:
+89: 
+90: - `backlog -> doing`
+91: - `doing -> review`
+92: - `review -> done`
+93: - `doing -> paused`
+94: - `paused -> doing`
+95: 
+96: Custom statuses are allowed when explicitly defined by the project.
+97: 
+98: When status changes:
+99: 
+100: - Always update `updated`.
+101: - Set `completed` when entering completion state (`done` by default).
+102: - Reset `completed: null` when moving out of completion state.
+103: 
+104: ## Detail file format (`tasks/T-XXX.md`)
+105: 
+106: Use this metadata-first format:
+107: 
+108: ```markdown
+109: # T-001
+110: 
+111:   - role: feature
+112:   - impact: high
+113:   - estimatedEffort: 2d
+114:   - prerequisites: []
+115:   - blocking: []
+116:   - filesAffected: []
+117:   - testsRequired: []
+118:   - summary: One-line objective.
+119:   - description: |
+120:       ## Acceptance
+121:       - [ ] Define acceptance criteria.
+122: 
+123:       ## Steps
+124:       - [ ] Define implementation steps.
+125: 
+126:       ## Notes
+127:       Additional context and constraints.
+128: ```
+129: 
+130: Rules:
+131: 
+132: - File heading must match task ID (`# T-XXX`).
+133: - Keep `description` as the last metadata key.
+134: - Put acceptance/steps/notes inside `description: |`.
+135: - Do not use fenced ```md blocks for task description format.
+136: 
+137: ## Project management patterns for agents
+138: 
+139: Use these planning rules by default:
+140: 
+141: 1. Start with outcomes, then execution.
+142:    - Create epics for major outcomes.
+143:    - Create feature/task/bug/chore items for execution.
+144:    - Add subtasks only when decomposition improves delivery clarity.
+145: 
+146: 2. Keep task size delivery-friendly.
+147:    - Prefer tasks that can be completed in a few days.
+148:    - Split oversized tasks before moving them to `doing`.
+149: 
+150: 3. Keep WIP low.
+151:    - Avoid many concurrent `doing` tasks.
+152:    - Finish in-progress work before opening new streams.
+153: 
+154: 4. Make dependencies explicit and minimal.
+155:    - Use `dependsOn` only for real blocking relationships.
+156:    - Avoid dependency chains that are longer than needed.
+157: 
+158: 5. Keep definitions of done testable.
+159:    - Use clear acceptance checklists in detail files.
+160:    - Keep `testsRequired` current with real validation commands.
+161: 
+162: 6. Preserve low-conflict edits.
+163:    - Prefer editing only the target task block.
+164:    - During status transitions, prefer changing `status`, `updated`, and `completed` only.
+165: 
+166: ## Agent execution checklist
+167: 
+168: When creating or editing tasks:
+169: 
+170: 1. Scan existing IDs and use the next sequential `T-XXX`.
+171: 2. Keep required field order exact.
+172: 3. Keep task ordering stable; append new tasks at end of `## Tasks`.
+173: 4. Update `updated` for every touched task.
+174: 5. Validate no duplicate IDs.
+175: 6. Ensure every referenced `detail` file exists (or set `detail: null`).
+
+(End of file - total 175 lines)
+</content>
