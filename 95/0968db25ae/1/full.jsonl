@@ -1,0 +1,1253 @@
+{
+  "info": {
+    "id": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+    "slug": "curious-river",
+    "projectID": "d6b1ca11d5baad84a8bbd704c60bc34fdf925bb6",
+    "directory": "/Users/alt/repos/mapctx",
+    "title": "Projeto: redefinir organização de recursos e estrutura de diretórios",
+    "version": "0.0.0-feat/plugin-bridge-202602281654",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "time": {
+      "created": 1773089297145,
+      "updated": 1773089360795
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1773089297208
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openai",
+          "modelID": "gpt-5.3-codex"
+        },
+        "id": "REDACTED",
+        "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "agora que cada vez mais o escopo de projeto todo esta sendo usado e nao so tasks, faz sentido talvez mudarmos de TASKS.md para outra coisa? e nao seria interessante estar em .tasks/ (ou outra coisa) ",
+          "id": "REDACTED",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1773089297217,
+          "completed": 1773089307017
+        },
+        "error": {
+          "name": "MessageAbortedError",
+          "data": {
+            "message": "The operation was aborted."
+          }
+        },
+        "parentID": "REDACTED",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "id": "REDACTED",
+        "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "id": "prt_cd45b965d001vPiiLeSgP6cWOM",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0c09ac3e9b11e53f0169af3212c06881a0adbca4f717d0479d",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1773089298876
+          },
+          "id": "prt_cd45b99bc001M1L5kBtf5jWD35",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "patch",
+          "hash": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "REDACTED",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1773089311894
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "plan",
+        "model": {
+          "providerID": "openai",
+          "modelID": "gpt-5.3-codex"
+        },
+        "id": "msg_cd45bcc6e001TjkS4J0WIx45lv",
+        "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "agora que cada vez mais o escopo de projeto todo esta sendo usado e nao so tasks, faz sentido talvez mudarmos de TASKS.md para outra coisa? e nao seria interessante estar em .tasks/ (ou outra coisa) ",
+          "id": "prt_cd45bcc6e002f6XruUdFxW64DG",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45bcc6e001TjkS4J0WIx45lv"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1773089311897,
+          "completed": 1773089317058
+        },
+        "parentID": "msg_cd45bcc6e001TjkS4J0WIx45lv",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 12411,
+          "input": 496,
+          "output": 139,
+          "reasoning": 106,
+          "cache": {
+            "read": 11776,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cd45bcc990022wpHacao2kClSz",
+        "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "id": "prt_cd45bd24f001Bm0lNVskV7Hp07",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45bcc990022wpHacao2kClSz"
+        },
+        {
+          "type": "reasoning",
+          "text": "**Checking for TASKS.md presence**",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_021f4aa569f9accf0169af32221cbc81a2806bf5d67ed7ffc7",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1773089314173,
+            "end": 1773089316573
+          },
+          "id": "prt_cd45bd57d001DjeOaso5H5OCDH",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45bcc990022wpHacao2kClSz"
+        },
+        {
+          "type": "tool",
+          "callID": "call_jxnvnn4svJ9Ru9FegXn8BY1I",
+          "tool": "glob",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "**/TASKS.md",
+              "path": "/Users/alt/repos/mapctx"
+            },
+            "output": "/Users/alt/repos/mapctx/TASKS.md\n/Users/alt/repos/mapctx/packages/sync-engine/TASKS.md\n/Users/alt/repos/mapctx/example-tasks/TASKS.md",
+            "title": "",
+            "metadata": {
+              "count": 3,
+              "truncated": false
+            },
+            "time": {
+              "start": 1773089316737,
+              "end": 1773089316751
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_021f4aa569f9accf0169af322480c081a2a9b652d708d6ce07"
+            }
+          },
+          "id": "prt_cd45bdedd001cG9t2bz7ZYIM9f",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45bcc990022wpHacao2kClSz"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "cost": 0,
+          "tokens": {
+            "total": 12411,
+            "input": 496,
+            "output": 139,
+            "reasoning": 106,
+            "cache": {
+              "read": 11776,
+              "write": 0
+            }
+          },
+          "id": "prt_cd45be053001Z1gwgKLrSoF2lg",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45bcc990022wpHacao2kClSz"
+        },
+        {
+          "type": "patch",
+          "hash": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_cd45be0c0001cAzbopvZ41iRvU",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45bcc990022wpHacao2kClSz"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1773089317059,
+          "completed": 1773089327835
+        },
+        "parentID": "msg_cd45bcc6e001TjkS4J0WIx45lv",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 12619,
+          "input": 175,
+          "output": 156,
+          "reasoning": 112,
+          "cache": {
+            "read": 12288,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cd45be0c3002pCagauEC6nILir",
+        "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "id": "prt_cd45be4dd0019Y9erxkPTUfdiq",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45be0c3002pCagauEC6nILir"
+        },
+        {
+          "type": "reasoning",
+          "text": "**Planning conditional markdown kanban prompt**",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0c7662c086748d550169af322c90188192b9ee75ae4cf78a81",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1773089324625,
+            "end": 1773089327228
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45be0c3002pCagauEC6nILir"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "grep",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "TASKS\\.md|\\.tasks/|tasks/",
+              "path": "/Users/alt/repos/mapctx",
+              "include": "*"
+            },
+            "output": "Found 2526 matches (showing first 100)\n/Users/alt/repos/mapctx/.git/entire-sessions/ses_32ba46d06ffehoyC0nXoyqYSAd.json:\n  Line 15:     \"skills/mapctx-ralph-tasks/SKILL.md\",\n  Line 16:     \"skills/mapctx-ralph-tasks/references/flow.md\",\n  Line 17:     \"skills/mapctx-ralph-tasks/references/prompt-contract.md\",\n  Line 18:     \"skills/mapctx-ralph-tasks/references/retry-policy.md\",\n  Line 25:     \"skills/mapctx-tasks/SKILL.md\",\n  Line 26:     \"skills/mapctx-tasks/references/bootstrap-and-templates.md\",\n  Line 27:     \"skills/mapctx-tasks/references/custom-statuses.md\",\n  Line 28:     \"skills/mapctx-tasks/references/field-types-and-contract.md\",\n  Line 29:     \"skills/mapctx-tasks/references/status-and-sync.md\"\n  Line 37:     \"TASKS.md\",\n  Line 38:     \"example-tasks/tasks/T-001.md\",\n  Line 39:     \"example-tasks/tasks/T-002.md\",\n  Line 40:     \"example-tasks/tasks/T-003.md\",\n  Line 41:     \"example-tasks/tasks/T-004.md\",\n  Line 42:     \"example-tasks/tasks/T-005.md\",\n  Line 54:     \"packages/sync-engine/tasks/T-001.md\",\n  Line 55:     \"packages/sync-engine/tasks/T-002.md\",\n  Line 56:     \"packages/sync-engine/tasks/T-003.md\",\n  Line 57:     \"packages/sync-engine/tasks/T-004.md\",\n  Line 58:     \"packages/sync-engine/tasks/T-005.md\",\n  Line 59:     \"packages/sync-engine/tasks/T-006.md\",\n  Line 60:     \"packages/sync-engine/tasks/T-007.md\",\n  Line 71:     \"skills/kanban-tasks/SKILL.md\",\n  Line 72:     \"skills/kanban-tasks/references/bootstrap-and-templates.md\",\n  Line 73:     \"skills/kanban-tasks/references/custom-statuses.md\",\n  Line 74:     \"skills/kanban-tasks/references/field-types-and-contract.md\",\n  Line 75:     \"skills/kanban-tasks/references/migrate-v1-to-v2.md\",\n  Line 76:     \"skills/kanban-tasks/references/status-and-sync.md\",\n  Line 77:     \"skills/mapctx-ralph-tasks/SKILL.md\",\n  Line 78:     \"skills/mapctx-ralph-tasks/references/flow.md\",\n  Line 79:     \"skills/mapctx-ralph-tasks/references/prompt-contract.md\",\n  Line 80:     \"skills/mapctx-ralph-tasks/references/retry-policy.md\",\n  Line 87:     \"skills/mapctx-tasks/SKILL.md\",\n  Line 88:     \"skills/mapctx-tasks/references/bootstrap-and-templates.md\",\n  Line 89:     \"skills/mapctx-tasks/references/custom-statuses.md\",\n  Line 90:     \"skills/mapctx-tasks/references/field-types-and-contract.md\",\n  Line 91:     \"skills/mapctx-tasks/references/status-and-sync.md\",\n  Line 93:     \"tasks/T-001.md\",\n  Line 94:     \"tasks/T-002.md\",\n  Line 95:     \"tasks/T-003.md\",\n  Line 96:     \"tasks/T-004.md\",\n  Line 97:     \"tasks/T-005.md\",\n  Line 98:     \"tasks/T-006.md\",\n  Line 99:     \"tasks/T-007.md\",\n  Line 100:     \"tasks/T-008.md\",\n  Line 101:     \"tasks/T-009.md\",\n  Line 102:     \"tasks/T-010.md\",\n  Line 103:     \"tasks/T-011.md\",\n  Line 104:     \"tasks/T-012.md\",\n  Line 105:     \"tasks/T-013.md\",\n  Line 106:     \"tasks/T-014.md\",\n  Line 107:     \"tasks/T-015.md\",\n  Line 108:     \"tasks/T-016.md\",\n  Line 109:     \"tasks/T-017.md\",\n  Line 110:     \"tasks/T-018.md\",\n  Line 111:     \"tasks/T-019.md\",\n  Line 112:     \"tasks/T-020.md\",\n  Line 113:     \"tasks/T-021.md\",\n  Line 114:     \"tasks/T-022.md\"\n\n/Users/alt/repos/mapctx/.entire/metadata/ses_32ba46d06ffehoyC0nXoyqYSAd/context.md:\n  Line 10: agora que cada vez mais o escopo de projeto todo esta sendo usado e nao so tasks, faz sentido talvez mudarmos de TASKS.md para outra coisa? e nao seria interessante estar em .tasks/ (ou outra coisa) \n\n/Users/alt/repos/mapctx/.entire/metadata/ses_32ba46d06ffehoyC0nXoyqYSAd/prompt.txt:\n  Line 1: agora que cada vez mais o escopo de projeto todo esta sendo usado e nao so tasks, faz sentido talvez mudarmos de TASKS.md para outra coisa? e nao seria interessante estar em .tasks/ (ou outra coisa) \n\n/Users/alt/repos/mapctx/.entire/metadata/ses_32ba46d06ffehoyC0nXoyqYSAd/full.jsonl:\n  Line 40:           \"text\": \"agora que cada vez mais o escopo de projeto todo esta sendo usado e nao so tasks, faz sentido talvez mudarmos de TASKS.md para outra coisa? e nao seria interessante estar em .tasks/ (ou outra coisa) \",\n\n/Users/alt/repos/mapctx/.entire/tmp/ses_32ba46d06ffehoyC0nXoyqYSAd.json:\n  Line 40:           \"text\": \"agora que cada vez mais o escopo de projeto todo esta sendo usado e nao so tasks, faz sentido talvez mudarmos de TASKS.md para outra coisa? e nao seria interessante estar em .tasks/ (ou outra coisa) \",\n\n/Users/alt/repos/mapctx/.git/entire-sessions/ses_32bb57a7effe0eS0iSf5YGXQnc.json:\n  Line 15:     \"skills/mapctx-ralph-tasks/SKILL.md\",\n  Line 16:     \"skills/mapctx-ralph-tasks/references/flow.md\",\n  Line 17:     \"skills/mapctx-ralph-tasks/references/prompt-contract.md\",\n  Line 18:     \"skills/mapctx-ralph-tasks/references/retry-policy.md\",\n  Line 25:     \"skills/mapctx-tasks/SKILL.md\",\n  Line 26:     \"skills/mapctx-tasks/references/bootstrap-and-templates.md\",\n  Line 27:     \"skills/mapctx-tasks/references/custom-statuses.md\",\n  Line 28:     \"skills/mapctx-tasks/references/field-types-and-contract.md\",\n  Line 29:     \"skills/mapctx-tasks/references/status-and-sync.md\"\n  Line 37:     \"TASKS.md\",\n  Line 38:     \"example-tasks/tasks/T-001.md\",\n  Line 39:     \"example-tasks/tasks/T-002.md\",\n  Line 40:     \"example-tasks/tasks/T-003.md\",\n  Line 41:     \"example-tasks/tasks/T-004.md\",\n  Line 42:     \"example-tasks/tasks/T-005.md\",\n  Line 54:     \"packages/sync-engine/tasks/T-001.md\",\n  Line 55:     \"packages/sync-engine/tasks/T-002.md\",\n  Line 56:     \"packages/sync-engine/tasks/T-003.md\",\n  Line 57:     \"packages/sync-engine/tasks/T-004.md\",\n  Line 58:     \"packages/sync-engine/tasks/T-005.md\",\n  Line 59:     \"packages/sync-engine/tasks/T-006.md\",\n  Line 60:     \"packages/sync-engine/tasks/T-007.md\",\n  Line 71:     \"skills/kanban-tasks/SKILL.md\",\n  Line 72:     \"skills/kanban-tasks/references/bootstrap-and-templates.md\",\n  Line 73:     \"skills/kanban-tasks/references/custom-statuses.md\",\n  Line 74:     \"skills/kanban-tasks/references/field-types-and-contract.md\",\n  Line 75:     \"skills/kanban-tasks/references/migrate-v1-to-v2.md\",\n  Line 76:     \"skills/kanban-tasks/references/status-and-sync.md\",\n  Line 77:     \"skills/mapctx-ralph-tasks/SKILL.md\",\n  Line 78:     \"skills/mapctx-ralph-tasks/references/flow.md\",\n  Line 79:     \"skills/mapctx-ralph-tasks/references/prompt-contract.md\",\n  Line 80:     \"skills/mapctx-ralph-tasks/references/retry-policy.md\",\n  Line 87:     \"skills/mapctx-tasks/SKILL.md\",\n  Line 88:     \"skills/mapctx-tasks/references/bootstrap-and-templates.md\",\n  Line 89:     \"skills/mapctx-tasks/references/custom-statuses.md\",\n  Line 90:     \"skills/mapctx-tasks/references/field-types-and-contract.md\",\n  Line 91:     \"skills/mapctx-tasks/references/status-and-sync.md\",\n\n(Results truncated: showing 100 of 2526 matches (2426 hidden). Consider using a more specific path or pattern.)",
+            "title": "TASKS\\.md|\\.tasks/|tasks/",
+            "metadata": {
+              "matches": 2526,
+              "truncated": true
+            },
+            "time": {
+              "start": 1773089327395,
+              "end": 1773089327739
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0c7662c086748d550169af322f2888819292e3013ff9521c70"
+            }
+          },
+          "id": "prt_cd45c087d001tk1X1CK84NQwtw",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45be0c3002pCagauEC6nILir"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "cost": 0,
+          "tokens": {
+            "total": 12619,
+            "input": 175,
+            "output": 156,
+            "reasoning": 112,
+            "cache": {
+              "read": 12288,
+              "write": 0
+            }
+          },
+          "id": "prt_cd45c0a7c0010g3CzJxJz1qSXr",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45be0c3002pCagauEC6nILir"
+        },
+        {
+          "type": "patch",
+          "hash": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_cd45c0ad9001DjlNrye4jemBHz",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45be0c3002pCagauEC6nILir"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1773089327836,
+          "completed": 1773089333260
+        },
+        "parentID": "msg_cd45bcc6e001TjkS4J0WIx45lv",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 14961,
+          "input": 2232,
+          "output": 185,
+          "reasoning": 117,
+          "cache": {
+            "read": 12544,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cd45c0adc002ya0fiNHNSqr28v",
+        "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "id": "prt_cd45c0f1a0014cxd0Py7VIRucU",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c0adc002ya0fiNHNSqr28v"
+        },
+        {
+          "type": "reasoning",
+          "text": "**Refining search scope with ripgrep**",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0614b55efe8142bb0169af3231a4cc81a08b38c212e741b471",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1773089329705,
+            "end": 1773089332433
+          },
+          "id": "prt_cd45c1229001IF1vmz3u88dQrr",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c0adc002ya0fiNHNSqr28v"
+        },
+        {
+          "type": "tool",
+          "callID": "call_3o9BGfsBLZmM4hEsYq34hdBo",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -n \"TASKS\\.md|tasks/T-|\\.tasks\" --glob '!.git' --glob '!.entire'",
+              "workdir": "/Users/alt/repos/mapctx",
+              "description": "Search repo references to TASKS paths"
+            },
+            "output": "zsh:1: command not found: rg\n",
+            "title": "Search repo references to TASKS paths",
+            "metadata": {
+              "output": "zsh:1: command not found: rg\n",
+              "exit": 127,
+              "description": "Search repo references to TASKS paths",
+              "truncated": false
+            },
+            "time": {
+              "start": 1773089333139,
+              "end": 1773089333163
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0614b55efe8142bb0169af3234446081a08d110e37d5081e58"
+            }
+          },
+          "id": "prt_cd45c1cd4001eeopCUesMQscGa",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c0adc002ya0fiNHNSqr28v"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "cost": 0,
+          "tokens": {
+            "total": 14961,
+            "input": 2232,
+            "output": 185,
+            "reasoning": 117,
+            "cache": {
+              "read": 12544,
+              "write": 0
+            }
+          },
+          "id": "prt_cd45c1fac001ptal0Vim0RvXPY",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c0adc002ya0fiNHNSqr28v"
+        },
+        {
+          "type": "patch",
+          "hash": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_cd45c20070011Bg8685N2R61U8",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c0adc002ya0fiNHNSqr28v"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1773089333263,
+          "completed": 1773089343389
+        },
+        "parentID": "msg_cd45bcc6e001TjkS4J0WIx45lv",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 15225,
+          "input": 135,
+          "output": 242,
+          "reasoning": 139,
+          "cache": {
+            "read": 14848,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cd45c200f0023mvQT6yk0WmACD",
+        "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "id": "prt_cd45c22bc001x4mY1cWE40AF9r",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c200f0023mvQT6yk0WmACD"
+        },
+        {
+          "type": "reasoning",
+          "text": "**Deciding fallback grep usage with includes**",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0ee3bfc94a53c3840169af323a27bc819dbd7cc2ee1a4524e2",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1773089338266,
+            "end": 1773089343233
+          },
+          "id": "prt_cd45c339a001DaPV1PoR9H6MLX",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c200f0023mvQT6yk0WmACD"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "glob",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "**/*mapcs*",
+              "path": "/Users/alt/repos/mapctx"
+            },
+            "output": "/Users/alt/repos/mapctx/.opencode/plugins/mapcs-session-sync.ts\n/Users/alt/repos/mapctx/packages/sync-engine/mapcs.config.json\n/Users/alt/repos/mapctx/packages/sync-engine/mapcs.dev.json\n/Users/alt/repos/mapctx/packages/sync-engine/mapcs.config.example.json",
+            "title": "",
+            "metadata": {
+              "count": 4,
+              "truncated": false
+            },
+            "time": {
+              "start": 1773089343244,
+              "end": 1773089343256
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0ee3bfc94a53c3840169af323f2964819daa6dce5185b0c29c"
+            }
+          },
+          "id": "prt_cd45c470300107yMOYqBrNj7sK",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c200f0023mvQT6yk0WmACD"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "glob",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "**/*sync*engine*",
+              "path": "/Users/alt/repos/mapctx"
+            },
+            "output": "/Users/alt/repos/mapctx/.github/workflows/release-sync-engine.yml",
+            "title": "",
+            "metadata": {
+              "count": 1,
+              "truncated": false
+            },
+            "time": {
+              "start": 1773089343249,
+              "end": 1773089343260
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0ee3bfc94a53c3840169af323f2974819da6d415dbcc3aa2b5"
+            }
+          },
+          "id": "prt_cd45c470f0018yWZk0lduyi8A2",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c200f0023mvQT6yk0WmACD"
+        },
+        {
+          "type": "tool",
+          "callID": "call_SUhnEjHbe1v1MOKOxrsh4ZsH",
+          "tool": "glob",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "**/README*",
+              "path": "/Users/alt/repos/mapctx"
+            },
+            "output": "/Users/alt/repos/mapctx/packages/opencode-plugin/README.md\n/Users/alt/repos/mapctx/skills/README.md\n/Users/alt/repos/mapctx/README.md\n/Users/alt/repos/mapctx/hooks/README.md\n/Users/alt/repos/mapctx/.opencode/plugins/README.md\n/Users/alt/repos/mapctx/packages/sync-engine/README.md\n/Users/alt/repos/mapctx/example-tasks/README.md\n/Users/alt/repos/mapctx/docs/README.md",
+            "title": "",
+            "metadata": {
+              "count": 8,
+              "truncated": false
+            },
+            "time": {
+              "start": 1773089343250,
+              "end": 1773089343260
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0ee3bfc94a53c3840169af323f297c819d80c49d67895edc7a"
+            }
+          },
+          "id": "prt_cd45c4711001DSqcGuB3c1EbDF",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c200f0023mvQT6yk0WmACD"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "cost": 0,
+          "tokens": {
+            "total": 15225,
+            "input": 135,
+            "output": 242,
+            "reasoning": 139,
+            "cache": {
+              "read": 14848,
+              "write": 0
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c200f0023mvQT6yk0WmACD"
+        },
+        {
+          "type": "patch",
+          "hash": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_cd45c479b001ZkJs4lZYlv6a4P",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c200f0023mvQT6yk0WmACD"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1773089343390,
+          "completed": 1773089350797
+        },
+        "parentID": "msg_cd45bcc6e001TjkS4J0WIx45lv",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 15563,
+          "input": 334,
+          "output": 125,
+          "reasoning": 27,
+          "cache": {
+            "read": 15104,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "id": "prt_cd45c5822001NOckwM4vhB32z7",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "**Reviewing key README files**",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_028c871b9a986dd30169af3243dbac819d959f16e05955b203",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1773089347997,
+            "end": 1773089350350
+          },
+          "id": "prt_cd45c599d0012YfhX50qGN1FX6",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "call_p1CgHE4vUJHEQdaF14bAaqp6",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/Users/alt/repos/mapctx/README.md"
+            },
+            "output": "<path>/Users/alt/repos/mapctx/README.md</path>\n<type>file</type>\n<content>1: # MapCtx - Multi-Agent Project Context\n2: \n3: A multi-agent project context workspace for Markdown tasks, roadmap visualization, and sync workflows.\n4: \n5: MapCtx is an AI-first workspace for planning and execution with:\n6: \n7: - local task boards in `TASKS.md`\n8: - detailed task docs in `tasks/T-XXX.md`\n9: - Kanban/Roadmap UI (VS Code + OpenCode plugin)\n10: - bidirectional sync with GitHub Issues + GitHub Projects v2 (via `@mapctx/sync-engine`)\n11: \n12: **Install extension:** [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=alotth.mapctx)\n13: \n14: ## What is in this monorepo\n15: \n16: - `packages/vscode-extension/`: VS Code/Cursor extension (`mapctx`)\n17: - `packages/opencode-plugin/`: OpenCode UI plugin assets + installer flow\n18: - `packages/sync-engine/`: `@mapctx/sync-engine` CLI/library for sync\n19: - `packages/core/`: shared parser/model helpers\n20: - `skills/`: reusable AI skills for OpenCode/Claude/Cursor\n21: - `rules/`: agent rules (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`)\n22: \n23: Contributor guide: `CONTRIBUTING.md`\n24: \n25: ## Core capabilities\n26: \n27: - Local-first task management in Markdown with deterministic structure\n28: - Task hierarchy support (`type`, `parent`, `subIssueProgress`)\n29: - External detail files for large task descriptions and checklists\n30: - Kanban + roadmap visualization in VS Code\n31: - OpenCode plugin tab for kanban/roadmap workflows\n32: - Sync operations for Issues + Projects v2:\n33:   - `status`, `pull`, `push`, `bootstrap`, `reconcile`\n34:   - dry-run and conflict-oriented workflows\n35: \n36: For sync operational details, see `packages/sync-engine/README.md` and `packages/sync-engine/DOCUMENTATION.md`.\n37: \n38: ## Quick start\n39: \n40: ### 1) Install dependencies\n41: \n42: ```bash\n43: npm ci\n44: ```\n45: \n46: ### 2) Build key packages\n47: \n48: ```bash\n49: npm run compile\n50: npm run build:sync-engine\n51: npm run build:opencode-plugin\n52: ```\n53: \n54: ### 3) Run tests\n55: \n56: ```bash\n57: npm test\n58: npm run test:sync-engine\n59: ```\n60: \n61: ## Use the VS Code extension\n62: \n63: You can use MapCtx from the Marketplace build or run it locally.\n64: \n65: Local dev flow:\n66: \n67: 1. Run `npm run compile`\n68: 2. Press `F5` in VS Code (Extension Development Host)\n69: 3. Open a folder with a `TASKS.md`\n70: 4. Use command palette action to open the Kanban board\n71: \n72: Package local VSIX:\n73: \n74: ```bash\n75: cd packages/vscode-extension\n76: npx @vscode/vsce package --out ../../mapctx-local.vsix\n77: ```\n78: \n79: ## Use sync engine (`@mapctx/sync-engine`)\n80: \n81: Run with `npx` (no global install required):\n82: \n83: ```bash\n84: npx --yes --package @mapctx/sync-engine mapcs status\n85: ```\n86: \n87: Typical safe flow:\n88: \n89: ```bash\n90: mapcs pull\n91: mapcs status\n92: mapcs push\n93: ```\n94: \n95: Safety rule: run `pull` before `push` in the same session.\n96: \n97: Main files:\n98: \n99: - `mapcs.config.json`\n100: - `.mapcs/state.json`\n101: - `.mapcs/conflicts/<task-id>.reconcile.md`\n102: \n103: ### GitHub auth scopes\n104: \n105: To sync Issues + Projects v2, token scopes must include:\n106: \n107: - `repo`\n108: - `read:project`\n109: - `project`\n110: \n111: Refresh example:\n112: \n113: ```bash\n114: gh auth refresh -h github.com -s repo,read:project,project\n115: gh auth status\n116: ```\n117: \n118: ## AI skills and rules\n119: \n120: Available skills are documented in `skills/README.md`:\n121: \n122: - `mapctx-tasks`: maintain V2 single-list `TASKS.md`\n123: - `mapctx-sync-engine`: safe sync operations and conflict handling\n124: - `mapctx-ralph-tasks`: execute Ralph task loops via slash trigger\n125: \n126: Rule packs for AI assistants:\n127: \n128: - `rules/AGENTS.md`\n129: - `rules/CLAUDE.md`\n130: - `rules/.cursorrules`\n131: \n132: ## OpenCode plugin\n133: \n134: Build + install from repo root:\n135: \n136: ```bash\n137: npm run build:opencode-plugin\n138: npm run install:opencode-plugin\n139: ```\n140: \n141: Installed location:\n142: \n143: - `~/.config/opencode/plugins/kanban-roadmap/`\n144: - `~/.config/opencode/plugins/kanban-roadmap.js`\n145: \n146: More details: `packages/opencode-plugin/README.md`\n147: \n148: ## Release tags\n149: \n150: Monorepo releases are split by tag prefix:\n151: \n152: - `ext-vX.Y.Z` -> VS Code extension\n153: - `sync-vX.Y.Z` -> `@mapctx/sync-engine`\n154: - `plugin-vX.Y.Z` -> OpenCode plugin\n155: \n156: Runbooks:\n157: \n158: - `docs/releases/tag-strategy.md`\n159: - `docs/releases/extension.md`\n160: - `docs/releases/engine.md`\n161: - `docs/releases/opencode-plugin.md`\n162: \n163: ## Documentation map\n164: \n165: - Main contributor docs: `CONTRIBUTING.md`\n166: - Sync engine guide: `packages/sync-engine/DOCUMENTATION.md`\n167: - Sync quick commands: `packages/sync-engine/CHEATSHEET.md`\n168: - Skills overview: `skills/README.md`\n169: - Static docs site source: `docs/`\n\n(End of file - total 169 lines)\n</content>",
+            "title": "README.md",
+            "metadata": {
+              "preview": "# MapCtx - Multi-Agent Project Context\n\nA multi-agent project context workspace for Markdown tasks, roadmap visualization, and sync workflows.\n\nMapCtx is an AI-first workspace for planning and execution with:\n\n- local task boards in `TASKS.md`\n- detailed task docs in `tasks/T-XXX.md`\n- Kanban/Roadmap UI (VS Code + OpenCode plugin)\n- bidirectional sync with GitHub Issues + GitHub Projects v2 (via `@mapctx/sync-engine`)\n\n**Install extension:** [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=alotth.mapctx)\n\n## What is in this monorepo\n\n- `packages/vscode-extension/`: VS Code/Cursor extension (`mapctx`)\n- `packages/opencode-plugin/`: OpenCode UI plugin assets + installer flow\n- `packages/sync-engine/`: `@mapctx/sync-engine` CLI/library for sync\n- `packages/core/`: shared parser/model helpers\n- `skills/`: reusable AI skills for OpenCode/Claude/Cursor",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1773089350355,
+              "end": 1773089350363
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_028c871b9a986dd30169af32462880819da04cac212ef6403c"
+            }
+          },
+          "id": "prt_cd45c62cf001pA4eJXFCM4Fdbp",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/Users/alt/repos/mapctx/packages/sync-engine/README.md"
+            },
+            "output": "<path>/Users/alt/repos/mapctx/packages/sync-engine/README.md</path>\n<type>file</type>\n<content>1: # @mapctx/sync-engine (alpha)\n2: \n3: Standalone npm package + CLI to sync local `TASKS.md` with GitHub Issues and GitHub Projects (v2).\n4: \n5: Status: alpha. APIs, config keys, and sync behavior may change before `1.0.0`.\n6: \n7: Detailed operational guide: `DOCUMENTATION.md`.\n8: \n9: ## Install\n10: \n11: ```bash\n12: npm install @mapctx/sync-engine\n13: ```\n14: \n15: Run with npx:\n16: \n17: ```bash\n18: npx --yes --package @mapctx/sync-engine mapcs status\n19: ```\n20: \n21: Release/maintainer process: see `MAINTAINERS.md`.\n22: \n23: ## Use as library\n24: \n25: ```ts\n26: import { pullCommand, pushCommand, statusCommand } from '@mapctx/sync-engine';\n27: \n28: statusCommand({ configPath: 'mapcs.dev.json' });\n29: ```\n30: \n31: ## CLI commands\n32: \n33: - `mapcs status`\n34: - `mapcs pull`\n35: - `mapcs push`\n36: - `mapcs bootstrap --from <local|github>`\n37: - `mapcs reconcile <task-id>`\n38: - `mapcs reconcile --list`\n39: \n40: Common flags:\n41: \n42: - `--dry-run`\n43: - `--force`\n44: - `--accept <local|remote>`\n45: - `--config <path>`\n46: - `--tasks-file <path>`\n47: \n48: ## Important files\n49: \n50: - Main config: `mapcs.config.json`\n51: - Config template: `mapcs.config.example.json`\n52: - Local sync state: `.mapcs/state.json`\n53: - Conflict artifacts: `.mapcs/conflicts/<task-id>.reconcile.md`\n54: \n55: ## Daily flow\n56: \n57: ```bash\n58: mapcs pull\n59: mapcs status\n60: mapcs push\n61: ```\n62: \n63: Safety rule: always run `pull` before `push` in the same session.\n64: \n65: ## Bootstrap\n66: \n67: Local-first (`TASKS.md` -> GitHub):\n68: \n69: ```bash\n70: mapcs bootstrap --from local --dry-run --confirm\n71: mapcs bootstrap --from local --confirm\n72: ```\n73: \n74: Remote-first (GitHub -> `TASKS.md`):\n75: \n76: ```bash\n77: mapcs bootstrap --from github --dry-run\n78: mapcs bootstrap --from github\n79: ```\n80: \n81: ## Reconciliation\n82: \n83: ```bash\n84: mapcs reconcile --list\n85: mapcs reconcile T-002\n86: mapcs reconcile T-002 --accept local\n87: mapcs reconcile T-002 --accept remote\n88: mapcs push\n89: ```\n90: \n91: ## GitHub auth scopes\n92: \n93: To sync Issues and Projects v2, your `gh` token needs:\n94: \n95: - `repo`\n96: - `read:project`\n97: - `project`\n98: \n99: Refresh scopes:\n100: \n101: ```bash\n102: gh auth refresh -h github.com -s repo,read:project,project\n103: gh auth status\n104: ```\n105: \n106: ## Dev quickstart\n107: \n108: From `packages/sync-engine/`:\n109: \n110: ```bash\n111: npm install\n112: npm run build\n113: node dist/cli.js status --config mapcs.dev.json\n114: node dist/cli.js pull --dry-run --config mapcs.dev.json\n115: node dist/cli.js push --dry-run --config mapcs.dev.json\n116: ```\n\n(End of file - total 116 lines)\n</content>",
+            "title": "packages/sync-engine/README.md",
+            "metadata": {
+              "preview": "# @mapctx/sync-engine (alpha)\n\nStandalone npm package + CLI to sync local `TASKS.md` with GitHub Issues and GitHub Projects (v2).\n\nStatus: alpha. APIs, config keys, and sync behavior may change before `1.0.0`.\n\nDetailed operational guide: `DOCUMENTATION.md`.\n\n## Install\n\n```bash\nnpm install @mapctx/sync-engine\n```\n\nRun with npx:\n\n```bash\nnpx --yes --package @mapctx/sync-engine mapcs status\n```\n",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1773089350357,
+              "end": 1773089350365
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_028c871b9a986dd30169af32462888819db049c7b6a1d4d379"
+            }
+          },
+          "id": "prt_cd45c62d3001vJmIRSN35J0jEe",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "call_pRxft1fWlUv3a6owbLy5SvAF",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/Users/alt/repos/mapctx/example-tasks/README.md"
+            },
+            "output": "<path>/Users/alt/repos/mapctx/example-tasks/README.md</path>\n<type>file</type>\n<content>1: # Example Tasks Model\n2: \n3: This folder demonstrates a low-conflict, AI-friendly tasks model ready for a shared sync engine.\n4: \n5: ## Design goals\n6: \n7: - Keep `TASKS.md` highly dynamic and lightweight.\n8: - Minimize merge conflicts by reducing multi-line edits per task.\n9: - Keep enough global data for parallel planning with low token cost.\n10: - Store rich context in `tasks/T-XXX.md` detail files.\n11: - Keep external mapping generic so sync can support multiple platforms.\n12: \n13: ## Core rules\n14: \n15: 1. Move a task by editing only `status:`.\n16: 2. Add new tasks at the end of `## Tasks`.\n17: 3. Keep fixed field order for every task block.\n18: 4. Use `touch` as coarse components (not per-file paths).\n19: 5. Put long descriptions and detailed test plans in detail files.\n20: 6. Keep `completed` always present. Use `null` until the task is done.\n21: 7. Keep `externalId` always present. Use `null` when not linked yet.\n22: \n23: ## TASKS.md field contract\n24: \n25: Use this fixed order in every task block:\n26: \n27: 1. `id`\n28: 2. `status`\n29: 3. `type` (`epic|feature|task|bug|chore|null`)\n30: 4. `parent` (`T-XXX` or `null`)\n31: 5. `subIssueProgress` (`x/y` or `null`)\n32: 6. `priority`\n33: 7. `workload`\n34: 8. `touch`\n35: 9. `dependsOn`\n36: 10. `start`\n37: 11. `due`\n38: 12. `completed` (`null` or date)\n39: 13. `externalId` (`null` or `<provider>:<entity>:<id>`)\n40: 14. `externalLinks` (optional array for multi-provider mapping)\n41: 15. `updated`\n42: 16. `detail`\n43: \n44: ## External mapping strategy\n45: \n46: - Use `externalId` as neutral mapping key.\n47: - For GitHub Issues use: `github:issue:<number>`.\n48: - This keeps the model open for other backends later (for example `jira:issue:<key>`).\n49: - Use `externalLinks` only when the same task is synced to multiple platforms.\n50: - Keep `externalLinks` optional to keep diffs small in most projects.\n51: \n52: Provider data note:\n53: \n54: - Avoid storing provider payload blobs in markdown files.\n55: - Keep provider-specific sync state in local cache/state files managed by the sync engine.\n56: \n57: ## GitHub payload examples to design sync\n58: \n59: Issue payload shape (REST):\n60: \n61: ```json\n62: {\n63:   \"number\": 203,\n64:   \"title\": \"Build local conflict and parallelization analyzer\",\n65:   \"state\": \"open\",\n66:   \"labels\": [{ \"name\": \"priority:medium\" }, { \"name\": \"workload:hard\" }],\n67:   \"milestone\": { \"title\": \"v2-intelligence\" },\n68:   \"body\": \"...\"\n69: }\n70: ```\n71: \n72: Project v2 item payload shape (GraphQL):\n73: \n74: ```json\n75: {\n76:   \"itemId\": \"PVTI_xxx\",\n77:   \"content\": { \"number\": 203 },\n78:   \"status\": \"Review\"\n79: }\n80: ```\n81: \n82: Recommended mapping:\n83: \n84: - `externalId` <-> issue number\n85: - `status` <-> project status field\n86: - `type` <-> issue label (`type:epic`, `type:feature`, ...)\n87: - `parent` <-> parent issue relationship\n88: - `subIssueProgress` <-> derived from child issues (read-mostly)\n89: - `priority/workload/tags` <-> labels\n90: - `milestone` <-> issue milestone\n\n(End of file - total 90 lines)\n</content>",
+            "title": "example-tasks/README.md",
+            "metadata": {
+              "preview": "# Example Tasks Model\n\nThis folder demonstrates a low-conflict, AI-friendly tasks model ready for a shared sync engine.\n\n## Design goals\n\n- Keep `TASKS.md` highly dynamic and lightweight.\n- Minimize merge conflicts by reducing multi-line edits per task.\n- Keep enough global data for parallel planning with low token cost.\n- Store rich context in `tasks/T-XXX.md` detail files.\n- Keep external mapping generic so sync can support multiple platforms.\n\n## Core rules\n\n1. Move a task by editing only `status:`.\n2. Add new tasks at the end of `## Tasks`.\n3. Keep fixed field order for every task block.\n4. Use `touch` as coarse components (not per-file paths).\n5. Put long descriptions and detailed test plans in detail files.\n6. Keep `completed` always present. Use `null` until the task is done.",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1773089350359,
+              "end": 1773089350366
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_028c871b9a986dd30169af32462890819d9b1746a9aa44557c"
+            }
+          },
+          "id": "prt_cd45c62d6001L47RHONtD3uIde",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "cost": 0,
+          "tokens": {
+            "total": 15563,
+            "input": 334,
+            "output": 125,
+            "reasoning": 27,
+            "cache": {
+              "read": 15104,
+              "write": 0
+            }
+          },
+          "id": "prt_cd45c641e001TABOcOLB3Bl8c3",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "patch",
+          "hash": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_cd45c648b001WZ66usv0rzPaGB",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1773089350799,
+          "completed": 1773089357473
+        },
+        "parentID": "msg_cd45bcc6e001TjkS4J0WIx45lv",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 19211,
+          "input": 4113,
+          "output": 250,
+          "reasoning": 143,
+          "cache": {
+            "read": 14848,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cd45c648f001uNBZKKYKByzNa1",
+        "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "id": "prt_cd45c68ee001k5UF138pbFoCDD",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c648f001uNBZKKYKByzNa1"
+        },
+        {
+          "type": "reasoning",
+          "text": "**Preparing to ask skill usage**",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0f40f95aa55ecd5a0169af32488cd881a390e3d876c1eaa469",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1773089352613,
+            "end": 1773089357189
+          },
+          "id": "prt_cd45c6ba5001z06p6FNhQMIYlT",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c648f001uNBZKKYKByzNa1"
+        },
+        {
+          "type": "tool",
+          "callID": "call_zsKuPm9FMISFBmsmzYHKSP94",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/Users/alt/repos/mapctx/packages/sync-engine/mapcs.config.example.json"
+            },
+            "output": "<path>/Users/alt/repos/mapctx/packages/sync-engine/mapcs.config.example.json</path>\n<type>file</type>\n<content>1: {\n2:   \"owner\": \"your-org-or-user\",\n3:   \"repo\": \"your-repo\",\n4:   \"projectId\": \"PVT_kwDOExample\",\n5:   \"statusFieldId\": \"PVTSSF_lADOExample\",\n6:   \"startDateFieldId\": \"PVTF_lADOExampleStart\",\n7:   \"dueDateFieldId\": \"PVTF_lADOExampleDue\",\n8:   \"completedDateFieldId\": \"PVTF_lADOExampleCompleted\",\n9:   \"allowedStatuses\": [\n10:     \"backlog\",\n11:     \"doing\",\n12:     \"review\",\n13:     \"done\",\n14:     \"paused\"\n15:   ],\n16:   \"completionStatuses\": [\n17:     \"done\"\n18:   ],\n19:   \"statusMap\": {\n20:     \"backlog\": \"Backlog\",\n21:     \"doing\": \"In Progress\",\n22:     \"review\": \"In Review\",\n23:     \"done\": \"Done\",\n24:     \"paused\": \"Blocked\"\n25:   },\n26:   \"tasksFile\": \"./TASKS.md\",\n27:   \"bootstrap\": {\n28:     \"createMissingDetailFiles\": true,\n29:     \"defaultStatusForImportedIssues\": \"backlog\",\n30:     \"requireConfirmFlag\": true\n31:   },\n32:   \"remoteWinsFields\": [\n33:     \"status\",\n34:     \"tags\",\n35:     \"priority\",\n36:     \"workload\",\n37:     \"milestone\"\n38:   ],\n39:   \"localWinsFields\": [\n40:     \"detail\",\n41:     \"defaultExpanded\"\n42:   ]\n43: }\n\n(End of file - total 43 lines)\n</content>",
+            "title": "packages/sync-engine/mapcs.config.example.json",
+            "metadata": {
+              "preview": "{\n  \"owner\": \"your-org-or-user\",\n  \"repo\": \"your-repo\",\n  \"projectId\": \"PVT_kwDOExample\",\n  \"statusFieldId\": \"PVTSSF_lADOExample\",\n  \"startDateFieldId\": \"PVTF_lADOExampleStart\",\n  \"dueDateFieldId\": \"PVTF_lADOExampleDue\",\n  \"completedDateFieldId\": \"PVTF_lADOExampleCompleted\",\n  \"allowedStatuses\": [\n    \"backlog\",\n    \"doing\",\n    \"review\",\n    \"done\",\n    \"paused\"\n  ],\n  \"completionStatuses\": [\n    \"done\"\n  ],\n  \"statusMap\": {\n    \"backlog\": \"Backlog\",",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1773089357207,
+              "end": 1773089357231
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0f40f95aa55ecd5a0169af324d1db881a39cbd59425d2d6b32"
+            }
+          },
+          "id": "prt_cd45c7d8800131iF9mYQHrtYOQ",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c648f001uNBZKKYKByzNa1"
+        },
+        {
+          "type": "tool",
+          "callID": "call_RZzBaoA99SLQuytp4bTcmoWp",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/Users/alt/repos/mapctx/packages/sync-engine/mapcs.config.json"
+            },
+            "output": "<path>/Users/alt/repos/mapctx/packages/sync-engine/mapcs.config.json</path>\n<type>file</type>\n<content>1: {\n2:   \"owner\": \"alotth\",\n3:   \"repo\": \"mapctx\",\n4:   \"projectId\": \"PVT_kwHOAcgr-s4BQF05\",\n5:   \"statusFieldId\": \"REDACTED\",\n6:   \"startDateFieldId\": \"PVTF_lAHOAcgr-s4BQF05zg-T90c\",\n7:   \"dueDateFieldId\": \"PVTF_lAHOAcgr-s4BQF05zg-T91w\",\n8:   \"completedDateFieldId\": \"PVTF_lAHOAcgr-s4BQF05zg-T910\",\n9:   \"statusMap\": {\n10:     \"backlog\": \"Backlog\",\n11:     \"doing\": \"Doing\",\n12:     \"review\": \"Review\",\n13:     \"done\": \"Done\",\n14:     \"paused\": \"Paused\"\n15:   },\n16:   \"tasksFile\": \"./TASKS.md\",\n17:   \"bootstrap\": {\n18:     \"createMissingDetailFiles\": true,\n19:     \"defaultStatusForImportedIssues\": \"backlog\",\n20:     \"requireConfirmFlag\": false\n21:   }\n22: }\n\n(End of file - total 22 lines)\n</content>",
+            "title": "packages/sync-engine/mapcs.config.json",
+            "metadata": {
+              "preview": "{\n  \"owner\": \"alotth\",\n  \"repo\": \"mapctx\",\n  \"projectId\": \"PVT_kwHOAcgr-s4BQF05\",\n  \"statusFieldId\": \"REDACTED\",\n  \"startDateFieldId\": \"PVTF_lAHOAcgr-s4BQF05zg-T90c\",\n  \"dueDateFieldId\": \"PVTF_lAHOAcgr-s4BQF05zg-T91w\",\n  \"completedDateFieldId\": \"PVTF_lAHOAcgr-s4BQF05zg-T910\",\n  \"statusMap\": {\n    \"backlog\": \"Backlog\",\n    \"doing\": \"Doing\",\n    \"review\": \"Review\",\n    \"done\": \"Done\",\n    \"paused\": \"Paused\"\n  },\n  \"tasksFile\": \"./TASKS.md\",\n  \"bootstrap\": {\n    \"createMissingDetailFiles\": true,\n    \"defaultStatusForImportedIssues\": \"backlog\",\n    \"requireConfirmFlag\": false",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1773089357211,
+              "end": 1773089357230
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0f40f95aa55ecd5a0169af324d1dcc81a3922a14b15ff63639"
+            }
+          },
+          "id": "prt_cd45c7d98001n0M7IWRv5WTbfs",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c648f001uNBZKKYKByzNa1"
+        },
+        {
+          "type": "tool",
+          "callID": "call_seyiVdogz9luW2MG7Mh5WQ7Z",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/Users/alt/repos/mapctx/packages/sync-engine/mapcs.dev.json"
+            },
+            "output": "<path>/Users/alt/repos/mapctx/packages/sync-engine/mapcs.dev.json</path>\n<type>file</type>\n<content>1: {\n2:   \"owner\": \"alotth\",\n3:   \"repo\": \"mapctx\",\n4:   \"statusMap\": {\n5:     \"backlog\": \"Backlog\",\n6:     \"doing\": \"In Progress\",\n7:     \"review\": \"In Review\",\n8:     \"done\": \"Done\",\n9:     \"paused\": \"Blocked\"\n10:   },\n11:   \"tasksFile\": \"../example-n-2/TASKS.md\",\n12:   \"bootstrap\": {\n13:     \"createMissingDetailFiles\": true,\n14:     \"defaultStatusForImportedIssues\": \"backlog\",\n15:     \"requireConfirmFlag\": true\n16:   },\n17:   \"remoteWinsFields\": [\n18:     \"status\",\n19:     \"tags\",\n20:     \"priority\",\n21:     \"workload\",\n22:     \"milestone\"\n23:   ],\n24:   \"localWinsFields\": [\n25:     \"detail\",\n26:     \"defaultExpanded\"\n27:   ]\n28: }\n\n(End of file - total 28 lines)\n</content>",
+            "title": "packages/sync-engine/mapcs.dev.json",
+            "metadata": {
+              "preview": "{\n  \"owner\": \"alotth\",\n  \"repo\": \"mapctx\",\n  \"statusMap\": {\n    \"backlog\": \"Backlog\",\n    \"doing\": \"In Progress\",\n    \"review\": \"In Review\",\n    \"done\": \"Done\",\n    \"paused\": \"Blocked\"\n  },\n  \"tasksFile\": \"../example-n-2/TASKS.md\",\n  \"bootstrap\": {\n    \"createMissingDetailFiles\": true,\n    \"defaultStatusForImportedIssues\": \"backlog\",\n    \"requireConfirmFlag\": true\n  },\n  \"remoteWinsFields\": [\n    \"status\",\n    \"tags\",\n    \"priority\",",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1773089357216,
+              "end": 1773089357231
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0f40f95aa55ecd5a0169af324d1dd481a3a3c078b4e1d11ab7"
+            }
+          },
+          "id": "prt_cd45c7d9c001WwmYe6P213lhIc",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c648f001uNBZKKYKByzNa1"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "cost": 0,
+          "tokens": {
+            "total": 19211,
+            "input": 4113,
+            "output": 250,
+            "reasoning": 143,
+            "cache": {
+              "read": 14848,
+              "write": 0
+            }
+          },
+          "id": "prt_cd45c7e30001w7Q40UuXjoH7D6",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c648f001uNBZKKYKByzNa1"
+        },
+        {
+          "type": "patch",
+          "hash": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_cd45c7ea0001172X7WC82cCwUP",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c648f001uNBZKKYKByzNa1"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1773089357474,
+          "completed": 1773089360753
+        },
+        "parentID": "msg_cd45bcc6e001TjkS4J0WIx45lv",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 20310,
+          "input": 1150,
+          "output": 88,
+          "reasoning": 41,
+          "cache": {
+            "read": 19072,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "id": "prt_cd45c8377001XF13Qm3bk47d8H",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "**Searching code for task file references**",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_03bdcedbf7834a550169af324ec82081918c85fca8b9f13f07",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1773089358842,
+            "end": 1773089360253
+          },
+          "id": "prt_cd45c83fa001jeBbXo4qVAEfa0",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "call_E1C4Hv6US3kUTEiS0HuueJdB",
+          "tool": "grep",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "TASKS\\.md",
+              "path": "/Users/alt/repos/mapctx",
+              "include": "*.{ts,tsx,js,json,md}"
+            },
+            "output": "Found 100 matches\n/Users/alt/repos/mapctx/.git/entire-sessions/ses_32ba5bf1bffeD41PwEU07lkXPB.json:\n  Line 37:     \"TASKS.md\",\n\n/Users/alt/repos/mapctx/.git/entire-sessions/ses_32ba46d06ffehoyC0nXoyqYSAd.json:\n  Line 37:     \"TASKS.md\",\n\n/Users/alt/repos/mapctx/.git/entire-sessions/ses_32bb57a7effe0eS0iSf5YGXQnc.json:\n  Line 37:     \"TASKS.md\",\n\n/Users/alt/repos/mapctx/.git/entire-sessions/ses_33b2b67d7ffe6tvPxvFEN9W97F.json:\n  Line 37:     \"TASKS.md\",\n\n/Users/alt/repos/mapctx/.git/entire-sessions/ses_33e538d56ffewKMoPve8tkYT5m.json:\n  Line 37:     \"TASKS.md\",\n\n/Users/alt/repos/mapctx/packages/opencode-plugin/src/kanban-roadmap.js:\n  Line 30:   tasksFile: params.get(\"tasksFile\") || \"TASKS.md\",\n\n/Users/alt/repos/mapctx/.git/entire-sessions/ses_33eb3ec63ffeRXoGFPvhXRhRhd.json:\n  Line 38:     \"TASKS.md\",\n\n/Users/alt/repos/mapctx/tasks/T-007.md:\n  Line 8:   - filesAffected: [rules/, skills/mapctx-tasks/, TASKS.md]\n  Line 19:       - [ ] `TASKS.md` includes an epic with tasks/subtasks as a concrete example.\n\n/Users/alt/repos/mapctx/rules/CLAUDE.md:\n  Line 3: Use this file when Claude edits `TASKS.md` and `tasks/T-XXX.md`.\n  Line 11: ## Required task format (`TASKS.md`)\n\n/Users/alt/repos/mapctx/rules/AGENTS.md:\n  Line 3: These rules define how agents should create and maintain `TASKS.md` and `tasks/T-XXX.md` files in this repository.\n  Line 5: ## TASKS.md structure\n\n/Users/alt/repos/mapctx/skills/mapctx-tasks/references/status-and-sync.md:\n  Line 39: - Keep provider-specific payload out of `TASKS.md`.\n\n/Users/alt/repos/mapctx/skills/mapctx-tasks/references/bootstrap-and-templates.md:\n  Line 3: Use this reference when `TASKS.md` does not exist, or when creating new baseline files.\n  Line 5: ## Bootstrap (When `TASKS.md` Does Not Exist)\n  Line 10: ./TASKS.md\n  Line 16: 1. Create `./TASKS.md`.\n  Line 21: ## `TASKS.md` Baseline Template\n  Line 59: - Keep updates in `TASKS.md` small and deterministic.\n\n/Users/alt/repos/mapctx/skills/mapctx-tasks/references/field-types-and-contract.md:\n  Line 3: Use this reference to keep deterministic structure for `TASKS.md` and detail files.\n  Line 5: ## Canonical Field Order (`TASKS.md`)\n  Line 17: ## `TASKS.md` Field Types and Meanings\n  Line 47: ## Null and List Policy (`TASKS.md`)\n\n/Users/alt/repos/mapctx/skills/mapctx-tasks/SKILL.md:\n  Line 3: description: Create and maintain status-based single-list TASKS.md files with deterministic low-conflict edits; trigger when requests mention `status:` updates, `## Tasks` model, sync metadata (`externalId`), epic/subtask hierarchy, and planning workflows.\n  Line 29:      2) Create local `TASKS.md` first (with optional future export to GitHub Project).\n  Line 33:    - If `TASKS.md` exists, scan all IDs to compute next `T-XXX` and keep task order stable.\n  Line 34:    - If `TASKS.md` does not exist, run bootstrap from `./references/bootstrap-and-templates.md` and start at `T-001`.\n  Line 60:    - Keep `TASKS.md` compact and deterministic.\n  Line 70: Before creating a new `TASKS.md` or syncing tasks, present these options and ask for one explicit choice:\n  Line 73: 2. Create local `TASKS.md` first (and export to GitHub Project later, or not).\n  Line 79: - If option 2 is selected and user later wants sync, create/sync GitHub Project from local `TASKS.md`.\n\n/Users/alt/repos/mapctx/.git/entire-sessions/ses_341a119c5ffeETuzwGzf2HPcVR.json:\n  Line 38:     \"TASKS.md\",\n\n/Users/alt/repos/mapctx/.git/entire-sessions/REDACTED.json:\n  Line 36:     \"TASKS.md\",\n  Line 115:         \"TASKS.md\": 2,\n\n/Users/alt/repos/mapctx/packages/opencode-plugin/README.md:\n  Line 52: /global/plugin/kanban-roadmap/index.html?tasksFile=TASKS.md\n  Line 58: permissions.file.read:  [\"TASKS.md\", \"tasks/**/*.md\"]\n  Line 59: permissions.file.write: [\"TASKS.md\", \"tasks/**/*.md\"]\n\n/Users/alt/repos/mapctx/skills/mapctx-ralph-tasks/references/flow.md:\n  Line 16: - Read `TASKS.md` and locate exact task block by `id`.\n  Line 43:   - `@TASKS.md`\n\n/Users/alt/repos/mapctx/packages/opencode-plugin/kanban-roadmap.plugin.ts:\n  Line 23:         src: \"/global/plugin/kanban-roadmap/index.html?tasksFile=TASKS.md\",\n  Line 27:             read: [\"TASKS.md\", \"tasks/*.md\"],\n  Line 28:             write: [\"TASKS.md\", \"tasks/*.md\"],\n\n/Users/alt/repos/mapctx/packages/opencode-plugin/kanban-roadmap.js:\n  Line 14:         src: \"/global/plugin/kanban-roadmap/index.html?tasksFile=TASKS.md\",\n  Line 18:             read: [\"TASKS.md\", \"tasks/*.md\"],\n  Line 19:             write: [\"TASKS.md\", \"tasks/*.md\"],\n\n/Users/alt/repos/mapctx/skills/README.md:\n  Line 7: - `mapctx-tasks`: maintain single-list `TASKS.md` (V2 status model)\n\n/Users/alt/repos/mapctx/skills/mapctx-ralph-tasks/SKILL.md:\n  Line 3: description: Run Ralph task loops from a single slash trigger `/mapctx-ralph-tasks`; use when user wants automatic TASKS.md status transitions, task detail loading from ./tasks/T-XXX.md, complexity-based iteration count, and deterministic completion markers with error-aware retry handling.\n  Line 33: 2. Validate task exists in `TASKS.md` single-list model.\n\n/Users/alt/repos/mapctx/README.md:\n  Line 7: - local task boards in `TASKS.md`\n  Line 69: 3. Open a folder with a `TASKS.md`\n  Line 122: - `mapctx-tasks`: maintain V2 single-list `TASKS.md`\n\n/Users/alt/repos/mapctx/skills/mapctx-ralph-tasks/references/prompt-contract.md:\n  Line 9:    - `@TASKS.md`\n  Line 28: ralph \"Work only on task T-XXX using @TASKS.md and @tasks/T-XXX.md. Implement what is needed for this task. Keep changes scoped to the task. Run relevant tests/checks. If implementation is complete and tests/checks passed, output <promise>COMPLETE_TESTED</promise>. If implementation is complete but still needs human review or tests were not fully validated, output <promise>COMPLETE_REVIEW</promise>.\" --agent codex --model gpt-5-codex --max-iterations N --completion-promise COMPLETE\n\n/Users/alt/repos/mapctx/skills/mapctx-ralph-tasks/references/retry-policy.md:\n  Line 42: - missing task block in `TASKS.md`\n\n/Users/alt/repos/mapctx/skills/mapctx-sync-engine/SKILL.md:\n  Line 3: description: Safely operate mapcs for TASKS.md <-> GitHub synchronization; trigger when sessions start with mapcs config, when users request pull/push/bootstrap/reconcile, or when divergence/conflicts must be diagnosed.\n\n/Users/alt/repos/mapctx/skills/mapctx-sync-engine/references/bootstrap-modes.md:\n  Line 3: Use bootstrap to initialize mapping between local `TASKS.md` and GitHub.\n  Line 5: ## Local-First Bootstrap (`TASKS.md` -> GitHub)\n  Line 21: ## Remote-First Bootstrap (GitHub -> `TASKS.md`)\n\n/Users/alt/repos/mapctx/hooks/README.md:\n  Line 36: - Runs only when `TASKS.md`, `sync.config.json`, and `packages/sync-engine/dist/cli.js` exist.\n\n/Users/alt/repos/mapctx/.opencode/plugins/README.md:\n  Line 19: - Tasks file: `TASKS.md`\n\n/Users/alt/repos/mapctx/.opencode/plugins/mapcs-session-sync.ts:\n  Line 3: const TASKS_RELATIVE_PATH = \"TASKS.md\";\n\n/Users/alt/repos/mapctx/packages/sync-engine/README.md:\n  Line 3: Standalone npm package + CLI to sync local `TASKS.md` with GitHub Issues and GitHub Projects (v2).\n  Line 67: Local-first (`TASKS.md` -> GitHub):\n  Line 74: Remote-first (GitHub -> `TASKS.md`):\n\n/Users/alt/repos/mapctx/packages/sync-engine/DOCUMENTATION.md:\n  Line 3: Practical guide to operate `mapcs` in your daily flow with `TASKS.md`, GitHub Issues, and GitHub Projects v2.\n  Line 29: - Local board: `TASKS.md`\n  Line 56: 2. Edit `TASKS.md` and/or `tasks/T-XXX.md`\n  Line 68: When you already have `TASKS.md` ready and want to create issues/project data:\n  Line 149:   - provided: only listed statuses are valid in `TASKS.md`\n  Line 157: - invalid statuses in `TASKS.md`\n\n/Users/alt/repos/mapctx/packages/sync-engine/src/status-workflows.test.ts:\n  Line 19:     tasksFile: './TASKS.md',\n  Line 35:   const tasksFilePath = path.resolve(tempDir, 'TASKS.md');\n  Line 309: test('fails when TASKS.md contains invalid status', () => {\n  Line 330:     assert.throws(() => statusCommand({ configPath }), /TASKS.md contains invalid statuses: design/);\n\n/Users/alt/repos/mapctx/packages/sync-engine/mapcs.config.json:\n  Line 16:   \"tasksFile\": \"./TASKS.md\",\n\n/Users/alt/repos/mapctx/packages/sync-engine/mapcs.dev.json:\n  Line 11:   \"tasksFile\": \"../example-n-2/TASKS.md\",\n\n/Users/alt/repos/mapctx/packages/sync-engine/mapcs.config.example.json:\n  Line 26:   \"tasksFile\": \"./TASKS.md\",\n\n/Users/alt/repos/mapctx/packages/sync-engine/package.json:\n  Line 4:   \"description\": \"Sync TASKS.md with GitHub Issues and Projects v2\",\n\n/Users/alt/repos/mapctx/packages/sync-engine/src/statuses.ts:\n  Line 88:     throw new Error(`TASKS.md contains invalid statuses: ${uniqueInvalid.join(', ')}. allowedStatuses: ${Array.from(allowedSet).join(', ')}`);\n\n/Users/alt/repos/mapctx/packages/sync-engine/src/sync.ts:\n  Line 156:   lines.push(`Synced from TASKS.md on ${todayISO()}.`);\n\n/Users/alt/repos/mapctx/packages/sync-engine/src/config.ts:\n  Line 29:     parsed.tasksFile = './TASKS.md';\n\n/Users/alt/repos/mapctx/CONTRIBUTING.md:\n  Line 31: - `TASKS.md` and `tasks/` are first-party dogfooding artifacts used by maintainers.\n\n/Users/alt/repos/mapctx/example-tasks/README.md:\n  Line 7: - Keep `TASKS.md` highly dynamic and lightweight.\n  Line 23: ## TASKS.md field contract\n\n/Users/alt/repos/mapctx/sync.config.json:\n  Line 13:   \"tasksFile\": \"./TASKS.md\",\n\n/Users/alt/repos/mapctx/scripts/dev-mode.ts:\n  Line 30:   const exampleFile = path.join(process.cwd(), 'example-tasks', 'TASKS.md');\n\n/Users/alt/repos/mapctx/scripts/test-parser.ts:\n  Line 27:     console.error('Example: npm run test:parser example-tasks/TASKS.md');\n\n/Users/alt/repos/mapctx/packages/sync-engine/TASKS.md:\n  Line 5: ### [T-001] Sync Project date fields from TASKS.md on push\n\n/Users/alt/repos/mapctx/TASKS_SYNC_CONTEXT.md:\n  Line 4: Build a standalone npm package + CLI sync engine to keep a local `TASKS.md` (Markdown Kanban format) in sync with GitHub Issues and GitHub Projects (Projects v2). The package will be used by multiple clients:\n  Line 11: `TASKS.md` is editable locally and can be pushed to GitHub, but sync must always pull before push.\n  Line 19: - Keep `TASKS.md` format compatible with Markdown Kanban rules.\n  Line 22: ### TASKS.md format\n  Line 54: - Add a stable mapping field in TASKS.md:\n  Line 75: - tasksFile path (default: ./TASKS.md)\n  Line 79: - OpenCode plugin should call `sync pull` on session start and `sync push` when TASKS.md changes\n  Line 82: 1) Migration: create Issues/Project items from existing TASKS.md\n  Line 83: 2) Update TASKS.md with `issue: <number>` for mapping\n\n/Users/alt/repos/mapctx/example-tasks/TASKS.md:\n  Line 92: - Keep updates in `TASKS.md` small and deterministic.\n\n/Users/alt/repos/mapctx/.vscode/tasks.json:\n  Line 99: \t\t\t\"command\": \"npm run test:parser -- example-tasks/TASKS.md\",",
+            "title": "TASKS\\.md",
+            "metadata": {
+              "matches": 100,
+              "truncated": false
+            },
+            "time": {
+              "start": 1773089360488,
+              "end": 1773089360521
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_03bdcedbf7834a550169af32502a4c8191b471d369be212324"
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "cost": 0,
+          "tokens": {
+            "total": 20310,
+            "input": 1150,
+            "output": 88,
+            "reasoning": 41,
+            "cache": {
+              "read": 19072,
+              "write": 0
+            }
+          },
+          "id": "prt_cd45c8b03001qX8zCpk5w5BVRM",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "patch",
+          "hash": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_cd45c8b6f001F5D4FH43a9QLHX",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1773089360754,
+          "completed": 1773089380637
+        },
+        "parentID": "msg_cd45bcc6e001TjkS4J0WIx45lv",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 24494,
+          "input": 3270,
+          "output": 1000,
+          "reasoning": 600,
+          "cache": {
+            "read": 20224,
+            "write": 0
+          }
+        },
+        "finish": "stop",
+        "id": "msg_cd45c8b72002sJIiJbUakgT0xz",
+        "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "id": "REDACTED",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c8b72002sJIiJbUakgT0xz"
+        },
+        {
+          "type": "reasoning",
+          "text": "**Recommending cautious TASKS.md rename**",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0731b237b517c06b0169af32524e3c81a3af48c86cc3772ec9",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1773089362433,
+            "end": 1773089375070
+          },
+          "id": "prt_cd45c9200001pdPtrCxPVKNBQa",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c8b72002sJIiJbUakgT0xz"
+        },
+        {
+          "type": "text",
+          "text": "Faz sentido sim repensar o nome/estrutura, mas hoje eu **não migraria direto** de `TASKS.md` para `.tasks/` sem uma camada de compatibilidade.\n\n- O ecossistema atual está bem acoplado a `TASKS.md` + `tasks/` (docs, regras, plugin e sync), por exemplo em `README.md:7`, `packages/opencode-plugin/kanban-roadmap.plugin.ts:23`, `packages/opencode-plugin/kanban-roadmap.plugin.ts:27`, `packages/sync-engine/src/config.ts:29`.\n- O `sync-engine` já aceita caminho custom (`tasksFile`), então tecnicamente dá para mudar (`packages/sync-engine/mapcs.config.example.json:26`), mas vários pontos ainda assumem o padrão por default.\n- Colocar em `.tasks/` (hidden) tem custo de DX: menor descobribilidade, risco de ignorar em tooling/editor, e permissões atuais do plugin estão focadas em `tasks/*.md` (não `.tasks/*.md`).\n- Minha recomendação prática: manter `TASKS.md` como **entrypoint canônico** e, se quiser ampliar o escopo, renomear o conceito/documentação para “project board/context” sem quebrar o filename agora.\n- Se quiser migrar mesmo, melhor em fases: (1) suportar ambos caminhos, (2) emitir depreciação, (3) trocar default depois.\n\nSe você quiser, eu te monto um plano de migração “sem quebra” (matriz de impacto por pacote + ordem de rollout).\n\nPergunta rápida (obrigatória para esta sessão): quer que eu use o padrão Markdown Kanban com a skill `mapctx-tasks` para qualquer proposta envolvendo `TASKS.md`/`tasks/T-XXX.md`?  \nRecomendação: **sim**, para manter consistência com as regras do repo.",
+          "time": {
+            "start": 1773089380437,
+            "end": 1773089380437
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "msg_0731b237b517c06b0169af325eb48881a3b1da79f5a8f77713"
+            }
+          },
+          "id": "prt_cd45cc35f001qV6DmkLMHwlA6M",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c8b72002sJIiJbUakgT0xz"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "cost": 0,
+          "tokens": {
+            "total": 24494,
+            "input": 3270,
+            "output": 1000,
+            "reasoning": 600,
+            "cache": {
+              "read": 20224,
+              "write": 0
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c8b72002sJIiJbUakgT0xz"
+        },
+        {
+          "type": "patch",
+          "hash": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_cd45cd91b001qF9oiEn1LcGmsB",
+          "sessionID": "ses_32ba46d06ffehoyC0nXoyqYSAd",
+          "messageID": "msg_cd45c8b72002sJIiJbUakgT0xz"
+        }
+      ]
+    }
+  ]
+}

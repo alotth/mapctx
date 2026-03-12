@@ -1,9 +1,11 @@
 {
   "cli_version": "0.4.9",
   "checkpoint_id": "950968db25ae",
+  "session_id": "ses_32ba46d06ffehoyC0nXoyqYSAd",
   "strategy": "manual-commit",
+  "created_at": "2026-03-12T01:15:59.549416Z",
   "branch": "chore/mapctx-monorepo-migration",
-  "checkpoints_count": 7,
+  "checkpoints_count": 3,
   "files_touched": [
     "skills/README.md",
     "skills/mapctx-ralph-tasks/SKILL.md",
@@ -16,27 +18,22 @@
     "skills/mapctx-tasks/references/field-types-and-contract.md",
     "skills/mapctx-tasks/references/status-and-sync.md"
   ],
-  "sessions": [
-    {
-      "metadata": "/95/0968db25ae/0/metadata.json",
-      "transcript": "/95/0968db25ae/0/full.jsonl",
-      "context": "/95/0968db25ae/0/context.md",
-      "content_hash": "/95/0968db25ae/0/content_hash.txt",
-      "prompt": "/95/0968db25ae/0/prompt.txt"
-    },
-    {
-      "metadata": "/95/0968db25ae/1/metadata.json",
-      "transcript": "/95/0968db25ae/1/full.jsonl",
-      "context": "/95/0968db25ae/1/context.md",
-      "content_hash": "/95/0968db25ae/1/content_hash.txt",
-      "prompt": "/95/0968db25ae/1/prompt.txt"
-    }
-  ],
+  "agent": "OpenCode",
+  "turn_id": "00572543978e",
   "token_usage": {
-    "input_tokens": 204666,
+    "input_tokens": 11905,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 1343360,
-    "output_tokens": 12013,
-    "api_call_count": 54
+    "cache_read_tokens": 120704,
+    "output_tokens": 2185,
+    "api_call_count": 9
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-12T01:15:59.532012Z",
+    "agent_lines": 630,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 630,
+    "agent_percentage": 100
   }
 }
