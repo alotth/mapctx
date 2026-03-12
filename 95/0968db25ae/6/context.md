@@ -1,0 +1,41 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+as skills estao explicando bem o conceito das tasks tipo epico? pois eu acho quando inicio um projeto a tendencia seria criar varios epicos, e depois criar as tasks /subtasks para esses epicos, correto?
+
+### Prompt 2
+
+sim, e quero saber se atualmente o nosso projeto, skills, plugins etc dao suporte à essas necessidades
+
+### Prompt 3
+
+atualizei as tasks do repo, me ajude a atualizar as skills e agents.md para esse novo padrao, e guiarmos os agentes a usarem os melhores padrões de gerenciamento de projetos
+
+### Prompt 4
+
+nao quero chamar de V2 pq iniciamos esse repositorio, ele ainda esta nas versoes mais novas, mas sim, vamos definir esse novo contrato
+
+type me parece obrigatorio
+
+assignees talvez, nao sei se para os agentes de ia ficar pegando o user vai ser interessante, ou mesmo se teria que passar o id do usuario do github para isso funcionar
+
+parent - acho que so quando subtask
+subIssueProgress - acho que so quando eh epico?
+interation - nao sei bem para que serve"
+
+defaultExpanded podemos apagar 
+
+migr...
+
+### Prompt 5
+
+ocomo recomendado
+
+### Prompt 6
+
+1  - sim 
+2 - ok, crie um epico "clean and organize new repository" com tasks e subtasks que fizemos agora, para ja termos um exemplo atual
+

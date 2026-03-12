@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "950968db25ae",
+  "session_id": "ses_33eb3ec63ffeRXoGFPvhXRhRhd",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-12T01:16:01.183236Z",
+  "branch": "chore/mapctx-monorepo-migration",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "skills/README.md",
+    "skills/mapctx-ralph-tasks/SKILL.md",
+    "skills/mapctx-ralph-tasks/references/flow.md",
+    "skills/mapctx-ralph-tasks/references/prompt-contract.md",
+    "skills/mapctx-ralph-tasks/references/retry-policy.md",
+    "skills/mapctx-tasks/SKILL.md",
+    "skills/mapctx-tasks/references/bootstrap-and-templates.md",
+    "skills/mapctx-tasks/references/custom-statuses.md",
+    "skills/mapctx-tasks/references/field-types-and-contract.md",
+    "skills/mapctx-tasks/references/status-and-sync.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "fd2731d4f10b",
+  "token_usage": {
+    "input_tokens": 383899,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 4021632,
+    "output_tokens": 21416,
+    "api_call_count": 60
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-12T01:16:00.975947Z",
+    "agent_lines": 630,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 630,
+    "agent_percentage": 100
+  }
+}

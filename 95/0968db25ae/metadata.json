@@ -3,7 +3,7 @@
   "checkpoint_id": "950968db25ae",
   "strategy": "manual-commit",
   "branch": "chore/mapctx-monorepo-migration",
-  "checkpoints_count": 30,
+  "checkpoints_count": 36,
   "files_touched": [
     "skills/README.md",
     "skills/mapctx-ralph-tasks/SKILL.md",
@@ -58,13 +58,20 @@
       "context": "/95/0968db25ae/5/context.md",
       "content_hash": "/95/0968db25ae/5/content_hash.txt",
       "prompt": "/95/0968db25ae/5/prompt.txt"
+    },
+    {
+      "metadata": "/95/0968db25ae/6/metadata.json",
+      "transcript": "/95/0968db25ae/6/full.jsonl",
+      "context": "/95/0968db25ae/6/context.md",
+      "content_hash": "/95/0968db25ae/6/content_hash.txt",
+      "prompt": "/95/0968db25ae/6/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 1051413,
+    "input_tokens": 1435312,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 6974080,
-    "output_tokens": 59631,
-    "api_call_count": 185
+    "cache_read_tokens": 10995712,
+    "output_tokens": 81047,
+    "api_call_count": 245
   }
 }
