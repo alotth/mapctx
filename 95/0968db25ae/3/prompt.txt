@@ -1,0 +1,40 @@
+estou pensando em uma nova skill, ao inves de blockear trazer o que acho que deve ser alterado e confirmar se pode alterar, copia da conversa abaixo 
+"
+Perfeito — vamos de **arquitetura leve** (sem enforcement forte de hook/CI).
+
+Plano enxuto:
+
+
+- **Objetivo**: quando você pedir para “subir commit”, a IA faz uma checagem de consistência entre mudanças de código e `TASKS.md` antes de commitar/push.
+- **Mecânica**: criar uma **skill/comando de fluxo** (ex.: `/ship`) que:
+  1. lê `git status` + `git diff --name-only`  
+  2. lê `TASKS.md` e identifica tasks abertas (`todo/in_progress/blocked`)  
+  3. compara arquivos alterados com escopo das tasks abertas (heurística por paths/keywords)  
+  4. se detectar mismatch, **bloqueia o push** e sugere exatamente o que atualizar no `TASKS.md`  
+  5. se estiver ok, segue com commit/push
+- **Sem script separado**: toda a lógica fica na própria skill/prompt operacional (mais simples de manter no começo).
+- **Tradeoff aceito**: isso só vale quando você usa a IA/comando; `git push` manual fora desse fluxo não será validado.
+
+
+Formato prático da skill (MVP):
+
+
+- **Entrada**: mensagem tipo “faz o commit e sobe”.
+- **Checklist interno da skill**:
+  - “há task aberta que menciona área alterada?”
+  - “`TASKS.md` foi alterado quando deveria?”
+  - “status da task mudou de forma coerente com o diff?”
+- **Saída**:
+  - ✅ `OK_TO_PUSH`: resumo + commit/push  
+  - ❌ `BLOCK_PUSH`: itens faltantes no `TASKS.md` + sugestão de texto pronto
+
+
+Regras simples para começar (evita complexidade):
+
+
+- Se mudou código em `packages/*` e existe task aberta relacionada, exigir atualização em `TASKS.md`.
+- Se task foi concluída no conteúdo do commit, exigir mudança para `done` + nota breve do que foi entregue.
+- Se só mudou docs/chore, permitir sem exigir update (a menos que task aberta esteja explicitamente ligada).
+
+
+Se quiser, no próximo passo eu te passo o **prompt exato da skill `/ship`** (copiar/colar), já com essas regras e com mensagens de bloqueio/ok padronizadas."

@@ -1,0 +1,521 @@
+{
+  "info": {
+    "id": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+    "slug": "happy-lagoon",
+    "projectID": "d6b1ca11d5baad84a8bbd704c60bc34fdf925bb6",
+    "directory": "/Users/alt/repos/mapctx",
+    "title": "Fluxo MVP: checar TASKS.md vs diff antes de push /ship",
+    "version": "0.0.0-feat/plugin-bridge-202602281654",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "time": {
+      "created": 1773088179585,
+      "updated": 1773088880714
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1773088179646
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "plan",
+        "model": {
+          "providerID": "openai",
+          "modelID": "gpt-5.3-codex"
+        },
+        "id": "msg_cd44a85a0001MyZNmXZq5s3Pdj",
+        "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "estou pensando em uma nova skill, ao inves de blockear trazer o que acho que deve ser alterado e confirmar se pode alterar, copia da conversa abaixo \n\"\nPerfeito — vamos de **arquitetura leve** (sem enforcement forte de hook/CI).\n\nPlano enxuto:\n\n\n- **Objetivo**: quando você pedir para “subir commit”, a IA faz uma checagem de consistência entre mudanças de código e `TASKS.md` antes de commitar/push.\n- **Mecânica**: criar uma **skill/comando de fluxo** (ex.: `/ship`) que:\n  1. lê `git status` + `git diff --name-only`  \n  2. lê `TASKS.md` e identifica tasks abertas (`todo/in_progress/blocked`)  \n  3. compara arquivos alterados com escopo das tasks abertas (heurística por paths/keywords)  \n  4. se detectar mismatch, **bloqueia o push** e sugere exatamente o que atualizar no `TASKS.md`  \n  5. se estiver ok, segue com commit/push\n- **Sem script separado**: toda a lógica fica na própria skill/prompt operacional (mais simples de manter no começo).\n- **Tradeoff aceito**: isso só vale quando você usa a IA/comando; `git push` manual fora desse fluxo não será validado.\n\n\nFormato prático da skill (MVP):\n\n\n- **Entrada**: mensagem tipo “faz o commit e sobe”.\n- **Checklist interno da skill**:\n  - “há task aberta que menciona área alterada?”\n  - “`TASKS.md` foi alterado quando deveria?”\n  - “status da task mudou de forma coerente com o diff?”\n- **Saída**:\n  - ✅ `OK_TO_PUSH`: resumo + commit/push  \n  - ❌ `BLOCK_PUSH`: itens faltantes no `TASKS.md` + sugestão de texto pronto\n\n\nRegras simples para começar (evita complexidade):\n\n\n- Se mudou código em `packages/*` e existe task aberta relacionada, exigir atualização em `TASKS.md`.\n- Se task foi concluída no conteúdo do commit, exigir mudança para `done` + nota breve do que foi entregue.\n- Se só mudou docs/chore, permitir sem exigir update (a menos que task aberta esteja explicitamente ligada).\n\n\nSe quiser, no próximo passo eu te passo o **prompt exato da skill `/ship`** (copiar/colar), já com essas regras e com mensagens de bloqueio/ok padronizadas.\"",
+          "id": "prt_cd44a85a0002W4WuGK8d5tABjy",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd44a85a0001MyZNmXZq5s3Pdj"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1773088179655,
+          "completed": 1773088186002
+        },
+        "parentID": "msg_cd44a85a0001MyZNmXZq5s3Pdj",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 12956,
+          "input": 12708,
+          "output": 248,
+          "reasoning": 215,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "id": "prt_cd44a88ac001lWFP441OlmmmVk",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "**Planning skill prompt with TASKS.md check**",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_00ec8262956fc74f0169af2db4d4b481a19dbd5c04040ab7e6",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1773088180896,
+            "end": 1773088185313
+          },
+          "id": "prt_cd44a8aa00014U34aDnB6PIOVw",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "glob",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "**/TASKS.md",
+              "path": "/Users/alt/repos/mapctx"
+            },
+            "output": "/Users/alt/repos/mapctx/TASKS.md\n/Users/alt/repos/mapctx/packages/sync-engine/TASKS.md\n/Users/alt/repos/mapctx/example-tasks/TASKS.md",
+            "title": "",
+            "metadata": {
+              "count": 3,
+              "truncated": false
+            },
+            "time": {
+              "start": 1773088185424,
+              "end": 1773088185439
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_00ec8262956fc74f0169af2db93d4481a1bd1d11140d2cf39a"
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "cost": 0,
+          "tokens": {
+            "total": 12956,
+            "input": 12708,
+            "output": 248,
+            "reasoning": 215,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "id": "prt_cd44a9e22001ojm1jVtmfIxOoC",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "patch",
+          "hash": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_cd44a9e900010LHwjrZ8zRSqE9",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1773088186003,
+          "completed": 1773088876775
+        },
+        "parentID": "msg_cd44a85a0001MyZNmXZq5s3Pdj",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 13226,
+          "input": 208,
+          "output": 218,
+          "reasoning": 90,
+          "cache": {
+            "read": 12800,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cd44a9e930024nJca9EW8xER1u",
+        "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "id": "prt_cd44aa1a5001JP533V2YUJole0",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd44a9e930024nJca9EW8xER1u"
+        },
+        {
+          "type": "reasoning",
+          "text": "**Planning session skill prompt**",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0be2941a3d17140c0169af2dbb811c819ea0e8b951f1150baf",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1773088187590,
+            "end": 1773088189622
+          },
+          "id": "prt_cd44aa4c6001YDgn1UV6rasKBf",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd44a9e930024nJca9EW8xER1u"
+        },
+        {
+          "type": "tool",
+          "callID": "call_15pnCxIbxfJSa9ZeCgSGLuGC",
+          "tool": "question",
+          "state": {
+            "status": "completed",
+            "input": {
+              "questions": [
+                {
+                  "header": "Usar padrão TASKS?",
+                  "question": "Encontrei `TASKS.md` no repositório. Você quer que eu use o padrão Markdown Kanban e carregue a skill `mapctx-tasks` nesta sessão para alinhar a proposta da nova skill `/ship`?",
+                  "options": [
+                    {
+                      "label": "Sim, carregar skill (Recommended)",
+                      "description": "Uso o padrão mapctx-tasks nesta sessão"
+                    },
+                    {
+                      "label": "Não, seguir sem skill",
+                      "description": "Continuo sem carregar mapctx-tasks"
+                    }
+                  ],
+                  "multiple": false
+                }
+              ]
+            },
+            "output": "User has answered your questions: \"Encontrei `TASKS.md` no repositório. Você quer que eu use o padrão Markdown Kanban e carregue a skill `mapctx-tasks` nesta sessão para alinhar a proposta da nova skill `/ship`?\"=\"Sim, carregar skill (Recommended)\". You can now continue with the user's answers in mind.",
+            "title": "Asked 1 question",
+            "metadata": {
+              "answers": [
+                [
+                  "Sim, carregar skill (Recommended)"
+                ]
+              ],
+              "truncated": false
+            },
+            "time": {
+              "start": 1773088191588,
+              "end": 1773088876644
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0be2941a3d17140c0169af2dbd8dd4819eb77c41e3c288cc14"
+            }
+          },
+          "id": "prt_cd44aacb8001FC5BnJ51Ce5xcX",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd44a9e930024nJca9EW8xER1u"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "cost": 0,
+          "tokens": {
+            "total": 13226,
+            "input": 208,
+            "output": 218,
+            "reasoning": 90,
+            "cache": {
+              "read": 12800,
+              "write": 0
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd44a9e930024nJca9EW8xER1u"
+        },
+        {
+          "type": "patch",
+          "hash": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_cd45528e5001ujzIfjrt2q94yO",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd44a9e930024nJca9EW8xER1u"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1773088876776,
+          "completed": 1773088880682
+        },
+        "parentID": "msg_cd44a85a0001MyZNmXZq5s3Pdj",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 13411,
+          "input": 13311,
+          "output": 100,
+          "reasoning": 78,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cd45528e8002KR4azD25DNeK2r",
+        "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "id": "prt_cd4552b72001jgGE2nkSG07d64",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd45528e8002KR4azD25DNeK2r"
+        },
+        {
+          "type": "reasoning",
+          "text": "**Deciding to load skill map context**",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_02a795766f6d10f70169af306e83e881a3a5fdb4e51681b4f6",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1773088878575,
+            "end": 1773088880539
+          },
+          "id": "prt_cd4552fef001xAleeyn2y5PD86",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd45528e8002KR4azD25DNeK2r"
+        },
+        {
+          "type": "tool",
+          "callID": "call_yVtIfRRIilnMHgDk5tHPaN2J",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "mapctx-tasks"
+            },
+            "output": "<skill_content name=\"mapctx-tasks\">\n# Skill: mapctx-tasks\n\n# Kanban Tasks (Single-List)\n\nUse this skill for boards where tasks live under one `## Tasks` section and workflow state is in `status:`.\n\nKeep this file focused on decisions and workflow. Load detailed templates and field specs from references:\n\n- `./references/bootstrap-and-templates.md`\n- `./references/field-types-and-contract.md`\n- `./references/status-and-sync.md`\n- `./references/custom-statuses.md`\n\nFor operational GitHub sync commands (`status`, `pull`, `push`, `bootstrap`, `reconcile`), use skill `mapctx-sync-engine`.\n\n## Workflow\n\n1. Detect format before editing.\n   - Confirm tasks are in one `## Tasks` list.\n   - Confirm each task has `status:`.\n   - If section headers (`## Backlog`, `## Doing`, ...) are primary, normalize to single-list format before making changes.\n\n2. Confirm source strategy (required decision gate).\n   - Present source options and ask the user to choose one:\n     1) Import tasks from an existing GitHub Project.\n     2) Create local `TASKS.md` first (with optional future export to GitHub Project).\n   - Do not proceed until one option is explicitly selected.\n\n3. Read current board state.\n   - If `TASKS.md` exists, scan all IDs to compute next `T-XXX` and keep task order stable.\n   - If `TASKS.md` does not exist, run bootstrap from `./references/bootstrap-and-templates.md` and start at `T-001`.\n\n4. Apply operation with minimal diff.\n   - Move status by editing only `status:` when possible.\n   - Add new tasks at end of `## Tasks`.\n   - Keep required canonical task fields present; if unknown, use `null`.\n   - For optional fields, add only when needed by project workflow or sync setup.\n   - Treat statuses as project-defined workflow states. If none are specified, use default `backlog|doing|review|done|paused`.\n   - Allow full rename/replacement of defaults when user defines a custom status model.\n\n5. Enforce contract.\n   - Keep exact field order and types from `./references/field-types-and-contract.md`.\n   - Keep hierarchy semantics deterministic:\n     - `type` is required in every task.\n     - `parent` is populated for subtasks (otherwise `null`).\n     - `subIssueProgress` is populated for epics when known (otherwise `null`).\n   - Keep dates as `YYYY-MM-DD`.\n   - Keep `externalId` provider-agnostic (`<provider>:<entity>:<id>`), or `null`.\n\n6. Keep metadata consistent.\n   - Update `updated` on every task edit.\n   - Use the project completion state policy from `./references/custom-statuses.md`.\n   - By default, completion state is `done`; if project defines another completion state, follow it.\n\n7. Maintain detail files when relevant.\n   - Store short objective in `summary` and full Markdown context in `description: |` in `./tasks/T-XXX.md`.\n   - Keep `TASKS.md` compact and deterministic.\n\n8. Validate before returning.\n   - No duplicate IDs.\n   - Required fields present in canonical order.\n   - Optional fields, when present, follow extension order.\n   - Every task appears once in the single list.\n\n## Source Strategy Gate (Required)\n\nBefore creating a new `TASKS.md` or syncing tasks, present these options and ask for one explicit choice:\n\n1. Import tasks from an existing GitHub Project.\n2. Create local `TASKS.md` first (and export to GitHub Project later, or not).\n\nDecision rules:\n\n- If option 1 is selected, use the existing GitHub Project as source of truth for linkage and mapping.\n- If option 2 is selected, initialize local files first and keep `externalId: null` until linked.\n- If option 2 is selected and user later wants sync, create/sync GitHub Project from local `TASKS.md`.\n- Do not assume project creation or linkage without explicit user confirmation.\n\nBase directory for this skill: file:///Users/alt/.config/opencode/skills/mapctx-tasks\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/Users/alt/.config/opencode/skills/mapctx-tasks/references/field-types-and-contract.md</file>\n<file>/Users/alt/.config/opencode/skills/mapctx-tasks/references/bootstrap-and-templates.md</file>\n<file>/Users/alt/.config/opencode/skills/mapctx-tasks/references/custom-statuses.md</file>\n<file>/Users/alt/.config/opencode/skills/mapctx-tasks/references/status-and-sync.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: mapctx-tasks",
+            "metadata": {
+              "name": "mapctx-tasks",
+              "dir": "/Users/alt/.config/opencode/skills/mapctx-tasks",
+              "truncated": false
+            },
+            "time": {
+              "start": 1773088880568,
+              "end": 1773088880579
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_02a795766f6d10f70169af3070692081a3ba72e03984be8e53"
+            }
+          },
+          "id": "prt_cd455379c001wC3S6coIH0a0JG",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd45528e8002KR4azD25DNeK2r"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "cost": 0,
+          "tokens": {
+            "total": 13411,
+            "input": 13311,
+            "output": 100,
+            "reasoning": 78,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "id": "prt_cd45537c8001ug5XdPW1Jtm23V",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd45528e8002KR4azD25DNeK2r"
+        },
+        {
+          "type": "patch",
+          "hash": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_cd455382800120H6opvqIqYHnz",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd45528e8002KR4azD25DNeK2r"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1773088880683,
+          "completed": 1773088913281
+        },
+        "parentID": "msg_cd44a85a0001MyZNmXZq5s3Pdj",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 15800,
+          "input": 1133,
+          "output": 1355,
+          "reasoning": 239,
+          "cache": {
+            "read": 13312,
+            "write": 0
+          }
+        },
+        "finish": "stop",
+        "id": "msg_cd455382b002pNdsrS0HbWLxeV",
+        "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "id": "REDACTED",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd455382b002pNdsrS0HbWLxeV"
+        },
+        {
+          "type": "reasoning",
+          "text": "**Providing prompt and plan**",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0089641bacb1f0850169af3074fe188192a39e061c62ae06d0",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1773088885246,
+            "end": 1773088890880
+          },
+          "id": "prt_cd45549fe0019LXPq94Hk2b7zG",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd455382b002pNdsrS0HbWLxeV"
+        },
+        {
+          "type": "text",
+          "text": "Boa ideia — esse desenho fica simples, útil e com baixo atrito no dia a dia.\n\nSegue um **MVP pronto para copiar/colar** como prompt operacional da skill `/ship` (sem hook/CI forte, só no fluxo da IA), já alinhado ao que você descreveu:\n\n```md\nVocê é a skill `/ship` para fluxo de commit/push com validação de consistência entre código e TASKS.md.\n\nObjetivo:\n- Antes de commitar/subir, validar se mudanças de código estão coerentes com o planejamento em TASKS.md.\n- Se incoerente, bloquear o push e sugerir exatamente o ajuste.\n- Se coerente, seguir com commit/push.\n\nEscopo:\n- Validar apenas no fluxo da IA (não tenta impedir git push manual fora da skill).\n- Sem scripts externos; toda lógica é feita aqui com leitura de git + TASKS.md.\n\nEntradas esperadas:\n- Mensagens como: \"faz commit e sobe\", \"ship\", \"subir commit\", \"commit + push\".\n\nSequência obrigatória:\n1) Coletar contexto do git:\n   - `git status --short`\n   - `git diff --name-only`\n   - `git diff --cached --name-only`\n   - Se necessário para resumo: `git diff --stat` e `git diff --cached --stat`\n\n2) Ler `TASKS.md`:\n   - Identificar tasks abertas (`backlog|todo|in_progress|doing|review|blocked|paused` e equivalentes locais de \"não concluída\").\n   - Identificar tasks concluídas (`done` ou estado final equivalente do projeto).\n   - Extrair para cada task: id, title, status, summary/description, labels/áreas/paths (quando existirem).\n\n3) Mapear mudanças -> possíveis tasks (heurística):\n   - Path matching por diretórios (ex.: `packages/sync-engine/**` -> task que menciona sync-engine).\n   - Keyword matching por nome de arquivo e termos da task.\n   - Se houver múltiplas candidatas, manter ranking por confiança (alta/média/baixa).\n\n4) Aplicar regras MVP:\n   Regra A:\n   - Se houve mudança de código em `packages/*` e existe task aberta relacionada por heurística (confiança >= média),\n     exigir que `TASKS.md` tenha sido atualizado no commit ou no working tree.\n   Regra B:\n   - Se o conteúdo do diff indica conclusão de entrega (feature completa/fix fechado/refactor final),\n     exigir transição da task para estado final (`done` ou equivalente) + nota breve do entregue.\n   Regra C:\n   - Se só mudou docs/chore (sem código em `packages/*`, `src/*`, `apps/*`), permitir sem exigir update,\n     exceto quando a própria task aberta declarar explicitamente que docs/chore fazem parte do escopo.\n   Regra D:\n   - Se não houver task claramente relacionada (nenhuma com confiança >= média),\n     não bloquear automaticamente; sinalizar \"sem vínculo claro\" e sugerir vinculação opcional.\n\n5) Decisão:\n   - Se qualquer regra obrigatória falhar -> `BLOCK_PUSH`\n   - Caso contrário -> `OK_TO_PUSH`\n\nFormato de saída (obrigatório):\n- Começar com exatamente uma das tags:\n  - `OK_TO_PUSH`\n  - `BLOCK_PUSH`\n\n- Em seguida:\n  1. Resumo curto do que foi detectado\n  2. Evidências (arquivos-chave + task(s) relacionada(s))\n  3. Ação proposta\n\nQuando `BLOCK_PUSH`, incluir:\n- Lista objetiva do que falta no `TASKS.md`\n- Sugestão de texto pronto para colar, por task:\n  - `status: ...`\n  - `updated: YYYY-MM-DD`\n  - nota de entrega em 1-2 linhas\n- Comando sugerido para seguir após ajuste (ex.: add/commit/push)\n\nQuando `OK_TO_PUSH`, incluir:\n- Resumo de consistência\n- Mensagem de commit sugerida (foco no porquê)\n- Prosseguir com commit e push, então reportar resultado final.\n\nCritérios de linguagem:\n- Resposta curta, objetiva e acionável.\n- Nunca inventar task inexistente.\n- Se houver ambiguidade, explicitar nível de confiança da associação.\n\nFallback seguro:\n- Em caso de dúvida entre bloquear ou liberar, preferir bloquear com orientação clara de correção.\n```\n\nPequenos ajustes que eu recomendo para reduzir falso positivo:\n- Trocar “exigir `TASKS.md` alterado” por “exigir atualização da task relacionada (em `TASKS.md` ou detalhe `tasks/T-XXX.md`, se o projeto usar)”.\n- Marcar conclusão só quando houver sinal forte de entrega final (ex.: testes + integração + remoção de TODO/fixme).\n- Introduzir limiar simples: confiança `alta` bloqueia, `média` avisa, `baixa` não bloqueia.\n\nSe quiser, no próximo passo eu te entrego uma versão **v2 curta e production-like** com:\n1) mensagens padronizadas de bloqueio/aprovação em PT-BR,  \n2) modelo de commit message por tipo (`feat/fix/refactor/docs/chore`),  \n3) política de exceção (`--override` com justificativa).",
+          "time": {
+            "start": 1773088913086,
+            "end": 1773088913086
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "msg_0089641bacb1f0850169af307acb9c819289a7a6243071ec1f"
+            }
+          },
+          "id": "prt_cd4556001001aikKy6EZqJO91D",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd455382b002pNdsrS0HbWLxeV"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "cost": 0,
+          "tokens": {
+            "total": 15800,
+            "input": 1133,
+            "output": 1355,
+            "reasoning": 239,
+            "cache": {
+              "read": 13312,
+              "write": 0
+            }
+          },
+          "id": "prt_cd455b6cf001bXHsyVc5ccu4tX",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd455382b002pNdsrS0HbWLxeV"
+        },
+        {
+          "type": "patch",
+          "hash": "8e0980581dfa6b914e825d0de315a1543af77dfc",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_cd455b760001DmSr36xoM4397Z",
+          "sessionID": "ses_32bb57a7effe0eS0iSf5YGXQnc",
+          "messageID": "msg_cd455382b002pNdsrS0HbWLxeV"
+        }
+      ]
+    }
+  ]
+}
