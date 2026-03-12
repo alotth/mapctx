@@ -1,0 +1,123 @@
+fui usar o mapcs em outro projeto e tive erro, subiu duplicado, deu um timeout no processo, mas igual as informacoes do detail estarao abaixo, outra, ao enviar para e fazer o sync ele modificou o TASKS.md apagando informacoes importantes que existiam la, ao inves de alterar so os campos id e externalId.
+tasks.md antes
+
+### [T-032] Bug: 500 no upload de cupom sem log util (POST /api/cupons/upload)
+
+- id: T-032
+- status: backlog
+- type: bug
+- parent: null
+- subIssueProgress: null
+- priority: high
+- workload: Easy
+- tags: [bug, backend, cupons, upload, logging, observability]
+- touch: [backend]
+- dependsOn: []
+- start: 2026-02-12
+- due: null
+- completed: null
+- externalId: null
+- updated: 2026-03-10
+- detail: ./tasks/T-032.md
+- milestone: fix-logging
+
+tasks.md depois 
+
+### [T-032] Bug: 500 no upload de cupom sem log util (POST /api/cupons/upload)
+ - id: tmp-j64mqk
+  - status: backlog
+  - completed: null
+  - externalId: github:issue:57
+  - updated: 2026-03-12
+
+t-032 detail:
+
+# T-032
+
+  - role: backend
+  - impact: high
+  - estimatedEffort: 4h
+  - prerequisites: []
+  - blocking: []
+  - filesAffected: [backend/app/routers/cupons.py]
+  - testsRequired: ["Reproduzir falha em /api/cupons/upload e validar logs do servidor"]
+  - summary: Corrigir falta de logs uteis em erro 500 no upload de cupom.
+  - description: |
+      ## Acceptance
+      - [x] Qualquer erro 500 em `POST /api/cupons/upload` deve gerar traceback completo no log.
+      - [x] Logs devem incluir contexto minimo: `company_id`, `user_id`, `filename`, `document_type_code`.
+      - [x] Causa raiz do erro deve ficar rastreavel para triagem operacional.
+
+
+      ## Steps
+      - [x] Adicionar `logger.exception(...)` nos blocos `except ValueError` e `except Exception` em `upload_cupom_file`.
+      - [x] Incluir contexto da requisicao na mensagem/extra do logger.
+      - [x] Validar com upload forçando falha e conferir log com stack trace e contexto.
+
+
+      ## Notes
+      A task foi normalizada para remover anotacoes soltas que nao pertenciam ao escopo do bug.
+      Comentario operacional: o storage do Supabase foi adicionado, mas em producao ainda nao esta funcionando.
+
+---
+
+esse parser esta no @packages/sync-engine ou no @packages/core ? 
+Called the Read tool with the following input: {"filePath":"/Users/alt/repos/mapctx/packages/sync-engine"}
+<path>/Users/alt/repos/mapctx/packages/sync-engine</path>
+<type>directory</type>
+<entries>
+.github/
+.gitignore
+AI_SKILL_DRAFT.md
+CHEATSHEET.md
+dist/
+DOCUMENTATION.md
+github-payload-examples.json
+LICENSE
+MAINTAINERS.md
+mapcs.config.example.json
+mapcs.config.json
+mapcs.dev.json
+node_modules/
+package.json
+README.md
+src/
+TASKS.md
+tasks/
+tsconfig.json
+
+(19 entries)
+</entries>
+Called the Read tool with the following input: {"filePath":"/Users/alt/repos/mapctx/packages/core"}
+<path>/Users/alt/repos/mapctx/packages/core</path>
+<type>directory</type>
+<entries>
+browser/
+dist/
+node_modules/
+package.json
+src/
+tsconfig.json
+
+(6 entries)
+</entries>
+
+---
+
+mas nao devia ser o mesmo parser?
+
+---
+
+esse parser tem o mesmo escopo no core e no sync? sera que foi feito isso de separar para facilitar criar o package?
+
+---
+
+acho que foi por causa da publicacao do package e para facilitar tudo, entao arrume e deixe mais flexivel o regex, tanto no core quanto no sync
+
+---
+
+e tambem arrume a questa do T-xxxx.md, pois agora tem o E-xxxx.md e podem ter outros formatos
+
+---
+
+pode ser

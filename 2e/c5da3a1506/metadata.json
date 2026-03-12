@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "2ec5da3a1506",
+  "strategy": "manual-commit",
+  "branch": "chore/mapctx-monorepo-migration",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "packages/core/src/detail.ts",
+    "packages/sync-engine/README.md",
+    "packages/sync-engine/mapcs.config.example.json",
+    "packages/sync-engine/src/config.ts",
+    "packages/sync-engine/src/markdown.ts",
+    "packages/sync-engine/src/status-workflows.test.ts",
+    "packages/sync-engine/src/sync.ts",
+    "packages/sync-engine/src/types.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/2e/c5da3a1506/0/metadata.json",
+      "transcript": "/2e/c5da3a1506/0/full.jsonl",
+      "context": "/2e/c5da3a1506/0/context.md",
+      "content_hash": "/2e/c5da3a1506/0/content_hash.txt",
+      "prompt": "/2e/c5da3a1506/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 289997,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1524096,
+    "output_tokens": 14872,
+    "api_call_count": 46
+  }
+}

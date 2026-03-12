@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "2ec5da3a1506",
+  "session_id": "ses_320455131ffe6hfIWibLzebgjf",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-12T03:47:04.669508Z",
+  "branch": "chore/mapctx-monorepo-migration",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "packages/core/src/detail.ts",
+    "packages/sync-engine/README.md",
+    "packages/sync-engine/mapcs.config.example.json",
+    "packages/sync-engine/src/config.ts",
+    "packages/sync-engine/src/markdown.ts",
+    "packages/sync-engine/src/status-workflows.test.ts",
+    "packages/sync-engine/src/sync.ts",
+    "packages/sync-engine/src/types.ts"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "65392fbcaaa2",
+  "token_usage": {
+    "input_tokens": 289997,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1524096,
+    "output_tokens": 14872,
+    "api_call_count": 46
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-12T03:47:04.437045Z",
+    "agent_lines": 308,
+    "human_added": 1,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 309,
+    "agent_percentage": 99.67637540453075
+  }
+}
