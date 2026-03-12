@@ -1,0 +1,29 @@
+acho que esta faltando dar nomenclatura clara para epicos, talvez usar E-xxx, que acha?
+
+---
+
+entao, la na skill aqui no repo, daria para por isso, mas tem mais tipos de issues, sera que uma nomenclatura para cada?
+
+---
+
+mas olhando agora, acho que t e e, para tasks em geral, e epicos que sao agregadores, ja temos praticamente 100% e quando for bug estar como task, nao parece ser ruim tbm
+
+---
+
+pode fazer
+
+---
+
+sim, pode alinhar, e tambem ja atualizar a skill global do opencode
+
+---
+
+pode fazer
+
+---
+
+sim pode fazer
+
+---
+
+pode subir esse commit
