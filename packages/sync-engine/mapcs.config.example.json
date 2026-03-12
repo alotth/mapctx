@@ -29,6 +29,9 @@
     "defaultStatusForImportedIssues": "backlog",
     "requireConfirmFlag": true
   },
+  "idGeneration": {
+    "preferredPrefix": "T"
+  },
   "remoteWinsFields": [
     "status",
     "tags",

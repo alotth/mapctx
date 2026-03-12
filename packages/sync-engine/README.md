@@ -52,6 +52,20 @@ Common flags:
 - Local sync state: `.mapcs/state.json`
 - Conflict artifacts: `.mapcs/conflicts/<task-id>.reconcile.md`
 
+## ID generation
+
+When importing remote issues (`bootstrap --from github`), new local IDs can follow a preferred prefix:
+
+```json
+{
+  "idGeneration": {
+    "preferredPrefix": "E"
+  }
+}
+```
+
+If omitted, the engine infers the dominant existing prefix (e.g. `T`, `E`, `EPIC`) and continues that sequence.
+
 ## Daily flow
 
 ```bash

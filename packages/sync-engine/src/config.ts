@@ -40,6 +40,13 @@ export function loadConfig(options: SyncOptions = {}): { config: SyncConfig; con
     parsed.bootstrap.defaultStatusForImportedIssues = normalizeStatus(parsed.bootstrap.defaultStatusForImportedIssues);
   }
 
+  if (parsed.idGeneration?.preferredPrefix !== undefined) {
+    parsed.idGeneration.preferredPrefix = String(parsed.idGeneration.preferredPrefix).trim();
+    if (!/^[A-Za-z][A-Za-z0-9]*$/.test(parsed.idGeneration.preferredPrefix)) {
+      throw new Error('idGeneration.preferredPrefix must match /^[A-Za-z][A-Za-z0-9]*$/.');
+    }
+  }
+
   validateStatusConfig(parsed);
 
   return { config: parsed, configPath };

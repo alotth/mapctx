@@ -224,6 +224,17 @@ test('fails when completionStatuses has values outside allowedStatuses', () => {
   assert.throws(() => loadConfig({ configPath }), /completionStatuses must be a subset/);
 });
 
+test('fails when idGeneration preferredPrefix is invalid', () => {
+  const tempDir = makeTempDir();
+  const configPath = writeConfig(tempDir, {
+    idGeneration: {
+      preferredPrefix: 'T-'
+    }
+  });
+
+  assert.throws(() => loadConfig({ configPath }), /idGeneration\.preferredPrefix/);
+});
+
 test('roundtrip pull/push/bootstrap preserves custom statuses', () => {
   const tempDir = makeTempDir();
   const configPath = writeConfig(tempDir, {
@@ -301,6 +312,144 @@ test('roundtrip pull/push/bootstrap preserves custom statuses', () => {
     const byId = new Map(parsed.tasks.map(task => [task.id, task.status]));
     assert.equal(byId.get('T-001'), 'design');
     assert.ok(Array.from(byId.values()).includes('qa'));
+  } finally {
+    restore();
+  }
+});
+
+test('parseTasksFile accepts metadata bullets with flexible indentation', () => {
+  const tempDir = makeTempDir();
+  const tasksFilePath = path.resolve(tempDir, 'TASKS.md');
+  fs.writeFileSync(tasksFilePath, [
+    '# Tasks',
+    '',
+    '## Tasks',
+    '',
+    '### [T-032] Bug: upload error',
+    '',
+    '- id: T-032',
+    ' - status: backlog',
+    '\t- completed: null',
+    '  - externalId: github:issue:27',
+    '    - updated: 2026-03-12',
+    ' - detail: ./tasks/T-032.md',
+    '',
+    '## Notes',
+    ''
+  ].join('\n'), 'utf8');
+
+  const parsed = parseTasksFile(tasksFilePath);
+  assert.equal(parsed.tasks.length, 1);
+  assert.equal(parsed.tasks[0].id, 'T-032');
+  assert.equal(parsed.tasks[0].status, 'backlog');
+  assert.equal(parsed.tasks[0].externalId, 'github:issue:27');
+  assert.equal(parsed.tasks[0].updated, '2026-03-12');
+  assert.equal(parsed.tasks[0].detail, './tasks/T-032.md');
+});
+
+test('bootstrap from github keeps existing id prefix for new tasks', () => {
+  const tempDir = makeTempDir();
+  const configPath = writeConfig(tempDir, {});
+  const tasksFilePath = writeTasks(tempDir, {
+    title: 'Tasks',
+    componentsSection: [],
+    notesSection: [],
+    tasks: [
+      { id: 'E-009', title: 'Legacy epic', status: 'backlog', completed: null, externalId: 'github:issue:91' }
+    ]
+  });
+
+  const restore = stubGitHub({
+    getIssues: () => [
+      {
+        number: 91,
+        node_id: 'I_91',
+        title: 'Legacy epic',
+        body: '',
+        state: 'open',
+        labels: [],
+        milestone: null,
+        html_url: 'https://example.test/91',
+        closed_at: null,
+        updated_at: '2026-03-10T00:00:00Z'
+      },
+      {
+        number: 92,
+        node_id: 'I_92',
+        title: 'New imported issue',
+        body: '',
+        state: 'open',
+        labels: [],
+        milestone: null,
+        html_url: 'https://example.test/92',
+        closed_at: null,
+        updated_at: '2026-03-10T00:00:00Z'
+      }
+    ]
+  });
+
+  try {
+    bootstrapCommand('github', { configPath });
+    const parsed = parseTasksFile(tasksFilePath);
+    const imported = parsed.tasks.find(task => task.externalId === 'github:issue:92');
+    assert.equal(imported?.id, 'E-010');
+    assert.equal(imported?.detail, './tasks/E-010.md');
+  } finally {
+    restore();
+  }
+});
+
+test('bootstrap from github honors configured idGeneration preferredPrefix', () => {
+  const tempDir = makeTempDir();
+  const configPath = writeConfig(tempDir, {
+    idGeneration: {
+      preferredPrefix: 'E'
+    }
+  });
+  const tasksFilePath = writeTasks(tempDir, {
+    title: 'Tasks',
+    componentsSection: [],
+    notesSection: [],
+    tasks: [
+      { id: 'T-009', title: 'Legacy task', status: 'backlog', completed: null, externalId: 'github:issue:93' }
+    ]
+  });
+
+  const restore = stubGitHub({
+    getIssues: () => [
+      {
+        number: 93,
+        node_id: 'I_93',
+        title: 'Legacy task',
+        body: '',
+        state: 'open',
+        labels: [],
+        milestone: null,
+        html_url: 'https://example.test/93',
+        closed_at: null,
+        updated_at: '2026-03-10T00:00:00Z'
+      },
+      {
+        number: 94,
+        node_id: 'I_94',
+        title: 'New imported issue',
+        body: '',
+        state: 'open',
+        labels: [],
+        milestone: null,
+        html_url: 'https://example.test/94',
+        closed_at: null,
+        updated_at: '2026-03-10T00:00:00Z'
+      }
+    ]
+  });
+
+  try {
+    bootstrapCommand('github', { configPath });
+    const parsed = parseTasksFile(tasksFilePath);
+    const imported = parsed.tasks.find(task => task.externalId === 'github:issue:94');
+    assert.equal(imported?.id, 'E-001');
+    assert.equal(imported?.detail, './tasks/E-001.md');
   } finally {
     restore();
   }

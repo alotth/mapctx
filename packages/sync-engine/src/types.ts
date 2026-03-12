@@ -49,6 +49,9 @@ export type SyncConfig = {
     defaultStatusForImportedIssues?: string;
     requireConfirmFlag?: boolean;
   };
+  idGeneration?: {
+    preferredPrefix?: string;
+  };
   remoteWinsFields?: string[];
   localWinsFields?: string[];
 };

@@ -116,7 +116,7 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
     }
 
     if (inTasks && currentTask) {
-      const m = line.match(/^\s{2}-\s+([A-Za-z][A-Za-z0-9]*):\s*(.*)$/);
+      const m = line.match(/^\s*-\s*([A-Za-z][A-Za-z0-9]*):\s*(.*)$/);
       if (!m) continue;
       const key = m[1];
       const value = m[2].trim();
@@ -253,5 +253,5 @@ export function ensureDetailFile(tasksFilePath: string, task: Task): void {
   const full = path.resolve(path.dirname(tasksFilePath), task.detail);
   if (fs.existsSync(full)) return;
   fs.mkdirSync(path.dirname(full), { recursive: true });
-  fs.writeFileSync(full, `# ${task.id}\n\n  - steps:\n      - [ ] Define scope\n`, 'utf8');
+  fs.writeFileSync(full, `# ${task.id}\n\n  - summary: Define scope\n  - description: |\n      ## Steps\n\n      - [ ] Define scope\n`, 'utf8');
 }

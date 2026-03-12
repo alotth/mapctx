@@ -4,82 +4,100 @@ export type TaskStep = {
 }
 
 export type TaskDetail = {
+  summary?: string
   steps?: TaskStep[]
   description?: string
 }
 
+function extractChecklistSteps(markdown: string): TaskStep[] {
+  return String(markdown || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => line.match(/^\s*-\s*\[([ xX])\]\s*(.+)$/))
+    .filter((match): match is RegExpMatchArray => Boolean(match))
+    .map((match) => ({ text: match[2].trim(), completed: match[1].toLowerCase() === "x" }))
+}
+
 export function parseTaskDetailMarkdown(content: string): TaskDetail {
   const lines = String(content || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")
-  const steps: TaskStep[] = []
-  const descriptionLines: string[] = []
-  let inSteps = false
-  let inDescription = false
-  let inCodeBlock = false
+  let summary: string | undefined
+  let description: string | undefined
 
-  for (const line of lines) {
-    const trimmedLine = line.trim()
-
-    if (inCodeBlock && inDescription) {
-      if (trimmedLine === "```") {
-        inCodeBlock = false
-        inDescription = false
-        continue
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]
+    const summaryMatch = line.match(/^\s*-\s*summary:\s*(.*)$/)
+    if (summaryMatch) {
+      const value = summaryMatch[1].trim()
+      if (value !== "" && value !== "null") {
+        summary = value
       }
-      descriptionLines.push(line.replace(/^\s{4,}/, ""))
       continue
     }
 
-    if (/^\s+- steps:\s*$/.test(line)) {
-      inSteps = true
-      continue
-    }
+    const descriptionMatch = line.match(/^(\s*)-\s*description:\s*\|\s*$/)
+    if (!descriptionMatch) continue
 
-    if (inSteps) {
-      const stepMatch = line.match(/^\s{6,}- \[([ x])\]\s*(.*)$/)
-      if (stepMatch) {
-        const checkmark = stepMatch[1]
-        const text = stepMatch[2]
-        steps.push({ text: text.trim(), completed: checkmark === "x" })
+    const baseIndent = descriptionMatch[1].length
+    const blockLines: string[] = []
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const nextLine = lines[j]
+      const nextLineIndent = nextLine.match(/^\s*/)?.[0].length ?? 0
+      if (/^\s*-\s*[A-Za-z][A-Za-z0-9]*:\s*/.test(nextLine) && nextLineIndent <= baseIndent) {
+        i = j - 1
+        break
+      }
+
+      if (nextLine.trim() === "") {
+        blockLines.push("")
+        i = j
         continue
       }
-      if (trimmedLine === "") {
-        continue
-      }
-      inSteps = false
+
+      const minimumIndent = baseIndent + 2
+      const stripIndent = nextLineIndent >= minimumIndent ? minimumIndent : 0
+      blockLines.push(nextLine.slice(stripIndent))
+      i = j
     }
 
-    if (/^\s+```md/.test(line) || /^\s+```/.test(line)) {
-      inDescription = true
-      inCodeBlock = true
-      continue
+    const raw = blockLines.join("\n").replace(/\s+$/, "")
+    if (raw.trim() !== "") {
+      description = raw
     }
   }
 
   const detail: TaskDetail = {}
-  if (steps.length > 0) detail.steps = steps
-  if (descriptionLines.length > 0) detail.description = descriptionLines.join("\n").trim()
+  if (summary) detail.summary = summary
+  if (description) {
+    detail.description = description
+    const steps = extractChecklistSteps(description)
+    if (steps.length > 0) detail.steps = steps
+  }
   return detail
 }
 
-export function generateTaskDetailMarkdown(task: { id?: string; steps?: TaskStep[]; description?: string }): string {
+export function generateTaskDetailMarkdown(task: { id?: string; summary?: string; steps?: TaskStep[]; description?: string }): string {
   const headerId = task.id ? task.id : "Task"
   let markdown = `# ${headerId}\n\n`
 
-  if (task.steps && task.steps.length > 0) {
-    markdown += "  - steps:\n"
-    for (const step of task.steps) {
-      const checkbox = step.completed ? "[x]" : "[ ]"
-      markdown += `      - ${checkbox} ${step.text}\n`
-    }
+  if (task.summary && task.summary.trim() !== "") {
+    markdown += `  - summary: ${task.summary.trim()}\n`
   }
 
-  if (task.description && task.description.trim() !== "") {
-    markdown += "    ```md\n"
-    const descriptionLines = task.description.trim().split("\n")
-    for (const descLine of descriptionLines) {
-      markdown += `    ${descLine}\n`
+  let description = task.description?.trim() ?? ""
+  if (!description && task.steps && task.steps.length > 0) {
+    const generatedSteps = task.steps
+      .map((step) => `- ${step.completed ? "[x]" : "[ ]"} ${step.text}`)
+      .join("\n")
+    description = `## Steps\n\n${generatedSteps}`
+  }
+
+  markdown += "  - description: |\n"
+  if (description) {
+    const descriptionLines = description.split("\n")
+    for (const descriptionLine of descriptionLines) {
+      markdown += `      ${descriptionLine}\n`
     }
-    markdown += "    ```\n"
   }
 
   return markdown.trimEnd() + "\n"
