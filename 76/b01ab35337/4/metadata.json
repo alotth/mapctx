@@ -1,17 +1,17 @@
 {
   "cli_version": "0.4.9",
   "checkpoint_id": "76b01ab35337",
+  "session_id": "ses_2de438438ffe2U5ZhGPGPSLlIg",
   "strategy": "manual-commit",
+  "created_at": "2026-03-31T00:40:22.960092Z",
   "branch": "chore/mapctx-monorepo-migration",
-  "checkpoints_count": 5,
+  "checkpoints_count": 1,
   "files_touched": [
     ".opencode/plugins/README.md",
     ".opencode/plugins/entire.ts",
     ".opencode/plugins/mapcs-session-sync.ts",
     "README.md",
     "TASKS.md",
-    "example-tasks/README.md",
-    "example-tasks/TASKS.md",
     "example-tasks/tasks/T-001.md",
     "example-tasks/tasks/T-002.md",
     "example-tasks/tasks/T-003.md",
@@ -28,10 +28,6 @@
     "packages/opencode-plugin/src/index.html",
     "packages/opencode-plugin/src/kanban-roadmap.css",
     "packages/opencode-plugin/src/kanban-roadmap.js",
-    "packages/sync-engine/TASKS.md",
-    "packages/sync-engine/src/markdown.ts",
-    "packages/sync-engine/src/status-workflows.test.ts",
-    "packages/sync-engine/src/types.ts",
     "packages/sync-engine/tasks/T-001.md",
     "packages/sync-engine/tasks/T-002.md",
     "packages/sync-engine/tasks/T-003.md",
@@ -84,48 +80,22 @@
     "tasks/T-021.md",
     "tasks/T-022.md"
   ],
-  "sessions": [
-    {
-      "metadata": "/76/b01ab35337/0/metadata.json",
-      "transcript": "/76/b01ab35337/0/full.jsonl",
-      "context": "/76/b01ab35337/0/context.md",
-      "content_hash": "/76/b01ab35337/0/content_hash.txt",
-      "prompt": "/76/b01ab35337/0/prompt.txt"
-    },
-    {
-      "metadata": "/76/b01ab35337/1/metadata.json",
-      "transcript": "/76/b01ab35337/1/full.jsonl",
-      "context": "/76/b01ab35337/1/context.md",
-      "content_hash": "/76/b01ab35337/1/content_hash.txt",
-      "prompt": "/76/b01ab35337/1/prompt.txt"
-    },
-    {
-      "metadata": "/76/b01ab35337/2/metadata.json",
-      "transcript": "/76/b01ab35337/2/full.jsonl",
-      "context": "/76/b01ab35337/2/context.md",
-      "content_hash": "/76/b01ab35337/2/content_hash.txt",
-      "prompt": "/76/b01ab35337/2/prompt.txt"
-    },
-    {
-      "metadata": "/76/b01ab35337/3/metadata.json",
-      "transcript": "/76/b01ab35337/3/full.jsonl",
-      "context": "/76/b01ab35337/3/context.md",
-      "content_hash": "/76/b01ab35337/3/content_hash.txt",
-      "prompt": "/76/b01ab35337/3/prompt.txt"
-    },
-    {
-      "metadata": "/76/b01ab35337/4/metadata.json",
-      "transcript": "/76/b01ab35337/4/full.jsonl",
-      "context": "/76/b01ab35337/4/context.md",
-      "content_hash": "/76/b01ab35337/4/content_hash.txt",
-      "prompt": "/76/b01ab35337/4/prompt.txt"
-    }
-  ],
+  "agent": "OpenCode",
+  "turn_id": "80adb0485057",
   "token_usage": {
-    "input_tokens": 15479,
-    "cache_creation_tokens": 63443,
-    "cache_read_tokens": 162902,
-    "output_tokens": 3895,
-    "api_call_count": 14
+    "input_tokens": 6,
+    "cache_creation_tokens": 22064,
+    "cache_read_tokens": 19230,
+    "output_tokens": 638,
+    "api_call_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-31T00:40:22.940154Z",
+    "agent_lines": 1976,
+    "human_added": 116,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 2092,
+    "agent_percentage": 94.45506692160612
   }
 }

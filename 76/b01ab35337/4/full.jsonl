@@ -1,0 +1,285 @@
+{
+  "info": {
+    "id": "ses_2de438438ffe2U5ZhGPGPSLlIg",
+    "slug": "neon-forest",
+    "projectID": "d6b1ca11d5baad84a8bbd704c60bc34fdf925bb6",
+    "directory": "/Users/alt/repos/mapctx",
+    "title": "Posts para LinkedIn e X sobre projeto",
+    "version": "0.0.0-feat/plugin-bridge-202602281654",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "time": {
+      "created": 1774387493831,
+      "updated": 1774387496310
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1774387493875
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "plan",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-haiku-4-5-20251001"
+        },
+        "id": "msg_d21bc7bd5001AF7H222qQVQrdD",
+        "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "me ajude a criar posts do linked in e x.com sobre esse projeto ",
+          "id": "prt_d21bc7bd5002ZwA3HHayNEb18k",
+          "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg",
+          "messageID": "msg_d21bc7bd5001AF7H222qQVQrdD"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1774387493884,
+          "completed": 1774387496278
+        },
+        "parentID": "msg_d21bc7bd5001AF7H222qQVQrdD",
+        "modelID": "claude-haiku-4-5-20251001",
+        "providerID": "anthropic",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 19451,
+          "input": 1,
+          "output": 220,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 19230
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_d21bc7bfc002POQ72QZdPWZA35",
+        "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3073e263584cf930576fdfbec9a579acd480971e",
+          "id": "prt_d21bc7fe300142fmP2W58ixz08",
+          "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg",
+          "messageID": "msg_d21bc7bfc002POQ72QZdPWZA35"
+        },
+        {
+          "type": "text",
+          "text": "Vou ajudá-lo a criar posts para LinkedIn e X (Twitter) sobre este projeto! Primeiro, preciso entender melhor o que é o projeto.\n\nDeixa eu explorar o repositório para entender melhor:",
+          "time": {
+            "start": 1774387495480,
+            "end": 1774387495480
+          },
+          "id": "prt_d21bc7fe3002sBCtxM5r3xQvJb",
+          "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg",
+          "messageID": "msg_d21bc7bfc002POQ72QZdPWZA35"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_011brSLRaAuUJJQQUXptHAWH",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/Users/alt/repos/mapctx"
+            },
+            "output": "<path>/Users/alt/repos/mapctx</path>\n<type>directory</type>\n<entries>\n.cursor/\n.DS_Store\n.entire/\n.git/\n.github/\n.gitignore\n.logs/\n.npmrc\n.opencode/\n.tasks-sync/\n.vscode/\nCONTRIBUTING.md\ndocs/\nexample-tasks/\nhooks/\nLICENSE\nnode_modules/\npackage-lock.json\npackage.json\npackages/\nREADME.md\nrules/\nscripts/\nskills/\nsync.config.json\nTASKS_SYNC_CONTEXT.md\nTASKS.md\ntasks/\ntemp/\n\n(29 entries)\n</entries>",
+            "title": "",
+            "metadata": {
+              "preview": ".cursor/\n.DS_Store\n.entire/\n.git/\n.github/\n.gitignore\n.logs/\n.npmrc\n.opencode/\n.tasks-sync/\n.vscode/\nCONTRIBUTING.md\ndocs/\nexample-tasks/\nhooks/\nLICENSE\nnode_modules/\npackage-lock.json\npackage.json\npackages/",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1774387495759,
+              "end": 1774387495761
+            }
+          },
+          "id": "prt_d21bc823b00184O0qhBBZNP1Nf",
+          "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg",
+          "messageID": "msg_d21bc7bfc002POQ72QZdPWZA35"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/Users/alt/repos/mapctx/README.md"
+            },
+            "output": "<path>/Users/alt/repos/mapctx/README.md</path>\n<type>file</type>\n<content>1: # MapCtx - Multi-Agent Project Context\n2: \n3: A multi-agent project context workspace for Markdown tasks, roadmap visualization, and sync workflows.\n4: \n5: MapCtx is an AI-first workspace for planning and execution with:\n6: \n7: - local task boards in `TASKS.md`\n8: - detailed task docs in `tasks/T-XXX.md`\n9: - Kanban/Roadmap UI (VS Code + OpenCode plugin)\n10: - bidirectional sync with GitHub Issues + GitHub Projects v2 (via `@mapctx/sync-engine`)\n11: \n12: **Install extension:** [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=alotth.mapctx)\n13: \n14: ## What is in this monorepo\n15: \n16: - `packages/vscode-extension/`: VS Code/Cursor extension (`mapctx`)\n17: - `packages/opencode-plugin/`: OpenCode UI plugin assets + installer flow\n18: - `packages/sync-engine/`: `@mapctx/sync-engine` CLI/library for sync\n19: - `packages/core/`: shared parser/model helpers\n20: - `skills/`: reusable AI skills for OpenCode/Claude/Cursor\n21: - `rules/`: agent rules (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`)\n22: \n23: Contributor guide: `CONTRIBUTING.md`\n24: \n25: ## Core capabilities\n26: \n27: - Local-first task management in Markdown with deterministic structure\n28: - Task hierarchy support (`type`, `parent`, `subIssueProgress`)\n29: - External detail files for large task descriptions and checklists\n30: - Kanban + roadmap visualization in VS Code\n31: - OpenCode plugin tab for kanban/roadmap workflows\n32: - Sync operations for Issues + Projects v2:\n33:   - `status`, `pull`, `push`, `bootstrap`, `reconcile`\n34:   - dry-run and conflict-oriented workflows\n35: \n36: For sync operational details, see `packages/sync-engine/README.md` and `packages/sync-engine/DOCUMENTATION.md`.\n37: \n38: ## Quick start\n39: \n40: ### 1) Install dependencies\n41: \n42: ```bash\n43: npm ci\n44: ```\n45: \n46: ### 2) Build key packages\n47: \n48: ```bash\n49: npm run compile\n50: npm run build:sync-engine\n51: npm run build:opencode-plugin\n52: ```\n53: \n54: ### 3) Run tests\n55: \n56: ```bash\n57: npm test\n58: npm run test:sync-engine\n59: ```\n60: \n61: ## Use the VS Code extension\n62: \n63: You can use MapCtx from the Marketplace build or run it locally.\n64: \n65: Local dev flow:\n66: \n67: 1. Run `npm run compile`\n68: 2. Press `F5` in VS Code (Extension Development Host)\n69: 3. Open a folder with a `TASKS.md`\n70: 4. Use command palette action to open the Kanban board\n71: \n72: Package local VSIX:\n73: \n74: ```bash\n75: cd packages/vscode-extension\n76: npx @vscode/vsce package --out ../../mapctx-local.vsix\n77: ```\n78: \n79: ## Use sync engine (`@mapctx/sync-engine`)\n80: \n81: Run with `npx` (no global install required):\n82: \n83: ```bash\n84: npx --yes --package @mapctx/sync-engine mapcs status\n85: ```\n86: \n87: Typical safe flow:\n88: \n89: ```bash\n90: mapcs pull\n91: mapcs status\n92: mapcs push\n93: ```\n94: \n95: Safety rule: run `pull` before `push` in the same session.\n96: \n97: Main files:\n98: \n99: - `mapcs.config.json`\n100: - `.mapcs/state.json`\n101: - `.mapcs/conflicts/<task-id>.reconcile.md`\n102: \n103: ### GitHub auth scopes\n104: \n105: To sync Issues + Projects v2, token scopes must include:\n106: \n107: - `repo`\n108: - `read:project`\n109: - `project`\n110: \n111: Refresh example:\n112: \n113: ```bash\n114: gh auth refresh -h github.com -s repo,read:project,project\n115: gh auth status\n116: ```\n117: \n118: ## AI skills and rules\n119: \n120: Available skills are documented in `skills/README.md`:\n121: \n122: - `mapctx-tasks`: maintain V2 single-list `TASKS.md`\n123: - `mapctx-sync-engine`: safe sync operations and conflict handling\n124: - `mapctx-ralph-tasks`: execute Ralph task loops via slash trigger\n125: \n126: Rule packs for AI assistants:\n127: \n128: - `rules/AGENTS.md`\n129: - `rules/CLAUDE.md`\n130: - `rules/.cursorrules`\n131: \n132: ## OpenCode plugin\n133: \n134: Build + install from repo root:\n135: \n136: ```bash\n137: npm run build:opencode-plugin\n138: npm run install:opencode-plugin\n139: ```\n140: \n141: Installed location:\n142: \n143: - `~/.config/opencode/plugins/kanban-roadmap/`\n144: - `~/.config/opencode/plugins/kanban-roadmap.js`\n145: \n146: More details: `packages/opencode-plugin/README.md`\n147: \n148: ## Release tags\n149: \n150: Monorepo releases are split by tag prefix:\n151: \n152: - `ext-vX.Y.Z` -> VS Code extension\n153: - `sync-vX.Y.Z` -> `@mapctx/sync-engine`\n154: - `plugin-vX.Y.Z` -> OpenCode plugin\n155: \n156: Runbooks:\n157: \n158: - `docs/releases/tag-strategy.md`\n159: - `docs/releases/extension.md`\n160: - `docs/releases/engine.md`\n161: - `docs/releases/opencode-plugin.md`\n162: \n163: ## Documentation map\n164: \n165: - Main contributor docs: `CONTRIBUTING.md`\n166: - Sync engine guide: `packages/sync-engine/DOCUMENTATION.md`\n167: - Sync quick commands: `packages/sync-engine/CHEATSHEET.md`\n168: - Skills overview: `skills/README.md`\n169: - Static docs site source: `docs/`\n\n(End of file - total 169 lines)\n</content>",
+            "title": "README.md",
+            "metadata": {
+              "preview": "# MapCtx - Multi-Agent Project Context\n\nA multi-agent project context workspace for Markdown tasks, roadmap visualization, and sync workflows.\n\nMapCtx is an AI-first workspace for planning and execution with:\n\n- local task boards in `TASKS.md`\n- detailed task docs in `tasks/T-XXX.md`\n- Kanban/Roadmap UI (VS Code + OpenCode plugin)\n- bidirectional sync with GitHub Issues + GitHub Projects v2 (via `@mapctx/sync-engine`)\n\n**Install extension:** [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=alotth.mapctx)\n\n## What is in this monorepo\n\n- `packages/vscode-extension/`: VS Code/Cursor extension (`mapctx`)\n- `packages/opencode-plugin/`: OpenCode UI plugin assets + installer flow\n- `packages/sync-engine/`: `@mapctx/sync-engine` CLI/library for sync\n- `packages/core/`: shared parser/model helpers\n- `skills/`: reusable AI skills for OpenCode/Claude/Cursor",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1774387496159,
+              "end": 1774387496176
+            }
+          },
+          "id": "prt_d21bc8350001KUoXF2p0D57WJz",
+          "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg",
+          "messageID": "msg_d21bc7bfc002POQ72QZdPWZA35"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01BReRK4hiXNMiFPH5PH1hwV",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/Users/alt/repos/mapctx/package.json"
+            },
+            "output": "<path>/Users/alt/repos/mapctx/package.json</path>\n<type>file</type>\n<content>1: {\n2:   \"name\": \"mapctx-monorepo\",\n3:   \"private\": true,\n4:   \"workspaces\": [\n5:     \"packages/*\"\n6:   ],\n7:   \"scripts\": {\n8:     \"vscode:prepublish\": \"npm run vscode:prepublish --workspace mapctx\",\n9:     \"compile\": \"npm run compile --workspace mapctx\",\n10:     \"watch\": \"npm run watch --workspace mapctx\",\n11:     \"watch:esbuild\": \"npm run watch:esbuild --workspace mapctx\",\n12:     \"watch:tsc\": \"npm run watch:tsc --workspace mapctx\",\n13:     \"package\": \"npm run package --workspace mapctx\",\n14:     \"compile-tests\": \"npm run compile-tests --workspace mapctx\",\n15:     \"watch-tests\": \"npm run watch-tests --workspace mapctx\",\n16:     \"check-types\": \"npm run check-types --workspace mapctx\",\n17:     \"lint\": \"npm run lint --workspace mapctx\",\n18:     \"test\": \"npm run test --workspace mapctx\",\n19:     \"test:parser\": \"npm run test:parser --workspace mapctx --\",\n20:     \"dev:standalone\": \"npm run dev:standalone --workspace mapctx\",\n21:     \"watch:logs\": \"npm run watch:logs --workspace mapctx\",\n22:     \"logs\": \"npm run logs --workspace mapctx\",\n23:     \"prepare-publish\": \"npm run prepare-publish --workspace mapctx\",\n24:     \"build:opencode-plugin\": \"node scripts/build-opencode-plugin.mjs\",\n25:     \"install:opencode-plugin\": \"node scripts/install-opencode-plugin.mjs\",\n26:     \"build:core\": \"npm run build --workspace @mapctx/core\",\n27:     \"build:sync-engine\": \"npm run build:core && npm run build --workspace @mapctx/sync-engine\",\n28:     \"test:sync-engine\": \"npm run build:core && npm run test --workspace @mapctx/sync-engine\"\n29:   },\n30:   \"dependencies\": {\n31:     \"@mapctx/sync-engine\": \"^0.0.1\"\n32:   }\n33: }\n\n(End of file - total 33 lines)\n</content>",
+            "title": "package.json",
+            "metadata": {
+              "preview": "{\n  \"name\": \"mapctx-monorepo\",\n  \"private\": true,\n  \"workspaces\": [\n    \"packages/*\"\n  ],\n  \"scripts\": {\n    \"vscode:prepublish\": \"npm run vscode:prepublish --workspace mapctx\",\n    \"compile\": \"npm run compile --workspace mapctx\",\n    \"watch\": \"npm run watch --workspace mapctx\",\n    \"watch:esbuild\": \"npm run watch:esbuild --workspace mapctx\",\n    \"watch:tsc\": \"npm run watch:tsc --workspace mapctx\",\n    \"package\": \"npm run package --workspace mapctx\",\n    \"compile-tests\": \"npm run compile-tests --workspace mapctx\",\n    \"watch-tests\": \"npm run watch-tests --workspace mapctx\",\n    \"check-types\": \"npm run check-types --workspace mapctx\",\n    \"lint\": \"npm run lint --workspace mapctx\",\n    \"test\": \"npm run test --workspace mapctx\",\n    \"test:parser\": \"npm run test:parser --workspace mapctx --\",\n    \"dev:standalone\": \"npm run dev:standalone --workspace mapctx\",",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1774387496163,
+              "end": 1774387496175
+            }
+          },
+          "id": "prt_d21bc84e10014XDT25Bc2TpQtn",
+          "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg",
+          "messageID": "msg_d21bc7bfc002POQ72QZdPWZA35"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3073e263584cf930576fdfbec9a579acd480971e",
+          "cost": 0,
+          "tokens": {
+            "total": 19451,
+            "input": 1,
+            "output": 220,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 19230
+            }
+          },
+          "id": "prt_d21bc84f1001XQlTY1m4Ouryqr",
+          "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg",
+          "messageID": "msg_d21bc7bfc002POQ72QZdPWZA35"
+        },
+        {
+          "type": "patch",
+          "hash": "3073e263584cf930576fdfbec9a579acd480971e",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_d21bc8554001sKjjpt9P4J6Gxg",
+          "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg",
+          "messageID": "msg_d21bc7bfc002POQ72QZdPWZA35"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1774387496278,
+          "completed": 1774387502155
+        },
+        "parentID": "msg_d21bc7bd5001AF7H222qQVQrdD",
+        "modelID": "claude-haiku-4-5-20251001",
+        "providerID": "anthropic",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 22487,
+          "input": 5,
+          "output": 418,
+          "reasoning": 0,
+          "cache": {
+            "read": 19230,
+            "write": 2834
+          }
+        },
+        "finish": "stop",
+        "id": "msg_d21bc8556002bl5yz1oeaNMTiC",
+        "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3073e263584cf930576fdfbec9a579acd480971e",
+          "id": "REDACTED",
+          "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg",
+          "messageID": "msg_d21bc8556002bl5yz1oeaNMTiC"
+        },
+        {
+          "type": "text",
+          "text": "Perfeito! Agora entendo melhor o projeto. **MapCtx** é um workspace de contexto multi-agente para gerenciamento de tarefas em Markdown com visualização em roadmap e sincronização bidirecional com GitHub.\n\nAntes de criar os posts, preciso esclarecer alguns pontos para deixar os posts mais alinhados com seus objetivos:\n\n## Perguntas importantes:\n\n1. **Tom e público**: Você quer posts mais técnicos (para desenvolvedores) ou mais acessíveis (para product managers/founders)?\n\n2. **Foco principal**: Qual aspecto você quer destacar?\n   - A experiência local-first de tarefas em Markdown?\n   - A sincronização bidirecional com GitHub Issues/Projects?\n   - O aspecto AI-first (integração com assistentes IA)?\n   - A visualização Kanban/Roadmap no VS Code?\n\n3. **Call-to-action**: Você quer:\n   - Direcionar para instalar a extensão do VS Code?\n   - Convidar contribuições no repositório?\n   - Gerar buzz sobre um lançamento/release recente?\n   - Simplesmente educar sobre o conceito?\n\n4. **Quantidade**: Quantos posts diferentes você quer? (ex: 3 para LinkedIn variando os ângulos, 3 para X com formatos diferentes)\n\n5. **Contexto recente**: Há algo específico acontecendo agora com o projeto que deveria ser mencionado? (novo recurso, milestone, colaboradores, etc.)\n\nAssim que você responder essas questões, vou criar posts bem estruturados para ambas as plataformas! 🎯",
+          "time": {
+            "start": 1774387502024,
+            "end": 1774387502024
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg",
+          "messageID": "msg_d21bc8556002bl5yz1oeaNMTiC"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "3073e263584cf930576fdfbec9a579acd480971e",
+          "cost": 0,
+          "tokens": {
+            "total": 22487,
+            "input": 5,
+            "output": 418,
+            "reasoning": 0,
+            "cache": {
+              "read": 19230,
+              "write": 2834
+            }
+          },
+          "id": "prt_d21bc9bde001jpA67hj9Tl41Pa",
+          "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg",
+          "messageID": "msg_d21bc8556002bl5yz1oeaNMTiC"
+        },
+        {
+          "type": "patch",
+          "hash": "3073e263584cf930576fdfbec9a579acd480971e",
+          "files": [
+            "/Users/alt/repos/mapctx/temp/kanban-sync-engine"
+          ],
+          "id": "prt_d21bc9c4a001WyXrXBJWjVEPMM",
+          "sessionID": "ses_2de438438ffe2U5ZhGPGPSLlIg",
+          "messageID": "msg_d21bc8556002bl5yz1oeaNMTiC"
+        }
+      ]
+    }
+  ]
+}
