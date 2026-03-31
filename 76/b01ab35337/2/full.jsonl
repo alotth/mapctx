@@ -1,0 +1,85 @@
+{
+  "info": {
+    "id": "ses_2c0f089b3ffenihvkNRdzASlW2",
+    "slug": "crisp-star",
+    "projectID": "d6b1ca11d5baad84a8bbd704c60bc34fdf925bb6",
+    "directory": "/Users/alt/repos/mapctx",
+    "title": "New session - 2026-03-30T14:04:31.180Z",
+    "version": "0.0.0-feat/plugin-bridge-202602281654",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "time": {
+      "created": 1774879471180,
+      "updated": 1774879471210
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1774879471202
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "plan",
+        "model": {
+          "providerID": "openai",
+          "modelID": "gpt-5.3-codex"
+        },
+        "id": "msg_d3f0f7657001g28pf9jvvzlcHl",
+        "sessionID": "ses_2c0f089b3ffenihvkNRdzASlW2"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "estou pensando em fazer uma aplicacao visual para acompanhar os projetos, talvez fazer web primeiro se for melhor (pois precisaremos ter acesso ao filesystem), e depois pensamos em desktop, nessa aplicacao adicionariamos o os paths do repositorio",
+          "id": "prt_d3f0f76570026K96RAUOmfkUSV",
+          "sessionID": "ses_2c0f089b3ffenihvkNRdzASlW2",
+          "messageID": "msg_d3f0f7657001g28pf9jvvzlcHl"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1774879471205,
+          "completed": 1774879471562
+        },
+        "error": {
+          "name": "UnknownError",
+          "data": {
+            "message": "Error: Token refresh failed: 401"
+          }
+        },
+        "parentID": "msg_d3f0f7657001g28pf9jvvzlcHl",
+        "modelID": "gpt-5.3-codex",
+        "providerID": "openai",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/Users/alt/repos/mapctx",
+          "root": "/Users/alt/repos/mapctx"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "id": "msg_d3f0f76650022Z2xvpwQEPLZ8m",
+        "sessionID": "ses_2c0f089b3ffenihvkNRdzASlW2"
+      },
+      "parts": []
+    }
+  ]
+}
