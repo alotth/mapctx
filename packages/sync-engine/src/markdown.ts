@@ -39,13 +39,13 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
   const lines = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
 
   let title = 'Tasks';
-  let inComponents = false;
+  let inWorkDomains = false;
   let inNotes = false;
   let inTasks = false;
   let currentLegacyStatus: LocalStatus = 'backlog';
   let currentTask: Task | null = null;
 
-  const componentsSection: string[] = [];
+  const workDomainsSection: string[] = [];
   const notesSection: string[] = [];
   const tasks: Task[] = [];
 
@@ -66,23 +66,23 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
       continue;
     }
 
-    if (trimmed === '## Components') {
+    if (trimmed === '## Work Domains' || trimmed === '## Components') {
       flushTask();
-      inComponents = true;
+      inWorkDomains = true;
       inTasks = false;
       inNotes = false;
       continue;
     }
     if (trimmed === '## Tasks') {
       flushTask();
-      inComponents = false;
+      inWorkDomains = false;
       inTasks = true;
       inNotes = false;
       continue;
     }
     if (trimmed === '## Notes' || trimmed === '## Notas') {
       flushTask();
-      inComponents = false;
+      inWorkDomains = false;
       inTasks = false;
       inNotes = true;
       continue;
@@ -92,7 +92,7 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
       const legacySection = trimmed.slice(3).trim().toLowerCase();
       if (legacySection in LEGACY_SECTIONS) {
         flushTask();
-        inComponents = false;
+        inWorkDomains = false;
         inTasks = true;
         inNotes = false;
         currentLegacyStatus = LEGACY_SECTIONS[legacySection];
@@ -100,8 +100,8 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
       }
     }
 
-    if (inComponents) {
-      componentsSection.push(line);
+    if (inWorkDomains) {
+      workDomainsSection.push(line);
       continue;
     }
     if (inNotes) {
@@ -146,7 +146,11 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
         case 'tags':
           currentTask.tags = parseArray(value);
           break;
+        case 'domains':
+          currentTask.domains = parseArray(value);
+          break;
         case 'touch':
+          if (!currentTask.domains) currentTask.domains = parseArray(value);
           currentTask.touch = parseArray(value);
           break;
         case 'dependsOn':
@@ -189,7 +193,8 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
 
   return {
     title,
-    componentsSection,
+    workDomainsSection,
+    componentsSection: workDomainsSection,
     tasks,
     notesSection
   };
@@ -200,10 +205,11 @@ export function serializeTasksFile(board: TaskBoard): string {
   out.push(`# ${board.title}`);
   out.push('');
 
-  if (board.componentsSection.length > 0) {
-    out.push('## Components');
+  const workDomains = board.workDomainsSection ?? board.componentsSection ?? [];
+  if (workDomains.length > 0) {
+    out.push('## Work Domains');
     out.push('');
-    for (const line of board.componentsSection) out.push(line);
+    for (const line of workDomains) out.push(line);
     out.push('');
   }
 
@@ -221,7 +227,7 @@ export function serializeTasksFile(board: TaskBoard): string {
     if (task.priority) out.push(`  - priority: ${task.priority}`);
     if (task.workload) out.push(`  - workload: ${task.workload}`);
     if (task.tags) out.push(`  - tags: ${toArrayString(task.tags)}`);
-    if (task.touch) out.push(`  - touch: ${toArrayString(task.touch)}`);
+    if (task.domains ?? task.touch) out.push(`  - domains: ${toArrayString(task.domains ?? task.touch ?? [])}`);
     if (task.dependsOn) out.push(`  - dependsOn: ${toArrayString(task.dependsOn)}`);
     if (task.milestone) out.push(`  - milestone: ${task.milestone}`);
     if (task.start) out.push(`  - start: ${task.start}`);

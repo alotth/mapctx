@@ -119,9 +119,9 @@ gh auth status
 
 Available skills are documented in `skills/README.md`:
 
-- `kanban-tasks`: maintain V2 single-list `TASKS.md`
-- `kanban-sync-engine`: safe sync operations and conflict handling
-- `tasks-md-v1`: legacy section-based boards
+- `mapctx-tasks`: maintain V2 single-list `TASKS.md`
+- `mapctx-sync-engine`: safe sync operations and conflict handling
+- `mapctx-ralph-tasks`: execute Ralph task loops via slash trigger
 
 Rule packs for AI assistants:
 

@@ -1,8 +1,11 @@
 const CLI_RELATIVE_PATH = "packages/sync-engine/dist/cli.js";
 const CONFIG_RELATIVE_PATH = "sync.config.json";
 const TASKS_RELATIVE_PATH = "TASKS.md";
+declare const Bun: any;
 
-async function log(client, level, message, extra = {}) {
+type LogLevel = "debug" | "info" | "warn" | "error";
+
+async function log(client: any, level: LogLevel, message: string, extra: Record<string, unknown> = {}): Promise<void> {
   if (!client?.app?.log) return;
   await client.app.log({
     body: {
@@ -14,11 +17,11 @@ async function log(client, level, message, extra = {}) {
   });
 }
 
-async function runMapcs($, cliPath, configPath, tasksPath, command) {
+async function runMapcs($: any, cliPath: string, configPath: string, tasksPath: string, command: string): Promise<void> {
   await $`node ${cliPath} ${command} --config ${configPath} --tasks-file ${tasksPath}`;
 }
 
-export const MapcsSessionSyncPlugin = async ({ client, $, worktree }) => {
+export const MapcsSessionSyncPlugin = async ({ client, $, worktree }: any) => {
   return {
     "session.created": async () => {
       const shouldPull = process.env.MAPCS_AUTO_PULL !== "0";

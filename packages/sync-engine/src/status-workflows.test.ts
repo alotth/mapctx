@@ -74,7 +74,7 @@ test('custom partial workflow accepts extra status', () => {
   });
   writeTasks(tempDir, {
     title: 'Tasks',
-    componentsSection: [],
+    workDomainsSection: [],
     notesSection: [],
     tasks: [{ id: 'T-001', title: 'UX pass', status: 'design', completed: null, externalId: null }]
   });
@@ -104,7 +104,7 @@ test('custom full replacement works without default statuses', () => {
   });
   writeTasks(tempDir, {
     title: 'Tasks',
-    componentsSection: [],
+    workDomainsSection: [],
     notesSection: [],
     tasks: [{ id: 'T-010', title: 'Ship v1', status: 'qa', completed: null, externalId: null }]
   });
@@ -136,7 +136,7 @@ test('custom completionStatuses drive completed semantics on pull', () => {
   });
   const tasksFilePath = writeTasks(tempDir, {
     title: 'Tasks',
-    componentsSection: [],
+    workDomainsSection: [],
     notesSection: [],
     tasks: [
       { id: 'T-001', title: 'Release train', status: 'released', completed: null, externalId: 'github:issue:1' },
@@ -255,7 +255,7 @@ test('roundtrip pull/push/bootstrap preserves custom statuses', () => {
   });
   const tasksFilePath = writeTasks(tempDir, {
     title: 'Tasks',
-    componentsSection: [],
+    workDomainsSection: [],
     notesSection: [],
     tasks: [
       { id: 'T-001', title: 'Design API', status: 'design', completed: null, externalId: 'github:issue:11' }
@@ -347,12 +347,57 @@ test('parseTasksFile accepts metadata bullets with flexible indentation', () => 
   assert.equal(parsed.tasks[0].detail, './tasks/T-032.md');
 });
 
+test('parseTasksFile accepts deprecated touch and maps to domains', () => {
+  const tempDir = makeTempDir();
+  const tasksFilePath = path.resolve(tempDir, 'TASKS.md');
+  fs.writeFileSync(tasksFilePath, [
+    '# Tasks',
+    '',
+    '## Work Domains',
+    '',
+    '- SYNC: sync engine',
+    '',
+    '## Tasks',
+    '',
+    '### [T-001] Legacy touch key',
+    '',
+    '  - id: T-001',
+    '  - status: backlog',
+    '  - touch: [SYNC]',
+    '  - completed: null',
+    '  - externalId: null',
+    '',
+    '## Notes',
+    ''
+  ].join('\n'), 'utf8');
+
+  const parsed = parseTasksFile(tasksFilePath);
+  assert.deepEqual(parsed.tasks[0].domains, ['SYNC']);
+});
+
+test('writeBoard always serializes work domains and domains key', () => {
+  const tempDir = makeTempDir();
+  const tasksFilePath = path.resolve(tempDir, 'TASKS.md');
+  writeBoard(tasksFilePath, {
+    title: 'Tasks',
+    workDomainsSection: ['- SYNC: sync engine'],
+    notesSection: [],
+    tasks: [{ id: 'T-001', title: 'Serialize domains', status: 'backlog', touch: ['SYNC'], completed: null, externalId: null }]
+  });
+
+  const content = fs.readFileSync(tasksFilePath, 'utf8');
+  assert.match(content, /^## Work Domains$/m);
+  assert.match(content, /^  - domains: \[SYNC\]$/m);
+  assert.doesNotMatch(content, /^## Components$/m);
+  assert.doesNotMatch(content, /^  - touch: /m);
+});
+
 test('bootstrap from github keeps existing id prefix for new tasks', () => {
   const tempDir = makeTempDir();
   const configPath = writeConfig(tempDir, {});
   const tasksFilePath = writeTasks(tempDir, {
     title: 'Tasks',
-    componentsSection: [],
+    workDomainsSection: [],
     notesSection: [],
     tasks: [
       { id: 'E-009', title: 'Legacy epic', status: 'backlog', completed: null, externalId: 'github:issue:91' }
@@ -408,7 +453,7 @@ test('bootstrap from github honors configured idGeneration preferredPrefix', () 
   });
   const tasksFilePath = writeTasks(tempDir, {
     title: 'Tasks',
-    componentsSection: [],
+    workDomainsSection: [],
     notesSection: [],
     tasks: [
       { id: 'T-009', title: 'Legacy task', status: 'backlog', completed: null, externalId: 'github:issue:93' }
@@ -469,7 +514,7 @@ test('fails when TASKS.md contains invalid status', () => {
   });
   writeTasks(tempDir, {
     title: 'Tasks',
-    componentsSection: [],
+    workDomainsSection: [],
     notesSection: [],
     tasks: [{ id: 'T-999', title: 'Unknown status', status: 'design', completed: null, externalId: null }]
   });

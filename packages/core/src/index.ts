@@ -4,6 +4,11 @@ export { parseTaskDetailMarkdown, generateTaskDetailMarkdown, type TaskDetail, t
 
 export function normalizeStatus(value: string | undefined | null): TaskStatus {
   const status = String(value || "").trim().toLowerCase()
+  if (status === "todo" || status === "to-do" || status === "pending") return "backlog"
+  if (status === "in_progress" || status === "in-progress" || status === "wip") return "doing"
+  if (status === "in_review" || status === "in-review" || status === "qa") return "review"
+  if (status === "completed" || status === "complete") return "done"
+  if (status === "on_hold" || status === "on-hold" || status === "blocked") return "paused"
   if (status === "backlog" || status === "doing" || status === "review" || status === "done" || status === "paused") {
     return status
   }

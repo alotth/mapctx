@@ -8,11 +8,19 @@ Use exactly this order in every task block:
 
 Required keys:
 
-`id`, `status`, `type`, `parent`, `subIssueProgress`, `priority`, `workload`, `tags`, `touch`, `dependsOn`, `start`, `due`, `completed`, `externalId`, `updated`, `detail`.
+`id`, `status`, `type`, `parent`, `subIssueProgress`, `priority`, `workload`, `tags`, `domains`, `dependsOn`, `start`, `due`, `completed`, `externalId`, `updated`, `detail`.
 
 Optional extension keys (append after required keys, in this order when used):
 
 `iteration`, `assignees`, `externalLinks`, `milestone`.
+
+## `## Work Domains` Contract (`TASKS.md`)
+
+- Keep a top-level `## Work Domains` section before `## Tasks`.
+- Each component entry uses format `- <KEY>: <description>`.
+- `<KEY>` should be stable, uppercase-friendly, and short (for example `SYNC`, `WEBVIEW`, `DOCS`).
+- Treat this section as the source of truth for valid `domains` values.
+- Do not reorder or rewrite descriptions unless user explicitly asks.
 
 ## `TASKS.md` Field Types and Meanings
 
@@ -30,7 +38,10 @@ Optional extension keys (append after required keys, in this order when used):
 - `priority` (`enum | null`, required key): `high | medium | low | null`.
 - `workload` (`enum | null`, required key): `Easy | Normal | Hard | Extreme | null`.
 - `tags` (`string[] | null`, required key): labels for planning/search/filtering.
-- `touch` (`string[] | null`, required key): coarse component names for conflict checks.
+- `domains` (`string[] | null`, required key): coarse work-domain keys for conflict checks.
+  - Values should reference keys declared in `## Work Domains`.
+  - Prefer `[]` over `null` when task scope is unknown but domain model exists.
+- `touch` (`string[] | null`, deprecated alias): legacy key accepted only for backward compatibility.
 - `dependsOn` (`string[] | null`, required key): list of prerequisite task IDs.
 - `start` (`date string | null`, required key): `YYYY-MM-DD` or `null`.
 - `due` (`date string | null`, required key): `YYYY-MM-DD` or `null`.
@@ -51,6 +62,7 @@ Optional extension keys:
 - Keep every required canonical key present, even when value is unknown.
 - Use literal `null` (without quotes) for unknown/unset values.
 - Prefer `[]` over `null` when empty list meaning is explicit.
+- If `## Work Domains` exists, keep `domains` aligned to declared domain keys.
 
 ## Detail File Conventions (`./tasks/<ID>.md`)
 
@@ -84,7 +96,7 @@ Rules:
   - priority: null
   - workload: null
   - tags: []
-  - touch: []
+  - domains: []
   - dependsOn: []
   - start: null
   - due: null

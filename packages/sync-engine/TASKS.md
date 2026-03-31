@@ -1,5 +1,16 @@
 # Kanban Sync Engine Execution
 
+## Work Domains
+
+- SYNC: synchronization engine and orchestration logic
+- GITHUB: GitHub API and project integration behavior
+- PROJECT: GitHub Projects field/status mapping
+- DOCS: documentation and guidance updates
+- CONFIG: configuration and setup workflow
+- CLI: command-line behavior and UX
+- PARSER: TASKS markdown parsing and serialization
+- TEST: automated coverage and regression validation
+
 ## Tasks
 
 ### [T-001] Sync Project date fields from TASKS.md on push
@@ -9,7 +20,7 @@
   - priority: high
   - workload: Hard
   - tags: []
-  - touch: [SYNC, GITHUB, PROJECT]
+  - domains: [SYNC, GITHUB, PROJECT]
   - dependsOn: []
   - start: 2026-02-24
   - due: 2026-02-24
@@ -25,7 +36,7 @@
   - priority: medium
   - workload: Normal
   - tags: []
-  - touch: [DOCS, CONFIG]
+  - domains: [DOCS, CONFIG]
   - dependsOn: [T-001]
   - start: 2026-02-24
   - due: 2026-02-24
@@ -41,7 +52,7 @@
   - priority: high
   - workload: Normal
   - tags: []
-  - touch: [CONFIG, PROJECT, CLI]
+  - domains: [CONFIG, PROJECT, CLI]
   - dependsOn: [T-001, T-002]
   - start: 2026-02-24
   - due: 2026-02-25
@@ -57,7 +68,7 @@
   - priority: high
   - workload: Hard
   - tags: []
-  - touch: [SYNC, GITHUB, PARSER]
+  - domains: [SYNC, GITHUB, PARSER]
   - dependsOn: [T-003]
   - start: 2026-02-25
   - due: 2026-02-27
@@ -73,7 +84,7 @@
   - priority: medium
   - workload: Hard
   - tags: []
-  - touch: [SYNC, GITHUB, PROJECT]
+  - domains: [SYNC, GITHUB, PROJECT]
   - dependsOn: [T-004]
   - start: 2026-02-26
   - due: 2026-03-01
@@ -89,7 +100,7 @@
   - priority: medium
   - workload: Normal
   - tags: []
-  - touch: [TEST, SYNC]
+  - domains: [TEST, SYNC]
   - dependsOn: [T-004]
   - start: 2026-02-27
   - due: 2026-03-02
@@ -105,7 +116,7 @@
   - priority: high
   - workload: Hard
   - tags: []
-  - touch: [SYNC, CONFIG, TEST, DOCS]
+  - domains: [SYNC, CONFIG, TEST, DOCS]
   - dependsOn: [T-004]
   - start: 2026-02-24
   - due: 2026-02-24

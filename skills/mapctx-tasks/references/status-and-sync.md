@@ -41,7 +41,10 @@ When custom statuses exist, keep transitions explicit and deterministic for that
 ## Validation Checklist
 
 - No duplicate task IDs.
+- `## Work Domains` is present and stable unless domain edits were explicitly requested.
 - Every task appears once under `## Tasks`.
 - Canonical field order is preserved.
+- `domains` values map to declared `## Work Domains` keys (or are intentionally empty).
+- `touch` may exist only in legacy tasks and should be migrated when edited.
 - `updated` changed for every edited task.
 - `completed` matches completion policy (completion state => date, other states => `null`).

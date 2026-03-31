@@ -20,7 +20,10 @@ For operational GitHub sync commands (`status`, `pull`, `push`, `bootstrap`, `re
 
 1. Detect format before editing.
    - Confirm tasks are in one `## Tasks` list.
+   - Confirm `## Work Domains` exists and stays in `TASKS.md` (do not remove it during normalization).
    - Confirm each task has `status:`.
+   - Confirm each task has `domains:` and values align with domain keys from `## Work Domains` when that section is defined.
+   - Accept legacy `touch:` when present, but treat it as deprecated alias for `domains`.
    - If section headers (`## Backlog`, `## Doing`, ...) are primary, normalize to single-list format before making changes.
 
 2. Confirm source strategy (required decision gate).
@@ -40,6 +43,9 @@ For operational GitHub sync commands (`status`, `pull`, `push`, `bootstrap`, `re
    - Move status by editing only `status:` when possible.
    - Add new tasks at end of `## Tasks`.
    - Keep required canonical task fields present; if unknown, use `null`.
+   - Preserve `## Work Domains` as project-level registry for valid `domains` values.
+   - When creating/updating tasks, keep `domains` explicit (`[]` when unknown) and prefer existing domain keys.
+   - For legacy tasks using `touch`, migrate to `domains` on write.
    - For optional fields, add only when needed by project workflow or sync setup.
    - Treat statuses as project-defined workflow states. If none are specified, use default `backlog|doing|review|done|paused`.
    - Allow full rename/replacement of defaults when user defines a custom status model.
@@ -64,8 +70,10 @@ For operational GitHub sync commands (`status`, `pull`, `push`, `bootstrap`, `re
 
 8. Validate before returning.
    - No duplicate IDs.
+   - `## Work Domains` exists and remains unchanged unless user explicitly requested domain edits.
    - Required fields present in canonical order.
    - Optional fields, when present, follow extension order.
+   - `domains` values use domain keys declared in `## Work Domains` (or are `[]`/`null` if domain model is intentionally not defined).
    - Every task appears once in the single list.
 
 ## Source Strategy Gate (Required)

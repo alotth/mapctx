@@ -21,7 +21,8 @@
           <option value="quarter">Quarter</option>
           <option value="year">Year</option>
         </select>
-        <button id="btn-group-status" class="btn toggle-btn active" type="button">Status</button>
+        <button id="btn-group-epic" class="btn toggle-btn active" type="button">Epic</button>
+        <button id="btn-group-status" class="btn toggle-btn" type="button">Status</button>
         <button id="btn-group-milestone" class="btn toggle-btn" type="button">Milestone</button>
         <button id="btn-today" class="btn" type="button">Today</button>
         <button id="btn-scroll-left" class="btn" type="button" aria-label="Scroll left">&#8249;</button>
@@ -37,7 +38,7 @@
   <main>
     <section id="kanban-view" class="view active"></section>
     <section id="roadmap-view" class="view"></section>
-    <section id="log-view" class="log-view"></section>
+    <section id="log-view" class="log-view hidden"></section>
   </main>
 
   <div id="detail-modal" class="modal" aria-hidden="true">

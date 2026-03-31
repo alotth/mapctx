@@ -15,7 +15,7 @@ This folder demonstrates a low-conflict, AI-friendly tasks model ready for a sha
 1. Move a task by editing only `status:`.
 2. Add new tasks at the end of `## Tasks`.
 3. Keep fixed field order for every task block.
-4. Use `touch` as coarse components (not per-file paths).
+4. Use `domains` as coarse work domains (not per-file paths).
 5. Put long descriptions and detailed test plans in detail files.
 6. Keep `completed` always present. Use `null` until the task is done.
 7. Keep `externalId` always present. Use `null` when not linked yet.
@@ -31,7 +31,12 @@ Use this fixed order in every task block:
 5. `subIssueProgress` (`x/y` or `null`)
 6. `priority`
 7. `workload`
-8. `touch`
+8. `domains`
+
+Deprecation note:
+
+- `touch` is a legacy alias accepted for backward compatibility.
+- New tasks and updates should use `domains`.
 9. `dependsOn`
 10. `start`
 11. `due`

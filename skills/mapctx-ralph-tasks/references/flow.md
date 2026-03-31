@@ -45,6 +45,10 @@ Use this sequence for `/mapctx-ralph-tasks`.
 - Include both files as explicit context:
 - `@TASKS.md`
   - `@tasks/<ID>.md`
+- Include component-scoping instruction from board metadata:
+  - respect `## Work Domains` definitions
+  - prioritize implementation on domain keys listed in task `domains`
+  - accept `touch` only as deprecated legacy alias
 - Include acceptance intent from detail `description` Markdown when present.
 - Force deterministic completion markers:
   - `<promise>COMPLETE_TESTED</promise>` when implementation and tests pass.

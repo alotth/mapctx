@@ -15,8 +15,8 @@ export default async function KanbanRoadmapPlugin() {
         origins: ["*"],
         permissions: {
           file: {
-            read: ["TASKS.md", "tasks/**/*.md"],
-            write: ["TASKS.md", "tasks/**/*.md"],
+            read: ["TASKS.md", "tasks/*.md"],
+            write: ["TASKS.md", "tasks/*.md"],
           },
         },
       })

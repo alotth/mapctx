@@ -4,9 +4,13 @@ let zoomPreset = "month"
 let roadmapRange = null
 let roadmapLayout = null
 let roadmapAutoCentered = false
-const groupBy = { status: true, milestone: false }
+const ROADMAP_GROUP_MODES = ["epic", "status", "milestone"]
+let roadmapGroupMode = "epic"
 const expanded = new Set()
 const detailCache = new Map()
+const taskById = new Map()
+const subtasksByParent = new Map()
+const collapsedEpicIds = new Set()
 
 const STATUS_ORDER = ["backlog", "doing", "review", "done", "paused", "unknown"]
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
@@ -25,6 +29,35 @@ const source = {
   directory: params.get("directory") || "",
   tasksFile: params.get("tasksFile") || "TASKS.md",
 }
+
+function collapsedEpicsStorageKey() {
+  return `kanban-roadmap:collapsed-epics:${source.tasksFile}`
+}
+
+function restoreCollapsedEpics() {
+  try {
+    const raw = window.localStorage.getItem(collapsedEpicsStorageKey())
+    if (!raw) return
+    const values = JSON.parse(raw)
+    if (!Array.isArray(values)) return
+    for (const item of values) {
+      const id = normalizeTaskId(item)
+      if (id) collapsedEpicIds.add(id)
+    }
+  } catch {
+    // ignore storage parse issues
+  }
+}
+
+function persistCollapsedEpics() {
+  try {
+    window.localStorage.setItem(collapsedEpicsStorageKey(), JSON.stringify([...collapsedEpicIds]))
+  } catch {
+    // ignore storage write issues
+  }
+}
+
+restoreCollapsedEpics()
 
 const BRIDGE_TIMEOUT = 1500
 let bridgeToken = ""
@@ -57,6 +90,11 @@ function normalizeStatus(value) {
     return window.KanbanCore.normalizeStatus(value)
   }
   const status = String(value || "").trim().toLowerCase()
+  if (status === "todo" || status === "to-do" || status === "pending") return "backlog"
+  if (status === "in_progress" || status === "in-progress" || status === "wip") return "doing"
+  if (status === "in_review" || status === "in-review" || status === "qa") return "review"
+  if (status === "completed" || status === "complete") return "done"
+  if (status === "on_hold" || status === "on-hold" || status === "blocked") return "paused"
   if (["backlog", "doing", "review", "done", "paused"].includes(status)) return status
   return "unknown"
 }
@@ -102,7 +140,7 @@ function parseTasksV2(content) {
         id: (match && match[1].trim()) || `T-${String(tasks.length + 1).padStart(3, "0")}`,
         title: (match && match[2].trim()) || heading,
         status: "unknown",
-        touch: [],
+        domains: [],
         dependsOn: [],
         completed: "",
       }
@@ -123,7 +161,8 @@ function parseTasksV2(content) {
         if (key === "subIssueProgress" && value !== "null") task.subIssueProgress = value
         if (key === "priority") task.priority = value
         if (key === "workload") task.workload = value
-        if (key === "touch") task.touch = parseArray(value)
+        if (key === "domains") task.domains = parseArray(value)
+        if (key === "touch" && (!task.domains || task.domains.length === 0)) task.domains = parseArray(value)
         if (key === "dependsOn") task.dependsOn = parseArray(value)
         if (key === "start") task.startDate = value
         if (key === "due") task.dueDate = value
@@ -195,6 +234,7 @@ async function requestBridge(action, payload) {
 
 function log(message, variant = "") {
   const el = document.getElementById("log-view")
+  if (!el) return
   const hidden = activeView === "roadmap" ? " hidden" : ""
   el.className = `log-view ${variant}${hidden}`.trim()
   el.textContent = message
@@ -207,7 +247,8 @@ function setView(view) {
   document.getElementById("tab-roadmap").classList.toggle("active", isRoadmap)
   document.getElementById("kanban-view").classList.toggle("active", view === "kanban")
   document.getElementById("roadmap-view").classList.toggle("active", isRoadmap)
-  document.getElementById("log-view").classList.toggle("hidden", isRoadmap)
+  const logView = document.getElementById("log-view")
+  if (logView) logView.classList.toggle("hidden", isRoadmap)
   document.getElementById("zoom-controls").classList.toggle("hidden", !isRoadmap)
   updateZoomPresetUI()
   updateGroupButtons()
@@ -228,9 +269,13 @@ function renderKanban() {
       const cards = (col.tasks || [])
         .map((task) => {
           const isExpanded = expanded.has(task.id)
-          const meta = [task.priority, task.workload, task.dueDate ? `Due ${task.dueDate}` : ""]
+          const meta = [
+            task.type ? `<span class="pill pill-type">${escapeHtml(task.type)}</span>` : "",
+            task.priority ? `<span class="pill">${escapeHtml(task.priority)}</span>` : "",
+            task.workload ? `<span class="pill">${escapeHtml(task.workload)}</span>` : "",
+            task.dueDate ? `<span class="pill">Due ${escapeHtml(task.dueDate)}</span>` : "",
+          ]
             .filter(Boolean)
-            .map((x) => `<span class="pill">${x}</span>`)
             .join("")
           return `<article class="card ${isExpanded ? "expanded" : ""}" data-task-id="${task.id}"><button class="card-head" data-expand-task="${task.id}" type="button"><span class="card-title">[${task.id}] ${escapeHtml(task.title || "")}</span><span class="expander">${isExpanded ? "Hide" : "Show"}</span></button><div class="card-meta">${meta}</div>${isExpanded ? renderTaskDetails(task) : ""}</article>`
         })
@@ -271,11 +316,33 @@ function renderRoadmap() {
 }
 
 function renderAll() {
+  rebuildTaskRelations()
   document.getElementById("board-title").textContent = board.title || "Tasks"
   document.getElementById("board-mode").textContent = `Model: ${board.mode || "v2-status"}`
   document.getElementById("board-meta").textContent = `${board.tasks?.length || 0} tasks - ${source.tasksFile}`
   renderKanban()
   renderRoadmap()
+}
+
+function normalizeTaskId(value) {
+  const text = String(value || "").trim()
+  return text || ""
+}
+
+function rebuildTaskRelations() {
+  taskById.clear()
+  subtasksByParent.clear()
+  for (const task of board.tasks || []) {
+    const id = normalizeTaskId(task.id)
+    if (!id) continue
+    taskById.set(id, task)
+  }
+  for (const task of board.tasks || []) {
+    const parentId = normalizeTaskId(task.parent)
+    if (!parentId) continue
+    if (!subtasksByParent.has(parentId)) subtasksByParent.set(parentId, [])
+    subtasksByParent.get(parentId).push(task)
+  }
 }
 
 function toggleTask(id) {
@@ -288,11 +355,18 @@ function toggleTask(id) {
   renderKanban()
 }
 
+function renderTaskLink(task) {
+  if (!task || !task.id) return ""
+  const label = `[${task.id}] ${task.title || ""}`.trim()
+  return `<button type="button" class="task-ref-link" data-open-detail="${escapeHtml(task.id)}">${escapeHtml(label)}</button>`
+}
+
 function renderTaskDetails(task) {
+  const parentTask = findTask(task.parent)
+  const subtasks = (subtasksByParent.get(task.id) || []).filter((child) => child.id !== task.id)
   const rows = [
     ["Status", task.status],
     ["Type", task.type],
-    ["Parent", task.parent],
     ["Sub-issue", task.subIssueProgress],
     ["Priority", task.priority],
     ["Workload", task.workload],
@@ -301,16 +375,22 @@ function renderTaskDetails(task) {
     ["Updated", task.updated],
     ["Completed", task.completed],
     ["External", task.externalId],
-    ["Touch", task.touch?.join(", ")],
+    ["Domains", task.domains?.join(", ")],
     ["Depends", task.dependsOn?.join(", ")],
   ]
     .filter(([, value]) => value)
     .map(([label, value]) => `<div class="detail-row"><span>${label}</span><strong>${escapeHtml(String(value))}</strong></div>`)
     .join("")
+  const parentRow = task.parent
+    ? `<div class="detail-row"><span>Parent</span>${parentTask ? renderTaskLink(parentTask) : `<strong>${escapeHtml(String(task.parent))}</strong>`}</div>`
+    : ""
+  const subtasksRow = subtasks.length
+    ? `<div class="detail-row"><span>Subtasks</span><div class="detail-link-list">${subtasks.map((child) => renderTaskLink(child)).join("")}</div></div>`
+    : ""
   const detailButton = task.detailPath
     ? `<div class="detail-row"><span>Detail</span><button type="button" class="detail-link" data-open-detail="${task.id}">Open</button></div>`
     : ""
-  return `<div class="card-details">${rows || '<div class="detail-row"><span>Info</span><strong>No extra fields</strong></div>'}${detailButton}</div>`
+  return `<div class="card-details">${rows || '<div class="detail-row"><span>Info</span><strong>No extra fields</strong></div>'}${parentRow}${subtasksRow}${detailButton}</div>`
 }
 
 function escapeHtml(value) {
@@ -457,74 +537,156 @@ function buildDayTicks(range, stepDays) {
   return ticks
 }
 
-function renderGroups(tasks, range) {
-  const normalized = tasks.map((task) => ({
-    ...task,
-    statusKey: task.status || "unknown",
-    milestoneKey: task.milestone && task.milestone.trim() ? task.milestone.trim() : "No milestone",
-  }))
+function normalizedType(task) {
+  return String(task?.type || "").trim().toLowerCase()
+}
 
+function renderRoadmapTaskRow(task, range, index, options = {}) {
+  const { child = false, epic = false, summary = "", childProgress = "" } = options
+  const left = getPosition(task.start, range)
+  const width = getWidth(task.start, task.end, range)
+  const rowClass = [
+    "task-row",
+    index % 2 ? "task-row-alt" : "",
+    child ? "task-row-child" : "",
+    epic ? "task-row-epic" : "",
+  ]
+    .filter(Boolean)
+    .join(" ")
+  const tag = [task.statusKey, task.milestoneKey !== "No milestone" ? task.milestoneKey : ""]
+    .filter(Boolean)
+    .join(" • ")
+  const isCollapsed = collapsedEpicIds.has(task.id)
+  const marker = epic
+    ? `<button type="button" class="epic-toggle" data-toggle-epic="${escapeHtml(task.id)}" aria-label="${isCollapsed ? "Expand epic" : "Collapse epic"}" title="${isCollapsed ? "Expand epic" : "Collapse epic"}"><span class="epic-toggle-icon${isCollapsed ? "" : " expanded"}" aria-hidden="true"></span></button>`
+    : ""
+  const openButton = `<button type="button" class="task-open-link" data-open-detail="${escapeHtml(task.id)}"><span class="task-id">[${escapeHtml(task.id)}]</span> ${escapeHtml(task.title)}</button>`
+  const subtitle = [summary, tag, childProgress].filter(Boolean).join(" • ")
+  return `<div class="${rowClass}"><div class="task-label"><div class="task-title-line">${marker}${openButton}</div><div class="task-status">${escapeHtml(subtitle)}</div></div><div class="task-bar-area"><div class="task-bar" style="left:${left}%;width:${width}%" title="${escapeHtml(`${task.title} (${task.startDate || "?"} -> ${task.dueDate || task.completed || task.updated || "?"})`)}"><div class="task-bar-progress" style="width:${Math.round(task.progress * 100)}%"></div></div></div></div>`
+}
+
+function renderStandardGroups(tasks, range, mode) {
   const groups = []
-
-  if (!groupBy.status && !groupBy.milestone) {
-    groups.push({ title: "All tasks", items: normalized })
-  }
-
-  if (groupBy.status && !groupBy.milestone) {
+  if (mode === "status") {
     for (const status of STATUS_ORDER) {
-      const items = normalized.filter((task) => task.statusKey === status)
+      const items = tasks.filter((task) => task.statusKey === status)
       if (!items.length) continue
       groups.push({ title: status.charAt(0).toUpperCase() + status.slice(1), items })
     }
-  }
-
-  if (!groupBy.status && groupBy.milestone) {
-    const keys = [...new Set(normalized.map((task) => task.milestoneKey))]
+  } else {
+    const keys = [...new Set(tasks.map((task) => task.milestoneKey))]
       .sort((a, b) => {
         if (a === "No milestone") return 1
         if (b === "No milestone") return -1
         return a.localeCompare(b)
       })
     for (const key of keys) {
-      const items = normalized.filter((task) => task.milestoneKey === key)
+      const items = tasks.filter((task) => task.milestoneKey === key)
       if (!items.length) continue
       groups.push({ title: key, items })
     }
   }
 
-  if (groupBy.status && groupBy.milestone) {
-    for (const status of STATUS_ORDER) {
-      const statusItems = normalized.filter((task) => task.statusKey === status)
-      if (!statusItems.length) continue
-      const milestoneKeys = [...new Set(statusItems.map((task) => task.milestoneKey))]
-        .sort((a, b) => {
-          if (a === "No milestone") return 1
-          if (b === "No milestone") return -1
-          return a.localeCompare(b)
-        })
-      for (const milestone of milestoneKeys) {
-        const items = statusItems.filter((task) => task.milestoneKey === milestone)
-        if (!items.length) continue
-        groups.push({ title: `${status.charAt(0).toUpperCase() + status.slice(1)} - ${milestone}`, items })
-      }
-    }
-  }
-
   return groups
     .map((group) => {
-      const rows = group.items
-        .map((task, idx) => {
-          const left = getPosition(task.start, range)
-          const width = getWidth(task.start, task.end, range)
-          const tag = [task.statusKey, task.milestoneKey !== "No milestone" ? task.milestoneKey : ""]
-            .filter(Boolean)
-            .join(" • ")
-          return `<div class="task-row ${idx % 2 ? "task-row-alt" : ""}"><div class="task-label"><div><span class="task-id">[${task.id}]</span> ${escapeHtml(task.title)}</div><div class="task-status">${escapeHtml(tag)}</div></div><div class="task-bar-area"><div class="task-bar" style="left:${left}%;width:${width}%" title="${escapeHtml(`${task.title} (${task.startDate || "?"} -> ${task.dueDate || task.completed || task.updated || "?"})`)}"><div class="task-bar-progress" style="width:${Math.round(task.progress * 100)}%"></div></div></div></div>`
-        })
-        .join("")
+      const rows = group.items.map((task, idx) => renderRoadmapTaskRow(task, range, idx)).join("")
       return `<div class="milestone-group"><div class="milestone-header"><div class="milestone-label">${escapeHtml(group.title)}</div><div class="milestone-line"></div></div>${rows}</div>`
     })
     .join("")
+}
+
+function buildEpicRows(tasks) {
+  const taskByRoadmapId = new Map(tasks.map((task) => [normalizeTaskId(task.id), task]))
+  const epicEntries = new Map()
+  const childrenByEpic = new Map()
+
+  for (const task of tasks) {
+    if (normalizedType(task) === "epic") {
+      epicEntries.set(task.id, { ...task })
+    }
+  }
+
+  for (const task of tasks) {
+    const parentId = normalizeTaskId(task.parent)
+    if (!parentId) continue
+    const parentTask = findTask(parentId)
+    if (!parentTask || normalizedType(parentTask) !== "epic") continue
+    if (!epicEntries.has(parentId)) {
+      const fallback = taskByRoadmapId.get(parentId)
+      epicEntries.set(parentId, {
+        ...(fallback || parentTask),
+        id: parentId,
+        title: (fallback || parentTask).title || parentId,
+        statusKey: normalizeStatus((fallback || parentTask).status),
+        milestoneKey: (fallback || parentTask).milestone && String((fallback || parentTask).milestone).trim() ? String((fallback || parentTask).milestone).trim() : "No milestone",
+        progress: progressFromStatus(normalizeStatus((fallback || parentTask).status)),
+      })
+    }
+    if (!childrenByEpic.has(parentId)) childrenByEpic.set(parentId, [])
+    childrenByEpic.get(parentId).push(task)
+  }
+
+  const epics = []
+  for (const [epicId, epic] of epicEntries.entries()) {
+    const children = (childrenByEpic.get(epicId) || []).sort((a, b) => a.start.getTime() - b.start.getTime())
+    const firstChild = children[0]
+    const start = epic.start || (firstChild ? firstChild.start : null)
+    const end = epic.end || (children.length ? children.reduce((latest, child) => (child.end > latest ? child.end : latest), children[0].end) : null)
+    if (!start || !end) continue
+    const doneCount = children.filter((child) => child.statusKey === "done").length
+    const childProgress = children.length ? `${doneCount}/${children.length} done` : ""
+    const progress = children.length ? doneCount / children.length : epic.progress
+    epics.push({ ...epic, id: epicId, start, end, progress, childProgress, children })
+  }
+
+  epics.sort((a, b) => a.start.getTime() - b.start.getTime())
+  const epicIds = new Set(epics.map((epic) => epic.id))
+  const standalone = tasks.filter((task) => {
+    const parentId = normalizeTaskId(task.parent)
+    return !parentId || !epicIds.has(parentId)
+  })
+  return { epics, standalone }
+}
+
+function renderEpicGroups(tasks, range) {
+  const { epics, standalone } = buildEpicRows(tasks)
+  const blocks = []
+
+  if (epics.length) {
+    const epicRows = []
+    let rowIndex = 0
+    for (const epic of epics) {
+      epicRows.push(renderRoadmapTaskRow(epic, range, rowIndex, { epic: true, summary: "Epic", childProgress: epic.childProgress }))
+      rowIndex += 1
+      if (collapsedEpicIds.has(epic.id)) continue
+      for (const child of epic.children) {
+        epicRows.push(renderRoadmapTaskRow(child, range, rowIndex, { child: true }))
+        rowIndex += 1
+      }
+    }
+    blocks.push(`<div class="milestone-group"><div class="milestone-header"><div class="milestone-label">Epics</div><div class="milestone-line"></div></div>${epicRows.join("")}</div>`)
+  }
+
+  if (standalone.length) {
+    const rows = standalone
+      .sort((a, b) => a.start.getTime() - b.start.getTime())
+      .map((task, idx) => renderRoadmapTaskRow(task, range, idx))
+      .join("")
+    blocks.push(`<div class="milestone-group"><div class="milestone-header"><div class="milestone-label">Standalone tasks</div><div class="milestone-line"></div></div>${rows}</div>`)
+  }
+
+  return blocks.join("")
+}
+
+function renderGroups(tasks, range) {
+  const normalized = tasks.map((task) => ({
+    ...task,
+    statusKey: task.status || "unknown",
+    milestoneKey: task.milestone && task.milestone.trim() ? task.milestone.trim() : "No milestone",
+  }))
+  if (roadmapGroupMode === "epic") return renderEpicGroups(normalized, range)
+  if (roadmapGroupMode === "milestone") return renderStandardGroups(normalized, range, "milestone")
+  return renderStandardGroups(normalized, range, "status")
 }
 
 function getLabelWidth() {
@@ -546,15 +708,31 @@ function updateZoomPresetUI() {
 }
 
 function updateGroupButtons() {
+  if (!ROADMAP_GROUP_MODES.includes(roadmapGroupMode)) roadmapGroupMode = "epic"
+  const epic = document.getElementById("btn-group-epic")
+  if (epic) epic.classList.toggle("active", roadmapGroupMode === "epic")
   const status = document.getElementById("btn-group-status")
-  if (status) status.classList.toggle("active", groupBy.status)
+  if (status) status.classList.toggle("active", roadmapGroupMode === "status")
   const milestone = document.getElementById("btn-group-milestone")
-  if (milestone) milestone.classList.toggle("active", groupBy.milestone)
+  if (milestone) milestone.classList.toggle("active", roadmapGroupMode === "milestone")
 }
 
 function toggleGroupBy(key) {
-  groupBy[key] = !groupBy[key]
+  if (!ROADMAP_GROUP_MODES.includes(key)) return
+  roadmapGroupMode = key
   updateGroupButtons()
+  if (activeView === "roadmap") renderRoadmap()
+}
+
+function toggleEpicCollapse(id) {
+  const epicId = normalizeTaskId(id)
+  if (!epicId) return
+  if (collapsedEpicIds.has(epicId)) {
+    collapsedEpicIds.delete(epicId)
+  } else {
+    collapsedEpicIds.add(epicId)
+  }
+  persistCollapsedEpics()
   if (activeView === "roadmap") renderRoadmap()
 }
 
@@ -637,9 +815,13 @@ function addTodayMarker(timeline, range, layout) {
 }
 
 function findTask(id) {
+  const key = normalizeTaskId(id)
+  if (!key) return
+  const task = taskById.get(key)
+  if (task) return task
   for (const col of board.columns || []) {
-    const task = (col.tasks || []).find((item) => item.id === id)
-    if (task) return task
+    const match = (col.tasks || []).find((item) => normalizeTaskId(item.id) === key)
+    if (match) return match
   }
 }
 
@@ -678,18 +860,86 @@ function resolveDetailPath(detailPath) {
   return joinPath(dirname(source.tasksFile), leaf)
 }
 
+function detailPathCandidates(detailPath) {
+  const raw = normalizePath(detailPath)
+  const resolved = resolveDetailPath(detailPath)
+  const candidates = [resolved, raw]
+  if (raw.startsWith("./")) {
+    candidates.push(raw.slice(2))
+  } else if (raw) {
+    candidates.push(`./${raw}`)
+  }
+  return [...new Set(candidates.filter(Boolean))]
+}
+
+function supportsLocalApiFallback() {
+  return window.location.protocol === "http:" || window.location.protocol === "https:"
+}
+
+function extractLooseDescription(lines) {
+  const output = []
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) {
+      if (output.length && output[output.length - 1] !== "") output.push("")
+      continue
+    }
+    if (/^#\s+\S+/.test(trimmed)) continue
+    if (/^-\s+[A-Za-z][A-Za-z0-9]*:\s*/.test(trimmed)) continue
+    output.push(line.replace(/^\s{2,}/, ""))
+  }
+  while (output[0] === "") output.shift()
+  while (output[output.length - 1] === "") output.pop()
+  return output.join("\n")
+}
+
 function parseDetail(content) {
   const text = String(content || "")
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")
-  const steps = lines
+  const summaryMatch = text.match(/^\s*-\s+summary:\s*(.+)$/m)
+  const summary = summaryMatch ? summaryMatch[1].trim() : ""
+  let description = ""
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const marker = lines[i].match(/^(\s*)-\s+description:\s*\|\s*$/)
+    if (!marker) continue
+    const baseIndent = marker[1].length
+    const blockLines = []
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const nextLine = lines[j]
+      const nextLineIndent = (nextLine.match(/^\s*/) || [""])[0].length
+      if (/^\s*-\s+[A-Za-z][A-Za-z0-9]*:\s*/.test(nextLine) && nextLineIndent <= baseIndent) {
+        i = j - 1
+        break
+      }
+      if (nextLine.trim() === "") {
+        blockLines.push("")
+        i = j
+        continue
+      }
+      const minimumIndent = baseIndent + 2
+      blockLines.push(nextLine.slice(nextLineIndent >= minimumIndent ? minimumIndent : 0))
+      i = j
+    }
+    description = blockLines.join("\n").replace(/\s+$/, "")
+    break
+  }
+
+  if (!description) {
+    description = extractLooseDescription(lines)
+  }
+
+  const steps = description
+    .split("\n")
     .map((line) => line.match(/^\s*-\s*\[( |x|X)\]\s*(.+)$/))
     .filter(Boolean)
     .map((match) => ({ done: match[1].toLowerCase() === "x", text: match[2].trim() }))
-  const block = text.match(/```md\n([\s\S]*?)\n```/)
+
   return {
     steps,
-    description: block ? block[1].trim() : "",
-    html: renderMarkdown(text),
+    summary,
+    description,
+    html: description ? renderMarkdown(description) : "",
     raw: text,
   }
 }
@@ -867,24 +1117,43 @@ async function loadTaskDetail(task) {
   const key = `${source.tasksFile}:${task.id}`
   if (detailCache.has(key)) return detailCache.get(key)
   if (!task.detailPath) return
-  try {
-    const payload = await requestBridge("file.read", {
-      path: resolveDetailPath(task.detailPath),
-    })
-    if (payload?.content) {
-      const result = { path: payload.path || task.detailPath, ...parseDetail(payload.content) }
-      detailCache.set(key, result)
-      return result
+  const candidates = detailPathCandidates(task.detailPath)
+  let bridgeError = null
+  for (const candidatePath of candidates) {
+    try {
+      const payload = await requestBridge("file.read", {
+        path: candidatePath,
+      })
+      if (payload?.content) {
+        const result = { path: payload.path || candidatePath, ...parseDetail(payload.content) }
+        detailCache.set(key, result)
+        return result
+      }
+    } catch (error) {
+      bridgeError = error
     }
-  } catch {
-    // fallback to local endpoint
   }
+
+  if (!supportsLocalApiFallback()) {
+    if (bridgeError instanceof Error) throw bridgeError
+    throw new Error("Unable to load detail file via bridge")
+  }
+
+  const preferredPath = candidates[0] || resolveDetailPath(task.detailPath)
   const query = new URLSearchParams({
     directory: source.directory,
     tasksFile: source.tasksFile,
-    detailPath: resolveDetailPath(task.detailPath),
+    detailPath: preferredPath,
   })
-  const response = await fetch(`/api/task-detail?${query.toString()}`)
+  let response
+  try {
+    response = await fetch(`/api/task-detail?${query.toString()}`)
+  } catch (error) {
+    if (bridgeError instanceof Error) {
+      throw new Error(`${bridgeError.message} (fallback failed: ${error instanceof Error ? error.message : String(error)})`)
+    }
+    throw error
+  }
   if (!response.ok) throw new Error((await response.text()) || "Failed to load detail")
   const payload = await response.json()
   const result = { path: payload.path || task.detailPath, ...parseDetail(payload.content || "") }
@@ -902,48 +1171,99 @@ function setModalContent(html) {
   document.getElementById("detail-modal-content").innerHTML = html
 }
 
+function renderModalRows(rows) {
+  return rows
+    .filter((row) => row && row.value)
+    .map((row) => `<div class="modal-row"><span>${escapeHtml(row.label)}</span><strong${row.links ? ' class="modal-links"' : ""}>${row.links ? row.value : escapeHtml(String(row.value))}</strong></div>`)
+    .join("")
+}
+
+function renderTaskIdLinks(ids) {
+  const values = (ids || []).map((id) => normalizeTaskId(id)).filter(Boolean)
+  if (!values.length) return ""
+  return values
+    .map((id) => {
+      const match = findTask(id)
+      return match ? renderTaskLink(match) : `<span class="task-ref-chip">${escapeHtml(id)}</span>`
+    })
+    .join("")
+}
+
 async function openTaskDetail(taskId) {
   const task = findTask(taskId)
   if (!task) return
   const modal = document.getElementById("detail-modal")
+  const modalTitle = document.getElementById("detail-modal-title")
+  if (modalTitle) modalTitle.textContent = `Task details - ${task.title || task.id}`
   modal.classList.add("open")
   modal.setAttribute("aria-hidden", "false")
   setModalContent('<p class="modal-empty">Loading details...</p>')
-  const head = [
+
+  const parentTask = findTask(task.parent)
+  const subtasks = (subtasksByParent.get(task.id) || []).filter((child) => child.id !== task.id)
+  const basicRows = renderModalRows([
     ["Task", `[${task.id}] ${task.title}`],
     ["Status", task.status],
     ["Type", task.type],
-    ["Parent", task.parent],
-    ["Sub-issue", task.subIssueProgress],
     ["Priority", task.priority],
     ["Workload", task.workload],
+    ["Sub-issue", task.subIssueProgress],
+  ].map(([label, value]) => ({ label, value })))
+  const dateRows = renderModalRows([
     ["Start", task.startDate],
     ["Due", task.dueDate],
     ["Updated", task.updated],
     ["Completed", task.completed],
-    ["External", task.externalId],
-    ["Touch", task.touch?.join(", ")],
-    ["Depends", task.dependsOn?.join(", ")],
+  ].map(([label, value]) => ({ label, value })))
+  const relationRows = renderModalRows([
+    {
+      label: "Parent",
+      value: task.parent ? (parentTask ? renderTaskLink(parentTask) : escapeHtml(String(task.parent))) : "",
+      links: true,
+    },
+    {
+      label: "Subtasks",
+      value: subtasks.length ? subtasks.map((child) => renderTaskLink(child)).join("") : "",
+      links: true,
+    },
+    {
+      label: "Depends",
+      value: renderTaskIdLinks(task.dependsOn),
+      links: true,
+    },
+  ])
+  const contextRows = renderModalRows([
+    { label: "Domains", value: task.domains?.join(", ") },
+    { label: "External", value: task.externalId },
+  ])
+  const infoGroups = [
+    `<div class="modal-group"><h4>Overview</h4>${basicRows || '<p class="modal-empty">No overview data.</p>'}</div>`,
+    dateRows ? `<div class="modal-group"><h4>Dates</h4>${dateRows}</div>` : "",
+    relationRows ? `<div class="modal-group"><h4>Relations</h4>${relationRows}</div>` : "",
+    contextRows ? `<div class="modal-group"><h4>Context</h4>${contextRows}</div>` : "",
   ]
-    .filter(([, value]) => value)
-    .map(([label, value]) => `<div class="modal-row"><span>${label}</span><strong>${escapeHtml(String(value))}</strong></div>`)
+    .filter(Boolean)
     .join("")
+  const infoSection = `<section class="modal-section"><h3>Task info</h3><div class="modal-info-grid">${infoGroups}</div></section>`
+
   if (!task.detailPath) {
-    setModalContent(`<section class="modal-section"><h3>Task info</h3>${head}</section>`)
+    setModalContent(`${infoSection}<section class="modal-section"><h3>Detail file</h3><p class="modal-empty">No detail file linked.</p></section>`)
     return
   }
+
   try {
     const detail = await loadTaskDetail(task)
-    const steps = (detail?.steps || [])
-      .map((step) => `<li class="${step.done ? "done" : ""}">${escapeHtml(step.text)}</li>`)
-      .join("")
-    const desc = detail?.description ? `<pre class="modal-pre">${escapeHtml(detail.description)}</pre>` : ""
-    const markdown = detail?.html ? `<div class="modal-markdown">${detail.html}</div>` : ""
-    const raw = detail?.raw ? `<details><summary>Raw detail markdown</summary><pre class="modal-pre">${escapeHtml(detail.raw)}</pre></details>` : ""
-    setModalContent(`<section class="modal-section"><h3>Task info</h3>${head}</section><section class="modal-section"><h3>Detail file</h3><div class="modal-row"><span>Path</span><strong>${escapeHtml(detail?.path || task.detailPath)}</strong></div>${steps ? `<ul class="modal-steps">${steps}</ul>` : '<p class="modal-empty">No checklist steps found.</p>'}${desc || '<p class="modal-empty">No description block found.</p>'}${markdown || '<p class="modal-empty">Could not render markdown.</p>'}${raw}</section>`)
+    const summary = detail?.summary ? `<div class="modal-row"><span>Summary</span><strong>${escapeHtml(detail.summary)}</strong></div>` : ""
+    const description = detail?.html
+      ? `<div class="modal-description"><h4>Description</h4><div class="modal-markdown">${detail.html}</div></div>`
+      : '<p class="modal-empty">No description found.</p>'
+    const raw = detail?.raw
+      ? `<details class="modal-debug"><summary>Debug: raw detail markdown</summary><pre class="modal-pre">${escapeHtml(detail.raw)}</pre></details>`
+      : ""
+    setModalContent(`${infoSection}<section class="modal-section"><h3>Detail file</h3><div class="modal-row"><span>Path</span><strong>${escapeHtml(detail?.path || task.detailPath)}</strong></div>${summary}${description}${raw}</section>`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    setModalContent(`<section class="modal-section"><h3>Task info</h3>${head}</section><section class="modal-section"><h3>Detail file</h3><p class="modal-error">${escapeHtml(message)}</p></section>`)
+    setModalContent(`${infoSection}<section class="modal-section"><h3>Detail file</h3><p class="modal-error">${escapeHtml(message)}</p></section>`)
   }
 }
 
@@ -995,6 +1315,7 @@ document.getElementById("zoom-preset").addEventListener("change", (event) => {
   if (!(target instanceof HTMLSelectElement)) return
   setZoomPreset(target.value)
 })
+document.getElementById("btn-group-epic").addEventListener("click", () => toggleGroupBy("epic"))
 document.getElementById("btn-group-status").addEventListener("click", () => toggleGroupBy("status"))
 document.getElementById("btn-group-milestone").addEventListener("click", () => toggleGroupBy("milestone"))
 document.getElementById("btn-today").addEventListener("click", () => centerToday(true))
@@ -1003,6 +1324,12 @@ document.getElementById("btn-scroll-right").addEventListener("click", () => scro
 window.addEventListener("click", (event) => {
   const target = event.target
   if (!(target instanceof HTMLElement)) return
+  const epicToggle = target.closest("[data-toggle-epic]")
+  const epicId = epicToggle ? epicToggle.getAttribute("data-toggle-epic") : null
+  if (epicId) {
+    toggleEpicCollapse(epicId)
+    return
+  }
   const trigger = target.closest("[data-expand-task]")
   const id = trigger ? trigger.getAttribute("data-expand-task") : null
   if (id) toggleTask(id)
@@ -1025,4 +1352,4 @@ window.addEventListener("resize", () => {
 })
 
 setView(activeView)
-loadBoard().then(() => log("Ready", "ok")).catch((error) => log(error.message, "error"))
+loadBoard().catch((error) => log(error.message, "error"))

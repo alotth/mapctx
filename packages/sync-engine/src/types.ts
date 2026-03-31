@@ -12,6 +12,7 @@ export type Task = {
   priority?: 'high' | 'medium' | 'low';
   workload?: 'Easy' | 'Normal' | 'Hard' | 'Extreme';
   tags?: string[];
+  domains?: string[];
   touch?: string[];
   dependsOn?: string[];
   milestone?: string;
@@ -27,7 +28,8 @@ export type Task = {
 
 export type TaskBoard = {
   title: string;
-  componentsSection: string[];
+  workDomainsSection: string[];
+  componentsSection?: string[];
   tasks: Task[];
   notesSection: string[];
 };

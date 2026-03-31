@@ -1,5 +1,5 @@
 ---
-name: kanban-sync-engine
+name: mapctx-sync-engine
 description: Safely operate mapcs for TASKS.md <-> GitHub synchronization; trigger when sessions start with mapcs config, when users request pull/push/bootstrap/reconcile, or when divergence/conflicts must be diagnosed.
 ---
 

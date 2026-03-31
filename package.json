@@ -26,5 +26,8 @@
     "build:core": "npm run build --workspace @mapctx/core",
     "build:sync-engine": "npm run build:core && npm run build --workspace @mapctx/sync-engine",
     "test:sync-engine": "npm run build:core && npm run test --workspace @mapctx/sync-engine"
+  },
+  "dependencies": {
+    "@mapctx/sync-engine": "^0.0.1"
   }
 }

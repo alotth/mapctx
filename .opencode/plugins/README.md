@@ -1,10 +1,10 @@
 # OpenCode session auto-sync plugin
 
-This project uses an OpenCode plugin (not a Cursor/Claude hook folder) to run sync on session start.
+This project uses an OpenCode plugin to run sync on session start.
 
 Plugin file:
 
-- `./mapcs-session-sync.js`
+- `./mapcs-session-sync.ts`
 
 Behavior on `session.created`:
 
@@ -17,6 +17,8 @@ It uses:
 - CLI: `packages/sync-engine/dist/cli.js`
 - Config: `sync.config.json`
 - Tasks file: `TASKS.md`
+
+Auto-sync runs only when all required files exist.
 
 Environment toggles:
 

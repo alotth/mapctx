@@ -9,9 +9,12 @@ Use this contract to build deterministic Ralph prompts.
    - `@TASKS.md`
    - `@tasks/<ID>.md`
 3. Execution requirements:
-   - implement requested changes
-   - run relevant tests/checks when available
-   - keep edits minimal and scoped
+    - implement requested changes
+    - respect `## Work Domains` definitions from `TASKS.md`
+    - prioritize changes in areas indicated by task `domains`
+    - accept `touch` only as deprecated legacy alias
+    - run relevant tests/checks when available
+    - keep edits minimal and scoped
 4. Completion markers (mandatory):
    - `<promise>COMPLETE_TESTED</promise>`
    - `<promise>COMPLETE_REVIEW</promise>`
@@ -27,6 +30,10 @@ Use this contract to build deterministic Ralph prompts.
 ```bash
 ralph "Work only on task <ID> using @TASKS.md and @tasks/<ID>.md. Implement what is needed for this task. Keep changes scoped to the task. Run relevant tests/checks. If implementation is complete and tests/checks passed, output <promise>COMPLETE_TESTED</promise>. If implementation is complete but still needs human review or tests were not fully validated, output <promise>COMPLETE_REVIEW</promise>." --agent codex --model gpt-5-codex --max-iterations N --completion-promise COMPLETE
 ```
+
+Recommended prompt addition before execution:
+
+- "Use `## Work Domains` in `TASKS.md` as the project registry and keep edits aligned with this task's `domains` keys (`touch` is legacy)."
 
 Notes:
 

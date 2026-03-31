@@ -1,6 +1,11 @@
 (function attachKanbanCore(globalObject) {
   function normalizeStatus(value) {
     var status = String(value || "").trim().toLowerCase()
+    if (status === "todo" || status === "to-do" || status === "pending") return "backlog"
+    if (status === "in_progress" || status === "in-progress" || status === "wip") return "doing"
+    if (status === "in_review" || status === "in-review" || status === "qa") return "review"
+    if (status === "completed" || status === "complete") return "done"
+    if (status === "on_hold" || status === "on-hold" || status === "blocked") return "paused"
     if (status === "backlog" || status === "doing" || status === "review" || status === "done" || status === "paused") {
       return status
     }
@@ -219,7 +224,7 @@
         id: (match && match[1].trim()) || "T-" + String(tasks.length + 1).padStart(3, "0"),
         title: (match && match[2].trim()) || heading,
         status: "unknown",
-        touch: [],
+        domains: [],
         dependsOn: [],
         completed: "",
       }
@@ -240,7 +245,8 @@
           if (key === "subIssueProgress" && value !== "null") task.subIssueProgress = value
           if (key === "priority") task.priority = value
           if (key === "workload") task.workload = value
-          if (key === "touch") task.touch = parseArray(value)
+          if (key === "domains") task.domains = parseArray(value)
+          if (key === "touch" && (!task.domains || task.domains.length === 0)) task.domains = parseArray(value)
           if (key === "dependsOn") task.dependsOn = parseArray(value)
           if (key === "start") task.startDate = value
           if (key === "due") task.dueDate = value

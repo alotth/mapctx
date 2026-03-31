@@ -20,6 +20,7 @@ Rules:
    - Use `E-XXX` when `type: epic`.
    - Use `T-XXX` for all other task types.
 5. When a task has `detail`, create `./tasks/<ID>.md`.
+6. Keep and maintain `## Work Domains`; task `domains` must use these domain keys.
 
 ## `TASKS.md` Baseline Template
 
@@ -28,7 +29,7 @@ Values below are examples. Replace with real project values.
 ```markdown
 # Tasks - <project-name>
 
-## Components
+## Work Domains
 
 - PARSER: example component for parser and serialization
 - WEBVIEW: example component for kanban rendering and interaction
@@ -48,7 +49,7 @@ Values below are examples. Replace with real project values.
   - priority: null
   - workload: null
   - tags: []
-  - touch: []
+  - domains: []
   - dependsOn: []
   - start: null
   - due: null
@@ -67,7 +68,7 @@ Values below are examples. Replace with real project values.
   - priority: null
   - workload: null
   - tags: []
-  - touch: []
+  - domains: []
   - dependsOn: []
   - start: null
   - due: null
@@ -80,6 +81,8 @@ Values below are examples. Replace with real project values.
 
 - Keep updates in `TASKS.md` small and deterministic.
 - Add optional extension keys (`iteration`, `assignees`, `externalLinks`, `milestone`) only when needed.
+- Keep `domains` values aligned with keys declared in `## Work Domains`.
+- Treat `touch` as deprecated legacy alias.
 ```
 
 ## Detail File Template (`./tasks/<ID>.md`)

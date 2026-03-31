@@ -1,6 +1,6 @@
 # Tasks - markdown-kanban-roadmap-v2
 
-## Components
+## Work Domains
 
 - PARSER: markdown parser and serialization
 - WEBVIEW: kanban webview rendering and interaction
@@ -16,7 +16,7 @@
   - status: doing
   - priority: high
   - workload: Hard
-  - touch: [PARSER, ROADMAP]
+  - domains: [PARSER, ROADMAP]
   - dependsOn: []
   - start: 2026-02-12
   - due: 2026-02-18
@@ -31,7 +31,7 @@
   - status: backlog
   - priority: high
   - workload: Normal
-  - touch: [PARSER, DOCS]
+  - domains: [PARSER, DOCS]
   - dependsOn: [T-001]
   - start: 2026-02-19
   - due: 2026-02-22
@@ -46,7 +46,7 @@
   - status: review
   - priority: medium
   - workload: Hard
-  - touch: [PARSER, CI]
+  - domains: [PARSER, CI]
   - dependsOn: [T-001]
   - start: 2026-02-10
   - due: 2026-02-16
@@ -61,7 +61,7 @@
   - status: backlog
   - priority: high
   - workload: Hard
-  - touch: [WEBVIEW]
+  - domains: [WEBVIEW]
   - dependsOn: [T-001]
   - start: 2026-02-20
   - due: 2026-02-25
@@ -76,7 +76,7 @@
   - status: done
   - priority: medium
   - workload: Normal
-  - touch: [CI, DOCS]
+  - domains: [CI, DOCS]
   - dependsOn: []
   - start: 2026-02-08
   - due: 2026-02-11
@@ -87,7 +87,8 @@
 
 ## Notes
 
-- `touch` drives fast conflict checks with minimal token use.
+- `domains` drives fast conflict checks with minimal token use.
+- `touch` is deprecated and accepted only for backward compatibility.
 - Detail files hold rich context and volatile metadata.
 - Keep updates in `TASKS.md` small and deterministic.
 - Use `externalId` as provider-agnostic mapping key (`<provider>:<entity>:<id>`).
