@@ -34,18 +34,25 @@ function parseTaskType(value: string): TaskType | undefined {
   return undefined;
 }
 
+function parseSpecMode(value: string): Task['specMode'] {
+  if (value === 'lite' || value === 'standard' || value === 'strict') {
+    return value;
+  }
+  return undefined;
+}
+
 export function parseTasksFile(tasksFilePath: string): TaskBoard {
   const content = readUtf8(tasksFilePath);
   const lines = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
 
   let title = 'Tasks';
-  let inComponents = false;
+  let inWorkDomains = false;
   let inNotes = false;
   let inTasks = false;
   let currentLegacyStatus: LocalStatus = 'backlog';
   let currentTask: Task | null = null;
 
-  const componentsSection: string[] = [];
+  const workDomainsSection: string[] = [];
   const notesSection: string[] = [];
   const tasks: Task[] = [];
 
@@ -66,23 +73,23 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
       continue;
     }
 
-    if (trimmed === '## Components') {
+    if (trimmed === '## Work Domains' || trimmed === '## Components') {
       flushTask();
-      inComponents = true;
+      inWorkDomains = true;
       inTasks = false;
       inNotes = false;
       continue;
     }
     if (trimmed === '## Tasks') {
       flushTask();
-      inComponents = false;
+      inWorkDomains = false;
       inTasks = true;
       inNotes = false;
       continue;
     }
     if (trimmed === '## Notes' || trimmed === '## Notas') {
       flushTask();
-      inComponents = false;
+      inWorkDomains = false;
       inTasks = false;
       inNotes = true;
       continue;
@@ -92,7 +99,7 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
       const legacySection = trimmed.slice(3).trim().toLowerCase();
       if (legacySection in LEGACY_SECTIONS) {
         flushTask();
-        inComponents = false;
+        inWorkDomains = false;
         inTasks = true;
         inNotes = false;
         currentLegacyStatus = LEGACY_SECTIONS[legacySection];
@@ -100,8 +107,8 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
       }
     }
 
-    if (inComponents) {
-      componentsSection.push(line);
+    if (inWorkDomains) {
+      workDomainsSection.push(line);
       continue;
     }
     if (inNotes) {
@@ -116,7 +123,7 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
     }
 
     if (inTasks && currentTask) {
-      const m = line.match(/^\s{2}-\s+([A-Za-z][A-Za-z0-9]*):\s*(.*)$/);
+      const m = line.match(/^\s*-\s*([A-Za-z][A-Za-z0-9]*):\s*(.*)$/);
       if (!m) continue;
       const key = m[1];
       const value = m[2].trim();
@@ -146,20 +153,33 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
         case 'tags':
           currentTask.tags = parseArray(value);
           break;
+        case 'domains':
+          currentTask.domains = parseArray(value);
+          break;
         case 'touch':
+          if (!currentTask.domains) currentTask.domains = parseArray(value);
           currentTask.touch = parseArray(value);
           break;
         case 'dependsOn':
           currentTask.dependsOn = parseArray(value);
           break;
+        case 'iteration':
+          currentTask.iteration = value === 'null' || value === '' ? undefined : value;
+          break;
+        case 'assignees':
+          currentTask.assignees = parseArray(value);
+          break;
         case 'milestone':
-          currentTask.milestone = value || undefined;
+          currentTask.milestone = value === 'null' || value === '' ? undefined : value;
+          break;
+        case 'specMode':
+          currentTask.specMode = parseSpecMode(value);
           break;
         case 'start':
-          currentTask.start = value || undefined;
+          currentTask.start = value === 'null' || value === '' ? undefined : value;
           break;
         case 'due':
-          currentTask.due = value || undefined;
+          currentTask.due = value === 'null' || value === '' ? undefined : value;
           break;
         case 'completed':
           currentTask.completed = value === 'null' || value === '' ? null : value;
@@ -171,7 +191,7 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
           currentTask.externalLinks = parseArray(value);
           break;
         case 'updated':
-          currentTask.updated = value || undefined;
+          currentTask.updated = value === 'null' || value === '' ? undefined : value;
           break;
         case 'detail':
           currentTask.detail = value || undefined;
@@ -189,7 +209,8 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
 
   return {
     title,
-    componentsSection,
+    workDomainsSection,
+    componentsSection: workDomainsSection,
     tasks,
     notesSection
   };
@@ -200,10 +221,11 @@ export function serializeTasksFile(board: TaskBoard): string {
   out.push(`# ${board.title}`);
   out.push('');
 
-  if (board.componentsSection.length > 0) {
-    out.push('## Components');
+  const workDomains = board.workDomainsSection ?? board.componentsSection ?? [];
+  if (workDomains.length > 0) {
+    out.push('## Work Domains');
     out.push('');
-    for (const line of board.componentsSection) out.push(line);
+    for (const line of workDomains) out.push(line);
     out.push('');
   }
 
@@ -221,16 +243,19 @@ export function serializeTasksFile(board: TaskBoard): string {
     if (task.priority) out.push(`  - priority: ${task.priority}`);
     if (task.workload) out.push(`  - workload: ${task.workload}`);
     if (task.tags) out.push(`  - tags: ${toArrayString(task.tags)}`);
-    if (task.touch) out.push(`  - touch: ${toArrayString(task.touch)}`);
+    if (task.domains ?? task.touch) out.push(`  - domains: ${toArrayString(task.domains ?? task.touch ?? [])}`);
     if (task.dependsOn) out.push(`  - dependsOn: ${toArrayString(task.dependsOn)}`);
-    if (task.milestone) out.push(`  - milestone: ${task.milestone}`);
     if (task.start) out.push(`  - start: ${task.start}`);
     if (task.due) out.push(`  - due: ${task.due}`);
     out.push(`  - completed: ${task.completed ?? 'null'}`);
     out.push(`  - externalId: ${task.externalId ?? 'null'}`);
-    if (task.externalLinks) out.push(`  - externalLinks: ${toArrayString(task.externalLinks)}`);
     if (task.updated) out.push(`  - updated: ${task.updated}`);
     if (task.detail) out.push(`  - detail: ${task.detail}`);
+    if (task.iteration) out.push(`  - iteration: ${task.iteration}`);
+    if (task.assignees) out.push(`  - assignees: ${toArrayString(task.assignees)}`);
+    if (task.externalLinks) out.push(`  - externalLinks: ${toArrayString(task.externalLinks)}`);
+    if (task.milestone) out.push(`  - milestone: ${task.milestone}`);
+    if (task.specMode) out.push(`  - specMode: ${task.specMode}`);
     if (task.defaultExpanded !== undefined) out.push(`  - defaultExpanded: ${task.defaultExpanded}`);
     out.push('');
   }
@@ -253,5 +278,5 @@ export function ensureDetailFile(tasksFilePath: string, task: Task): void {
   const full = path.resolve(path.dirname(tasksFilePath), task.detail);
   if (fs.existsSync(full)) return;
   fs.mkdirSync(path.dirname(full), { recursive: true });
-  fs.writeFileSync(full, `# ${task.id}\n\n  - steps:\n      - [ ] Define scope\n`, 'utf8');
+  fs.writeFileSync(full, `# ${task.id}\n\n  - summary: Define scope\n  - description: |\n      ## Steps\n\n      - [ ] Define scope\n`, 'utf8');
 }

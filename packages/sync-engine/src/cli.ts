@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { bootstrapCommand, listConflictsCommand, pullCommand, pushCommand, reconcileCommand, statusCommand } from './sync';
+import { planCommand, validateCommand } from './board-tools';
 import { SyncOptions } from './types';
 
 function parseArgs(argv: string[]): { command: string; options: SyncOptions; from?: 'local' | 'github'; taskId?: string } {
@@ -16,6 +17,7 @@ function parseArgs(argv: string[]): { command: string; options: SyncOptions; fro
     else if (a === '--list') options.list = true;
     else if (a === '--json') options.json = true;
     else if (a === '--confirm') options.confirm = true;
+    else if (a === '--mermaid') options.mermaid = true;
     else if (a === '--accept') {
       const value = args[++i];
       if (value === 'local' || value === 'remote') options.accept = value;
@@ -36,15 +38,17 @@ function parseArgs(argv: string[]): { command: string; options: SyncOptions; fro
 }
 
 function printHelp(): void {
-  console.log('kanban-sync-engine CLI');
+  console.log('mapcs CLI');
   console.log('');
   console.log('Commands:');
-  console.log('  kanban-sync-engine status [--json] [--config path] [--tasks-file path]');
-  console.log('  kanban-sync-engine pull [--dry-run] [--config path] [--tasks-file path]');
-  console.log('  kanban-sync-engine push [--dry-run] [--force] [--config path] [--tasks-file path]');
-  console.log('  kanban-sync-engine bootstrap --from <local|github> [--dry-run] [--confirm] [--config path] [--tasks-file path]');
-  console.log('  kanban-sync-engine reconcile <task-id> [--accept <local|remote>] [--config path] [--tasks-file path]');
-  console.log('  kanban-sync-engine reconcile --list [--json] [--config path] [--tasks-file path]');
+  console.log('  mapcs status [--json] [--config path] [--tasks-file path]');
+  console.log('  mapcs validate [--json] [--config path] [--tasks-file path]');
+  console.log('  mapcs plan [--json] [--mermaid] [--config path] [--tasks-file path]');
+  console.log('  mapcs pull [--dry-run] [--config path] [--tasks-file path]');
+  console.log('  mapcs push [--dry-run] [--force] [--config path] [--tasks-file path]');
+  console.log('  mapcs bootstrap --from <local|github> [--dry-run] [--confirm] [--config path] [--tasks-file path]');
+  console.log('  mapcs reconcile <task-id> [--accept <local|remote>] [--config path] [--tasks-file path]');
+  console.log('  mapcs reconcile --list [--json] [--config path] [--tasks-file path]');
 }
 
 function main(): void {
@@ -57,6 +61,14 @@ function main(): void {
     }
     if (command === 'pull') {
       pullCommand(options);
+      return;
+    }
+    if (command === 'validate') {
+      validateCommand(options);
+      return;
+    }
+    if (command === 'plan') {
+      planCommand(options);
       return;
     }
     if (command === 'push') {

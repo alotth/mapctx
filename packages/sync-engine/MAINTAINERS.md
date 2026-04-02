@@ -1,6 +1,6 @@
 # Maintainers Guide
 
-Internal release process for `kanban-sync-engine`.
+Internal release process for `@mapctx/sync-engine` (CLI command `mapcs`).
 
 ## Prerequisites
 
@@ -18,8 +18,8 @@ npm publish --access public
 
 ## GitHub Actions publish
 
-- workflow file: `.github/workflows/publish.yml`
-- trigger by tag push: `vX.Y.Z` (example: `v0.1.0`)
+- workflow file: `.github/workflows/release-sync-engine.yml`
+- trigger by tag push: `sync-vX.Y.Z` (example: `sync-v0.0.1`)
 - or run manually through `workflow_dispatch`
 
 ## Standard release flow

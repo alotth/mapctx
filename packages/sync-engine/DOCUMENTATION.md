@@ -1,6 +1,6 @@
-# kanban-sync-engine - Documentation
+# mapcs - Documentation
 
-Practical guide to operate `kanban-sync-engine` in your daily flow with `TASKS.md`, GitHub Issues, and GitHub Projects v2.
+Practical guide to operate `mapcs` in your daily flow with `TASKS.md`, GitHub Issues, and GitHub Projects v2.
 
 ## 1) Prerequisites
 
@@ -25,22 +25,22 @@ gh auth status
 
 ## 2) Important files
 
-- Main config: `kanban-sync-engine.config.json`
+- Main config: `mapcs.config.json`
 - Local board: `TASKS.md`
 - Task detail files: `tasks/T-XXX.md`
-- Local sync state: `.kanban-sync-engine/state.json` (auto-generated)
-- Reconciliation conflicts: `.kanban-sync-engine/conflicts/*.reconcile.md`
+- Local sync state: `.mapcs/state.json` (auto-generated)
+- Reconciliation conflicts: `.mapcs/conflicts/*.reconcile.md`
 
 ## 3) Main commands
 
 ```bash
-kanban-sync-engine status
-kanban-sync-engine pull
-kanban-sync-engine push
-kanban-sync-engine reconcile --list
-kanban-sync-engine reconcile T-002
-kanban-sync-engine reconcile T-002 --accept local
-kanban-sync-engine reconcile T-002 --accept remote
+mapcs status
+mapcs pull
+mapcs push
+mapcs reconcile --list
+mapcs reconcile T-002
+mapcs reconcile T-002 --accept local
+mapcs reconcile T-002 --accept remote
 ```
 
 Common flags:
@@ -52,10 +52,10 @@ Common flags:
 
 ## 4) Recommended daily flow
 
-1. Before editing: `kanban-sync-engine pull`
+1. Before editing: `mapcs pull`
 2. Edit `TASKS.md` and/or `tasks/T-XXX.md`
-3. Check divergence: `kanban-sync-engine status`
-4. Publish updates: `kanban-sync-engine push`
+3. Check divergence: `mapcs status`
+4. Publish updates: `mapcs push`
 
 Safety rule:
 
@@ -68,8 +68,8 @@ Safety rule:
 When you already have `TASKS.md` ready and want to create issues/project data:
 
 ```bash
-kanban-sync-engine bootstrap --from local --dry-run --confirm
-kanban-sync-engine bootstrap --from local --confirm
+mapcs bootstrap --from local --dry-run --confirm
+mapcs bootstrap --from local --confirm
 ```
 
 ### GitHub -> Local
@@ -77,8 +77,8 @@ kanban-sync-engine bootstrap --from local --confirm
 When project/issues already exist and you want to materialize them locally:
 
 ```bash
-kanban-sync-engine bootstrap --from github --dry-run
-kanban-sync-engine bootstrap --from github
+mapcs bootstrap --from github --dry-run
+mapcs bootstrap --from github
 ```
 
 ## 6) Conflict reconciliation (local detail vs remote)
@@ -96,13 +96,13 @@ Step by step:
 1. List conflicts:
 
 ```bash
-kanban-sync-engine reconcile --list
+mapcs reconcile --list
 ```
 
 2. Generate/update conflict file for a task:
 
 ```bash
-kanban-sync-engine reconcile T-002
+mapcs reconcile T-002
 ```
 
 3. Resolve:
@@ -110,19 +110,19 @@ kanban-sync-engine reconcile T-002
 - keep local:
 
 ```bash
-kanban-sync-engine reconcile T-002 --accept local
+mapcs reconcile T-002 --accept local
 ```
 
 - keep remote:
 
 ```bash
-kanban-sync-engine reconcile T-002 --accept remote
+mapcs reconcile T-002 --accept remote
 ```
 
 4. Publish:
 
 ```bash
-kanban-sync-engine push
+mapcs push
 ```
 
 ## 7) GitHub Project v2 and status mapping
@@ -133,7 +133,7 @@ To map `backlog/doing/review/done/paused` without status loss, create a custom p
 gh project field-create <project-number> --owner <owner> --name Pipeline --data-type SINGLE_SELECT --single-select-options "Backlog,Doing,Review,Done,Paused"
 ```
 
-Then configure in `kanban-sync-engine.config.json`:
+Then configure in `mapcs.config.json`:
 
 - `projectId`
 - `statusFieldId` (Pipeline field ID)

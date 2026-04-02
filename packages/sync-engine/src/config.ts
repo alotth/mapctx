@@ -13,10 +13,10 @@ export function loadConfig(options: SyncOptions = {}): { config: SyncConfig; con
   const cwd = process.cwd();
   const configPath = options.configPath
     ? path.resolve(cwd, options.configPath)
-    : path.resolve(cwd, 'kanban-sync-engine.config.json');
+    : path.resolve(cwd, 'mapcs.config.json');
 
   if (!fs.existsSync(configPath)) {
-    throw new Error(`Config not found: ${configPath}. Create kanban-sync-engine.config.json from kanban-sync-engine/kanban-sync-engine.config.example.json.`);
+    throw new Error(`Config not found: ${configPath}. Create mapcs.config.json from mapcs.config.example.json.`);
   }
 
   const raw = fs.readFileSync(configPath, 'utf8');
@@ -38,6 +38,13 @@ export function loadConfig(options: SyncOptions = {}): { config: SyncConfig; con
 
   if (parsed.bootstrap?.defaultStatusForImportedIssues) {
     parsed.bootstrap.defaultStatusForImportedIssues = normalizeStatus(parsed.bootstrap.defaultStatusForImportedIssues);
+  }
+
+  if (parsed.idGeneration?.preferredPrefix !== undefined) {
+    parsed.idGeneration.preferredPrefix = String(parsed.idGeneration.preferredPrefix).trim();
+    if (!/^[A-Za-z][A-Za-z0-9]*$/.test(parsed.idGeneration.preferredPrefix)) {
+      throw new Error('idGeneration.preferredPrefix must match /^[A-Za-z][A-Za-z0-9]*$/.');
+    }
   }
 
   validateStatusConfig(parsed);

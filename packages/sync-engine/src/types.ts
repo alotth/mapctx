@@ -2,6 +2,8 @@ export type LocalStatus = string;
 
 export type TaskType = 'epic' | 'feature' | 'task' | 'bug' | 'chore';
 
+export type SpecMode = 'lite' | 'standard' | 'strict';
+
 export type Task = {
   title: string;
   id: string;
@@ -12,9 +14,13 @@ export type Task = {
   priority?: 'high' | 'medium' | 'low';
   workload?: 'Easy' | 'Normal' | 'Hard' | 'Extreme';
   tags?: string[];
+  domains?: string[];
   touch?: string[];
   dependsOn?: string[];
+  iteration?: string;
+  assignees?: string[];
   milestone?: string;
+  specMode?: SpecMode;
   start?: string;
   due?: string;
   completed: string | null;
@@ -27,7 +33,8 @@ export type Task = {
 
 export type TaskBoard = {
   title: string;
-  componentsSection: string[];
+  workDomainsSection: string[];
+  componentsSection?: string[];
   tasks: Task[];
   notesSection: string[];
 };
@@ -49,6 +56,9 @@ export type SyncConfig = {
     defaultStatusForImportedIssues?: string;
     requireConfirmFlag?: boolean;
   };
+  idGeneration?: {
+    preferredPrefix?: string;
+  };
   remoteWinsFields?: string[];
   localWinsFields?: string[];
 };
@@ -62,6 +72,7 @@ export type SyncOptions = {
   force?: boolean;
   accept?: 'local' | 'remote';
   list?: boolean;
+  mermaid?: boolean;
 };
 
 export type SyncStateEntry = {

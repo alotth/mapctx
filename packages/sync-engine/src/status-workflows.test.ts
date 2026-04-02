@@ -9,7 +9,7 @@ import { bootstrapCommand, pullCommand, pushCommand, statusCommand } from './syn
 import { SyncConfig, TaskBoard } from './types';
 
 function makeTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'kanban-sync-engine-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'mapcs-'));
 }
 
 function writeConfig(tempDir: string, config: Partial<SyncConfig>): string {
@@ -19,6 +19,7 @@ function writeConfig(tempDir: string, config: Partial<SyncConfig>): string {
     tasksFile: './TASKS.md',
     statusMap: {
       backlog: 'Backlog',
+      'ready-for-do': 'Ready for Do',
       doing: 'Doing',
       review: 'Review',
       done: 'Done',
@@ -26,7 +27,7 @@ function writeConfig(tempDir: string, config: Partial<SyncConfig>): string {
     },
     ...config
   };
-  const configPath = path.resolve(tempDir, 'kanban-sync-engine.config.json');
+  const configPath = path.resolve(tempDir, 'mapcs.config.json');
   fs.writeFileSync(configPath, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
   return configPath;
 }
@@ -55,7 +56,7 @@ test('default config keeps legacy status behavior', () => {
   const tempDir = makeTempDir();
   const configPath = writeConfig(tempDir, {});
   const { config } = loadConfig({ configPath });
-  assert.deepEqual(config.allowedStatuses, ['backlog', 'doing', 'review', 'done', 'paused']);
+  assert.deepEqual(config.allowedStatuses, ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused']);
   assert.deepEqual(config.completionStatuses, ['done']);
 });
 
@@ -74,7 +75,7 @@ test('custom partial workflow accepts extra status', () => {
   });
   writeTasks(tempDir, {
     title: 'Tasks',
-    componentsSection: [],
+    workDomainsSection: [],
     notesSection: [],
     tasks: [{ id: 'T-001', title: 'UX pass', status: 'design', completed: null, externalId: null }]
   });
@@ -104,7 +105,7 @@ test('custom full replacement works without default statuses', () => {
   });
   writeTasks(tempDir, {
     title: 'Tasks',
-    componentsSection: [],
+    workDomainsSection: [],
     notesSection: [],
     tasks: [{ id: 'T-010', title: 'Ship v1', status: 'qa', completed: null, externalId: null }]
   });
@@ -136,7 +137,7 @@ test('custom completionStatuses drive completed semantics on pull', () => {
   });
   const tasksFilePath = writeTasks(tempDir, {
     title: 'Tasks',
-    componentsSection: [],
+    workDomainsSection: [],
     notesSection: [],
     tasks: [
       { id: 'T-001', title: 'Release train', status: 'released', completed: null, externalId: 'github:issue:1' },
@@ -224,6 +225,17 @@ test('fails when completionStatuses has values outside allowedStatuses', () => {
   assert.throws(() => loadConfig({ configPath }), /completionStatuses must be a subset/);
 });
 
+test('fails when idGeneration preferredPrefix is invalid', () => {
+  const tempDir = makeTempDir();
+  const configPath = writeConfig(tempDir, {
+    idGeneration: {
+      preferredPrefix: 'T-'
+    }
+  });
+
+  assert.throws(() => loadConfig({ configPath }), /idGeneration\.preferredPrefix/);
+});
+
 test('roundtrip pull/push/bootstrap preserves custom statuses', () => {
   const tempDir = makeTempDir();
   const configPath = writeConfig(tempDir, {
@@ -244,7 +256,7 @@ test('roundtrip pull/push/bootstrap preserves custom statuses', () => {
   });
   const tasksFilePath = writeTasks(tempDir, {
     title: 'Tasks',
-    componentsSection: [],
+    workDomainsSection: [],
     notesSection: [],
     tasks: [
       { id: 'T-001', title: 'Design API', status: 'design', completed: null, externalId: 'github:issue:11' }
@@ -306,6 +318,189 @@ test('roundtrip pull/push/bootstrap preserves custom statuses', () => {
   }
 });
 
+test('parseTasksFile accepts metadata bullets with flexible indentation', () => {
+  const tempDir = makeTempDir();
+  const tasksFilePath = path.resolve(tempDir, 'TASKS.md');
+  fs.writeFileSync(tasksFilePath, [
+    '# Tasks',
+    '',
+    '## Tasks',
+    '',
+    '### [T-032] Bug: upload error',
+    '',
+    '- id: T-032',
+    ' - status: backlog',
+    '\t- completed: null',
+    '  - externalId: github:issue:27',
+    '    - updated: 2026-03-12',
+    ' - detail: ./tasks/T-032.md',
+    '',
+    '## Notes',
+    ''
+  ].join('\n'), 'utf8');
+
+  const parsed = parseTasksFile(tasksFilePath);
+  assert.equal(parsed.tasks.length, 1);
+  assert.equal(parsed.tasks[0].id, 'T-032');
+  assert.equal(parsed.tasks[0].status, 'backlog');
+  assert.equal(parsed.tasks[0].externalId, 'github:issue:27');
+  assert.equal(parsed.tasks[0].updated, '2026-03-12');
+  assert.equal(parsed.tasks[0].detail, './tasks/T-032.md');
+});
+
+test('parseTasksFile accepts deprecated touch and maps to domains', () => {
+  const tempDir = makeTempDir();
+  const tasksFilePath = path.resolve(tempDir, 'TASKS.md');
+  fs.writeFileSync(tasksFilePath, [
+    '# Tasks',
+    '',
+    '## Work Domains',
+    '',
+    '- SYNC: sync engine',
+    '',
+    '## Tasks',
+    '',
+    '### [T-001] Legacy touch key',
+    '',
+    '  - id: T-001',
+    '  - status: backlog',
+    '  - touch: [SYNC]',
+    '  - completed: null',
+    '  - externalId: null',
+    '',
+    '## Notes',
+    ''
+  ].join('\n'), 'utf8');
+
+  const parsed = parseTasksFile(tasksFilePath);
+  assert.deepEqual(parsed.tasks[0].domains, ['SYNC']);
+});
+
+test('writeBoard always serializes work domains and domains key', () => {
+  const tempDir = makeTempDir();
+  const tasksFilePath = path.resolve(tempDir, 'TASKS.md');
+  writeBoard(tasksFilePath, {
+    title: 'Tasks',
+    workDomainsSection: ['- SYNC: sync engine'],
+    notesSection: [],
+    tasks: [{ id: 'T-001', title: 'Serialize domains', status: 'backlog', touch: ['SYNC'], completed: null, externalId: null }]
+  });
+
+  const content = fs.readFileSync(tasksFilePath, 'utf8');
+  assert.match(content, /^## Work Domains$/m);
+  assert.match(content, /^  - domains: \[SYNC\]$/m);
+  assert.doesNotMatch(content, /^## Components$/m);
+  assert.doesNotMatch(content, /^  - touch: /m);
+});
+
+test('bootstrap from github keeps existing id prefix for new tasks', () => {
+  const tempDir = makeTempDir();
+  const configPath = writeConfig(tempDir, {});
+  const tasksFilePath = writeTasks(tempDir, {
+    title: 'Tasks',
+    workDomainsSection: [],
+    notesSection: [],
+    tasks: [
+      { id: 'E-009', title: 'Legacy epic', status: 'backlog', completed: null, externalId: 'github:issue:91' }
+    ]
+  });
+
+  const restore = stubGitHub({
+    getIssues: () => [
+      {
+        number: 91,
+        node_id: 'I_91',
+        title: 'Legacy epic',
+        body: '',
+        state: 'open',
+        labels: [],
+        milestone: null,
+        html_url: 'https://example.test/91',
+        closed_at: null,
+        updated_at: '2026-03-10T00:00:00Z'
+      },
+      {
+        number: 92,
+        node_id: 'I_92',
+        title: 'New imported issue',
+        body: '',
+        state: 'open',
+        labels: [],
+        milestone: null,
+        html_url: 'https://example.test/92',
+        closed_at: null,
+        updated_at: '2026-03-10T00:00:00Z'
+      }
+    ]
+  });
+
+  try {
+    bootstrapCommand('github', { configPath });
+    const parsed = parseTasksFile(tasksFilePath);
+    const imported = parsed.tasks.find(task => task.externalId === 'github:issue:92');
+    assert.equal(imported?.id, 'E-010');
+    assert.equal(imported?.detail, './tasks/E-010.md');
+  } finally {
+    restore();
+  }
+});
+
+test('bootstrap from github honors configured idGeneration preferredPrefix', () => {
+  const tempDir = makeTempDir();
+  const configPath = writeConfig(tempDir, {
+    idGeneration: {
+      preferredPrefix: 'E'
+    }
+  });
+  const tasksFilePath = writeTasks(tempDir, {
+    title: 'Tasks',
+    workDomainsSection: [],
+    notesSection: [],
+    tasks: [
+      { id: 'T-009', title: 'Legacy task', status: 'backlog', completed: null, externalId: 'github:issue:93' }
+    ]
+  });
+
+  const restore = stubGitHub({
+    getIssues: () => [
+      {
+        number: 93,
+        node_id: 'I_93',
+        title: 'Legacy task',
+        body: '',
+        state: 'open',
+        labels: [],
+        milestone: null,
+        html_url: 'https://example.test/93',
+        closed_at: null,
+        updated_at: '2026-03-10T00:00:00Z'
+      },
+      {
+        number: 94,
+        node_id: 'I_94',
+        title: 'New imported issue',
+        body: '',
+        state: 'open',
+        labels: [],
+        milestone: null,
+        html_url: 'https://example.test/94',
+        closed_at: null,
+        updated_at: '2026-03-10T00:00:00Z'
+      }
+    ]
+  });
+
+  try {
+    bootstrapCommand('github', { configPath });
+    const parsed = parseTasksFile(tasksFilePath);
+    const imported = parsed.tasks.find(task => task.externalId === 'github:issue:94');
+    assert.equal(imported?.id, 'E-001');
+    assert.equal(imported?.detail, './tasks/E-001.md');
+  } finally {
+    restore();
+  }
+});
+
 test('fails when TASKS.md contains invalid status', () => {
   const tempDir = makeTempDir();
   const configPath = writeConfig(tempDir, {
@@ -320,7 +515,7 @@ test('fails when TASKS.md contains invalid status', () => {
   });
   writeTasks(tempDir, {
     title: 'Tasks',
-    componentsSection: [],
+    workDomainsSection: [],
     notesSection: [],
     tasks: [{ id: 'T-999', title: 'Unknown status', status: 'design', completed: null, externalId: null }]
   });

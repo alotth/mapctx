@@ -41,11 +41,11 @@ function resolveTasksFile(configPath: string, config: SyncConfig, options: SyncO
 }
 
 function resolveSyncStatePath(tasksFilePath: string): string {
-  return path.resolve(path.dirname(tasksFilePath), '.kanban-sync-engine', 'state.json');
+  return path.resolve(path.dirname(tasksFilePath), '.mapcs', 'state.json');
 }
 
 function resolveConflictsDir(tasksFilePath: string): string {
-  return path.resolve(path.dirname(tasksFilePath), '.kanban-sync-engine', 'conflicts');
+  return path.resolve(path.dirname(tasksFilePath), '.mapcs', 'conflicts');
 }
 
 function readDetailContent(task: Task, tasksFilePath: string): string {
@@ -133,9 +133,9 @@ function writeConflictFile(args: {
     '',
     '## Resolution',
     '',
-    '- Keep local version: kanban-sync-engine reconcile <task-id> --accept local',
-    '- Keep remote version: kanban-sync-engine reconcile <task-id> --accept remote',
-    '- Then run: kanban-sync-engine push',
+    '- Keep local version: mapcs reconcile <task-id> --accept local',
+    '- Keep remote version: mapcs reconcile <task-id> --accept remote',
+    '- Then run: mapcs push',
     ''
   ].join('\n');
   fs.writeFileSync(filePath, content, 'utf8');
@@ -201,7 +201,7 @@ function parseIssueMetadata(body: string | null): Record<string, string> {
     const trimmed = line.trim();
     if (!trimmed) continue;
     if (trimmed.startsWith('## ')) break;
-    const m = trimmed.match(/^-\s+([A-Za-z][A-Za-z0-9]*):\s*(.*)$/);
+    const m = trimmed.match(/^-\s*([A-Za-z][A-Za-z0-9]*):\s*(.*)$/);
     if (!m) continue;
     out[m[1]] = m[2].trim();
   }
@@ -276,13 +276,70 @@ function requireGhProjectItems(config: SyncConfig): boolean {
   return Boolean(config.projectId);
 }
 
-function nextTaskId(existingIds: string[]): string {
-  const nums = existingIds
-    .map(id => id.match(/^T-(\d+)$/))
-    .filter(Boolean)
-    .map(m => Number((m as RegExpMatchArray)[1]));
-  const next = (nums.length === 0 ? 1 : Math.max(...nums) + 1).toString().padStart(3, '0');
-  return `T-${next}`;
+type SequenceStyle = {
+  prefix: string;
+  max: number;
+  padWidth: number;
+  count: number;
+  firstSeenAt: number;
+};
+
+function parseSequencedTaskId(id: string): { prefix: string; number: number; padWidth: number } | null {
+  const m = id.match(/^([A-Za-z][A-Za-z0-9]*)-(\d+)$/);
+  if (!m) return null;
+  return {
+    prefix: m[1],
+    number: Number(m[2]),
+    padWidth: m[2].length
+  };
+}
+
+function nextTaskId(existingIds: string[], preferredPrefix?: string): string {
+  const stylesByPrefix = new Map<string, SequenceStyle>();
+
+  for (let i = 0; i < existingIds.length; i++) {
+    const parsed = parseSequencedTaskId(existingIds[i]);
+    if (!parsed) continue;
+
+    const existing = stylesByPrefix.get(parsed.prefix);
+    if (!existing) {
+      stylesByPrefix.set(parsed.prefix, {
+        prefix: parsed.prefix,
+        max: parsed.number,
+        padWidth: parsed.padWidth,
+        count: 1,
+        firstSeenAt: i
+      });
+      continue;
+    }
+
+    existing.max = Math.max(existing.max, parsed.number);
+    existing.padWidth = Math.max(existing.padWidth, parsed.padWidth);
+    existing.count += 1;
+  }
+
+  const styles = Array.from(stylesByPrefix.values());
+  if (preferredPrefix) {
+    const preferredStyle = stylesByPrefix.get(preferredPrefix);
+    if (!preferredStyle) {
+      return `${preferredPrefix}-001`;
+    }
+    const next = String(preferredStyle.max + 1).padStart(Math.max(preferredStyle.padWidth, 3), '0');
+    return `${preferredStyle.prefix}-${next}`;
+  }
+
+  if (styles.length === 0) {
+    return 'T-001';
+  }
+
+  styles.sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.firstSeenAt - b.firstSeenAt;
+  });
+
+  const style = styles[0];
+  const next = String(style.max + 1).padStart(Math.max(style.padWidth, 3), '0');
+  return `${style.prefix}-${next}`;
 }
 
 function buildStatusByIssue(config: SyncConfig): Map<number, string> {
@@ -656,7 +713,7 @@ export function bootstrapCommand(from: 'local' | 'github', options: SyncOptions 
       : (issue.state === 'closed' ? closedIssueFallbackStatus(config, defaultStatus) : defaultStatus);
 
       if (!task) {
-      const newId = nextTaskId(existingIds);
+      const newId = nextTaskId(existingIds, config.idGeneration?.preferredPrefix);
       existingIds.push(newId);
         task = {
           id: newId,
@@ -783,7 +840,7 @@ export function reconcileCommand(taskId: string, options: SyncOptions = {}): voi
   }
 
   console.log(`reconcile resolved for ${taskId} using '${options.accept}'.`);
-  console.log('Run kanban-sync-engine push to apply final state.');
+  console.log('Run mapcs push to apply final state.');
 }
 
 export function listConflictsCommand(options: SyncOptions = {}): void {
