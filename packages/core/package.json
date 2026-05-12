@@ -11,6 +11,11 @@
       "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./thread": {
+      "types": "./dist/thread.d.ts",
+      "require": "./dist/thread.js",
+      "default": "./dist/thread.js"
     }
   },
   "files": [

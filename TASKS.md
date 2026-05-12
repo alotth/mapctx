@@ -8,6 +8,12 @@
 - DOCS: guides, migration notes, runbooks
 - SKILLS: local skills and references for task and sync workflows
 - HOOKS: session-start automation for OpenCode and other clients
+- GITHUB: GitHub API and issue/project integration behavior
+- PROJECT: GitHub Projects field and timeline mapping
+- CONFIG: configuration model and setup workflow
+- CLI: command-line behavior and operator UX
+- PARSER: TASKS markdown parsing and serialization
+- TEST: automated coverage and regression validation
 
 ## Tasks
 
@@ -885,6 +891,139 @@
   - externalId: null
   - updated: 2026-04-01
   - detail: ./tasks/T-040.md
+
+### [T-041] Sync Project date fields from TASKS.md on push
+
+  - id: T-041
+  - status: done
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: high
+  - workload: Hard
+  - tags: [sync-engine, github-projects, dates]
+  - domains: [SYNC, GITHUB, PROJECT]
+  - dependsOn: []
+  - start: 2026-02-24
+  - due: 2026-02-24
+  - completed: 2026-02-24
+  - externalId: github:issue:1
+  - updated: 2026-04-18
+  - detail: ./tasks/T-041.md
+
+### [T-042] Document roadmap date-field requirements in config guides
+
+  - id: T-042
+  - status: done
+  - type: chore
+  - parent: null
+  - subIssueProgress: null
+  - priority: medium
+  - workload: Normal
+  - tags: [docs, config, roadmap]
+  - domains: [DOCS, CONFIG]
+  - dependsOn: [T-041]
+  - start: 2026-02-24
+  - due: 2026-02-24
+  - completed: 2026-02-24
+  - externalId: github:issue:2
+  - updated: 2026-04-18
+  - detail: ./tasks/T-042.md
+
+### [T-043] Configure real Project date field IDs and run first sync validation
+
+  - id: T-043
+  - status: review
+  - type: task
+  - parent: null
+  - subIssueProgress: null
+  - priority: high
+  - workload: Normal
+  - tags: [config, validation, roadmap]
+  - domains: [CONFIG, PROJECT, CLI]
+  - dependsOn: [T-041, T-042]
+  - start: 2026-02-24
+  - due: 2026-02-25
+  - completed: null
+  - externalId: github:issue:3
+  - updated: 2026-04-18
+  - detail: ./tasks/T-043.md
+
+### [T-044] Pull Project date fields back into local task model
+
+  - id: T-044
+  - status: done
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: high
+  - workload: Hard
+  - tags: [sync-engine, github-projects, parser]
+  - domains: [SYNC, GITHUB, PARSER]
+  - dependsOn: [T-043]
+  - start: 2026-02-25
+  - due: 2026-02-27
+  - completed: 2026-02-24
+  - externalId: github:issue:4
+  - updated: 2026-04-18
+  - detail: ./tasks/T-044.md
+
+### [T-045] Add optional Project field sync for priority and workload
+
+  - id: T-045
+  - status: backlog
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: medium
+  - workload: Hard
+  - tags: [github-projects, mapping, metadata]
+  - domains: [SYNC, GITHUB, PROJECT]
+  - dependsOn: [T-044]
+  - start: 2026-02-26
+  - due: 2026-03-01
+  - completed: null
+  - externalId: github:issue:5
+  - updated: 2026-04-18
+  - detail: ./tasks/T-045.md
+
+### [T-046] Add automated tests for Project field date operations
+
+  - id: T-046
+  - status: backlog
+  - type: task
+  - parent: null
+  - subIssueProgress: null
+  - priority: medium
+  - workload: Normal
+  - tags: [tests, github-projects, dates]
+  - domains: [TEST, SYNC]
+  - dependsOn: [T-044]
+  - start: 2026-02-27
+  - due: 2026-03-02
+  - completed: null
+  - externalId: github:issue:6
+  - updated: 2026-04-18
+  - detail: ./tasks/T-046.md
+
+### [T-047] Add full support for custom status workflows and configurable completion states
+
+  - id: T-047
+  - status: done
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: high
+  - workload: Hard
+  - tags: [statuses, config, workflow]
+  - domains: [SYNC, CONFIG, TEST, DOCS]
+  - dependsOn: [T-044]
+  - start: 2026-02-24
+  - due: 2026-02-24
+  - completed: 2026-02-24
+  - externalId: github:issue:7
+  - updated: 2026-04-18
+  - detail: ./tasks/T-047.md
 
 ## Notes
 

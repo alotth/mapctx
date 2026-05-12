@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "activeProjectId": "mapctx",
+  "projects": [
+    {
+      "id": "mapctx",
+      "name": "mapctx",
+      "organization": "local",
+      "path": ".",
+      "icon": ".mapctx/projects/mapctx/icon.svg",
+      "accent": "#5bb5ff"
+    }
+  ]
+}

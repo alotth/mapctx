@@ -26,5 +26,12 @@ task-sync/dist/
 *.local.json
 *.dev.local.json
 
+# MapCtx local runtime state
+.mapctx/threads/*/runs/
+.mapctx/threads/*/events/
+.mapctx/locks/
+.mapctx/tmp/
+.mapctx/state.json
+
 # temp files
 temp/

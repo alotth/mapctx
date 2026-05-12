@@ -7,22 +7,44 @@
     <link rel="stylesheet" href="workspaceV2.css">
 </head>
 <body>
-    <header class="topbar">
-        <div class="title-group">
-            <h1 id="board-title">Workspace V2</h1>
-            <span id="board-mode" class="mode-badge">Model: unknown</span>
-            <span id="board-meta"></span>
-        </div>
-        <div class="view-switcher">
-            <button id="tab-kanban" class="tab active" type="button">Kanban</button>
-            <button id="tab-roadmap" class="tab" type="button">Roadmap</button>
-        </div>
-    </header>
+    <div class="workspace-shell">
+        <aside class="project-rail" aria-label="Projects">
+            <div id="project-rail-list" class="project-rail-list"></div>
+            <button id="project-add" class="project-add" type="button" aria-label="Add project" title="Add project">+</button>
+        </aside>
 
-    <main>
-        <section id="kanban-view" class="view active"></section>
-        <section id="roadmap-view" class="view"></section>
-    </main>
+        <div class="workspace-main">
+            <header class="topbar">
+                <div class="title-group">
+                    <h1 id="board-title">Workspace V2</h1>
+                    <span id="board-mode" class="mode-badge">Model: unknown</span>
+                    <span id="board-meta"></span>
+                </div>
+                <div class="view-switcher">
+                    <button id="tab-kanban" class="tab active" type="button">Kanban</button>
+                    <button id="tab-roadmap" class="tab" type="button">Roadmap</button>
+                    <button id="tab-execution" class="tab" type="button">Execution</button>
+                </div>
+            </header>
+
+            <main>
+                <section id="kanban-view" class="view active"></section>
+                <section id="roadmap-view" class="view"></section>
+                <section id="execution-view" class="view"></section>
+            </main>
+        </div>
+    </div>
+
+    <div id="detail-modal" class="modal" aria-hidden="true">
+        <div class="modal-backdrop" data-close-modal="detail"></div>
+        <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
+            <header class="modal-head">
+                <h2 id="detail-modal-title">Task detail</h2>
+                <button class="modal-close" data-close-modal="detail" type="button">Close</button>
+            </header>
+            <div id="detail-modal-content" class="modal-content"></div>
+        </section>
+    </div>
 
     <script src="workspaceV2.js"></script>
 </body>

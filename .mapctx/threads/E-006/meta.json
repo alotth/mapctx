@@ -1,0 +1,13 @@
+{
+  "taskId": "E-006",
+  "schemaVersion": 1,
+  "status": "doing",
+  "primaryThread": "thread.md",
+  "workingSummary": "summary.md",
+  "preferredRuntime": "codex",
+  "lastRuntime": "codex",
+  "lastAgentProfile": "standard-implementer",
+  "lastModel": "gpt-5",
+  "lastRunId": "run-2026-05-11T12-10-00Z",
+  "updatedAt": "2026-05-11T13:49:28.568Z"
+}

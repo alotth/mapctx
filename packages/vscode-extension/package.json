@@ -101,6 +101,7 @@
     "test": "vscode-test",
     "test:parser": "tsx ../../scripts/test-parser.ts",
     "dev:standalone": "tsx ../../scripts/dev-mode.ts",
+    "dev:workspace-v2": "tsx ../../scripts/serve-workspace-v2.ts",
     "watch:logs": "bash ../../scripts/watch-logs.sh",
     "logs": "tail -f ../../.logs/extension.log",
     "prepare-publish": "node ../../scripts/prepare-publish.js"

@@ -18,6 +18,7 @@
     "test": "npm run test --workspace mapctx",
     "test:parser": "npm run test:parser --workspace mapctx --",
     "dev:standalone": "npm run dev:standalone --workspace mapctx",
+    "dev:workspace-v2": "npm run dev:workspace-v2 --workspace mapctx",
     "watch:logs": "npm run watch:logs --workspace mapctx",
     "logs": "npm run logs --workspace mapctx",
     "prepare-publish": "npm run prepare-publish --workspace mapctx",
