@@ -1,14 +1,25 @@
 {
-  "schemaVersion": 1,
-  "activeProjectId": "mapctx",
+  "schemaVersion": 2,
+  "activeTargetId": "project:mapctx",
+  "organizations": [
+    {
+      "id": "local",
+      "name": "Local",
+      "path": ".",
+      "tasksFile": "TASKS.md",
+      "icon": ".mapctx/organizations/local/icon.svg",
+      "accent": "#5bb5ff"
+    }
+  ],
   "projects": [
     {
       "id": "mapctx",
       "name": "mapctx",
-      "organization": "local",
+      "organizationId": "local",
       "path": ".",
+      "tasksFile": "TASKS.md",
       "icon": ".mapctx/projects/mapctx/icon.svg",
-      "accent": "#5bb5ff"
+      "accent": "#7cde9f"
     }
   ]
 }

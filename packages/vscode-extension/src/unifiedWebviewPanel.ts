@@ -38,10 +38,16 @@ type WorkspaceTask = {
     thread?: WorkspaceThreadSummary;
 };
 
-type WorkspaceProject = {
+type WorkspaceTargetType = 'organization' | 'project';
+
+type WorkspaceTarget = {
     id: string;
+    targetId: string;
+    type: WorkspaceTargetType;
     name: string;
     path: string;
+    tasksFile?: string;
+    organizationId?: string;
     iconUrl?: string;
     accent?: string;
     active: boolean;
@@ -49,17 +55,29 @@ type WorkspaceProject = {
     threadCount: number;
 };
 
+type ProjectRegistryOrganization = {
+    id: string;
+    name?: string;
+    path?: string;
+    tasksFile?: string;
+    icon?: string;
+    accent?: string;
+};
+
 type ProjectRegistryProject = {
     id: string;
     name?: string;
     path?: string;
+    tasksFile?: string;
     icon?: string;
     accent?: string;
+    organizationId?: string;
     organization?: string;
 };
 
 type ProjectRegistry = {
-    activeProjectId: string;
+    activeTargetId: string;
+    organizations: ProjectRegistryOrganization[];
     projects: ProjectRegistryProject[];
 };
 
@@ -80,6 +98,7 @@ export class UnifiedWebviewPanel {
     private _detailWatchers: vscode.FileSystemWatcher[] = [];
     private _threadWatchers: vscode.FileSystemWatcher[] = [];
     private _boardWatcher?: vscode.FileSystemWatcher;
+    private _activeTargetOverride?: string;
 
     public static createOrShow(extensionUri: vscode.Uri, context: vscode.ExtensionContext, document?: vscode.TextDocument) {
         const column = vscode.window.activeTextEditor?.viewColumn;
@@ -155,6 +174,10 @@ export class UnifiedWebviewPanel {
             void vscode.window.showInformationMessage('Project registry lives in .mapctx/projects.json; automatic project creation is not wired yet.');
             return;
         }
+        if (message?.type === 'selectTarget' && typeof message.targetId === 'string') {
+            void this.openWorkspaceTarget(message.targetId);
+            return;
+        }
     }
 
     public loadMarkdownFile(document: vscode.TextDocument) {
@@ -179,7 +202,8 @@ export class UnifiedWebviewPanel {
         this._panel.webview.html = this._getHtmlForWebview();
         const board = this._board || { title: 'Please open a Markdown file', columns: [] };
         const tasks = this._buildTasks(board);
-        const registry = this._readProjectRegistry();
+        const registry = this._withActiveTarget(this._readProjectRegistry(), this._activeTargetOverride);
+        const workspaceTargets = this._buildWorkspaceTargets(registry, tasks);
 
         this._panel.webview.postMessage({
             type: 'updateWorkspaceV2',
@@ -187,8 +211,10 @@ export class UnifiedWebviewPanel {
             columns: board.columns,
             mode: this._workspaceModel,
             tasks,
-            projects: this._buildProjects(registry, tasks),
-            activeProjectId: registry.activeProjectId
+            workspaceTargets,
+            projects: workspaceTargets,
+            activeTargetId: registry.activeTargetId,
+            activeProjectId: registry.activeTargetId
         });
     }
 
@@ -262,9 +288,12 @@ export class UnifiedWebviewPanel {
 
         try {
             const parsed = JSON.parse(fs.readFileSync(registryPath, 'utf8')) as {
+                activeTargetId?: unknown;
                 activeProjectId?: unknown;
+                organizations?: unknown;
                 projects?: unknown;
             };
+            const organizations = this._parseOrganizations(parsed.organizations);
             const projects = Array.isArray(parsed.projects)
                 ? parsed.projects
                     .filter((project): project is Record<string, unknown> => Boolean(project) && typeof project === 'object')
@@ -273,53 +302,173 @@ export class UnifiedWebviewPanel {
                         id: String(project.id),
                         name: typeof project.name === 'string' ? project.name : String(project.id),
                         path: typeof project.path === 'string' ? project.path : '.',
+                        tasksFile: typeof project.tasksFile === 'string' ? project.tasksFile : undefined,
                         icon: typeof project.icon === 'string' ? project.icon : undefined,
                         accent: typeof project.accent === 'string' ? project.accent : undefined,
+                        organizationId: typeof project.organizationId === 'string' ? project.organizationId : undefined,
                         organization: typeof project.organization === 'string' ? project.organization : undefined
                     }))
                 : [];
 
-            if (!projects.length) return fallback;
-
-            const requestedActive = typeof parsed.activeProjectId === 'string' ? parsed.activeProjectId : projects[0].id;
-            const activeProjectId = projects.some(project => project.id === requestedActive) ? requestedActive : projects[0].id;
-            return { activeProjectId, projects };
+            const normalizedOrganizations = organizations.length ? organizations : this._inferOrganizations(projects);
+            if (!projects.length && !normalizedOrganizations.length) return fallback;
+            const activeTargetId = this._normalizeActiveTargetId(parsed.activeTargetId, parsed.activeProjectId, normalizedOrganizations, projects);
+            return { activeTargetId, organizations: normalizedOrganizations, projects };
         } catch {
             return fallback;
         }
     }
 
+    private _parseOrganizations(value: unknown): ProjectRegistryOrganization[] {
+        if (!Array.isArray(value)) return [];
+        return value
+            .filter((organization): organization is Record<string, unknown> => Boolean(organization) && typeof organization === 'object')
+            .filter(organization => typeof organization.id === 'string')
+            .map(organization => ({
+                id: String(organization.id),
+                name: typeof organization.name === 'string' ? organization.name : String(organization.id),
+                path: typeof organization.path === 'string' ? organization.path : '.',
+                tasksFile: typeof organization.tasksFile === 'string' ? organization.tasksFile : undefined,
+                icon: typeof organization.icon === 'string' ? organization.icon : undefined,
+                accent: typeof organization.accent === 'string' ? organization.accent : undefined
+            }));
+    }
+
+    private _inferOrganizations(projects: ProjectRegistryProject[]): ProjectRegistryOrganization[] {
+        const inferred = new Map<string, ProjectRegistryOrganization>();
+        for (const project of projects) {
+            const id = project.organizationId || project.organization;
+            if (!id || inferred.has(id)) continue;
+            inferred.set(id, {
+                id,
+                name: id,
+                path: project.path || '.',
+                tasksFile: project.tasksFile || 'TASKS.md',
+                accent: project.accent
+            });
+        }
+        return Array.from(inferred.values());
+    }
+
+    private _normalizeActiveTargetId(
+        activeTarget: unknown,
+        legacyActiveProject: unknown,
+        organizations: ProjectRegistryOrganization[],
+        projects: ProjectRegistryProject[]
+    ): string {
+        const targetIds = new Set([
+            ...organizations.map(organization => this._targetId('organization', organization.id)),
+            ...projects.map(project => this._targetId('project', project.id))
+        ]);
+        if (typeof activeTarget === 'string' && targetIds.has(activeTarget)) return activeTarget;
+        if (typeof legacyActiveProject === 'string') {
+            if (targetIds.has(legacyActiveProject)) return legacyActiveProject;
+            const projectTarget = this._targetId('project', legacyActiveProject);
+            if (targetIds.has(projectTarget)) return projectTarget;
+            const organizationTarget = this._targetId('organization', legacyActiveProject);
+            if (targetIds.has(organizationTarget)) return organizationTarget;
+        }
+        return projects[0] ? this._targetId('project', projects[0].id) : this._targetId('organization', organizations[0]?.id || 'local');
+    }
+
+    private _withActiveTarget(registry: ProjectRegistry, requestedTargetId: string | undefined): ProjectRegistry {
+        if (!requestedTargetId) return registry;
+        const validTargetIds = new Set([
+            ...registry.organizations.map(organization => this._targetId('organization', organization.id)),
+            ...registry.projects.map(project => this._targetId('project', project.id))
+        ]);
+        if (!validTargetIds.has(requestedTargetId)) return registry;
+        return { ...registry, activeTargetId: requestedTargetId };
+    }
+
     private _defaultProjectRegistry(): ProjectRegistry {
         const repoRoot = this._getRepoRoot();
         return {
-            activeProjectId: 'mapctx',
+            activeTargetId: this._targetId('project', 'mapctx'),
+            organizations: [{
+                id: 'local',
+                name: 'Local',
+                path: '.',
+                tasksFile: 'TASKS.md',
+                icon: '.mapctx/organizations/local/icon.svg',
+                accent: '#5bb5ff'
+            }],
             projects: [{
                 id: 'mapctx',
                 name: path.basename(repoRoot) || 'mapctx',
+                organizationId: 'local',
                 path: '.',
+                tasksFile: 'TASKS.md',
                 icon: '.mapctx/projects/mapctx/icon.svg',
-                accent: '#5bb5ff'
+                accent: '#7cde9f'
             }]
         };
     }
 
-    private _buildProjects(registry: ProjectRegistry, tasks: WorkspaceTask[]): WorkspaceProject[] {
+    private _buildWorkspaceTargets(registry: ProjectRegistry, tasks: WorkspaceTask[]): WorkspaceTarget[] {
         const activeTaskCount = tasks.length;
         const activeThreadCount = tasks.filter(task => task.thread?.exists).length;
+        const projectsByOrganization = new Map<string, ProjectRegistryProject[]>();
+        const orphanProjects: ProjectRegistryProject[] = [];
 
-        return registry.projects.map(project => {
-            const active = project.id === registry.activeProjectId;
-            return {
-                id: project.id,
-                name: project.name || project.id,
-                path: project.path || '.',
-                iconUrl: this._readProjectIconDataUri(project.icon),
-                accent: project.accent,
-                active,
-                taskCount: active ? activeTaskCount : 0,
-                threadCount: active ? activeThreadCount : 0
-            };
-        });
+        for (const project of registry.projects) {
+            const organizationId = project.organizationId || project.organization;
+            if (!organizationId) {
+                orphanProjects.push(project);
+                continue;
+            }
+            const current = projectsByOrganization.get(organizationId) || [];
+            current.push(project);
+            projectsByOrganization.set(organizationId, current);
+        }
+
+        const targets: WorkspaceTarget[] = [];
+        for (const organization of registry.organizations) {
+            targets.push(this._targetFromRegistry('organization', organization, registry.activeTargetId, activeTaskCount, activeThreadCount));
+            for (const project of projectsByOrganization.get(organization.id) || []) {
+                targets.push(this._targetFromRegistry('project', project, registry.activeTargetId, activeTaskCount, activeThreadCount));
+            }
+        }
+
+        for (const project of orphanProjects) {
+            targets.push(this._targetFromRegistry('project', project, registry.activeTargetId, activeTaskCount, activeThreadCount));
+        }
+
+        return targets;
+    }
+
+    private _targetFromRegistry(
+        type: WorkspaceTargetType,
+        source: ProjectRegistryOrganization | ProjectRegistryProject,
+        activeTargetId: string,
+        activeTaskCount: number,
+        activeThreadCount: number
+    ): WorkspaceTarget {
+        const id = source.id;
+        const targetId = this._targetId(type, id);
+        const hasCurrentTasksFile = this._resolveTargetTasksFile(source.path, source.tasksFile) === this._document?.uri.fsPath;
+        return {
+            id,
+            targetId,
+            type,
+            name: source.name || id,
+            path: source.path || '.',
+            tasksFile: source.tasksFile || 'TASKS.md',
+            organizationId: type === 'project' ? (source as ProjectRegistryProject).organizationId || (source as ProjectRegistryProject).organization : undefined,
+            iconUrl: this._readProjectIconDataUri(source.icon),
+            accent: source.accent,
+            active: targetId === activeTargetId,
+            taskCount: hasCurrentTasksFile ? activeTaskCount : 0,
+            threadCount: hasCurrentTasksFile ? activeThreadCount : 0
+        };
+    }
+
+    private _targetId(type: WorkspaceTargetType, id: string): string {
+        return `${type}:${id}`;
+    }
+
+    private _resolveTargetTasksFile(targetPath: string | undefined, targetTasksFile: string | undefined): string {
+        return path.resolve(this._getRepoRoot(), targetPath || '.', targetTasksFile || 'TASKS.md');
     }
 
     private _readProjectIconDataUri(iconPath: string | undefined): string | undefined {
@@ -473,6 +622,36 @@ export class UnifiedWebviewPanel {
         } catch (error) {
             vscode.window.showErrorMessage(`failed open file: ${error}`);
         }
+    }
+
+    private async openWorkspaceTarget(targetId: string) {
+        const registry = this._readProjectRegistry();
+        const target = this._findRegistryTarget(registry, targetId);
+        if (!target) {
+            void vscode.window.showWarningMessage(`Workspace target not found: ${targetId}`);
+            return;
+        }
+
+        const tasksFilePath = this._resolveTargetTasksFile(target.path, target.tasksFile);
+        if (!fs.existsSync(tasksFilePath)) {
+            void vscode.window.showWarningMessage(`Workspace target has no TASKS.md: ${path.relative(this._getRepoRoot(), tasksFilePath)}`);
+            return;
+        }
+
+        this._activeTargetOverride = targetId;
+        try {
+            const document = await vscode.workspace.openTextDocument(vscode.Uri.file(tasksFilePath));
+            await vscode.window.showTextDocument(document, { preview: false });
+            this.loadMarkdownFile(document);
+        } catch (error) {
+            vscode.window.showErrorMessage(`failed open workspace target: ${error}`);
+        }
+    }
+
+    private _findRegistryTarget(registry: ProjectRegistry, targetId: string): ProjectRegistryOrganization | ProjectRegistryProject | undefined {
+        const organization = registry.organizations.find(item => this._targetId('organization', item.id) === targetId);
+        if (organization) return organization;
+        return registry.projects.find(item => this._targetId('project', item.id) === targetId);
     }
 
     private _getHtmlForWebview() {

@@ -1,8 +1,18 @@
-const vscode = typeof acquireVsCodeApi === 'function'
+const hasVsCodeApi = typeof acquireVsCodeApi === 'function';
+const vscode = hasVsCodeApi
   ? acquireVsCodeApi()
   : { postMessage: (message) => console.info('workspaceV2 message', message) };
 
-let board = { title: 'Workspace V2', columns: [], tasks: [], mode: 'unknown', projects: [], activeProjectId: null };
+let board = {
+  title: 'Workspace V2',
+  columns: [],
+  tasks: [],
+  mode: 'unknown',
+  workspaceTargets: [],
+  projects: [],
+  activeTargetId: null,
+  activeProjectId: null
+};
 let activeView = 'kanban';
 
 const DEFAULT_STATUS_ORDER = ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused'];
@@ -63,8 +73,8 @@ function setView(view) {
   document.getElementById('execution-view').classList.toggle('active', view === 'execution');
 }
 
-function projectInitials(project) {
-  const label = String(project.name || project.id || '?').trim();
+function projectInitials(target) {
+  const label = String(target.name || target.id || '?').trim();
   const words = label.split(/[\s_-]+/).filter(Boolean);
   if (words.length >= 2) {
     return `${words[0][0]}${words[1][0]}`.toUpperCase();
@@ -91,30 +101,35 @@ function renderProjects() {
     return;
   }
 
-  const projects = board.projects || [];
-  if (!projects.length) {
+  const targets = board.workspaceTargets || board.projects || [];
+  if (!targets.length) {
     root.innerHTML = '<div class="project-empty" aria-hidden="true"></div>';
     return;
   }
 
-  root.innerHTML = projects.map((project) => {
-    const active = Boolean(project.active || project.id === board.activeProjectId);
-    const accent = projectAccent(project.accent);
+  root.innerHTML = targets.map((target) => {
+    const targetId = target.targetId || target.id;
+    const type = target.type === 'organization' ? 'organization' : 'project';
+    const active = Boolean(target.active || targetId === board.activeTargetId || target.id === board.activeProjectId);
+    const accent = projectAccent(target.accent);
     const style = accent ? ` style="--project-accent:${accent}"` : '';
-    const icon = project.iconUrl
-      ? `<img src="${escapeHtml(project.iconUrl)}" alt="" loading="lazy">`
-      : `<span>${escapeHtml(projectInitials(project))}</span>`;
-    const taskCount = projectCountLabel(project.taskCount);
-    const title = `${project.name || project.id} - ${project.taskCount || 0} tasks`;
+    const icon = target.iconUrl
+      ? `<img src="${escapeHtml(target.iconUrl)}" alt="" loading="lazy">`
+      : `<span>${escapeHtml(projectInitials(target))}</span>`;
+    const taskCount = projectCountLabel(target.taskCount);
+    const kindLabel = type === 'organization' ? 'Org' : 'Project';
+    const title = `${kindLabel}: ${target.name || target.id} - ${target.taskCount || 0} tasks`;
+    const hierarchyClass = target.organizationId ? 'child' : 'root';
     return `
       <button
-        class="project-tile ${active ? 'active' : ''}"
-        data-select-project="${escapeHtml(project.id)}"
+        class="project-tile ${type} ${hierarchyClass} ${active ? 'active' : ''}"
+        data-select-target="${escapeHtml(targetId)}"
         type="button"
         aria-label="${escapeHtml(title)}"
         aria-pressed="${active ? 'true' : 'false'}"
         title="${escapeHtml(title)}"${style}>
         <span class="project-avatar">${icon}</span>
+        <span class="project-kind" aria-hidden="true">${type === 'organization' ? 'O' : 'P'}</span>
         <span class="project-count">${escapeHtml(taskCount)}</span>
       </button>
     `;
@@ -612,16 +627,24 @@ window.addEventListener('click', (event) => {
   if (!(target instanceof HTMLElement)) {
     return;
   }
-  const projectTrigger = target.closest('[data-select-project]');
-  const projectId = projectTrigger ? projectTrigger.getAttribute('data-select-project') : null;
-  if (projectId) {
-    board.activeProjectId = projectId;
-    board.projects = (board.projects || []).map((project) => ({
-      ...project,
-      active: project.id === projectId
+  const targetTrigger = target.closest('[data-select-target]');
+  const targetId = targetTrigger ? targetTrigger.getAttribute('data-select-target') : null;
+  if (targetId) {
+    board.activeTargetId = targetId;
+    board.activeProjectId = targetId;
+    board.workspaceTargets = (board.workspaceTargets || board.projects || []).map((item) => ({
+      ...item,
+      active: (item.targetId || item.id) === targetId
     }));
+    board.projects = board.workspaceTargets;
     renderProjects();
-    vscode.postMessage({ type: 'selectProject', projectId });
+    if (!hasVsCodeApi) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('target', targetId);
+      window.location.assign(url.toString());
+      return;
+    }
+    vscode.postMessage({ type: 'selectTarget', targetId });
     return;
   }
   if (target.closest('#project-add')) {
@@ -663,7 +686,9 @@ window.addEventListener('message', (event) => {
       columns: message.columns || [],
       tasks: message.tasks || [],
       mode: message.mode || 'unknown',
+      workspaceTargets: message.workspaceTargets || message.projects || [],
       projects: message.projects || [],
+      activeTargetId: message.activeTargetId || message.activeProjectId || null,
       activeProjectId: message.activeProjectId || null
     };
     renderAll();
