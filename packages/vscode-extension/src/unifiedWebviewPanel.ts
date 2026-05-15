@@ -174,10 +174,34 @@ export class UnifiedWebviewPanel {
             void vscode.window.showInformationMessage('Project registry lives in .mapctx/projects.json; automatic project creation is not wired yet.');
             return;
         }
+        if (message?.type === 'browseFolder' && typeof message.inputId === 'string') {
+            void this.browseFolder(message.inputId, typeof message.prompt === 'string' ? message.prompt : undefined);
+            return;
+        }
+        if (message?.type === 'browseProjectFolder') {
+            void this.browseFolder('project-path', 'Choose project folder with TASKS.md');
+            return;
+        }
         if (message?.type === 'selectTarget' && typeof message.targetId === 'string') {
             void this.openWorkspaceTarget(message.targetId);
             return;
         }
+    }
+
+    private async browseFolder(inputId: string, prompt?: string) {
+        const selected = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: 'Select Folder',
+            title: prompt || 'Choose folder'
+        });
+        const folderPath = selected?.[0]?.fsPath;
+        if (!folderPath) {
+            void this._panel.webview.postMessage({ type: 'folderSelectionCanceled', inputId });
+            return;
+        }
+        void this._panel.webview.postMessage({ type: 'selectedFolder', inputId, path: folderPath });
     }
 
     public loadMarkdownFile(document: vscode.TextDocument) {

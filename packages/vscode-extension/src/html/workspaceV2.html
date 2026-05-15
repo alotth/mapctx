@@ -73,7 +73,10 @@
                     </label>
                     <label class="wide">
                         <span>Organization folder</span>
-                        <input id="project-org-path" name="organizationPath" placeholder="/Users/you/repos/inlift">
+                        <div class="path-row">
+                            <input id="project-org-path" name="organizationPath" placeholder="/Users/you/repos/inlift">
+                            <button class="secondary-button" type="button" data-browse-folder="project-org-path" data-browse-prompt="Choose organization folder">Browse</button>
+                        </div>
                     </label>
                     <label>
                         <span>Project name</span>
@@ -83,11 +86,11 @@
                         <span>Project folder with TASKS.md</span>
                         <div class="path-row">
                             <input id="project-path" name="projectPath" required placeholder="/Users/you/repos/inlift/audit_financeiro">
-                            <button id="project-browse" class="secondary-button" type="button">Browse</button>
+                            <button id="project-browse" class="secondary-button" type="button" data-browse-folder="project-path" data-browse-prompt="Choose project folder with TASKS.md">Browse</button>
                         </div>
                     </label>
                 </div>
-                <p class="form-hint">Browser runtimes cannot reveal native folder paths, so paste the absolute path here. In VS Code, Browse can delegate to the extension.</p>
+                <p class="form-hint">Browse opens the native folder picker when running through MapCtx or VS Code. You can also paste an absolute path.</p>
                 <p id="project-form-message" class="form-message" aria-live="polite"></p>
                 <footer class="form-actions">
                     <button class="secondary-button" data-close-modal="project" type="button">Cancel</button>

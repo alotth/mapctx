@@ -1012,6 +1012,47 @@ async function submitProjectForm(event) {
   }
 }
 
+async function browseFolderIntoInput(inputId, prompt) {
+  const input = document.getElementById(inputId);
+  if (!(input instanceof HTMLInputElement)) {
+    setProjectFormMessage('Folder input not found.', 'error');
+    return;
+  }
+
+  setProjectFormMessage('Opening folder picker...', 'pending');
+  if (hasVsCodeApi) {
+    vscode.postMessage({ type: 'browseFolder', inputId, prompt });
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/browse-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        defaultPath: input.value || input.placeholder || ''
+      })
+    });
+    if (!response.ok) {
+      throw new Error(await response.text() || 'Failed to open folder picker');
+    }
+    const result = await response.json();
+    if (result.canceled) {
+      setProjectFormMessage('Folder selection canceled.', 'pending');
+      return;
+    }
+    if (!result.path) {
+      throw new Error('Folder picker returned no path');
+    }
+    input.value = result.path;
+    setProjectFormMessage('Folder selected.', 'success');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setProjectFormMessage(message, 'error');
+  }
+}
+
 window.addEventListener('click', (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) {
@@ -1049,13 +1090,12 @@ window.addEventListener('click', (event) => {
     openProjectModal();
     return;
   }
-  if (target.closest('#project-browse')) {
-    if (hasVsCodeApi) {
-      vscode.postMessage({ type: 'browseProjectFolder' });
-      setProjectFormMessage('Waiting for folder selection from VS Code...', 'pending');
-    } else {
-      setProjectFormMessage('Paste an absolute folder path. Browsers do not expose native paths safely.', 'pending');
-    }
+  const browseTrigger = target.closest('[data-browse-folder]');
+  if (browseTrigger) {
+    browseFolderIntoInput(
+      browseTrigger.getAttribute('data-browse-folder'),
+      browseTrigger.getAttribute('data-browse-prompt') || 'Choose folder'
+    );
     return;
   }
   const detailTrigger = target.closest('[data-open-detail]');
@@ -1106,10 +1146,18 @@ window.addEventListener('message', (event) => {
     };
     renderAll();
   }
+  if (message.type === 'selectedFolder' && message.inputId && message.path) {
+    const input = document.getElementById(message.inputId);
+    if (input) input.value = message.path;
+    setProjectFormMessage('Folder selected. Review the fields and add it.', 'success');
+  }
   if (message.type === 'selectedProjectFolder' && message.projectPath) {
     const input = document.getElementById('project-path');
     if (input) input.value = message.projectPath;
     setProjectFormMessage('Folder selected. Review the fields and add it.', 'success');
+  }
+  if (message.type === 'folderSelectionCanceled') {
+    setProjectFormMessage('Folder selection canceled.', 'pending');
   }
 });
 

@@ -227,6 +227,18 @@ async function handleRequest(
     return;
   }
 
+  if (url.pathname === '/api/browse-folder' && request.method === 'POST') {
+    const payload = await readJsonBody(request);
+    const result = await pickFolder({
+      prompt: readString(payload.prompt),
+      defaultPath: readString(payload.defaultPath)
+    });
+
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify({ ok: true, ...result }));
+    return;
+  }
+
   const requestedTargetId = url.searchParams.get('target') || context.defaultTargetId || undefined;
   const activeWorkspace = resolveActiveWorkspace(requestedTargetId, context.registryPath);
 
@@ -608,6 +620,51 @@ function readString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed || undefined;
+}
+
+function pickFolder(options: { prompt?: string; defaultPath?: string }): Promise<{ path?: string; canceled?: boolean }> {
+  if (process.platform !== 'darwin') {
+    throw new Error('Native folder picker is currently implemented for macOS. Paste an absolute path instead.');
+  }
+
+  const prompt = options.prompt || 'Choose folder';
+  const defaultPath = options.defaultPath && fs.existsSync(options.defaultPath)
+    ? path.resolve(options.defaultPath)
+    : undefined;
+  const script = [
+    `set promptText to ${appleScriptString(prompt)}`,
+    defaultPath ? `set defaultFolder to POSIX file ${appleScriptString(defaultPath)}` : '',
+    `POSIX path of (choose folder with prompt promptText${defaultPath ? ' default location defaultFolder' : ''})`
+  ].filter(Boolean);
+  const args = script.flatMap(line => ['-e', line]);
+
+  return new Promise((resolve, reject) => {
+    childProcess.execFile('osascript', args, { timeout: 300000 }, (error, stdout, stderr) => {
+      if (error) {
+        if (isFolderPickerCanceled(stderr)) {
+          resolve({ canceled: true });
+          return;
+        }
+        reject(new Error(stderr.trim() || error.message));
+        return;
+      }
+
+      const selectedPath = stdout.trim();
+      if (!selectedPath) {
+        resolve({ canceled: true });
+        return;
+      }
+      resolve({ path: selectedPath });
+    });
+  });
+}
+
+function isFolderPickerCanceled(stderr: string): boolean {
+  return /User canceled|-\d*128/.test(stderr);
+}
+
+function appleScriptString(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
 function findHtmlRoot(): string {
