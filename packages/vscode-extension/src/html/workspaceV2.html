@@ -78,11 +78,15 @@
                             <button class="secondary-button" type="button" data-browse-folder="project-org-path" data-browse-prompt="Choose organization folder">Browse</button>
                         </div>
                     </label>
-                    <label>
+                    <label class="project-only">
                         <span>Project name</span>
                         <input id="project-name" name="projectName" placeholder="e.g. audit_financeiro">
                     </label>
-                    <label class="wide">
+                    <label class="project-only">
+                        <span>Project id</span>
+                        <input id="project-id" name="projectId" placeholder="e.g. audit-financeiro">
+                    </label>
+                    <label class="wide project-only">
                         <span>Project folder with TASKS.md</span>
                         <div class="path-row">
                             <input id="project-path" name="projectPath" required placeholder="/Users/you/repos/inlift/audit_financeiro">

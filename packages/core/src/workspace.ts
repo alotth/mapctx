@@ -46,6 +46,16 @@ export type EnsureWorkspaceRegistryOptions = WorkspaceRegistryOptions & {
   addCurrentIfTasks?: boolean
 }
 
+export type UpdateWorkspaceTargetInput = {
+  targetId: string
+  organizationId?: string
+  organizationName?: string
+  organizationPath?: string
+  projectId?: string
+  projectName?: string
+  projectPath?: string
+}
+
 export function getMapctxHome(options: WorkspaceRegistryOptions = {}): string {
   if (options.homeDir) return path.resolve(options.homeDir)
   return path.resolve(process.env.MAPCTX_HOME || path.join(os.homedir(), ".mapctx"))
@@ -174,6 +184,88 @@ export function addProjectToRegistry(
   return { registry: nextRegistry, project: nextProject }
 }
 
+export function updateWorkspaceTarget(
+  registry: WorkspaceRegistry,
+  input: UpdateWorkspaceTargetInput
+): { registry: WorkspaceRegistry; target: WorkspaceOrganization | WorkspaceProject; targetId: string; type: WorkspaceTargetType } {
+  const current = findRegistryTarget(registry, input.targetId)
+  if (!current) {
+    throw new Error(`Workspace target not found: ${input.targetId}`)
+  }
+
+  if (current.type === "organization") {
+    const previous = current.target as WorkspaceOrganization
+    const nextId = slugify(input.organizationId || previous.id) || previous.id
+    if (nextId !== previous.id && registry.organizations.some(organization => organization.id === nextId)) {
+      throw new Error(`Organization id already exists: ${nextId}`)
+    }
+
+    const nextPath = input.organizationPath ? path.resolve(input.organizationPath) : previous.path
+    const nextOrganization: WorkspaceOrganization = {
+      ...previous,
+      id: nextId,
+      name: input.organizationName || previous.name || titleize(nextId),
+      path: nextPath,
+      tasksFile: nextPath && fs.existsSync(path.join(nextPath, "TASKS.md")) ? "TASKS.md" : previous.tasksFile
+    }
+    const nextProjects = registry.projects.map(project => project.organizationId === previous.id
+      ? { ...project, organizationId: nextId }
+      : project)
+    for (const project of nextProjects) {
+      const previousProject = registry.projects.find(item => item.id === project.id)
+      if (previousProject?.organizationId === previous.id && fs.existsSync(project.path)) {
+        writeLocalProjectMetadata(path.resolve(project.path), project)
+      }
+    }
+
+    const nextTargetId = targetId("organization", nextId)
+    const nextRegistry: WorkspaceRegistry = {
+      schemaVersion: 2,
+      activeTargetId: registry.activeTargetId === input.targetId ? nextTargetId : registry.activeTargetId,
+      organizations: registry.organizations.map(organization => organization.id === previous.id ? nextOrganization : organization),
+      projects: nextProjects
+    }
+    return { registry: nextRegistry, target: nextOrganization, targetId: nextTargetId, type: "organization" }
+  }
+
+  const previous = current.target as WorkspaceProject
+  const nextId = slugify(input.projectId || previous.id) || previous.id
+  if (nextId !== previous.id && registry.projects.some(project => project.id === nextId)) {
+    throw new Error(`Project id already exists: ${nextId}`)
+  }
+
+  const projectRoot = input.projectPath ? resolveProjectRoot(input.projectPath) : path.resolve(previous.path)
+  const organizationId = slugify(input.organizationId || previous.organizationId || "local") || "local"
+  const previousOrganization = registry.organizations.find(organization => organization.id === organizationId)
+  const organizationPath = input.organizationPath ? path.resolve(input.organizationPath) : previousOrganization?.path
+  const organizations = ensureOrganization(registry.organizations, {
+    id: organizationId,
+    name: input.organizationName || previousOrganization?.name || titleize(organizationId),
+    path: organizationPath,
+    tasksFile: organizationPath && fs.existsSync(path.join(organizationPath, "TASKS.md")) ? "TASKS.md" : previousOrganization?.tasksFile,
+    accent: "#5bb5ff"
+  })
+  const nextProject: WorkspaceProject = {
+    ...previous,
+    id: nextId,
+    name: input.projectName || previous.name || path.basename(projectRoot) || "Project",
+    organizationId,
+    path: projectRoot,
+    tasksFile: previous.tasksFile || "TASKS.md",
+    icon: previous.icon || inferProjectIcon(projectRoot, nextId)
+  }
+  const nextTargetId = targetId("project", nextId)
+  const nextRegistry: WorkspaceRegistry = {
+    schemaVersion: 2,
+    activeTargetId: registry.activeTargetId === input.targetId ? nextTargetId : registry.activeTargetId,
+    organizations,
+    projects: registry.projects.map(project => project.id === previous.id ? nextProject : project)
+  }
+
+  writeLocalProjectMetadata(projectRoot, nextProject)
+  return { registry: nextRegistry, target: nextProject, targetId: nextTargetId, type: "project" }
+}
+
 export function findTasksRoot(startPath: string): string | undefined {
   let current = path.resolve(startPath)
   if (fs.existsSync(current) && fs.statSync(current).isFile()) {
@@ -245,6 +337,14 @@ function normalizeActiveTargetId(
   }
   if (projects[0]) return targetId("project", projects[0].id)
   if (organizations[0]) return targetId("organization", organizations[0].id)
+  return undefined
+}
+
+function findRegistryTarget(registry: WorkspaceRegistry, requestedTargetId: string): { type: WorkspaceTargetType; target: WorkspaceOrganization | WorkspaceProject } | undefined {
+  const organization = registry.organizations.find(item => targetId("organization", item.id) === requestedTargetId)
+  if (organization) return { type: "organization", target: organization }
+  const project = registry.projects.find(item => targetId("project", item.id) === requestedTargetId)
+  if (project) return { type: "project", target: project }
   return undefined
 }
 

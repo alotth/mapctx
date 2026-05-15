@@ -15,6 +15,9 @@ let board = {
 };
 let activeView = 'kanban';
 let railExpanded = window.localStorage?.getItem('mapctx:railExpanded') === 'true';
+let projectFormMode = 'create';
+let editingTargetId = null;
+let editingTargetType = null;
 
 const DEFAULT_STATUS_ORDER = ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused'];
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -163,22 +166,25 @@ function renderProjects() {
     const disabled = target.hasTasksFile === false;
     const selectAttr = disabled ? `data-target-disabled="${escapeHtml(targetId)}"` : `data-select-target="${escapeHtml(targetId)}"`;
     return `
-      <button
-        class="project-tile ${type} ${hierarchyClass} ${active ? 'active' : ''} ${disabled ? 'disabled' : ''}"
-        ${selectAttr}
-        type="button"
-        aria-label="${escapeHtml(title)}"
-        aria-pressed="${active ? 'true' : 'false'}"
-        title="${escapeHtml(title)}"${style}>
-        <span class="project-avatar">${icon}</span>
-        <span class="project-label">
-          <span class="project-name">${escapeHtml(target.name || target.id)}</span>
-          <span class="project-meta">${escapeHtml(targetMetaLabel(target, type))}</span>
-          <span class="project-path">${escapeHtml(compactPath(target.path))}</span>
-        </span>
-        <span class="project-kind" aria-hidden="true">${type === 'organization' ? 'O' : 'P'}</span>
-        <span class="project-count">${escapeHtml(taskCount)}</span>
-      </button>
+      <div class="project-target-row ${type} ${hierarchyClass}">
+        <button
+          class="project-tile ${type} ${hierarchyClass} ${active ? 'active' : ''} ${disabled ? 'disabled' : ''}"
+          ${selectAttr}
+          type="button"
+          aria-label="${escapeHtml(title)}"
+          aria-pressed="${active ? 'true' : 'false'}"
+          title="${escapeHtml(title)}"${style}>
+          <span class="project-avatar">${icon}</span>
+          <span class="project-label">
+            <span class="project-name">${escapeHtml(target.name || target.id)}</span>
+            <span class="project-meta">${escapeHtml(targetMetaLabel(target, type))}</span>
+            <span class="project-path">${escapeHtml(compactPath(target.path))}</span>
+          </span>
+          <span class="project-kind" aria-hidden="true">${type === 'organization' ? 'O' : 'P'}</span>
+          <span class="project-count">${escapeHtml(taskCount)}</span>
+        </button>
+        <button class="project-edit" type="button" data-edit-target="${escapeHtml(targetId)}" aria-label="Edit ${escapeHtml(target.name || target.id)}" title="Edit ${escapeHtml(target.name || target.id)}">Edit</button>
+      </div>
     `;
   }).join('');
 }
@@ -546,6 +552,14 @@ function findTask(taskId) {
   return allTasks().find((task) => task.id === taskId);
 }
 
+function allTargets() {
+  return board.workspaceTargets || board.projects || [];
+}
+
+function findTargetByTargetId(targetId) {
+  return allTargets().find((target) => (target.targetId || target.id) === targetId);
+}
+
 function closeDetailModal() {
   const modal = document.getElementById('detail-modal');
   modal.classList.remove('open');
@@ -564,20 +578,78 @@ function closeModal() {
 }
 
 function openProjectModal() {
+  projectFormMode = 'create';
+  editingTargetId = null;
+  editingTargetType = null;
   const modal = document.getElementById('project-modal');
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
-  hydrateProjectForm();
+  configureProjectForm('create');
+  hydrateProjectFormForCreate();
   setProjectFormMessage('');
   window.setTimeout(() => document.getElementById('project-path')?.focus(), 0);
+}
+
+function openEditTargetModal(targetId) {
+  const target = findTargetByTargetId(targetId);
+  if (!target) {
+    setProjectFormMessage('Workspace target not found.', 'error');
+    return;
+  }
+
+  projectFormMode = 'edit';
+  editingTargetId = target.targetId || target.id;
+  editingTargetType = target.type === 'organization' ? 'organization' : 'project';
+  const modal = document.getElementById('project-modal');
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+  configureProjectForm(editingTargetType);
+  hydrateProjectFormForEdit(target);
+  setProjectFormMessage('');
+  window.setTimeout(() => {
+    const focusId = editingTargetType === 'organization' ? 'project-org-name' : 'project-name';
+    document.getElementById(focusId)?.focus();
+  }, 0);
 }
 
 function setModalContent(html) {
   document.getElementById('detail-modal-content').innerHTML = html;
 }
 
-function hydrateProjectForm() {
-  const targets = board.workspaceTargets || board.projects || [];
+function configureProjectForm(mode) {
+  const form = document.getElementById('project-form');
+  const title = document.getElementById('project-modal-title');
+  const submit = form?.querySelector('.primary-button');
+  const projectPath = document.getElementById('project-path');
+  if (!form || !(projectPath instanceof HTMLInputElement)) {
+    return;
+  }
+
+  form.classList.toggle('mode-organization', mode === 'organization');
+  form.classList.toggle('mode-project', mode === 'project' || mode === 'create');
+  projectPath.required = mode !== 'organization';
+  if (title) {
+    title.textContent = mode === 'organization'
+      ? 'Edit organization'
+      : mode === 'project'
+        ? 'Edit project'
+        : 'Add organization / project';
+  }
+  if (submit) {
+    submit.textContent = mode === 'create' ? 'Add to workspace' : 'Save changes';
+  }
+}
+
+function clearProjectForm() {
+  for (const id of ['project-org-name', 'project-org-id', 'project-org-path', 'project-name', 'project-id', 'project-path']) {
+    const input = document.getElementById(id);
+    if (input) input.value = '';
+  }
+}
+
+function hydrateProjectFormForCreate() {
+  clearProjectForm();
+  const targets = allTargets();
   const active = targets.find((target) => target.active) || targets.find((target) => target.type === 'project') || targets[0];
   const organization = active?.type === 'organization'
     ? active
@@ -587,13 +659,40 @@ function hydrateProjectForm() {
   const orgId = document.getElementById('project-org-id');
   const orgPath = document.getElementById('project-org-path');
   const projectName = document.getElementById('project-name');
+  const projectId = document.getElementById('project-id');
   const projectPath = document.getElementById('project-path');
 
   if (orgName && !orgName.value) orgName.value = organization?.name || '';
   if (orgId && !orgId.value) orgId.value = organization?.id || active?.organizationId || '';
   if (orgPath && !orgPath.value) orgPath.value = organization?.path || '';
   if (projectName) projectName.value = '';
+  if (projectId) projectId.value = '';
   if (projectPath) projectPath.value = '';
+}
+
+function hydrateProjectFormForEdit(target) {
+  clearProjectForm();
+  const targets = allTargets();
+  const organization = target.type === 'organization'
+    ? target
+    : targets.find((item) => item.type === 'organization' && item.id === target.organizationId);
+
+  const orgName = document.getElementById('project-org-name');
+  const orgId = document.getElementById('project-org-id');
+  const orgPath = document.getElementById('project-org-path');
+  const projectName = document.getElementById('project-name');
+  const projectId = document.getElementById('project-id');
+  const projectPath = document.getElementById('project-path');
+
+  if (orgName) orgName.value = organization?.name || '';
+  if (orgId) orgId.value = organization?.id || target.organizationId || '';
+  if (orgPath) orgPath.value = organization?.path || '';
+
+  if (target.type === 'project') {
+    if (projectName) projectName.value = target.name || '';
+    if (projectId) projectId.value = target.id || '';
+    if (projectPath) projectPath.value = target.path || '';
+  }
 }
 
 function setProjectFormMessage(message, kind = '') {
@@ -971,28 +1070,48 @@ async function submitProjectForm(event) {
 
   const data = new FormData(form);
   const payload = {
+    targetId: editingTargetId,
+    targetType: editingTargetType,
     organizationName: String(data.get('organizationName') || '').trim(),
     organizationId: String(data.get('organizationId') || '').trim(),
     organizationPath: String(data.get('organizationPath') || '').trim(),
     projectName: String(data.get('projectName') || '').trim(),
+    projectId: String(data.get('projectId') || '').trim(),
     projectPath: String(data.get('projectPath') || '').trim()
   };
 
-  if (!payload.projectPath) {
+  if (projectFormMode !== 'edit' || editingTargetType === 'project') {
+    if (!payload.projectPath) {
+      setProjectFormMessage('Project folder is required.', 'error');
+      return;
+    }
+  }
+
+  if (projectFormMode === 'edit' && !payload.targetId) {
+    setProjectFormMessage('Target id is required for editing.', 'error');
+    return;
+  }
+
+  if (editingTargetType === 'organization' && !payload.organizationId) {
+    setProjectFormMessage('Organization id is required.', 'error');
+    return;
+  }
+
+  if ((projectFormMode === 'create' || editingTargetType === 'project') && !payload.projectPath) {
     setProjectFormMessage('Project folder is required.', 'error');
     return;
   }
 
-  setProjectFormMessage('Adding project to workspace...', 'pending');
+  setProjectFormMessage(projectFormMode === 'edit' ? 'Saving workspace target...' : 'Adding project to workspace...', 'pending');
   if (hasVsCodeApi) {
-    vscode.postMessage({ type: 'addProjectFromModal', ...payload });
+    vscode.postMessage({ type: projectFormMode === 'edit' ? 'updateWorkspaceTarget' : 'addProjectFromModal', ...payload });
     setProjectFormMessage('Request sent to the extension runtime.', 'success');
     return;
   }
 
   try {
     const response = await fetch('/api/workspace-targets', {
-      method: 'POST',
+      method: projectFormMode === 'edit' ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
@@ -1001,10 +1120,13 @@ async function submitProjectForm(event) {
     }
     const result = await response.json();
     const url = new URL(window.location.href);
-    if (result.targetId) {
-      url.searchParams.set('target', result.targetId);
+    const nextTargetId = projectFormMode === 'edit' && editingTargetType === 'organization' && board.activeTargetId !== editingTargetId
+      ? board.activeTargetId
+      : result.targetId;
+    if (nextTargetId) {
+      url.searchParams.set('target', nextTargetId);
     }
-    setProjectFormMessage('Project added. Reloading workspace...', 'success');
+    setProjectFormMessage(projectFormMode === 'edit' ? 'Changes saved. Reloading workspace...' : 'Project added. Reloading workspace...', 'success');
     window.setTimeout(() => window.location.assign(url.toString()), 250);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1060,6 +1182,12 @@ window.addEventListener('click', (event) => {
   }
   if (target.closest('#rail-toggle')) {
     setRailExpanded(!railExpanded);
+    return;
+  }
+  const editTrigger = target.closest('[data-edit-target]');
+  const editTargetId = editTrigger ? editTrigger.getAttribute('data-edit-target') : null;
+  if (editTargetId) {
+    openEditTargetModal(editTargetId);
     return;
   }
   if (target.closest('[data-target-disabled]')) {

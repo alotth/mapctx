@@ -182,6 +182,10 @@ export class UnifiedWebviewPanel {
             void this.browseFolder('project-path', 'Choose project folder with TASKS.md');
             return;
         }
+        if (message?.type === 'updateWorkspaceTarget') {
+            void vscode.window.showInformationMessage('Workspace target editing is available in the local `mapctx workspace` UI.');
+            return;
+        }
         if (message?.type === 'selectTarget' && typeof message.targetId === 'string') {
             void this.openWorkspaceTarget(message.targetId);
             return;

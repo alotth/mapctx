@@ -12,6 +12,7 @@ import {
   readWorkspaceRegistry,
   resolveWorkspaceTargetTasksFile,
   targetId,
+  updateWorkspaceTarget,
   writeWorkspaceRegistry,
   type WorkspaceOrganization,
   type WorkspaceProject,
@@ -213,6 +214,7 @@ async function handleRequest(
       organizationId: readString(payload.organizationId),
       organizationName: readString(payload.organizationName),
       organizationPath: readString(payload.organizationPath),
+      projectId: readString(payload.projectId),
       projectName: readString(payload.projectName)
     });
     const registryPath = writeWorkspaceRegistry(result.registry, registryOptions);
@@ -223,6 +225,39 @@ async function handleRequest(
       targetId: targetId('project', result.project.id),
       registryPath,
       project: result.project
+    }));
+    return;
+  }
+
+  if (url.pathname === '/api/workspace-targets' && request.method === 'PATCH') {
+    const payload = await readJsonBody(request);
+    const currentTargetId = readString(payload.targetId);
+    if (!currentTargetId) {
+      response.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('Missing targetId');
+      return;
+    }
+
+    const registryOptions = context.registryPath ? { registryPath: context.registryPath } : {};
+    const registry = readWorkspaceRegistry(registryOptions);
+    const result = updateWorkspaceTarget(registry, {
+      targetId: currentTargetId,
+      organizationId: readString(payload.organizationId),
+      organizationName: readString(payload.organizationName),
+      organizationPath: readString(payload.organizationPath),
+      projectId: readString(payload.projectId),
+      projectName: readString(payload.projectName),
+      projectPath: readString(payload.projectPath)
+    });
+    const registryPath = writeWorkspaceRegistry(result.registry, registryOptions);
+
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify({
+      ok: true,
+      targetId: result.targetId,
+      registryPath,
+      type: result.type,
+      target: result.target
     }));
     return;
   }
