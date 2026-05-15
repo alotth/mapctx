@@ -1112,6 +1112,83 @@ button {
   margin-bottom: 12px;
 }
 
+.issue-summary-card {
+  background:
+    linear-gradient(135deg, rgba(91, 181, 255, 0.08), rgba(124, 222, 159, 0.035)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.issue-summary-card p {
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.issue-copy-section .modal-markdown {
+  color: #e4ebff;
+}
+
+.issue-check-section.acceptance {
+  border-color: rgba(124, 222, 159, 0.22);
+}
+
+.issue-check-section.steps {
+  border-color: rgba(91, 181, 255, 0.22);
+}
+
+.issue-checklist {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.issue-checklist li {
+  align-items: start;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(149, 162, 200, 0.16);
+  border-radius: 10px;
+  color: var(--text);
+  display: grid;
+  font-size: 12px;
+  gap: 9px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  line-height: 1.4;
+  padding: 8px 9px;
+}
+
+.issue-checklist li.done {
+  color: var(--muted);
+}
+
+.issue-checklist li.done > span:last-child {
+  text-decoration: line-through;
+}
+
+.check-dot {
+  align-items: center;
+  border: 1px solid rgba(149, 162, 200, 0.42);
+  border-radius: 6px;
+  color: #07101b;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  height: 18px;
+  justify-content: center;
+  line-height: 1;
+  width: 18px;
+}
+
+.issue-checklist li.done .check-dot {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+}
+
+.issue-note-section {
+  background: rgba(91, 181, 255, 0.035);
+}
+
 .section-title-row span {
   color: var(--muted);
   font-size: 11px;
@@ -1183,6 +1260,15 @@ button {
 
 .modal-markdown p {
   margin: 8px 0;
+}
+
+.modal-markdown h3,
+.modal-markdown h4 {
+  color: #cbd8ff;
+}
+
+.modal-bullet {
+  margin: 5px 0;
 }
 
 .modal-check.done {

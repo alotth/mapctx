@@ -740,26 +740,25 @@ function agentInitial(value) {
 }
 
 function renderDetailMarkdown(detailPath, content) {
-  const summary = extractDetailSummary(content);
-  const checklist = extractChecklist(content);
-  const checklistHtml = checklist.length
-    ? `<ul class="modal-steps">${checklist.map((step) => `<li class="${step.done ? 'done' : ''}">${escapeHtml(step.text)}</li>`).join('')}</ul>`
-    : '<p class="modal-empty">No checklist steps found.</p>';
-  const summaryHtml = summary
-    ? `<div class="modal-markdown">${summary}</div>`
-    : '<p class="modal-empty">No description block found.</p>';
+  const detail = parseDetailContent(content);
+  const markdownSections = splitDetailMarkdownSections(detail.description);
+  const acceptance = [
+    ...extractChecklist(detail.fields.acceptance?.lines || []),
+    ...extractSectionChecklist(markdownSections, 'acceptance')
+  ];
+  const steps = [
+    ...extractChecklist(detail.fields.steps?.lines || []),
+    ...extractSectionChecklist(markdownSections, 'steps')
+  ];
+  const noteBlocks = extractFencedMarkdownBlocks(content);
+  const descriptionSections = markdownSections.filter(section => !isChecklistSection(section.title));
+  const descriptionHtml = renderDescriptionSections(detail, descriptionSections, detailPath);
+
   return `
-    <section class="modal-section issue-body-section">
-      <div class="section-title-row">
-        <h3>Description</h3>
-        <span>${escapeHtml(detailPath)}</span>
-      </div>
-      ${summaryHtml}
-    </section>
-    <section class="modal-section issue-body-section">
-      <h3>Checklist</h3>
-      ${checklistHtml}
-    </section>
+    ${descriptionHtml}
+    ${renderChecklistSection('Acceptance', acceptance, 'acceptance')}
+    ${renderChecklistSection('Steps', steps, 'steps')}
+    ${renderNoteSections(noteBlocks)}
     <section class="modal-section issue-body-section">
       <details>
         <summary>Raw detail markdown</summary>
@@ -769,28 +768,187 @@ function renderDetailMarkdown(detailPath, content) {
   `;
 }
 
-function extractChecklist(content) {
-  return content.split(/\r?\n/)
+function parseDetailContent(content) {
+  const lines = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const fields = {};
+
+  for (let index = 0; index < lines.length; index++) {
+    const match = lines[index].match(/^\s{2}-\s+([A-Za-z][\w-]*):(?:\s*(.*))?$/);
+    if (!match) {
+      continue;
+    }
+
+    const key = match[1];
+    const rawValue = (match[2] || '').trimEnd();
+    const childLines = [];
+    let cursor = index + 1;
+    while (cursor < lines.length && !/^\s{2}-\s+[A-Za-z][\w-]*:/.test(lines[cursor])) {
+      childLines.push(lines[cursor]);
+      cursor++;
+    }
+
+    fields[key] = {
+      value: rawValue === '|'
+        ? dedentDetailLines(childLines).join('\n').trim()
+        : rawValue || dedentDetailLines(childLines).join('\n').trim(),
+      lines: childLines
+    };
+    index = cursor - 1;
+  }
+
+  return {
+    fields,
+    summary: fields.summary?.value || '',
+    description: fields.description?.value || ''
+  };
+}
+
+function dedentDetailLines(lines) {
+  return lines.map(line => line.replace(/^\s{6}/, '').replace(/^\s{4}/, ''));
+}
+
+function splitDetailMarkdownSections(markdown) {
+  const normalized = String(markdown || '').trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const sections = [];
+  let current = { title: 'Description', lines: [] };
+  for (const line of normalized.split(/\n/)) {
+    const heading = line.match(/^#{2,4}\s+(.+)$/);
+    if (heading) {
+      if (current.lines.some(item => item.trim())) {
+        sections.push(current);
+      }
+      current = { title: heading[1].trim(), lines: [] };
+      continue;
+    }
+    current.lines.push(line);
+  }
+  if (current.lines.some(item => item.trim())) {
+    sections.push(current);
+  }
+  return sections;
+}
+
+function isChecklistSection(title) {
+  const normalized = String(title || '').trim().toLowerCase();
+  return normalized === 'acceptance' || normalized === 'steps';
+}
+
+function extractSectionChecklist(sections, targetTitle) {
+  const section = sections.find(item => String(item.title || '').trim().toLowerCase() === targetTitle);
+  return section ? extractChecklist(section.lines) : [];
+}
+
+function extractChecklist(lines) {
+  const list = Array.isArray(lines) ? lines : String(lines || '').split(/\r?\n/);
+  return list
     .map((line) => line.match(/^\s*-\s+\[([ x])\]\s+(.*)$/i))
     .filter(Boolean)
     .map((match) => ({ done: match[1].toLowerCase() === 'x', text: match[2].trim() }));
 }
 
-function extractDetailSummary(content) {
-  const lines = content.split(/\r?\n/);
-  const start = lines.findIndex((line) => line.trim() === '- description: |');
-  if (start < 0) {
+function renderDescriptionSections(detail, sections, detailPath) {
+  const rendered = [];
+  if (detail.summary) {
+    rendered.push(`
+      <section class="modal-section issue-body-section issue-summary-card">
+        <div class="section-title-row">
+          <h3>Summary</h3>
+          <span>${escapeHtml(detailPath)}</span>
+        </div>
+        <p>${escapeHtml(detail.summary)}</p>
+      </section>
+    `);
+  }
+
+  if (!sections.length && detail.description) {
+    rendered.push(renderTextSection('Description', detail.description, detailPath));
+  } else {
+    rendered.push(...sections.map((section, index) => renderTextSection(
+      section.title,
+      section.lines.join('\n').trim(),
+      index === 0 && !detail.summary ? detailPath : ''
+    )));
+  }
+
+  if (!rendered.length) {
+    rendered.push(`
+      <section class="modal-section issue-body-section">
+        <div class="section-title-row">
+          <h3>Description</h3>
+          <span>${escapeHtml(detailPath)}</span>
+        </div>
+        <p class="modal-empty">No description block found.</p>
+      </section>
+    `);
+  }
+
+  return rendered.join('');
+}
+
+function renderTextSection(title, markdown, sideLabel = '') {
+  return `
+    <section class="modal-section issue-body-section issue-copy-section">
+      <div class="section-title-row">
+        <h3>${escapeHtml(title || 'Description')}</h3>
+        ${sideLabel ? `<span>${escapeHtml(sideLabel)}</span>` : ''}
+      </div>
+      <div class="modal-markdown">${renderSimpleMarkdown(markdown)}</div>
+    </section>
+  `;
+}
+
+function renderChecklistSection(title, items, tone) {
+  if (!items.length) {
     return '';
   }
-  const body = [];
-  for (let index = start + 1; index < lines.length; index++) {
-    const line = lines[index];
-    if (/^\s{2}-\s+\w/.test(line)) {
-      break;
+  const done = items.filter(item => item.done).length;
+  return `
+    <section class="modal-section issue-body-section issue-check-section ${escapeHtml(tone)}">
+      <div class="section-title-row">
+        <h3>${escapeHtml(title)}</h3>
+        <span>${done}/${items.length} done</span>
+      </div>
+      <ul class="issue-checklist">
+        ${items.map(item => `
+          <li class="${item.done ? 'done' : ''}">
+            <span class="check-dot">${item.done ? '✓' : ''}</span>
+            <span>${escapeHtml(item.text)}</span>
+          </li>
+        `).join('')}
+      </ul>
+    </section>
+  `;
+}
+
+function extractFencedMarkdownBlocks(content) {
+  const blocks = [];
+  const pattern = /^\s*```[A-Za-z0-9_-]*\s*\n([\s\S]*?)^\s*```\s*$/gm;
+  let match;
+  while ((match = pattern.exec(content)) !== null) {
+    const block = dedentDetailLines(match[1].split(/\r?\n/)).join('\n').trim();
+    if (block) {
+      blocks.push(block);
     }
-    body.push(line.replace(/^\s{6}/, ''));
   }
-  return renderSimpleMarkdown(body.join('\n').trim());
+  return blocks;
+}
+
+function renderNoteSections(blocks) {
+  if (!blocks.length) {
+    return '';
+  }
+  return blocks.map((block, index) => `
+    <section class="modal-section issue-body-section issue-note-section">
+      <div class="section-title-row">
+        <h3>${index === 0 ? 'Notes' : `Notes ${index + 1}`}</h3>
+      </div>
+      <div class="modal-markdown">${renderSimpleMarkdown(block)}</div>
+    </section>
+  `).join('');
 }
 
 function renderSimpleMarkdown(markdown) {
@@ -799,6 +957,7 @@ function renderSimpleMarkdown(markdown) {
     .replace(/^## (.*)$/gm, '<h3>$1</h3>')
     .replace(/^- \[ \] (.*)$/gm, '<div class="modal-check">[ ] $1</div>')
     .replace(/^- \[x\] (.*)$/gim, '<div class="modal-check done">[x] $1</div>')
+    .replace(/^- (?!\[)(.*)$/gm, '<div class="modal-bullet">• $1</div>')
     .replace(/\n{2,}/g, '</p><p>')
     .replace(/^(?!<h|<div)(.+)$/gm, '<p>$1</p>');
 }
