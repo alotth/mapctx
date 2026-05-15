@@ -9,6 +9,11 @@
 <body>
     <div class="workspace-shell">
         <aside class="project-rail" aria-label="Projects">
+            <button id="rail-toggle" class="rail-toggle" type="button" aria-label="Expand sidebar" aria-pressed="false">
+                <span class="rail-mark" aria-hidden="true">M</span>
+                <span class="rail-title">MapCtx</span>
+                <span class="rail-chev" aria-hidden="true">›</span>
+            </button>
             <div id="project-rail-list" class="project-rail-list"></div>
             <button id="project-add" class="project-add" type="button" aria-label="Add project" title="Add project">+</button>
         </aside>
@@ -43,6 +48,52 @@
                 <button class="modal-close" data-close-modal="detail" type="button">Close</button>
             </header>
             <div id="detail-modal-content" class="modal-content"></div>
+        </section>
+    </div>
+
+    <div id="project-modal" class="modal" aria-hidden="true">
+        <div class="modal-backdrop" data-close-modal="project"></div>
+        <section class="modal-panel project-modal-panel" role="dialog" aria-modal="true" aria-labelledby="project-modal-title">
+            <header class="modal-head">
+                <div>
+                    <p class="modal-kicker">Workspace registry</p>
+                    <h2 id="project-modal-title">Add organization / project</h2>
+                </div>
+                <button class="modal-close" data-close-modal="project" type="button">Close</button>
+            </header>
+            <form id="project-form" class="project-form">
+                <div class="form-grid">
+                    <label>
+                        <span>Organization name</span>
+                        <input id="project-org-name" name="organizationName" autocomplete="organization" placeholder="e.g. Inlift">
+                    </label>
+                    <label>
+                        <span>Organization id</span>
+                        <input id="project-org-id" name="organizationId" placeholder="e.g. inlift">
+                    </label>
+                    <label class="wide">
+                        <span>Organization folder</span>
+                        <input id="project-org-path" name="organizationPath" placeholder="/Users/you/repos/inlift">
+                    </label>
+                    <label>
+                        <span>Project name</span>
+                        <input id="project-name" name="projectName" placeholder="e.g. audit_financeiro">
+                    </label>
+                    <label class="wide">
+                        <span>Project folder with TASKS.md</span>
+                        <div class="path-row">
+                            <input id="project-path" name="projectPath" required placeholder="/Users/you/repos/inlift/audit_financeiro">
+                            <button id="project-browse" class="secondary-button" type="button">Browse</button>
+                        </div>
+                    </label>
+                </div>
+                <p class="form-hint">Browser runtimes cannot reveal native folder paths, so paste the absolute path here. In VS Code, Browse can delegate to the extension.</p>
+                <p id="project-form-message" class="form-message" aria-live="polite"></p>
+                <footer class="form-actions">
+                    <button class="secondary-button" data-close-modal="project" type="button">Cancel</button>
+                    <button class="primary-button" type="submit">Add to workspace</button>
+                </footer>
+            </form>
         </section>
     </div>
 

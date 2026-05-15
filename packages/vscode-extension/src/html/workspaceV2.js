@@ -14,6 +14,7 @@ let board = {
   activeProjectId: null
 };
 let activeView = 'kanban';
+let railExpanded = window.localStorage?.getItem('mapctx:railExpanded') === 'true';
 
 const DEFAULT_STATUS_ORDER = ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused'];
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -95,6 +96,45 @@ function projectAccent(value) {
   return /^#[0-9a-f]{3,8}$/i.test(color) ? color : '';
 }
 
+function compactPath(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return 'No folder linked';
+  }
+  const parts = text.split('/').filter(Boolean);
+  if (parts.length <= 3) {
+    return text;
+  }
+  return `…/${parts.slice(-3).join('/')}`;
+}
+
+function targetMetaLabel(target, type) {
+  const count = Number(target.taskCount || 0);
+  const taskLabel = `${count} task${count === 1 ? '' : 's'}`;
+  const file = target.tasksFile || 'TASKS.md';
+  if (target.hasTasksFile === false) {
+    return `${type === 'organization' ? 'Organization' : 'Project'} · no TASKS.md`;
+  }
+  return `${type === 'organization' ? 'Organization' : 'Project'} · ${taskLabel} · ${file}`;
+}
+
+function applyRailState() {
+  const shell = document.querySelector('.workspace-shell');
+  const toggle = document.getElementById('rail-toggle');
+  if (!shell || !toggle) {
+    return;
+  }
+  shell.classList.toggle('rail-expanded', railExpanded);
+  toggle.setAttribute('aria-pressed', railExpanded ? 'true' : 'false');
+  toggle.setAttribute('aria-label', railExpanded ? 'Collapse sidebar' : 'Expand sidebar');
+}
+
+function setRailExpanded(value) {
+  railExpanded = Boolean(value);
+  window.localStorage?.setItem('mapctx:railExpanded', railExpanded ? 'true' : 'false');
+  applyRailState();
+}
+
 function renderProjects() {
   const root = document.getElementById('project-rail-list');
   if (!root) {
@@ -120,15 +160,22 @@ function renderProjects() {
     const kindLabel = type === 'organization' ? 'Org' : 'Project';
     const title = `${kindLabel}: ${target.name || target.id} - ${target.taskCount || 0} tasks`;
     const hierarchyClass = target.organizationId ? 'child' : 'root';
+    const disabled = target.hasTasksFile === false;
+    const selectAttr = disabled ? `data-target-disabled="${escapeHtml(targetId)}"` : `data-select-target="${escapeHtml(targetId)}"`;
     return `
       <button
-        class="project-tile ${type} ${hierarchyClass} ${active ? 'active' : ''}"
-        data-select-target="${escapeHtml(targetId)}"
+        class="project-tile ${type} ${hierarchyClass} ${active ? 'active' : ''} ${disabled ? 'disabled' : ''}"
+        ${selectAttr}
         type="button"
         aria-label="${escapeHtml(title)}"
         aria-pressed="${active ? 'true' : 'false'}"
         title="${escapeHtml(title)}"${style}>
         <span class="project-avatar">${icon}</span>
+        <span class="project-label">
+          <span class="project-name">${escapeHtml(target.name || target.id)}</span>
+          <span class="project-meta">${escapeHtml(targetMetaLabel(target, type))}</span>
+          <span class="project-path">${escapeHtml(compactPath(target.path))}</span>
+        </span>
         <span class="project-kind" aria-hidden="true">${type === 'organization' ? 'O' : 'P'}</span>
         <span class="project-count">${escapeHtml(taskCount)}</span>
       </button>
@@ -499,14 +546,63 @@ function findTask(taskId) {
   return allTasks().find((task) => task.id === taskId);
 }
 
-function closeModal() {
+function closeDetailModal() {
   const modal = document.getElementById('detail-modal');
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
 }
 
+function closeProjectModal() {
+  const modal = document.getElementById('project-modal');
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+function closeModal() {
+  closeDetailModal();
+  closeProjectModal();
+}
+
+function openProjectModal() {
+  const modal = document.getElementById('project-modal');
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+  hydrateProjectForm();
+  setProjectFormMessage('');
+  window.setTimeout(() => document.getElementById('project-path')?.focus(), 0);
+}
+
 function setModalContent(html) {
   document.getElementById('detail-modal-content').innerHTML = html;
+}
+
+function hydrateProjectForm() {
+  const targets = board.workspaceTargets || board.projects || [];
+  const active = targets.find((target) => target.active) || targets.find((target) => target.type === 'project') || targets[0];
+  const organization = active?.type === 'organization'
+    ? active
+    : targets.find((target) => target.type === 'organization' && target.id === active?.organizationId);
+
+  const orgName = document.getElementById('project-org-name');
+  const orgId = document.getElementById('project-org-id');
+  const orgPath = document.getElementById('project-org-path');
+  const projectName = document.getElementById('project-name');
+  const projectPath = document.getElementById('project-path');
+
+  if (orgName && !orgName.value) orgName.value = organization?.name || '';
+  if (orgId && !orgId.value) orgId.value = organization?.id || active?.organizationId || '';
+  if (orgPath && !orgPath.value) orgPath.value = organization?.path || '';
+  if (projectName) projectName.value = '';
+  if (projectPath) projectPath.value = '';
+}
+
+function setProjectFormMessage(message, kind = '') {
+  const element = document.getElementById('project-form-message');
+  if (!element) {
+    return;
+  }
+  element.textContent = message;
+  element.className = `form-message ${kind}`.trim();
 }
 
 async function openTaskDetail(taskId) {
@@ -519,24 +615,27 @@ async function openTaskDetail(taskId) {
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
   document.getElementById('detail-modal-title').textContent = renderPlainTaskLabel(task);
-  setModalContent(`${renderTaskInfo(task)}<p class="modal-empty">Loading detail file...</p>`);
+  setModalContent(renderIssueShell(task, '<p class="modal-empty">Loading detail file...</p>'));
 
   if (!task.detailPath) {
-    setModalContent(`${renderTaskInfo(task)}<p class="modal-empty">No detail file linked.</p>`);
+    setModalContent(renderIssueShell(task, '<p class="modal-empty">No detail file linked.</p>'));
     return;
   }
 
   try {
     const query = new URLSearchParams({ detailPath: task.detailPath });
+    if (board.activeTargetId) {
+      query.set('target', board.activeTargetId);
+    }
     const response = await fetch(`/api/task-detail?${query.toString()}`);
     if (!response.ok) {
       throw new Error(await response.text() || 'Failed to load detail');
     }
     const payload = await response.json();
-    setModalContent(`${renderTaskInfo(task)}${renderDetailMarkdown(payload.path || task.detailPath, payload.content || '')}`);
+    setModalContent(renderIssueShell(task, renderDetailMarkdown(payload.path || task.detailPath, payload.content || '')));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    setModalContent(`${renderTaskInfo(task)}<p class="modal-error">${escapeHtml(message)}</p>`);
+    setModalContent(renderIssueShell(task, `<p class="modal-error">${escapeHtml(message)}</p>`));
   }
 }
 
@@ -544,25 +643,100 @@ function renderPlainTaskLabel(task) {
   return `[${task.id || '-'}] ${taskDisplayTitle(task)}`;
 }
 
-function renderTaskInfo(task) {
+function renderIssueShell(task, bodyHtml) {
+  const title = taskDisplayTitle(task);
+  const pills = [
+    task.priority ? `<span class="issue-pill priority-${escapeHtml(task.priority)}">${escapeHtml(task.priority)}</span>` : '',
+    task.workload ? `<span class="issue-pill">${escapeHtml(task.workload)}</span>` : '',
+    task.type ? `<span class="issue-pill">${escapeHtml(task.type)}</span>` : '',
+    task.dueDate ? `<span class="issue-pill">Due ${escapeHtml(task.dueDate)}</span>` : '',
+    ...(task.tags || []).map((tag) => `<span class="issue-pill tag">${escapeHtml(tag)}</span>`)
+  ].filter(Boolean).join('');
+
+  return `
+    <div class="issue-detail">
+      <section class="issue-hero">
+        <div class="issue-eyebrow">
+          <span class="issue-id">${escapeHtml(task.id || '-')}</span>
+          <span class="issue-state state-${escapeHtml(normalizeStatus(task.status) || 'unknown')}">${escapeHtml(displayStatus(task.status))}</span>
+        </div>
+        <h3>${escapeHtml(title)}</h3>
+        <div class="issue-pill-row">${pills || '<span class="issue-pill muted">No labels</span>'}</div>
+      </section>
+      <div class="issue-grid">
+        <main class="issue-main">${bodyHtml}</main>
+        ${renderIssueSidebar(task)}
+      </div>
+    </div>
+  `;
+}
+
+function renderIssueSidebar(task) {
   const rows = [
-    ['Status', task.status],
+    ['Status', displayStatus(task.status)],
+    ['Owner', renderOwner(task), true],
     ['Type', task.type],
-    ['Parent', task.parent],
-    ['Sub-issue', task.subIssueProgress],
     ['Priority', task.priority],
     ['Workload', task.workload],
+    ['Parent', task.parent],
+    ['Sub-issue', task.subIssueProgress],
     ['Start', task.startDate],
     ['Due', task.dueDate],
     ['Updated', task.updated],
     ['Completed', task.completed],
     ['Milestone', task.milestone],
-    ['Detail', task.detailPath]
+    ['Detail', task.detailPath],
+    ['Depends on', (task.dependsOn || []).join(', ')]
   ]
     .filter(([, value]) => value && value !== 'null')
-    .map(([label, value]) => `<div class="modal-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`)
+    .map(([label, value, html]) => `
+      <div class="issue-field">
+        <span>${escapeHtml(label)}</span>
+        <strong>${html ? value : escapeHtml(String(value))}</strong>
+      </div>
+    `)
     .join('');
-  return `<section class="modal-section"><h3>Task info</h3>${rows}</section>`;
+
+  const thread = task.thread && task.thread.exists ? `
+    <section class="issue-side-section">
+      <h4>Agent thread</h4>
+      <div class="agent-card">
+        <span class="agent-avatar">${escapeHtml(agentInitial(task.thread.lastAgentProfile || task.thread.lastRuntime || 'AI'))}</span>
+        <div>
+          <strong>${escapeHtml(task.thread.lastAgentProfile || 'Agent')}</strong>
+          <span>${escapeHtml([task.thread.lastRuntime, task.thread.lastModel].filter(Boolean).join(' · ') || 'runtime unknown')}</span>
+        </div>
+      </div>
+      ${task.thread.latestRunStatus ? `<span class="run-chip">${escapeHtml(task.thread.latestRunStatus)}</span>` : ''}
+      ${task.thread.costUsd ? `<span class="run-chip">${formatCost(task.thread.costUsd)}</span>` : ''}
+    </section>
+  ` : '';
+
+  return `
+    <aside class="issue-sidebar">
+      <section class="issue-side-section">
+        <h4>Properties</h4>
+        ${rows || '<p class="modal-empty">No properties yet.</p>'}
+      </section>
+      ${thread}
+    </aside>
+  `;
+}
+
+function renderOwner(task) {
+  const assignees = (task.assignees || []).filter(Boolean);
+  if (assignees.length) {
+    return `<span class="owner-stack">${assignees.map((name) => `<span class="owner-chip">${escapeHtml(name)}</span>`).join('')}</span>`;
+  }
+  if (task.thread && task.thread.exists) {
+    const name = task.thread.lastAgentProfile || task.thread.lastRuntime || 'agent';
+    return `<span class="owner-stack"><span class="owner-chip agent">${escapeHtml(name)}</span></span>`;
+  }
+  return '<span class="owner-stack"><span class="owner-chip empty-owner">Unassigned</span></span>';
+}
+
+function agentInitial(value) {
+  return String(value || 'AI').trim().slice(0, 2).toUpperCase() || 'AI';
 }
 
 function renderDetailMarkdown(detailPath, content) {
@@ -575,11 +749,18 @@ function renderDetailMarkdown(detailPath, content) {
     ? `<div class="modal-markdown">${summary}</div>`
     : '<p class="modal-empty">No description block found.</p>';
   return `
-    <section class="modal-section">
-      <h3>Detail file</h3>
-      <div class="modal-row"><span>Path</span><strong>${escapeHtml(detailPath)}</strong></div>
+    <section class="modal-section issue-body-section">
+      <div class="section-title-row">
+        <h3>Description</h3>
+        <span>${escapeHtml(detailPath)}</span>
+      </div>
       ${summaryHtml}
+    </section>
+    <section class="modal-section issue-body-section">
+      <h3>Checklist</h3>
       ${checklistHtml}
+    </section>
+    <section class="modal-section issue-body-section">
       <details>
         <summary>Raw detail markdown</summary>
         <pre class="modal-pre">${escapeHtml(content)}</pre>
@@ -622,9 +803,67 @@ function renderSimpleMarkdown(markdown) {
     .replace(/^(?!<h|<div)(.+)$/gm, '<p>$1</p>');
 }
 
+async function submitProjectForm(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!(form instanceof HTMLFormElement)) {
+    return;
+  }
+
+  const data = new FormData(form);
+  const payload = {
+    organizationName: String(data.get('organizationName') || '').trim(),
+    organizationId: String(data.get('organizationId') || '').trim(),
+    organizationPath: String(data.get('organizationPath') || '').trim(),
+    projectName: String(data.get('projectName') || '').trim(),
+    projectPath: String(data.get('projectPath') || '').trim()
+  };
+
+  if (!payload.projectPath) {
+    setProjectFormMessage('Project folder is required.', 'error');
+    return;
+  }
+
+  setProjectFormMessage('Adding project to workspace...', 'pending');
+  if (hasVsCodeApi) {
+    vscode.postMessage({ type: 'addProjectFromModal', ...payload });
+    setProjectFormMessage('Request sent to the extension runtime.', 'success');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/workspace-targets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      throw new Error(await response.text() || 'Failed to add project');
+    }
+    const result = await response.json();
+    const url = new URL(window.location.href);
+    if (result.targetId) {
+      url.searchParams.set('target', result.targetId);
+    }
+    setProjectFormMessage('Project added. Reloading workspace...', 'success');
+    window.setTimeout(() => window.location.assign(url.toString()), 250);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setProjectFormMessage(message, 'error');
+  }
+}
+
 window.addEventListener('click', (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  if (target.closest('#rail-toggle')) {
+    setRailExpanded(!railExpanded);
+    return;
+  }
+  if (target.closest('[data-target-disabled]')) {
+    setRailExpanded(true);
     return;
   }
   const targetTrigger = target.closest('[data-select-target]');
@@ -648,7 +887,16 @@ window.addEventListener('click', (event) => {
     return;
   }
   if (target.closest('#project-add')) {
-    vscode.postMessage({ type: 'addProject' });
+    openProjectModal();
+    return;
+  }
+  if (target.closest('#project-browse')) {
+    if (hasVsCodeApi) {
+      vscode.postMessage({ type: 'browseProjectFolder' });
+      setProjectFormMessage('Waiting for folder selection from VS Code...', 'pending');
+    } else {
+      setProjectFormMessage('Paste an absolute folder path. Browsers do not expose native paths safely.', 'pending');
+    }
     return;
   }
   const detailTrigger = target.closest('[data-open-detail]');
@@ -659,7 +907,12 @@ window.addEventListener('click', (event) => {
   }
   const closeTrigger = target.closest("[data-close-modal='detail']");
   if (closeTrigger) {
-    closeModal();
+    closeDetailModal();
+    return;
+  }
+  const projectCloseTrigger = target.closest("[data-close-modal='project']");
+  if (projectCloseTrigger) {
+    closeProjectModal();
     return;
   }
   const taskId = target.getAttribute('data-open-task');
@@ -677,6 +930,7 @@ window.addEventListener('keydown', (event) => {
 document.getElementById('tab-kanban').addEventListener('click', () => setView('kanban'));
 document.getElementById('tab-roadmap').addEventListener('click', () => setView('roadmap'));
 document.getElementById('tab-execution').addEventListener('click', () => setView('execution'));
+document.getElementById('project-form')?.addEventListener('submit', submitProjectForm);
 
 window.addEventListener('message', (event) => {
   const message = event.data;
@@ -693,7 +947,14 @@ window.addEventListener('message', (event) => {
     };
     renderAll();
   }
+  if (message.type === 'selectedProjectFolder' && message.projectPath) {
+    const input = document.getElementById('project-path');
+    if (input) input.value = message.projectPath;
+    setProjectFormMessage('Folder selected. Review the fields and add it.', 'success');
+  }
 });
+
+applyRailState();
 
 if (window.MAPCTX_BOOTSTRAP) {
   board = window.MAPCTX_BOOTSTRAP;

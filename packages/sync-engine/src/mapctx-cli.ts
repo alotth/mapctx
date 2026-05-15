@@ -6,8 +6,8 @@ function printHelp(): void {
   console.log('mapctx CLI');
   console.log('');
   console.log('Commands:');
-  console.log('  mapctx workspace [path] [--add path] [--org id] [--org-name name] [--target target-id] [--port n] [--no-open]');
-  console.log('  mapctx workspace:add <path> [--org id] [--org-name name]');
+  console.log('  mapctx workspace [path] [--add path] [--org id] [--org-name name] [--org-path path] [--target target-id] [--port n] [--no-open]');
+  console.log('  mapctx workspace:add <path> [--org id] [--org-name name] [--org-path path]');
 }
 
 function main(): void {
@@ -37,6 +37,7 @@ function main(): void {
       addProjectPath: projectPath,
       organizationId: options.organizationId,
       organizationName: options.organizationName,
+      organizationPath: options.organizationPath,
       registryPath: options.registryPath
     });
     console.log(`Registered project in ${result.registryPath}`);

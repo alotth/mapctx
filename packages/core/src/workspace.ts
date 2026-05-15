@@ -40,6 +40,7 @@ export type EnsureWorkspaceRegistryOptions = WorkspaceRegistryOptions & {
   addProjectPath?: string
   organizationId?: string
   organizationName?: string
+  organizationPath?: string
   projectId?: string
   projectName?: string
   addCurrentIfTasks?: boolean
@@ -128,13 +129,14 @@ export function ensureWorkspaceRegistry(options: EnsureWorkspaceRegistryOptions 
 export function addProjectToRegistry(
   registry: WorkspaceRegistry,
   projectPath: string,
-  options: Pick<EnsureWorkspaceRegistryOptions, "organizationId" | "organizationName" | "projectId" | "projectName"> = {}
+  options: Pick<EnsureWorkspaceRegistryOptions, "organizationId" | "organizationName" | "organizationPath" | "projectId" | "projectName"> = {}
 ): { registry: WorkspaceRegistry; project: WorkspaceProject } {
   const projectRoot = resolveProjectRoot(projectPath)
   const tasksFile = "TASKS.md"
-  const organizationId = slugify(options.organizationId || "local") || "local"
+  const organizationId = slugify(options.organizationId || options.organizationName || "local") || "local"
+  const organizationPath = options.organizationPath ? path.resolve(options.organizationPath) : undefined
   const projectId = uniqueId(
-    options.projectId ? slugify(options.projectId) : slugify(path.basename(projectRoot) || "project"),
+    options.projectId ? slugify(options.projectId) : slugify(options.projectName || path.basename(projectRoot) || "project"),
     registry.projects.map(project => project.id)
   )
 
@@ -152,6 +154,8 @@ export function addProjectToRegistry(
   const organizations = ensureOrganization(registry.organizations, {
     id: organizationId,
     name: options.organizationName || titleize(organizationId),
+    path: organizationPath,
+    tasksFile: organizationPath && fs.existsSync(path.join(organizationPath, "TASKS.md")) ? "TASKS.md" : undefined,
     accent: "#5bb5ff"
   })
 
@@ -257,7 +261,18 @@ function resolveProjectRoot(projectPath: string): string {
 }
 
 function ensureOrganization(organizations: WorkspaceOrganization[], organization: WorkspaceOrganization): WorkspaceOrganization[] {
-  if (organizations.some(item => item.id === organization.id)) return organizations
+  if (organizations.some(item => item.id === organization.id)) {
+    return organizations.map(item => item.id === organization.id
+      ? {
+          ...item,
+          name: organization.name || item.name,
+          path: organization.path || item.path,
+          tasksFile: organization.tasksFile || item.tasksFile,
+          accent: item.accent || organization.accent,
+          icon: item.icon || organization.icon
+        }
+      : item)
+  }
   return [...organizations, organization]
 }
 

@@ -12,6 +12,7 @@ import {
   readWorkspaceRegistry,
   resolveWorkspaceTargetTasksFile,
   targetId,
+  writeWorkspaceRegistry,
   type WorkspaceOrganization,
   type WorkspaceProject,
   type WorkspaceRegistry,
@@ -30,6 +31,7 @@ type WorkspaceServerOptions = {
   addProjectPath?: string;
   organizationId?: string;
   organizationName?: string;
+  organizationPath?: string;
   projectPath?: string;
   targetId?: string;
   registryPath?: string;
@@ -50,6 +52,7 @@ type WorkspaceTaskView = {
   priority?: string;
   workload?: string;
   tags?: string[];
+  assignees?: string[];
   detailPath?: string;
   dependsOn?: string[];
   thread: {
@@ -78,6 +81,7 @@ type WorkspaceTargetView = {
   iconUrl?: string;
   accent?: string;
   active: boolean;
+  hasTasksFile: boolean;
   taskCount: number;
   threadCount: number;
 };
@@ -110,6 +114,8 @@ export function parseWorkspaceServerArgs(argv: string[], cwd = process.cwd()): W
       options.organizationId = args.shift();
     } else if (arg === '--org-name') {
       options.organizationName = args.shift();
+    } else if (arg === '--org-path') {
+      options.organizationPath = args.shift();
     } else if (arg === '--target') {
       options.targetId = args.shift();
     } else if (arg === '--registry') {
@@ -143,24 +149,23 @@ export async function startWorkspaceServer(options: WorkspaceServerOptions = {})
     addProjectPath,
     addCurrentIfTasks: !addProjectPath,
     organizationId: options.organizationId,
-    organizationName: options.organizationName
+    organizationName: options.organizationName,
+    organizationPath: options.organizationPath
   });
 
   const htmlRoot = findHtmlRoot();
   const server = http.createServer((request, response) => {
-    try {
-      handleRequest(request, response, {
-        cwd,
-        htmlRoot,
-        port,
-        registryPath: registryOptions.registryPath,
-        defaultTargetId: options.targetId
-      });
-    } catch (error) {
+    void handleRequest(request, response, {
+      cwd,
+      htmlRoot,
+      port,
+      registryPath: registryOptions.registryPath,
+      defaultTargetId: options.targetId
+    }).catch(error => {
       const message = error instanceof Error ? error.message : String(error);
       response.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
       response.end(message);
-    }
+    });
   });
 
   await new Promise<void>((resolve) => {
@@ -181,15 +186,44 @@ export async function startWorkspaceServer(options: WorkspaceServerOptions = {})
   return server;
 }
 
-function handleRequest(
+async function handleRequest(
   request: http.IncomingMessage,
   response: http.ServerResponse,
   context: { cwd: string; htmlRoot: string; port: number; registryPath?: string; defaultTargetId?: string }
-): void {
+): Promise<void> {
   const url = new URL(request.url || '/', `http://localhost:${context.port}`);
   if (url.pathname === '/favicon.ico') {
     response.writeHead(204);
     response.end();
+    return;
+  }
+
+  if (url.pathname === '/api/workspace-targets' && request.method === 'POST') {
+    const payload = await readJsonBody(request);
+    const projectPath = readString(payload.projectPath);
+    if (!projectPath) {
+      response.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('Missing projectPath');
+      return;
+    }
+
+    const registryOptions = context.registryPath ? { registryPath: context.registryPath } : {};
+    const registry = readWorkspaceRegistry(registryOptions);
+    const result = addProjectToRegistry(registry, projectPath, {
+      organizationId: readString(payload.organizationId),
+      organizationName: readString(payload.organizationName),
+      organizationPath: readString(payload.organizationPath),
+      projectName: readString(payload.projectName)
+    });
+    const registryPath = writeWorkspaceRegistry(result.registry, registryOptions);
+
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify({
+      ok: true,
+      targetId: targetId('project', result.project.id),
+      registryPath,
+      project: result.project
+    }));
     return;
   }
 
@@ -321,6 +355,7 @@ function buildTasks(board: TaskBoard, projectRoot: string): WorkspaceTaskView[] 
     priority: task.priority,
     workload: task.workload,
     tags: task.tags,
+    assignees: task.assignees,
     detailPath: task.detail,
     dependsOn: task.dependsOn,
     thread: readTaskThread(projectRoot, task.id)
@@ -381,8 +416,9 @@ function targetFromRegistry(
   activeTasksFilePath: string
 ): WorkspaceTargetView {
   const currentTargetId = targetId(type, source.id);
-  const tasksPath = resolveWorkspaceTargetTasksFile(source);
-  const hasCurrentTasksFile = tasksPath === activeTasksFilePath;
+  const tasksPath = source.path ? resolveWorkspaceTargetTasksFile(source) : '';
+  const hasTasksFile = fs.existsSync(tasksPath);
+  const hasCurrentTasksFile = hasTasksFile && tasksPath === activeTasksFilePath;
 
   return {
     id: source.id,
@@ -395,6 +431,7 @@ function targetFromRegistry(
     iconUrl: projectIconUrl(source),
     accent: source.accent,
     active: currentTargetId === activeTargetId,
+    hasTasksFile,
     taskCount: hasCurrentTasksFile ? activeTaskCount : 0,
     threadCount: hasCurrentTasksFile ? activeThreadCount : 0
   };
@@ -541,6 +578,38 @@ function contentType(filePath: string): string {
   return 'text/plain; charset=utf-8';
 }
 
+function readJsonBody(request: http.IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    request.setEncoding('utf8');
+    request.on('data', chunk => {
+      body += chunk;
+      if (body.length > 1024 * 1024) {
+        reject(new Error('Request body too large'));
+      }
+    });
+    request.on('end', () => {
+      if (!body.trim()) {
+        resolve({});
+        return;
+      }
+      try {
+        const parsed = JSON.parse(body);
+        resolve(parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {});
+      } catch {
+        reject(new Error('Invalid JSON body'));
+      }
+    });
+    request.on('error', reject);
+  });
+}
+
+function readString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
 function findHtmlRoot(): string {
   let current = path.resolve(__dirname);
   while (true) {
@@ -578,12 +647,8 @@ function openUrl(url: string): void {
   child.unref();
 }
 
-export function registerWorkspaceProject(projectPath: string, options: { organizationId?: string; organizationName?: string; registryPath?: string } = {}): void {
+export function registerWorkspaceProject(projectPath: string, options: { organizationId?: string; organizationName?: string; organizationPath?: string; registryPath?: string } = {}): void {
   const registry = readWorkspaceRegistry(options.registryPath ? { registryPath: options.registryPath } : {});
   const result = addProjectToRegistry(registry, projectPath, options);
-  const registryPath = options.registryPath
-    ? path.resolve(options.registryPath)
-    : getGlobalRegistryPath();
-  fs.mkdirSync(path.dirname(registryPath), { recursive: true });
-  fs.writeFileSync(registryPath, `${JSON.stringify(result.registry, null, 2)}\n`, 'utf8');
+  writeWorkspaceRegistry(result.registry, options.registryPath ? { registryPath: path.resolve(options.registryPath) } : {});
 }
