@@ -14,14 +14,15 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "mapcs": "./dist/cli.js"
+    "mapcs": "./dist/cli.js",
+    "mapctx": "./dist/mapctx-cli.js"
   },
   "files": [
     "dist",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && rm -rf dist/workspace-ui && mkdir -p dist/workspace-ui && cp ../vscode-extension/src/html/workspaceV2.* dist/workspace-ui/",
     "test": "npm run build && node --test dist/**/*.test.js",
     "clean": "rm -rf dist",
     "pack:check": "npm pack --dry-run",
@@ -52,7 +53,9 @@
   "publishConfig": {
     "access": "public"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@mapctx/core": "file:../core"
+  },
   "devDependencies": {
     "@types/node": "^24.5.2",
     "typescript": "^5.9.2"

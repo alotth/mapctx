@@ -6,6 +6,16 @@
   "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "thread": [
+        "./dist/thread.d.ts"
+      ],
+      "workspace": [
+        "./dist/workspace.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -16,6 +26,11 @@
       "types": "./dist/thread.d.ts",
       "require": "./dist/thread.js",
       "default": "./dist/thread.js"
+    },
+    "./workspace": {
+      "types": "./dist/workspace.d.ts",
+      "require": "./dist/workspace.js",
+      "default": "./dist/workspace.js"
     }
   },
   "files": [
