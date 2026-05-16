@@ -144,8 +144,7 @@ button {
 .workspace-shell.rail-expanded .project-target-row {
   align-items: center;
   display: grid;
-  gap: 6px;
-  grid-template-columns: minmax(0, 1fr) 36px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .workspace-shell.rail-expanded .project-target-row.child {
@@ -232,32 +231,6 @@ button {
     0 0 0 2px rgba(15, 21, 34, 0.9),
     0 0 0 4px color-mix(in srgb, var(--project-accent) 45%, transparent),
     0 16px 34px rgba(0, 0, 0, 0.34);
-}
-
-.project-edit {
-  display: none;
-}
-
-.workspace-shell.rail-expanded .project-edit {
-  align-items: center;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(149, 162, 200, 0.2);
-  border-radius: 10px;
-  color: var(--muted);
-  cursor: pointer;
-  display: flex;
-  font-size: 10px;
-  font-weight: 800;
-  height: 36px;
-  justify-content: center;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  width: 36px;
-}
-
-.workspace-shell.rail-expanded .project-edit:hover {
-  border-color: rgba(219, 228, 255, 0.42);
-  color: var(--text);
 }
 
 .project-avatar {
@@ -431,6 +404,31 @@ button {
 #board-meta {
   color: var(--muted);
   font-size: 12px;
+}
+
+.target-edit-button {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(91, 181, 255, 0.16), rgba(124, 222, 159, 0.09));
+  border: 1px solid rgba(91, 181, 255, 0.32);
+  border-radius: 999px;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 800;
+  gap: 6px;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  text-transform: uppercase;
+}
+
+.target-edit-button:hover {
+  border-color: rgba(124, 222, 159, 0.52);
+  transform: translateY(-1px);
+}
+
+.target-edit-button[hidden] {
+  display: none;
 }
 
 .view-switcher {
@@ -1466,7 +1464,7 @@ button {
 
   .workspace-shell.rail-expanded .project-target-row {
     flex: 0 0 auto;
-    grid-template-columns: 240px 36px;
+    grid-template-columns: 240px;
     width: auto;
   }
 

@@ -183,7 +183,6 @@ function renderProjects() {
           <span class="project-kind" aria-hidden="true">${type === 'organization' ? 'O' : 'P'}</span>
           <span class="project-count">${escapeHtml(taskCount)}</span>
         </button>
-        <button class="project-edit" type="button" data-edit-target="${escapeHtml(targetId)}" aria-label="Edit ${escapeHtml(target.name || target.id)}" title="Edit ${escapeHtml(target.name || target.id)}">Edit</button>
       </div>
     `;
   }).join('');
@@ -508,6 +507,7 @@ function renderAll() {
   modeEl.className = `mode-badge mode-${board.mode}`;
   modeEl.textContent = `Model: ${board.mode}`;
   document.getElementById('board-meta').textContent = `${board.tasks.length || 0} tasks`;
+  renderTargetHeader();
   renderProjects();
   renderKanban();
   renderRoadmap();
@@ -558,6 +558,35 @@ function allTargets() {
 
 function findTargetByTargetId(targetId) {
   return allTargets().find((target) => (target.targetId || target.id) === targetId);
+}
+
+function activeTarget() {
+  return allTargets().find((target) => Boolean(target.active)) ||
+    findTargetByTargetId(board.activeTargetId) ||
+    allTargets().find((target) => target.id === board.activeProjectId) ||
+    null;
+}
+
+function renderTargetHeader() {
+  const editButton = document.getElementById('target-edit');
+  if (!editButton) {
+    return;
+  }
+
+  const target = activeTarget();
+  if (!target) {
+    editButton.hidden = true;
+    editButton.removeAttribute('data-active-target');
+    return;
+  }
+
+  const targetId = target.targetId || target.id;
+  const typeLabel = target.type === 'organization' ? 'organization' : 'project';
+  editButton.hidden = false;
+  editButton.textContent = 'Edit';
+  editButton.setAttribute('data-active-target', targetId);
+  editButton.setAttribute('aria-label', `Edit selected ${typeLabel}: ${target.name || target.id}`);
+  editButton.setAttribute('title', `Edit ${target.name || target.id}`);
 }
 
 function closeDetailModal() {
@@ -1184,10 +1213,14 @@ window.addEventListener('click', (event) => {
     setRailExpanded(!railExpanded);
     return;
   }
-  const editTrigger = target.closest('[data-edit-target]');
-  const editTargetId = editTrigger ? editTrigger.getAttribute('data-edit-target') : null;
-  if (editTargetId) {
-    openEditTargetModal(editTargetId);
+  const activeEditTrigger = target.closest('#target-edit');
+  if (activeEditTrigger) {
+    const currentTarget = activeTarget();
+    const editTargetId = activeEditTrigger.getAttribute('data-active-target') ||
+      (currentTarget ? currentTarget.targetId || currentTarget.id : null);
+    if (editTargetId) {
+      openEditTargetModal(editTargetId);
+    }
     return;
   }
   if (target.closest('[data-target-disabled]')) {
@@ -1204,6 +1237,7 @@ window.addEventListener('click', (event) => {
       active: (item.targetId || item.id) === targetId
     }));
     board.projects = board.workspaceTargets;
+    renderTargetHeader();
     renderProjects();
     if (!hasVsCodeApi) {
       const url = new URL(window.location.href);
