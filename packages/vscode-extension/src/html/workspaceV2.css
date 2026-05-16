@@ -600,34 +600,165 @@ button {
   height: calc(100vh - 54px);
 }
 
+.roadmap-layout {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+}
+
+.roadmap-hero {
+  align-items: stretch;
+  background:
+    radial-gradient(520px 180px at 18% 0%, rgba(91, 181, 255, 0.18), transparent 70%),
+    linear-gradient(135deg, rgba(21, 29, 46, 0.98), rgba(14, 20, 34, 0.94));
+  border-bottom: 1px solid rgba(149, 162, 200, 0.2);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(360px, 2fr) auto;
+  padding: 14px;
+}
+
+.roadmap-hero-copy {
+  border: 1px solid rgba(149, 162, 200, 0.18);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+  padding: 13px 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.roadmap-kicker {
+  color: var(--accent-2);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.roadmap-hero-copy strong {
+  color: var(--text);
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+
+.roadmap-hero-copy span:last-child {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.roadmap-metrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.roadmap-metrics div {
+  border: 1px solid rgba(149, 162, 200, 0.16);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 72px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.roadmap-metrics strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.roadmap-metrics span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+
+.roadmap-legend {
+  align-content: center;
+  border: 1px solid rgba(149, 162, 200, 0.16);
+  border-radius: 16px;
+  color: var(--muted);
+  display: grid;
+  gap: 8px;
+  min-width: 150px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 11px;
+}
+
+.roadmap-legend span {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.legend-dot {
+  border-radius: 999px;
+  display: inline-block;
+  height: 9px;
+  width: 18px;
+}
+
+.legend-dot.actual {
+  background: linear-gradient(90deg, #5bb5ff, #7cde9f);
+}
+
+.legend-dot.estimated {
+  border: 1px dashed rgba(124, 222, 159, 0.8);
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(124, 222, 159, 0.18),
+    rgba(124, 222, 159, 0.18) 4px,
+    rgba(91, 181, 255, 0.08) 4px,
+    rgba(91, 181, 255, 0.08) 8px
+  );
+}
+
+.legend-line {
+  display: inline-block;
+  height: 16px;
+  width: 2px;
+  background: #ffb84d;
+  box-shadow: 0 0 12px rgba(255, 184, 77, 0.5);
+}
+
 .roadmap-surface {
-  border-top: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
   height: 100%;
   overflow: auto;
-  padding: 10px 14px;
+  padding: 12px 14px 18px;
 }
 
 .timeline {
-  min-width: 900px;
+  min-width: 1080px;
   position: relative;
+  isolation: isolate;
 }
 
 .timeline-header,
 .milestone-header,
 .task-row {
   display: grid;
-  grid-template-columns: 260px minmax(560px, 1fr);
+  grid-template-columns: 320px minmax(700px, 1fr);
 }
 
 .timeline-header {
   position: sticky;
   top: 0;
-  z-index: 2;
-  background: var(--panel);
+  z-index: 5;
+  background:
+    linear-gradient(180deg, rgba(27, 36, 57, 0.98), rgba(21, 29, 46, 0.98));
   border: 1px solid var(--line);
-  border-radius: 8px 8px 0 0;
+  border-radius: 14px 14px 0 0;
   overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
 }
 
 .timeline-label,
@@ -644,12 +775,14 @@ button {
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .timeline-grid {
-  height: 42px;
+  height: 52px;
   position: relative;
+  overflow: hidden;
 }
 
 .timeline-grid-line {
@@ -657,16 +790,29 @@ button {
   top: 0;
   bottom: 0;
   width: 1px;
-  background: rgba(149, 162, 200, 0.22);
+  background: rgba(149, 162, 200, 0.16);
+  z-index: 0;
 }
 
 .timeline-grid-label {
   position: absolute;
-  top: 10px;
   transform: translateX(-50%);
   color: var(--muted);
   font-size: 10px;
   white-space: nowrap;
+  z-index: 1;
+}
+
+.timeline-grid-label-month {
+  top: 8px;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.timeline-grid-label-day {
+  bottom: 9px;
+  color: rgba(149, 162, 200, 0.72);
+  font-size: 9px;
 }
 
 .milestone-group {
@@ -677,28 +823,42 @@ button {
 .milestone-header {
   align-items: center;
   border-top: 1px solid var(--line);
+  background: rgba(91, 181, 255, 0.045);
 }
 
 .milestone-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   color: var(--text);
   font-size: 12px;
   font-weight: 700;
 }
 
+.milestone-label small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .milestone-line {
   height: 1px;
-  background: var(--line);
+  background: linear-gradient(90deg, rgba(91, 181, 255, 0.5), transparent);
   margin-right: 10px;
 }
 
 .task-row {
   align-items: center;
-  min-height: 44px;
+  min-height: 56px;
   border-top: 1px solid rgba(149, 162, 200, 0.16);
 }
 
 .task-row-alt {
   background: rgba(91, 181, 255, 0.04);
+}
+
+.task-row-estimated {
+  background-image: linear-gradient(90deg, rgba(124, 222, 159, 0.035), transparent 45%);
 }
 
 .task-label {
@@ -709,6 +869,8 @@ button {
   flex-direction: column;
   font: inherit;
   gap: 3px;
+  min-height: 56px;
+  justify-content: center;
   text-align: left;
 }
 
@@ -725,30 +887,113 @@ button {
 .task-status {
   font-size: 10px;
   letter-spacing: 0.06em;
+  line-height: 1.45;
   text-transform: uppercase;
 }
 
+.task-warning {
+  color: #ffce7a;
+  margin-left: 6px;
+}
+
 .task-bar-area {
-  height: 30px;
+  height: 56px;
   position: relative;
+  overflow: hidden;
 }
 
 .task-bar {
-  border: 1px solid rgba(124, 222, 159, 0.44);
+  align-items: center;
+  border: 1px solid rgba(124, 222, 159, 0.5);
   border-radius: 999px;
+  color: #07101b;
   cursor: pointer;
-  height: 18px;
+  display: flex;
+  height: 24px;
   overflow: hidden;
   padding: 0;
   position: absolute;
-  top: 6px;
+  top: 16px;
   background: rgba(124, 222, 159, 0.14);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  z-index: 2;
+}
+
+.task-bar:hover {
+  border-color: rgba(219, 228, 255, 0.72);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+.task-bar.estimated {
+  border-style: dashed;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(124, 222, 159, 0.16),
+    rgba(124, 222, 159, 0.16) 5px,
+    rgba(91, 181, 255, 0.08) 5px,
+    rgba(91, 181, 255, 0.08) 10px
+  );
+}
+
+.task-bar.conflict {
+  border-color: rgba(255, 184, 77, 0.82);
 }
 
 .task-bar-progress {
   display: block;
   height: 100%;
   background: linear-gradient(90deg, #5bb5ff, #7cde9f);
+  min-width: 2px;
+}
+
+.task-bar.status-done .task-bar-progress {
+  background: linear-gradient(90deg, #7cde9f, #b9f3cb);
+}
+
+.task-bar.status-review .task-bar-progress {
+  background: linear-gradient(90deg, #ffca6b, #7cde9f);
+}
+
+.task-bar.status-paused .task-bar-progress {
+  background: linear-gradient(90deg, #95a2c8, #d2d8ee);
+}
+
+.task-bar-label {
+  color: rgba(219, 228, 255, 0.92);
+  font-size: 10px;
+  font-weight: 900;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.today-line {
+  background: #ffb84d;
+  bottom: 0;
+  box-shadow: 0 0 14px rgba(255, 184, 77, 0.58);
+  position: absolute;
+  top: 0;
+  width: 2px;
+  z-index: 3;
+}
+
+.today-badge {
+  background: #ffb84d;
+  border-radius: 999px;
+  color: #191003;
+  font-size: 10px;
+  font-weight: 900;
+  left: 50%;
+  padding: 2px 7px;
+  position: absolute;
+  top: 6px;
+  transform: translateX(-50%);
+  white-space: nowrap;
 }
 
 .empty {
@@ -1551,13 +1796,27 @@ button {
     height: calc(100vh - 85px);
   }
 
+  .roadmap-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .roadmap-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .roadmap-legend {
+    grid-template-columns: repeat(3, max-content);
+    min-width: 0;
+    overflow-x: auto;
+  }
+
   .timeline {
-    min-width: 780px;
+    min-width: 860px;
   }
 
   .timeline-header,
   .milestone-header,
   .task-row {
-    grid-template-columns: 190px minmax(520px, 1fr);
+    grid-template-columns: 230px minmax(560px, 1fr);
   }
 }

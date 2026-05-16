@@ -21,8 +21,14 @@ let editingTargetType = null;
 
 const DEFAULT_STATUS_ORDER = ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused'];
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_DURATION_DAYS = 5;
+const DEFAULT_DURATION_DAYS = 1;
 const RANGE_PADDING_DAYS = 7;
+const WORKLOAD_DURATION_DAYS = {
+  easy: 1,
+  normal: 2,
+  hard: 3,
+  extreme: 5
+};
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -65,6 +71,14 @@ function renderTaskLabel(task) {
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function cssToken(value) {
+  return String(value || 'unknown')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'unknown';
 }
 
 function setView(view) {
@@ -244,20 +258,41 @@ function renderRoadmap() {
   const root = document.getElementById('roadmap-view');
   const tasks = normalizeRoadmapTasks(board.tasks || []);
   if (!tasks.length) {
-    root.innerHTML = '<p class="empty">No tasks with usable roadmap dates found.</p>';
+    root.innerHTML = '<p class="empty">No tasks found for this roadmap.</p>';
     return;
   }
 
   const range = getDateRange(tasks);
+  const summary = roadmapSummary(tasks);
 
   root.innerHTML = `
-    <div class="roadmap-surface" tabindex="0" aria-label="Roadmap timeline">
-      <div class="timeline">
-        <div class="timeline-header">
-          <div class="timeline-label">Task</div>
-          <div class="timeline-grid">${renderTicks(range)}</div>
+    <div class="roadmap-layout">
+      <section class="roadmap-hero" aria-label="Roadmap summary">
+        <div class="roadmap-hero-copy">
+          <span class="roadmap-kicker">Projected plan</span>
+          <strong>${escapeHtml(summary.finishLabel)}</strong>
+          <span>${escapeHtml(summary.rangeLabel)}</span>
         </div>
-        ${renderRoadmapGroups(tasks, range)}
+        <div class="roadmap-metrics">
+          <div><strong>${summary.total}</strong><span>tasks</span></div>
+          <div><strong>${summary.open}</strong><span>open</span></div>
+          <div><strong>${summary.estimated}</strong><span>estimated</span></div>
+          <div><strong>${summary.waves}</strong><span>waves</span></div>
+        </div>
+        <div class="roadmap-legend" aria-label="Roadmap legend">
+          <span><i class="legend-dot actual"></i> explicit date</span>
+          <span><i class="legend-dot estimated"></i> estimated</span>
+          <span><i class="legend-line"></i> today</span>
+        </div>
+      </section>
+      <div class="roadmap-surface" tabindex="0" aria-label="Roadmap timeline">
+        <div class="timeline">
+          <div class="timeline-header">
+            <div class="timeline-label">Execution order</div>
+            <div class="timeline-grid">${renderTicks(range)}</div>
+          </div>
+          ${renderRoadmapGroups(tasks, range)}
+        </div>
       </div>
     </div>
   `;
@@ -371,42 +406,167 @@ function progressFromStatus(status) {
   return 0.25;
 }
 
+function todayDate() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function dateDiffDays(start, end) {
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / ONE_DAY_MS));
+}
+
+function durationForTask(task, fallbackEnd) {
+  const start = parseDate(task.startDate);
+  if (start && fallbackEnd) {
+    return Math.max(1, dateDiffDays(start, fallbackEnd) + 1);
+  }
+  const workload = String(task.workload || '').trim().toLowerCase();
+  return WORKLOAD_DURATION_DAYS[workload] || DEFAULT_DURATION_DAYS;
+}
+
 function normalizeRoadmapTasks(list) {
-  return list
-    .map((task) => {
-      let start = parseDate(task.startDate);
-      const due = parseDate(task.dueDate);
-      const completed = parseDate(task.completed);
-      const updated = parseDate(task.updated);
-      const end = completed || due || updated;
-      if (!start && !end) {
-        return null;
-      }
-      if (!start && end) {
-        start = addDays(end, -DEFAULT_DURATION_DAYS);
-      }
-      if (!start) {
-        return null;
-      }
-      const safeEnd = end || addDays(start, DEFAULT_DURATION_DAYS);
-      if (start.getTime() > safeEnd.getTime()) {
-        start = addDays(safeEnd, -DEFAULT_DURATION_DAYS);
-      }
-      return {
+  const source = Array.isArray(list) ? list : [];
+  const byId = new Map(source.map((task) => [task.id, task]));
+  const computed = new Map();
+  const today = todayDate();
+
+  function compute(task, stack = []) {
+    if (!task || !task.id) {
+      return null;
+    }
+    if (computed.has(task.id)) {
+      return computed.get(task.id);
+    }
+
+    const inCycle = stack.includes(task.id);
+    if (inCycle) {
+      const start = parseDate(task.startDate) || today;
+      const explicitEnd = parseDate(task.completed) || parseDate(task.dueDate) || parseDate(task.updated);
+      const duration = durationForTask(task, explicitEnd);
+      const end = explicitEnd || addDays(start, duration - 1);
+      const normalized = {
         ...task,
         start,
-        end: safeEnd,
+        end,
+        durationDays: Math.max(1, dateDiffDays(start, end) + 1),
+        estimatedStart: !task.startDate,
+        estimatedEnd: !explicitEnd,
+        fullyEstimated: !task.startDate && !explicitEnd,
+        missingDependencies: [],
+        scheduleConflict: true,
+        wave: 1,
         progress: progressFromStatus(task.status)
       };
-    })
-    .filter(Boolean);
+      computed.set(task.id, normalized);
+      return normalized;
+    }
+
+    const dependencies = (task.dependsOn || []).filter(Boolean);
+    const knownDependencySchedules = dependencies
+      .filter((dependencyId) => byId.has(dependencyId))
+      .map((dependencyId) => compute(byId.get(dependencyId), [...stack, task.id]))
+      .filter(Boolean);
+
+    const missingDependencies = dependencies.filter((dependencyId) => !byId.has(dependencyId));
+    const dependencyEnd = knownDependencySchedules.reduce((latest, dependency) => {
+      if (!latest || dependency.end > latest) return dependency.end;
+      return latest;
+    }, null);
+    const dependencyWave = knownDependencySchedules.reduce((latest, dependency) => Math.max(latest, dependency.wave || 1), 0);
+
+    let start = parseDate(task.startDate);
+    const due = parseDate(task.dueDate);
+    const completed = parseDate(task.completed);
+    const updated = parseDate(task.updated);
+    const explicitEnd = completed || due || updated;
+    const duration = durationForTask(task, explicitEnd);
+    let end = explicitEnd;
+    const hasExplicitStart = Boolean(start);
+    const hasExplicitEnd = Boolean(explicitEnd);
+
+    if (!start && end) {
+      start = addDays(end, -(duration - 1));
+    }
+    if (!start) {
+      start = dependencyEnd ? addDays(dependencyEnd, 1) : today;
+    }
+    if (!end) {
+      end = addDays(start, duration - 1);
+    }
+    if (start > end) {
+      start = addDays(end, -(duration - 1));
+    }
+
+    const dependencyReady = dependencyEnd ? addDays(dependencyEnd, 1) : null;
+    let scheduleConflict = false;
+    if (dependencyReady && start < dependencyReady) {
+      if (hasExplicitStart) {
+        scheduleConflict = true;
+      } else {
+        start = dependencyReady;
+        end = addDays(start, duration - 1);
+      }
+    }
+
+    const normalized = {
+      ...task,
+      start,
+      end,
+      durationDays: Math.max(1, dateDiffDays(start, end) + 1),
+      estimatedStart: !hasExplicitStart,
+      estimatedEnd: !hasExplicitEnd,
+      fullyEstimated: !hasExplicitStart && !hasExplicitEnd,
+      missingDependencies,
+      scheduleConflict: scheduleConflict || inCycle,
+      wave: Math.max(1, dependencyWave + 1),
+      progress: progressFromStatus(task.status)
+    };
+    computed.set(task.id, normalized);
+    return normalized;
+  }
+
+  return source
+    .map((task) => compute(task))
+    .filter(Boolean)
+    .sort(compareRoadmapTasks);
+}
+
+function compareRoadmapTasks(a, b) {
+  const waveDelta = (a.wave || 1) - (b.wave || 1);
+  if (waveDelta) return waveDelta;
+  const startDelta = a.start.getTime() - b.start.getTime();
+  if (startDelta) return startDelta;
+  const statusDelta = statusOrderIndex(a.status) - statusOrderIndex(b.status);
+  if (statusDelta) return statusDelta;
+  return String(a.id || '').localeCompare(String(b.id || ''));
+}
+
+function statusOrderIndex(status) {
+  const index = DEFAULT_STATUS_ORDER.indexOf(normalizeStatus(status));
+  return index === -1 ? DEFAULT_STATUS_ORDER.length : index;
+}
+
+function roadmapSummary(tasks) {
+  const total = tasks.length;
+  const open = tasks.filter((task) => normalizeStatus(task.status) !== 'done').length;
+  const estimated = tasks.filter((task) => task.estimatedStart || task.estimatedEnd).length;
+  const waves = tasks.reduce((max, task) => Math.max(max, task.wave || 1), 0);
+  const minStart = tasks.reduce((earliest, task) => task.start < earliest ? task.start : earliest, tasks[0].start);
+  const maxEnd = tasks.reduce((latest, task) => task.end > latest ? task.end : latest, tasks[0].end);
+  return {
+    total,
+    open,
+    estimated,
+    waves,
+    finishLabel: `Finish ${formatShortDate(maxEnd)}`,
+    rangeLabel: `${formatShortDate(minStart)} -> ${formatShortDate(maxEnd)}`
+  };
 }
 
 function getDateRange(tasks) {
   let min = tasks.reduce((acc, task) => (task.start < acc ? task.start : acc), tasks[0].start);
   let max = tasks.reduce((acc, task) => (task.end > acc ? task.end : acc), tasks[0].end);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = todayDate();
   if (today < min) {
     min = today;
   }
@@ -417,6 +577,10 @@ function getDateRange(tasks) {
     start: addDays(min, -RANGE_PADDING_DAYS),
     end: addDays(max, RANGE_PADDING_DAYS + 1)
   };
+}
+
+function formatShortDate(date) {
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
 }
 
 function getPosition(date, range) {
@@ -436,6 +600,22 @@ function getWidth(start, end, range) {
 }
 
 function renderTicks(range) {
+  const days = dateDiffDays(range.start, range.end);
+  const secondaryTicks = days <= 70 ? buildDayTicks(range) : days <= 180 ? buildWeekTicks(range) : [];
+  const monthTicks = buildMonthTicks(range);
+  return `
+    ${renderGridLines(range)}
+    ${monthTicks.map((tick) => `
+      <div class="timeline-grid-label timeline-grid-label-month" style="left:${tick.left}%">${escapeHtml(tick.label)}</div>
+    `).join('')}
+    ${secondaryTicks.map((tick) => `
+      <div class="timeline-grid-label timeline-grid-label-day" style="left:${tick.left}%">${escapeHtml(tick.label)}</div>
+    `).join('')}
+    ${renderTodayLine(range, true)}
+  `;
+}
+
+function buildMonthTicks(range) {
   const ticks = [];
   const cursor = new Date(range.start.getFullYear(), range.start.getMonth(), 1);
   while (cursor <= range.end) {
@@ -445,10 +625,70 @@ function renderTicks(range) {
     });
     cursor.setMonth(cursor.getMonth() + 1);
   }
-  return ticks.map((tick) => `
+  return ticks;
+}
+
+function buildWeekTicks(range) {
+  const ticks = [];
+  const cursor = new Date(range.start.getTime());
+  const dayOfWeek = cursor.getDay();
+  const offset = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+  cursor.setDate(cursor.getDate() + offset);
+  while (cursor <= range.end) {
+    ticks.push({
+      left: getPosition(cursor, range),
+      label: `W${getIsoWeek(cursor)}`
+    });
+    cursor.setDate(cursor.getDate() + 7);
+  }
+  return ticks;
+}
+
+function buildDayTicks(range) {
+  const ticks = [];
+  const days = dateDiffDays(range.start, range.end);
+  const cursor = new Date(range.start.getTime());
+  cursor.setDate(cursor.getDate() + 1);
+  while (cursor <= range.end) {
+    ticks.push({
+      left: getPosition(cursor, range),
+      label: days > 35 ? String(cursor.getDate()) : formatShortDate(cursor)
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return ticks;
+}
+
+function buildGridTicks(range) {
+  const days = dateDiffDays(range.start, range.end);
+  if (days <= 45) return buildDayTicks(range);
+  if (days <= 180) return buildWeekTicks(range);
+  return buildMonthTicks(range);
+}
+
+function renderGridLines(range) {
+  return buildGridTicks(range).map((tick) => `
     <div class="timeline-grid-line" style="left:${tick.left}%"></div>
-    <div class="timeline-grid-label" style="left:${tick.left}%">${escapeHtml(tick.label)}</div>
   `).join('');
+}
+
+function renderTodayLine(range, withBadge = false) {
+  const today = todayDate();
+  if (today < range.start || today > range.end) return '';
+  const left = getPosition(today, range);
+  return `
+    <div class="today-line" style="left:${left}%">
+      ${withBadge ? '<span class="today-badge">Today</span>' : ''}
+    </div>
+  `;
+}
+
+function getIsoWeek(date) {
+  const temp = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = temp.getDay() || 7;
+  temp.setDate(temp.getDate() + 4 - day);
+  const yearStart = new Date(temp.getFullYear(), 0, 1);
+  return Math.ceil((((temp.getTime() - yearStart.getTime()) / ONE_DAY_MS) + 1) / 7);
 }
 
 function renderRoadmapGroups(tasks, range) {
@@ -457,17 +697,31 @@ function renderRoadmapGroups(tasks, range) {
     const rows = group.items.map((task, index) => {
       const left = getPosition(task.start, range);
       const width = Math.max(getWidth(task.start, task.end, range), 1.4);
-      const title = `${taskDisplayTitle(task)} (${task.startDate || '?'} -> ${task.dueDate || task.completed || task.updated || '?'})`;
-      const tag = [task.status, task.milestone].filter(Boolean).join(' / ');
+      const title = roadmapTooltip(task);
+      const status = normalizeStatus(task.status) || 'unknown';
+      const statusClass = cssToken(status);
+      const dependencyLabel = task.dependsOn && task.dependsOn.length ? `after ${task.dependsOn.join(', ')}` : '';
+      const estimateLabel = task.estimatedStart || task.estimatedEnd ? 'estimated' : 'explicit';
+      const issueLabel = task.scheduleConflict
+        ? '<span class="task-warning">schedule conflict</span>'
+        : task.missingDependencies && task.missingDependencies.length
+          ? `<span class="task-warning">missing ${escapeHtml(task.missingDependencies.join(', '))}</span>`
+          : '';
       return `
-        <div class="task-row ${index % 2 ? 'task-row-alt' : ''}">
+        <div class="task-row ${index % 2 ? 'task-row-alt' : ''} status-${statusClass} ${task.fullyEstimated ? 'task-row-estimated' : ''}">
           <button class="task-label" data-open-detail="${escapeHtml(task.id)}" type="button">
             <span><span class="task-id">[${escapeHtml(task.id)}]</span> ${escapeHtml(taskDisplayTitle(task))}</span>
-            <span class="task-status">${escapeHtml(tag || task.type || '')}</span>
+            <span class="task-status">
+              ${escapeHtml([displayStatus(task.status), task.workload, estimateLabel, dependencyLabel].filter(Boolean).join(' / '))}
+              ${issueLabel}
+            </span>
           </button>
           <div class="task-bar-area">
-            <button class="task-bar" data-open-detail="${escapeHtml(task.id)}" style="left:${left}%;width:${width}%" title="${escapeHtml(title)}" type="button">
+            ${renderGridLines(range)}
+            ${renderTodayLine(range)}
+            <button class="task-bar status-${statusClass} ${task.fullyEstimated ? 'estimated' : ''} ${task.scheduleConflict ? 'conflict' : ''}" data-open-detail="${escapeHtml(task.id)}" style="left:${left}%;width:${width}%" title="${escapeHtml(title)}" type="button">
               <span class="task-bar-progress" style="width:${Math.round(task.progress * 100)}%"></span>
+              <span class="task-bar-label">${escapeHtml(`${task.durationDays}d`)}</span>
             </button>
           </div>
         </div>
@@ -476,7 +730,10 @@ function renderRoadmapGroups(tasks, range) {
     return `
       <section class="milestone-group">
         <div class="milestone-header">
-          <div class="milestone-label">${escapeHtml(group.title)}</div>
+          <div class="milestone-label">
+            <span>${escapeHtml(group.title)}</span>
+            <small>${escapeHtml(group.meta)}</small>
+          </div>
           <div class="milestone-line"></div>
         </div>
         ${rows}
@@ -486,19 +743,36 @@ function renderRoadmapGroups(tasks, range) {
 }
 
 function groupRoadmapTasks(tasks) {
-  const groups = [];
-  for (const status of DEFAULT_STATUS_ORDER) {
-    const items = tasks.filter((task) => normalizeStatus(task.status) === status);
-    if (items.length) {
-      groups.push({ title: displayStatus(status), items });
-    }
+  const grouped = new Map();
+  for (const task of tasks) {
+    const wave = task.wave || 1;
+    grouped.set(wave, [...(grouped.get(wave) || []), task]);
   }
-  const known = new Set(DEFAULT_STATUS_ORDER);
-  const other = tasks.filter((task) => !known.has(normalizeStatus(task.status)));
-  if (other.length) {
-    groups.push({ title: 'Other', items: other });
-  }
-  return groups;
+
+  return Array.from(grouped.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([wave, items]) => {
+      const sortedItems = [...items].sort(compareRoadmapTasks);
+      const start = sortedItems.reduce((earliest, task) => task.start < earliest ? task.start : earliest, sortedItems[0].start);
+      const end = sortedItems.reduce((latest, task) => task.end > latest ? task.end : latest, sortedItems[0].end);
+      return {
+        title: `Wave ${wave}`,
+        meta: `${sortedItems.length} task${sortedItems.length === 1 ? '' : 's'} · ${formatShortDate(start)} -> ${formatShortDate(end)}`,
+        items: sortedItems
+      };
+    });
+}
+
+function roadmapTooltip(task) {
+  const dates = `${formatShortDate(task.start)} -> ${formatShortDate(task.end)}`;
+  const source = task.fullyEstimated
+    ? 'Dates estimated by dependency order'
+    : task.estimatedStart || task.estimatedEnd
+      ? 'Partial date estimate'
+      : 'Explicit dates';
+  const deps = task.dependsOn && task.dependsOn.length ? `\nDepends on: ${task.dependsOn.join(', ')}` : '';
+  const missing = task.missingDependencies && task.missingDependencies.length ? `\nMissing dependencies: ${task.missingDependencies.join(', ')}` : '';
+  return `${task.id ? `[${task.id}] ` : ''}${taskDisplayTitle(task)}\n${dates}\n${source}\nStatus: ${displayStatus(task.status)}${deps}${missing}`;
 }
 
 function renderAll() {
