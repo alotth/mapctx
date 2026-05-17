@@ -1,18 +1,27 @@
 #!/usr/bin/env node
+import { initConfigCommand } from './config';
 import { bootstrapCommand, listConflictsCommand, pullCommand, pushCommand, reconcileCommand, statusCommand } from './sync';
 import { planCommand, validateCommand } from './board-tools';
 import { SyncOptions } from './types';
 
-function parseArgs(argv: string[]): { command: string; options: SyncOptions; from?: 'local' | 'github'; taskId?: string } {
+function parseArgs(argv: string[]): {
+  command: string;
+  options: SyncOptions;
+  from?: 'local' | 'github';
+  taskId?: string;
+  help: boolean;
+} {
   const args = [...argv];
   const command = args.shift() || 'help';
   const options: SyncOptions = {};
   let from: 'local' | 'github' | undefined;
   let taskId: string | undefined;
+  let help = false;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (a === '--dry-run') options.dryRun = true;
+    if (a === '--help' || a === '-h') help = true;
+    else if (a === '--dry-run') options.dryRun = true;
     else if (a === '--force') options.force = true;
     else if (a === '--list') options.list = true;
     else if (a === '--json') options.json = true;
@@ -34,13 +43,14 @@ function parseArgs(argv: string[]): { command: string; options: SyncOptions; fro
     }
   }
 
-  return { command, options, from, taskId };
+  return { command, options, from, taskId, help };
 }
 
 function printHelp(): void {
   console.log('mapcs CLI');
   console.log('');
   console.log('Commands:');
+  console.log('  mapcs init [--force] [--config path] [--tasks-file path]');
   console.log('  mapcs status [--json] [--config path] [--tasks-file path]');
   console.log('  mapcs validate [--json] [--config path] [--tasks-file path]');
   console.log('  mapcs plan [--json] [--mermaid] [--config path] [--tasks-file path]');
@@ -51,10 +61,39 @@ function printHelp(): void {
   console.log('  mapcs reconcile --list [--json] [--config path] [--tasks-file path]');
 }
 
+function printCommandHelp(command: string): void {
+  if (command === 'validate') {
+    console.log('mapcs validate [--json] [--config path] [--tasks-file path]');
+    console.log('');
+    console.log('Validates a TASKS.md board. If mapcs.config.json is absent, uses ./TASKS.md or --tasks-file.');
+    return;
+  }
+  if (command === 'plan') {
+    console.log('mapcs plan [--json] [--mermaid] [--config path] [--tasks-file path]');
+    console.log('');
+    console.log('Builds dependency waves after validation. If mapcs.config.json is absent, uses ./TASKS.md or --tasks-file.');
+    return;
+  }
+  printHelp();
+}
+
 function main(): void {
   try {
-    const { command, options, from, taskId } = parseArgs(process.argv.slice(2));
+    const { command, options, from, taskId, help } = parseArgs(process.argv.slice(2));
 
+    if (command === 'help' || command === '--help' || command === '-h') {
+      printHelp();
+      return;
+    }
+    if (help) {
+      printCommandHelp(command);
+      return;
+    }
+
+    if (command === 'init') {
+      initConfigCommand(options);
+      return;
+    }
     if (command === 'status') {
       statusCommand(options);
       return;

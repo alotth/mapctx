@@ -36,6 +36,7 @@ Load operational details only when needed:
    - Prefer `./mapcs.config.json`.
    - If missing and the user wants setup, run `mapcs init`.
    - Use `mapcs init --tasks-file <path>` for non-default `TASKS.md`.
+   - `mapcs init` can create a local-only board/project config; GitHub owner/repo/project fields are optional until actual GitHub sync.
    - Use `mapcs init --force` only when the user explicitly approves overwriting config.
 
 3. Check current sync state first.

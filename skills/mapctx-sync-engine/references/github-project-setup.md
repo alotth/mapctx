@@ -1,6 +1,6 @@
 # GitHub Project Setup
 
-Use this only when project configuration must be created or repaired.
+Use this only when GitHub project configuration must be created or repaired. A local-only `mapcs.config.json` does not require these fields until GitHub sync is needed.
 
 ## Create Project and Pipeline Field
 

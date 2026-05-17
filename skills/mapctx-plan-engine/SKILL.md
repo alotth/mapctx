@@ -24,17 +24,21 @@ Keep this file focused on operational flow. Load command details from:
 1. Run preflight for CLI availability.
    - Check `command -v mapcs`.
    - If missing, use `npx --yes --package @mapctx/sync-engine mapcs <command>`.
+   - Do not use `mapcs <command> --help` as a health check.
 
-2. Resolve config path.
+2. Resolve board input.
    - Prefer `./mapcs.config.json` when present.
-   - Fallback to `./packages/sync-engine/mapcs.config.json`.
+   - If config is absent but `./TASKS.md` exists, run read-only commands with `--tasks-file ./TASKS.md`.
+   - If config is absent and no tasks file is known, use `mapctx-sync-engine` to create a local-only config with `mapcs init` or ask for the tasks file path.
 
 3. Validate board first.
    - Run `mapcs validate` before any planning output.
+   - Include `--tasks-file <path>` when operating without config or outside the board root.
    - If validation fails, stop and report blockers.
 
 4. Generate plan only after validation passes.
    - Run `mapcs plan`.
+   - Include the same `--tasks-file <path>` used during validation.
    - Include `--mermaid` when user asks for graph output.
 
 5. Return concise planning summary.
@@ -43,6 +47,7 @@ Keep this file focused on operational flow. Load command details from:
 ## Guardrails
 
 - Never run write/sync commands (`pull`, `push`, `bootstrap`, `reconcile`) in this skill.
+- Never create or edit `mapcs.config.json` here; route config setup to `mapctx-sync-engine`.
 - Never hide validation errors; show blocking issues first.
 - Never auto-change `TASKS.md` from planning commands; report and suggest fixes.
 

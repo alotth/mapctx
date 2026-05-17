@@ -32,6 +32,7 @@ planCommand({ configPath: 'mapcs.dev.json' });
 
 ## CLI commands
 
+- `mapcs init`
 - `mapcs status`
 - `mapcs validate`
 - `mapcs plan`
@@ -57,6 +58,26 @@ Common flags:
 - Config template: `mapcs.config.example.json`
 - Local sync state: `.mapcs/state.json`
 - Conflict artifacts: `.mapcs/conflicts/<task-id>.reconcile.md`
+
+`mapcs validate` and `mapcs plan` are read-only and can run without `mapcs.config.json` when `./TASKS.md` exists or `--tasks-file <path>` is provided. Sync commands (`status`, `pull`, `push`, `bootstrap`, `reconcile`) still require config.
+
+## First-time setup
+
+Create a starter config in the current repo:
+
+```bash
+mapcs init
+```
+
+This does not require linking the project to GitHub. Without an inferred GitHub remote, `owner` defaults to `local` and the config is still useful for local board settings such as `tasksFile`, statuses, and completion rules.
+
+If you want a non-default tasks file path:
+
+```bash
+mapcs init --tasks-file ./planning/TASKS.md
+```
+
+If `mapcs.config.json` already exists, re-run with `--force` to overwrite it. Fill in GitHub owner/repo/project fields only when you want to run GitHub sync commands.
 
 ## ID generation
 

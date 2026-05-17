@@ -1,7 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { SyncConfig, SyncOptions } from './types';
 import {
+  DEFAULT_ALLOWED_STATUSES,
+  DEFAULT_COMPLETION_STATUSES,
   getAllowedStatuses,
   getCompletionStatuses,
   normalizeStatus,
@@ -9,19 +12,88 @@ import {
   validateStatusConfig
 } from './statuses';
 
-export function loadConfig(options: SyncOptions = {}): { config: SyncConfig; configPath: string } {
+const DEFAULT_STATUS_MAP: Record<string, string> = {
+  backlog: 'Backlog',
+  'ready-for-do': 'Ready for Do',
+  doing: 'Doing',
+  review: 'Review',
+  done: 'Done',
+  paused: 'Paused'
+};
+
+function inferRepoFromGitRemote(cwd: string): { owner: string; repo: string } | null {
+  try {
+    const remote = execSync('git config --get remote.origin.url', {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+
+    const match = remote.match(/github\.com[:/]([^/]+)\/([^/\s]+?)(?:\.git)?$/i);
+    if (!match) return null;
+
+    return {
+      owner: match[1],
+      repo: match[2]
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function initConfigCommand(options: SyncOptions = {}): { config: SyncConfig; configPath: string } {
   const cwd = process.cwd();
   const configPath = options.configPath
     ? path.resolve(cwd, options.configPath)
     : path.resolve(cwd, 'mapcs.config.json');
 
-  if (!fs.existsSync(configPath)) {
-    throw new Error(`Config not found: ${configPath}. Create mapcs.config.json from mapcs.config.example.json.`);
+  if (fs.existsSync(configPath) && !options.force) {
+    throw new Error(`Config already exists: ${configPath}. Re-run with --force to overwrite.`);
   }
 
-  const raw = fs.readFileSync(configPath, 'utf8');
-  const parsed = JSON.parse(raw) as SyncConfig;
+  const inferred = inferRepoFromGitRemote(cwd);
+  const fallbackRepo = path.basename(cwd) || 'your-repo';
+  const config: SyncConfig = {
+    owner: inferred?.owner || 'local',
+    repo: inferred?.repo || fallbackRepo,
+    tasksFile: options.tasksFileOverride || './TASKS.md',
+    allowedStatuses: [...DEFAULT_ALLOWED_STATUSES],
+    completionStatuses: [...DEFAULT_COMPLETION_STATUSES],
+    statusMap: { ...DEFAULT_STATUS_MAP },
+    bootstrap: {
+      createMissingDetailFiles: true,
+      defaultStatusForImportedIssues: 'backlog',
+      requireConfirmFlag: true
+    },
+    idGeneration: {
+      preferredPrefix: 'T'
+    },
+    remoteWinsFields: [
+      'status',
+      'tags',
+      'priority',
+      'workload',
+      'milestone'
+    ],
+    localWinsFields: [
+      'detail',
+      'defaultExpanded'
+    ]
+  };
 
+  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  if (inferred) {
+    console.log(`Created ${configPath} for ${inferred.owner}/${inferred.repo}`);
+  } else {
+    console.log(`Created ${configPath}`);
+    console.log('This config works for local board commands. Fill in GitHub owner/repo/project fields only before GitHub sync commands.');
+  }
+
+  return { config, configPath };
+}
+
+function normalizeLoadedConfig(parsed: SyncConfig): SyncConfig {
   if (!parsed.owner || !parsed.repo) {
     throw new Error('Config must include owner and repo.');
   }
@@ -49,5 +121,60 @@ export function loadConfig(options: SyncOptions = {}): { config: SyncConfig; con
 
   validateStatusConfig(parsed);
 
-  return { config: parsed, configPath };
+  return parsed;
+}
+
+export function loadConfig(options: SyncOptions = {}): { config: SyncConfig; configPath: string } {
+  const cwd = process.cwd();
+  const configPath = options.configPath
+    ? path.resolve(cwd, options.configPath)
+    : path.resolve(cwd, 'mapcs.config.json');
+
+  if (!fs.existsSync(configPath)) {
+    throw new Error(`Config not found: ${configPath}. Run "mapcs init" or create mapcs.config.json from mapcs.config.example.json.`);
+  }
+
+  const raw = fs.readFileSync(configPath, 'utf8');
+  const parsed = JSON.parse(raw) as SyncConfig;
+
+  return { config: normalizeLoadedConfig(parsed), configPath };
+}
+
+export function loadConfigOptionalForBoard(options: SyncOptions = {}): {
+  config: SyncConfig;
+  configPath: string;
+  configExists: boolean;
+} {
+  const cwd = process.cwd();
+  const configPath = options.configPath
+    ? path.resolve(cwd, options.configPath)
+    : path.resolve(cwd, 'mapcs.config.json');
+
+  if (fs.existsSync(configPath)) {
+    return { ...loadConfig(options), configExists: true };
+  }
+
+  const tasksFile = options.tasksFileOverride || './TASKS.md';
+  const tasksFilePath = path.resolve(cwd, tasksFile);
+  if (!fs.existsSync(tasksFilePath)) {
+    throw new Error(
+      `Config not found: ${configPath}. No tasks file found at ${tasksFilePath}. ` +
+      'Run "mapcs init" to create mapcs.config.json or pass --tasks-file <path> for read-only validate/plan.'
+    );
+  }
+
+  const config: SyncConfig = {
+    owner: 'local',
+    repo: path.basename(cwd) || 'local',
+    tasksFile,
+    allowedStatuses: [...DEFAULT_ALLOWED_STATUSES],
+    completionStatuses: [...DEFAULT_COMPLETION_STATUSES],
+    statusMap: { ...DEFAULT_STATUS_MAP }
+  };
+
+  return {
+    config: normalizeLoadedConfig(config),
+    configPath,
+    configExists: false
+  };
 }

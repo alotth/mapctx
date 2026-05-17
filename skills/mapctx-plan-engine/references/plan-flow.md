@@ -7,13 +7,19 @@ Use this flow to compute dependency waves after validation passes.
 Preferred (local binary):
 
 ```bash
-mapcs plan --config <config-path> [--tasks-file <tasks-path>] [--json] [--mermaid]
+mapcs plan [--config ./mapcs.config.json] [--tasks-file <tasks-path>] [--json] [--mermaid]
+```
+
+Config-less planning:
+
+```bash
+mapcs plan --tasks-file ./TASKS.md [--json] [--mermaid]
 ```
 
 Fallback (npx):
 
 ```bash
-npx --yes --package @mapctx/sync-engine mapcs plan --config <config-path> [--tasks-file <tasks-path>] [--json] [--mermaid]
+npx --yes --package @mapctx/sync-engine mapcs plan [--config ./mapcs.config.json] [--tasks-file <tasks-path>] [--json] [--mermaid]
 ```
 
 ## Output to Capture
@@ -31,3 +37,5 @@ npx --yes --package @mapctx/sync-engine mapcs plan --config <config-path> [--tas
 2. Present waves compactly (first 2-3 waves inline).
 3. Highlight blocked/cycle conditions.
 4. End with one next operational action.
+
+If config is absent and the user wants persistent project metadata, switch to `mapctx-sync-engine` and initialize config. That config can remain local-only; add GitHub fields only before sync work.

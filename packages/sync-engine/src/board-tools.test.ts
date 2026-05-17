@@ -79,6 +79,52 @@ test('validate command passes for canonical single-list board', () => {
   assert.equal(report.errors, 0);
 });
 
+test('validate command works without config when TASKS.md exists in cwd', () => {
+  const tempDir = makeTempDir();
+  const previousCwd = process.cwd();
+
+  writeTasks(tempDir, [
+    '# Tasks - sample',
+    '',
+    '## Work Domains',
+    '',
+    '- SYNC: sync domain',
+    '',
+    '## Tasks',
+    '',
+    '### [T-001] Validate board',
+    '',
+    '  - id: T-001',
+    '  - status: ready-for-do',
+    '  - type: task',
+    '  - parent: null',
+    '  - subIssueProgress: null',
+    '  - priority: medium',
+    '  - workload: Normal',
+    '  - tags: [validation]',
+    '  - domains: [SYNC]',
+    '  - dependsOn: []',
+    '  - start: null',
+    '  - due: null',
+    '  - completed: null',
+    '  - externalId: null',
+    '  - updated: 2026-04-01',
+    '  - detail: null',
+    '',
+    '## Notes',
+    ''
+  ].join('\n'));
+
+  process.chdir(tempDir);
+  try {
+    const report = validateCommand();
+    assert.equal(report.errors, 0);
+    assert.equal(report.totalTasks, 1);
+  } finally {
+    process.chdir(previousCwd);
+  }
+});
+
 test('validate command fails when detail file does not exist', () => {
   const tempDir = makeTempDir();
   const configPath = writeConfig(tempDir);
@@ -217,6 +263,84 @@ test('plan command returns dependency waves and recommendations', () => {
   assert.deepEqual(report.waves[1].tasks.map(task => task.id), ['T-003']);
   assert.deepEqual(report.cycleTaskIds, []);
   assert.ok(report.recommendedNext.includes('T-002'));
+});
+
+test('plan command works without config when tasks file override is provided', () => {
+  const tempDir = makeTempDir();
+  const tasksFilePath = writeTasks(tempDir, [
+    '# Tasks - sample',
+    '',
+    '## Work Domains',
+    '',
+    '- SYNC: sync domain',
+    '',
+    '## Tasks',
+    '',
+    '### [T-001] Done prerequisite',
+    '',
+    '  - id: T-001',
+    '  - status: done',
+    '  - type: task',
+    '  - parent: null',
+    '  - subIssueProgress: null',
+    '  - priority: medium',
+    '  - workload: Easy',
+    '  - tags: []',
+    '  - domains: [SYNC]',
+    '  - dependsOn: []',
+    '  - start: null',
+    '  - due: null',
+    '  - completed: 2026-04-01',
+    '  - externalId: null',
+    '  - updated: 2026-04-01',
+    '  - detail: null',
+    '',
+    '### [T-002] Runnable',
+    '',
+    '  - id: T-002',
+    '  - status: ready-for-do',
+    '  - type: task',
+    '  - parent: null',
+    '  - subIssueProgress: null',
+    '  - priority: high',
+    '  - workload: Normal',
+    '  - tags: []',
+    '  - domains: [SYNC]',
+    '  - dependsOn: [T-001]',
+    '  - start: null',
+    '  - due: null',
+    '  - completed: null',
+    '  - externalId: null',
+    '  - updated: 2026-04-01',
+    '  - detail: null',
+    '',
+    '### [T-003] Follows runnable',
+    '',
+    '  - id: T-003',
+    '  - status: backlog',
+    '  - type: task',
+    '  - parent: null',
+    '  - subIssueProgress: null',
+    '  - priority: medium',
+    '  - workload: Normal',
+    '  - tags: []',
+    '  - domains: [SYNC]',
+    '  - dependsOn: [T-002]',
+    '  - start: null',
+    '  - due: null',
+    '  - completed: null',
+    '  - externalId: null',
+    '  - updated: 2026-04-01',
+    '  - detail: null',
+    '',
+    '## Notes',
+    ''
+  ].join('\n'));
+
+  const report = planCommand({ tasksFileOverride: tasksFilePath });
+  assert.equal(report.waves.length, 2);
+  assert.deepEqual(report.waves[0].tasks.map(task => task.id), ['T-002']);
+  assert.deepEqual(report.waves[1].tasks.map(task => task.id), ['T-003']);
 });
 
 test('plan command fails when validation reports dependency cycle', () => {

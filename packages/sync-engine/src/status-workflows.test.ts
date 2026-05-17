@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import test from 'node:test';
-import { loadConfig } from './config';
+import { initConfigCommand, loadConfig } from './config';
 import { parseTasksFile, writeBoard } from './markdown';
 import { bootstrapCommand, pullCommand, pushCommand, statusCommand } from './sync';
 import { SyncConfig, TaskBoard } from './types';
@@ -58,6 +58,40 @@ test('default config keeps legacy status behavior', () => {
   const { config } = loadConfig({ configPath });
   assert.deepEqual(config.allowedStatuses, ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused']);
   assert.deepEqual(config.completionStatuses, ['done']);
+});
+
+test('init command creates a starter config when none exists', () => {
+  const tempDir = makeTempDir();
+  const configPath = path.resolve(tempDir, 'mapcs.config.json');
+  const previousCwd = process.cwd();
+
+  process.chdir(tempDir);
+  try {
+    initConfigCommand({
+      configPath,
+      tasksFileOverride: './planning/TASKS.md'
+    });
+  } finally {
+    process.chdir(previousCwd);
+  }
+
+  const created = JSON.parse(fs.readFileSync(configPath, 'utf8')) as SyncConfig;
+  assert.equal(created.owner, 'local');
+  assert.equal(created.repo, path.basename(tempDir));
+  assert.equal(created.tasksFile, './planning/TASKS.md');
+  assert.deepEqual(created.allowedStatuses, ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused']);
+  assert.deepEqual(created.completionStatuses, ['done']);
+  assert.equal(created.bootstrap?.requireConfirmFlag, true);
+});
+
+test('init command refuses to overwrite existing config without force', () => {
+  const tempDir = makeTempDir();
+  const configPath = writeConfig(tempDir, { owner: 'first-owner' });
+
+  assert.throws(() => initConfigCommand({ configPath }), /already exists/);
+
+  const existing = JSON.parse(fs.readFileSync(configPath, 'utf8')) as SyncConfig;
+  assert.equal(existing.owner, 'first-owner');
 });
 
 test('custom partial workflow accepts extra status', () => {

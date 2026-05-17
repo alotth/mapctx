@@ -38,6 +38,8 @@ Create the starter config in the repo root:
 mapcs init
 ```
 
+This can be local-only. It does not need a GitHub project link unless the user is going to run sync commands.
+
 Use a non-default task file path when needed:
 
 ```bash

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadConfig } from './config';
+import { loadConfigOptionalForBoard } from './config';
 import { parseTasksFile } from './markdown';
 import { getCompletionStatuses, normalizeStatus } from './statuses';
 import { SyncConfig, SyncOptions, Task } from './types';
@@ -79,8 +79,8 @@ export type PlanReport = {
   mermaid: string;
 };
 
-function resolveTasksFile(configPath: string, config: SyncConfig, options: SyncOptions): string {
-  const dir = path.dirname(configPath);
+function resolveTasksFile(configPath: string, config: SyncConfig, options: SyncOptions, configExists: boolean): string {
+  const dir = configExists ? path.dirname(configPath) : process.cwd();
   const tasksFile = options.tasksFileOverride || config.tasksFile;
   return path.resolve(dir, tasksFile);
 }
@@ -469,8 +469,8 @@ function printPlanReport(report: PlanReport, options: SyncOptions): void {
 }
 
 export function validateCommand(options: SyncOptions = {}): ValidateReport {
-  const { config, configPath } = loadConfig(options);
-  const tasksFilePath = resolveTasksFile(configPath, config, options);
+  const { config, configPath, configExists } = loadConfigOptionalForBoard(options);
+  const tasksFilePath = resolveTasksFile(configPath, config, options, configExists);
   const report = validateBoardInternal(tasksFilePath, config);
   printValidationReport(report, options.json);
   if (report.errors > 0) {
@@ -480,8 +480,8 @@ export function validateCommand(options: SyncOptions = {}): ValidateReport {
 }
 
 export function planCommand(options: SyncOptions = {}): PlanReport {
-  const { config, configPath } = loadConfig(options);
-  const tasksFilePath = resolveTasksFile(configPath, config, options);
+  const { config, configPath, configExists } = loadConfigOptionalForBoard(options);
+  const tasksFilePath = resolveTasksFile(configPath, config, options, configExists);
 
   const validation = validateBoardInternal(tasksFilePath, config);
   if (validation.errors > 0) {
