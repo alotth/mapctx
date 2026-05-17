@@ -18,8 +18,8 @@ Use this precedence policy unless the user explicitly asks for a different polic
 
 When reporting sync actions, include:
 
-- Current sync state
-- Commands executed
-- High-level fields changed
-- Conflicts and chosen resolution
-- Recommended next step
+- Current sync state.
+- Commands executed.
+- High-level fields changed.
+- Conflicts and chosen resolution.
+- Recommended next step.
