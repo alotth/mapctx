@@ -32,6 +32,9 @@ jobs:
       - name: Check package contents
         run: npm run pack:check --workspace @mapctx/sync-engine
 
+      - name: Verify packed install
+        run: npm run pack:smoke --workspace @mapctx/sync-engine
+
       - name: Publish to npm
         working-directory: packages/sync-engine
         run: npm publish --provenance --access public

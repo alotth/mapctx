@@ -17,6 +17,7 @@ Release target: npm package `@mapctx/sync-engine`.
    npm run build:sync-engine
    npm run test --workspace @mapctx/sync-engine
    npm run pack:check --workspace @mapctx/sync-engine
+   npm run pack:smoke --workspace @mapctx/sync-engine
    ```
 
 3. Create and push tag:
@@ -29,3 +30,5 @@ Release target: npm package `@mapctx/sync-engine`.
 ## Required Secrets
 
 - `NPM_TOKEN`
+
+`@mapctx/core` remains a private workspace package and is bundled into the `@mapctx/sync-engine` tarball via `bundleDependencies`.

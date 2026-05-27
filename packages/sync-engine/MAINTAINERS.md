@@ -1,6 +1,6 @@
 # Maintainers Guide
 
-Internal release process for `@mapctx/sync-engine` (CLI command `mapcs`).
+Internal release process for `@mapctx/sync-engine` (CLI commands `mapcs` and `mapctx`).
 
 ## Prerequisites
 
@@ -11,10 +11,13 @@ Internal release process for `@mapctx/sync-engine` (CLI command `mapcs`).
 
 ```bash
 npm ci
-npm run build
-npm run pack:check
-npm publish --access public
+npm run build:sync-engine
+npm run pack:check --workspace @mapctx/sync-engine
+npm run pack:smoke --workspace @mapctx/sync-engine
+npm publish --workspace @mapctx/sync-engine --access public
 ```
+
+`@mapctx/core` is private and bundled into the sync-engine tarball; do not publish it separately.
 
 ## GitHub Actions publish
 
