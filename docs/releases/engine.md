@@ -27,8 +27,16 @@ Release target: npm package `@mapctx/sync-engine`.
    git push origin sync-v0.1.3
    ```
 
-## Required Secrets
+## npm Trusted Publisher
 
-- `NPM_TOKEN`
+Publishing uses npm Trusted Publishing/OIDC from GitHub Actions instead of an npm token.
+
+Configure `@mapctx/sync-engine` on npm with:
+
+- publisher: GitHub Actions
+- organization/user: `alotth`
+- repository: `mapctx`
+- workflow filename: `release-sync-engine.yml`
+- allowed action: `npm publish`
 
 `@mapctx/core` remains a private workspace package and is bundled into the `@mapctx/sync-engine` tarball via `bundleDependencies`.
