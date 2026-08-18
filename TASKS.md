@@ -1307,7 +1307,7 @@
   - priority: high
   - workload: Hard
   - tags: [vnext, ui, gantt, variance]
-  - domains: [WEBVIEW, EXTENSION, FORECAST, PLANNER]
+  - domains: [WEBVIEW, EXTENSION, FORECAST, CLI]
   - dependsOn: [T-050, T-051, T-054]
   - start: null
   - due: null
