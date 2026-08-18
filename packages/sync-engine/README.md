@@ -4,6 +4,8 @@ Standalone npm package + CLI to sync local `TASKS.md` with GitHub Issues and Git
 
 Status: alpha. APIs, config keys, and sync behavior may change before `1.0.0`.
 
+**Note on workspace-server.ts:** The local workspace-server is frozen as of [T-059](../../tasks/T-059.md). It receives build-green fixes only and is revisited at external-adoption gate. It remains the sole host for workspaceV2 (used by planned Gantt) and should not be removed.
+
 Detailed operational guide: `DOCUMENTATION.md`.
 
 ## Install

@@ -13,11 +13,25 @@ let board = {
   activeTargetId: null,
   activeProjectId: null
 };
-let activeView = 'kanban';
+
+const VIEW_MODES = ['kanban', 'roadmap', 'execution'];
+let activeView = normalizeView(window.localStorage?.getItem('mapctx:activeView'));
 let railExpanded = window.localStorage?.getItem('mapctx:railExpanded') === 'true';
 let projectFormMode = 'create';
 let editingTargetId = null;
 let editingTargetType = null;
+let pendingExecutionTaskId = null;
+let pendingExecutionRunId = null;
+
+const ROADMAP_GROUP_MODES = ['wave', 'epic'];
+let roadmapGroupMode = normalizeRoadmapGroupMode(window.localStorage?.getItem('mapctx:roadmapGroupMode'));
+let roadmapAllCollapsed = window.localStorage?.getItem('mapctx:roadmapAllCollapsed') === 'true';
+const roadmapCollapsedGroups = new Set();
+const roadmapCollapsedNodes = new Set();
+const executionFilters = {
+  from: window.localStorage?.getItem('mapctx:executionFrom') || '',
+  to: window.localStorage?.getItem('mapctx:executionTo') || ''
+};
 
 const DEFAULT_STATUS_ORDER = ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused'];
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -44,6 +58,14 @@ function normalizeStatus(status) {
     return '';
   }
   return String(status).trim().toLowerCase();
+}
+
+function normalizeRoadmapGroupMode(value) {
+  return ROADMAP_GROUP_MODES.includes(value) ? value : 'wave';
+}
+
+function normalizeView(value) {
+  return VIEW_MODES.includes(value) ? value : 'kanban';
 }
 
 function displayStatus(status) {
@@ -82,13 +104,14 @@ function cssToken(value) {
 }
 
 function setView(view) {
-  activeView = view;
-  document.getElementById('tab-kanban').classList.toggle('active', view === 'kanban');
-  document.getElementById('tab-roadmap').classList.toggle('active', view === 'roadmap');
-  document.getElementById('tab-execution').classList.toggle('active', view === 'execution');
-  document.getElementById('kanban-view').classList.toggle('active', view === 'kanban');
-  document.getElementById('roadmap-view').classList.toggle('active', view === 'roadmap');
-  document.getElementById('execution-view').classList.toggle('active', view === 'execution');
+  activeView = normalizeView(view);
+  window.localStorage?.setItem('mapctx:activeView', activeView);
+  document.getElementById('tab-kanban').classList.toggle('active', activeView === 'kanban');
+  document.getElementById('tab-roadmap').classList.toggle('active', activeView === 'roadmap');
+  document.getElementById('tab-execution').classList.toggle('active', activeView === 'execution');
+  document.getElementById('kanban-view').classList.toggle('active', activeView === 'kanban');
+  document.getElementById('roadmap-view').classList.toggle('active', activeView === 'roadmap');
+  document.getElementById('execution-view').classList.toggle('active', activeView === 'execution');
 }
 
 function projectInitials(target) {
@@ -263,7 +286,11 @@ function renderRoadmap() {
   }
 
   const range = getDateRange(tasks);
-  const summary = roadmapSummary(tasks);
+  const groups = groupRoadmapTasks(tasks);
+  syncRoadmapCollapsedGroups(groups);
+  const summary = roadmapSummary(tasks, groups);
+  const groupMetricLabel = roadmapGroupMode === 'epic' ? 'groups' : 'waves';
+  const timelineLabel = roadmapGroupMode === 'epic' ? 'Epic / task' : 'Execution order';
 
   root.innerHTML = `
     <div class="roadmap-layout">
@@ -277,8 +304,9 @@ function renderRoadmap() {
           <div><strong>${summary.total}</strong><span>tasks</span></div>
           <div><strong>${summary.open}</strong><span>open</span></div>
           <div><strong>${summary.estimated}</strong><span>estimated</span></div>
-          <div><strong>${summary.waves}</strong><span>waves</span></div>
+          <div><strong>${summary.groups}</strong><span>${escapeHtml(groupMetricLabel)}</span></div>
         </div>
+        ${renderRoadmapControls()}
         <div class="roadmap-legend" aria-label="Roadmap legend">
           <span><i class="legend-dot actual"></i> explicit date</span>
           <span><i class="legend-dot estimated"></i> estimated</span>
@@ -288,11 +316,38 @@ function renderRoadmap() {
       <div class="roadmap-surface" tabindex="0" aria-label="Roadmap timeline">
         <div class="timeline">
           <div class="timeline-header">
-            <div class="timeline-label">Execution order</div>
+            <div class="timeline-label">${escapeHtml(timelineLabel)}</div>
             <div class="timeline-grid">${renderTicks(range)}</div>
           </div>
-          ${renderRoadmapGroups(tasks, range)}
+          ${renderRoadmapGroups(groups, range)}
         </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderRoadmapControls() {
+  const modeButtons = ROADMAP_GROUP_MODES.map((mode) => {
+    const active = roadmapGroupMode === mode;
+    return `
+      <button
+        class="roadmap-control-button ${active ? 'active' : ''}"
+        data-roadmap-group-mode="${escapeHtml(mode)}"
+        type="button"
+        aria-pressed="${active ? 'true' : 'false'}">
+        ${escapeHtml(mode === 'epic' ? 'Epic' : 'Wave')}
+      </button>
+    `;
+  }).join('');
+
+  return `
+    <div class="roadmap-controls" aria-label="Roadmap controls">
+      <div class="roadmap-toggle" role="group" aria-label="Group roadmap by">
+        ${modeButtons}
+      </div>
+      <div class="roadmap-action-row">
+        <button class="roadmap-control-button" data-roadmap-collapse-all="false" type="button">Expand</button>
+        <button class="roadmap-control-button" data-roadmap-collapse-all="true" type="button">Collapse</button>
       </div>
     </div>
   `;
@@ -302,19 +357,35 @@ function renderExecution() {
   const root = document.getElementById('execution-view');
   const tasks = board.tasks || [];
   const withThreads = tasks.filter(task => task.thread && task.thread.exists);
+  const executionItems = getExecutionItems(withThreads);
+  const filteredItems = executionItems.filter(matchesExecutionItemDateFilter);
+  const filteredThreadCount = new Set(filteredItems.map(item => item.task.id)).size;
+  const filteredRunCount = filteredItems.filter(item => item.run).length;
+  const filteredCost = filteredItems.reduce((sum, item) => sum + (item.run?.costUsd || (!item.run ? item.task.thread?.costUsd || 0 : 0)), 0);
 
   const summaryHtml = `
+    <div class="execution-toolbar">
+      <label>
+        <span>From</span>
+        <input type="date" data-execution-date-filter="from" value="${escapeHtml(executionFilters.from)}">
+      </label>
+      <label>
+        <span>To</span>
+        <input type="date" data-execution-date-filter="to" value="${escapeHtml(executionFilters.to)}">
+      </label>
+      <button class="secondary-button execution-clear" data-clear-execution-filters type="button">Clear</button>
+    </div>
     <div class="execution-summary">
       <div>
-        <span class="metric-value">${withThreads.length}</span>
-        <span class="metric-label">threads</span>
+        <span class="metric-value">${filteredThreadCount}</span>
+        <span class="metric-label">contexts</span>
       </div>
       <div>
-        <span class="metric-value">${tasks.reduce((sum, task) => sum + (task.thread?.runCount || 0), 0)}</span>
-        <span class="metric-label">runs</span>
+        <span class="metric-value">${filteredRunCount}</span>
+        <span class="metric-label">executions</span>
       </div>
       <div>
-        <span class="metric-value">${formatCost(tasks.reduce((sum, task) => sum + (task.thread?.costUsd || 0), 0))}</span>
+        <span class="metric-value">${formatCost(filteredCost)}</span>
         <span class="metric-label">tracked cost</span>
       </div>
     </div>
@@ -325,28 +396,84 @@ function renderExecution() {
     return;
   }
 
-  const rows = withThreads
-    .map(task => `
-      <article class="execution-row">
+  if (filteredItems.length === 0) {
+    root.innerHTML = `${summaryHtml}<p class="empty">No executions match the selected dates.</p>`;
+    return;
+  }
+
+  const rows = filteredItems
+    .map(({ task, run }) => {
+      const key = executionItemKey(task, run);
+      const stamp = executionItemTimestamp({ task, run });
+      const result = run?.result || (!run ? task.thread.summaryPreview : '');
+      return `
+      <article
+        class="execution-row"
+        data-open-detail="${escapeHtml(task.id)}"
+        data-execution-task="${escapeHtml(task.id)}"
+        data-execution-run="${escapeHtml(run?.runId || '')}"
+        data-execution-key="${escapeHtml(key)}"
+        tabindex="0"
+        role="button">
         <div class="execution-main">
           <div class="execution-title">${renderTaskLabel(task)}</div>
           <div class="execution-meta">
-            ${renderThreadBadges(task.thread)}
-            ${task.thread.lastModel ? `<span class="pill">${escapeHtml(task.thread.lastModel)}</span>` : ''}
-            ${task.thread.runCount ? `<span class="pill">${task.thread.runCount} run${task.thread.runCount === 1 ? '' : 's'}</span>` : ''}
-            ${task.thread.costUsd ? `<span class="pill">${formatCost(task.thread.costUsd)}</span>` : ''}
+            ${renderExecutionBadges(task.thread, run)}
+            ${run?.runId ? `<span class="pill run-id">${escapeHtml(run.runId)}</span>` : ''}
           </div>
-          ${task.thread.summaryPreview ? `<div class="thread-summary">${escapeHtml(task.thread.summaryPreview)}</div>` : ''}
+          ${result ? `<div class="thread-summary">${escapeHtml(result)}</div>` : ''}
         </div>
         <div class="execution-side">
-          <span class="run-status">${escapeHtml(task.thread.latestRunStatus || 'thread')}</span>
-          ${task.thread.latestRunResult ? `<span class="run-result">${escapeHtml(task.thread.latestRunResult)}</span>` : ''}
+          <span class="run-status">${escapeHtml(run?.status || task.thread.latestRunStatus || 'context')}</span>
+          ${stamp ? `<span class="run-result">${escapeHtml(formatDateTime(stamp))}</span>` : ''}
         </div>
       </article>
-    `)
+    `;
+    })
     .join('');
 
   root.innerHTML = `${summaryHtml}<div class="execution-list">${rows}</div>`;
+  focusPendingExecutionTask();
+}
+
+function getExecutionItems(threadTasks) {
+  const items = [];
+  for (const task of threadTasks) {
+    const runs = getThreadRuns(task.thread);
+    if (!runs.length) {
+      items.push({ task, run: null });
+      continue;
+    }
+    for (const run of runs) {
+      items.push({ task, run });
+    }
+  }
+
+  return items.sort((a, b) => {
+    const aTime = executionItemTimestamp(a)?.getTime() || 0;
+    const bTime = executionItemTimestamp(b)?.getTime() || 0;
+    if (aTime !== bTime) return bTime - aTime;
+    return renderPlainTaskLabel(a.task).localeCompare(renderPlainTaskLabel(b.task));
+  });
+}
+
+function getThreadRuns(thread) {
+  return Array.isArray(thread?.runs)
+    ? thread.runs.filter(run => run && run.runId)
+    : [];
+}
+
+function executionItemKey(task, run) {
+  return `${task.id || 'task'}::${run?.runId || 'context'}`;
+}
+
+function executionItemTimestamp(item) {
+  return parseExecutionTimestamp(
+    item.run?.startedAt ||
+    item.run?.endedAt ||
+    item.task.thread?.latestRunStartedAt ||
+    item.task.thread?.latestRunEndedAt
+  );
 }
 
 function renderThreadBadges(thread) {
@@ -358,6 +485,96 @@ function renderThreadBadges(thread) {
     thread.lastRuntime ? `<span class="pill">${escapeHtml(thread.lastRuntime)}</span>` : '',
     thread.lastAgentProfile ? `<span class="pill">${escapeHtml(thread.lastAgentProfile)}</span>` : ''
   ].join('');
+}
+
+function renderExecutionBadges(thread, run) {
+  if (!thread || !thread.exists) {
+    return '';
+  }
+  const stamp = executionItemTimestamp({ task: { thread }, run });
+  return [
+    run?.status || thread.latestRunStatus ? `<span class="pill thread-pill">${escapeHtml(run?.status || thread.latestRunStatus)}</span>` : '<span class="pill thread-pill">thread</span>',
+    run?.runtime || thread.lastRuntime ? `<span class="pill">${escapeHtml(run?.runtime || thread.lastRuntime)}</span>` : '',
+    run?.agentProfile || thread.lastAgentProfile ? `<span class="pill">${escapeHtml(run?.agentProfile || thread.lastAgentProfile)}</span>` : '',
+    run?.model || thread.lastModel ? `<span class="pill">${escapeHtml(run?.model || thread.lastModel)}</span>` : '',
+    run?.costUsd ? `<span class="pill">${formatCost(run.costUsd)}</span>` : '',
+    stamp ? `<span class="pill">${escapeHtml(formatDateTime(stamp))}</span>` : ''
+  ].join('');
+}
+
+function matchesExecutionItemDateFilter(item) {
+  const stamp = executionItemTimestamp(item);
+  if (!stamp) {
+    return !executionFilters.from && !executionFilters.to;
+  }
+  const from = parseDate(executionFilters.from);
+  const to = parseDate(executionFilters.to);
+  if (from && stamp < from) return false;
+  if (to && stamp > addDays(to, 1)) return false;
+  return true;
+}
+
+function parseExecutionTimestamp(value) {
+  if (!value) return null;
+  const stamp = new Date(value);
+  if (Number.isNaN(stamp.getTime())) return null;
+  return stamp;
+}
+
+function formatDateTime(value) {
+  const stamp = parseExecutionTimestamp(value);
+  if (!stamp) return '';
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(stamp);
+}
+
+function setExecutionDateFilter(key, value) {
+  if (!['from', 'to'].includes(key)) return;
+  executionFilters[key] = value || '';
+  window.localStorage?.setItem(`mapctx:execution${key === 'from' ? 'From' : 'To'}`, executionFilters[key]);
+  renderExecution();
+}
+
+function clearExecutionFilters() {
+  executionFilters.from = '';
+  executionFilters.to = '';
+  window.localStorage?.setItem('mapctx:executionFrom', '');
+  window.localStorage?.setItem('mapctx:executionTo', '');
+  renderExecution();
+}
+
+function goToExecutionTask(taskId, runId = '') {
+  pendingExecutionTaskId = taskId || null;
+  pendingExecutionRunId = runId || null;
+  const task = findTask(taskId);
+  const run = runId ? getThreadRuns(task?.thread).find(item => item.runId === runId) : null;
+  if (task && (executionFilters.from || executionFilters.to) && !matchesExecutionItemDateFilter({ task, run })) {
+    executionFilters.from = '';
+    executionFilters.to = '';
+    window.localStorage?.setItem('mapctx:executionFrom', '');
+    window.localStorage?.setItem('mapctx:executionTo', '');
+  }
+  closeDetailModal();
+  setView('execution');
+  renderExecution();
+}
+
+function focusPendingExecutionTask() {
+  if (!pendingExecutionTaskId) return;
+  const escapeSelector = window.CSS && typeof window.CSS.escape === 'function'
+    ? window.CSS.escape
+    : (value) => String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+  const key = pendingExecutionRunId
+    ? `${pendingExecutionTaskId}::${pendingExecutionRunId}`
+    : '';
+  const row = key
+    ? document.querySelector(`[data-execution-key="${escapeSelector(key)}"]`)
+    : document.querySelector(`[data-execution-task="${escapeSelector(pendingExecutionTaskId)}"]`);
+  if (!row) return;
+  row.classList.add('highlight');
+  row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  window.setTimeout(() => row.classList.remove('highlight'), 1600);
+  pendingExecutionTaskId = null;
+  pendingExecutionRunId = null;
 }
 
 function formatCost(value) {
@@ -404,6 +621,23 @@ function progressFromStatus(status) {
     return 0.15;
   }
   return 0.25;
+}
+
+function isTaskComplete(task) {
+  return normalizeStatus(task.status) === 'done' || Boolean(task.completed);
+}
+
+function aggregateCompletionProgress(tasks) {
+  const items = (tasks || []).filter(Boolean);
+  if (!items.length) {
+    return 0;
+  }
+  return items.filter(isTaskComplete).length / items.length;
+}
+
+function percentLabel(value) {
+  const bounded = Math.min(Math.max(Number(value) || 0, 0), 1);
+  return `${Math.round(bounded * 100)}%`;
 }
 
 function todayDate() {
@@ -546,7 +780,7 @@ function statusOrderIndex(status) {
   return index === -1 ? DEFAULT_STATUS_ORDER.length : index;
 }
 
-function roadmapSummary(tasks) {
+function roadmapSummary(tasks, groups = []) {
   const total = tasks.length;
   const open = tasks.filter((task) => normalizeStatus(task.status) !== 'done').length;
   const estimated = tasks.filter((task) => task.estimatedStart || task.estimatedEnd).length;
@@ -558,6 +792,7 @@ function roadmapSummary(tasks) {
     open,
     estimated,
     waves,
+    groups: groups.length || waves,
     finishLabel: `Finish ${formatShortDate(maxEnd)}`,
     rangeLabel: `${formatShortDate(minStart)} -> ${formatShortDate(maxEnd)}`
   };
@@ -691,50 +926,30 @@ function getIsoWeek(date) {
   return Math.ceil((((temp.getTime() - yearStart.getTime()) / ONE_DAY_MS) + 1) / 7);
 }
 
-function renderRoadmapGroups(tasks, range) {
-  const groups = groupRoadmapTasks(tasks);
+function renderRoadmapGroups(groups, range) {
   return groups.map((group) => {
-    const rows = group.items.map((task, index) => {
-      const left = getPosition(task.start, range);
-      const width = Math.max(getWidth(task.start, task.end, range), 1.4);
-      const title = roadmapTooltip(task);
-      const status = normalizeStatus(task.status) || 'unknown';
-      const statusClass = cssToken(status);
-      const dependencyLabel = task.dependsOn && task.dependsOn.length ? `after ${task.dependsOn.join(', ')}` : '';
-      const estimateLabel = task.estimatedStart || task.estimatedEnd ? 'estimated' : 'explicit';
-      const issueLabel = task.scheduleConflict
-        ? '<span class="task-warning">schedule conflict</span>'
-        : task.missingDependencies && task.missingDependencies.length
-          ? `<span class="task-warning">missing ${escapeHtml(task.missingDependencies.join(', '))}</span>`
-          : '';
-      return `
-        <div class="task-row ${index % 2 ? 'task-row-alt' : ''} status-${statusClass} ${task.fullyEstimated ? 'task-row-estimated' : ''}">
-          <button class="task-label" data-open-detail="${escapeHtml(task.id)}" type="button">
-            <span><span class="task-id">[${escapeHtml(task.id)}]</span> ${escapeHtml(taskDisplayTitle(task))}</span>
-            <span class="task-status">
-              ${escapeHtml([displayStatus(task.status), task.workload, estimateLabel, dependencyLabel].filter(Boolean).join(' / '))}
-              ${issueLabel}
+    const collapsed = roadmapCollapsedGroups.has(group.id);
+    const rows = collapsed ? '' : group.rows.map((entry, index) => renderRoadmapRow(entry, range, index)).join('');
+    const summaryArea = collapsed ? renderRangeBar(group, range, 'group-range-bar') : '<div class="milestone-line"></div>';
+    return `
+      <section class="milestone-group ${collapsed ? 'collapsed' : 'expanded'}">
+        <div class="milestone-header">
+          <button
+            class="milestone-label milestone-toggle"
+            data-toggle-roadmap-group="${escapeHtml(group.id)}"
+            type="button"
+            aria-expanded="${collapsed ? 'false' : 'true'}">
+            <span class="disclosure" aria-hidden="true">${collapsed ? '+' : '-'}</span>
+            <span class="milestone-title-text">
+              <span>${escapeHtml(group.title)}</span>
+              <small>${escapeHtml(group.meta)}</small>
             </span>
           </button>
-          <div class="task-bar-area">
+          <div class="milestone-summary-area">
             ${renderGridLines(range)}
             ${renderTodayLine(range)}
-            <button class="task-bar status-${statusClass} ${task.fullyEstimated ? 'estimated' : ''} ${task.scheduleConflict ? 'conflict' : ''}" data-open-detail="${escapeHtml(task.id)}" style="left:${left}%;width:${width}%" title="${escapeHtml(title)}" type="button">
-              <span class="task-bar-progress" style="width:${Math.round(task.progress * 100)}%"></span>
-              <span class="task-bar-label">${escapeHtml(`${task.durationDays}d`)}</span>
-            </button>
+            ${summaryArea}
           </div>
-        </div>
-      `;
-    }).join('');
-    return `
-      <section class="milestone-group">
-        <div class="milestone-header">
-          <div class="milestone-label">
-            <span>${escapeHtml(group.title)}</span>
-            <small>${escapeHtml(group.meta)}</small>
-          </div>
-          <div class="milestone-line"></div>
         </div>
         ${rows}
       </section>
@@ -743,6 +958,13 @@ function renderRoadmapGroups(tasks, range) {
 }
 
 function groupRoadmapTasks(tasks) {
+  if (roadmapGroupMode === 'epic') {
+    return groupRoadmapTasksByEpic(tasks);
+  }
+  return groupRoadmapTasksByWave(tasks);
+}
+
+function groupRoadmapTasksByWave(tasks) {
   const grouped = new Map();
   for (const task of tasks) {
     const wave = task.wave || 1;
@@ -755,16 +977,224 @@ function groupRoadmapTasks(tasks) {
       const sortedItems = [...items].sort(compareRoadmapTasks);
       const start = sortedItems.reduce((earliest, task) => task.start < earliest ? task.start : earliest, sortedItems[0].start);
       const end = sortedItems.reduce((latest, task) => task.end > latest ? task.end : latest, sortedItems[0].end);
+      const progress = aggregateCompletionProgress(sortedItems);
       return {
+        id: `wave:${wave}`,
         title: `Wave ${wave}`,
-        meta: `${sortedItems.length} task${sortedItems.length === 1 ? '' : 's'} · ${formatShortDate(start)} -> ${formatShortDate(end)}`,
-        items: sortedItems
+        meta: `${sortedItems.length} task${sortedItems.length === 1 ? '' : 's'} · ${percentLabel(progress)} done · ${formatShortDate(start)} -> ${formatShortDate(end)}`,
+        start,
+        end,
+        progress,
+        taskCount: sortedItems.length,
+        rows: sortedItems.map((task) => ({ task, depth: 0, node: null }))
       };
     });
 }
 
-function roadmapTooltip(task) {
-  const dates = `${formatShortDate(task.start)} -> ${formatShortDate(task.end)}`;
+function groupRoadmapTasksByEpic(tasks) {
+  const tree = buildRoadmapTree(tasks);
+  const epicNodes = tree.nodes
+    .filter((node) => isEpicTask(node.task))
+    .sort(compareRoadmapNodes);
+  const epicIds = new Set(epicNodes.map((node) => node.task.id));
+  const ungroupedRoots = tree.roots
+    .filter((node) => !epicIds.has(node.task.id))
+    .sort(compareRoadmapNodes);
+
+  const groups = epicNodes.map((node) => {
+    const childRows = node.children.length
+      ? flattenRoadmapNodes(node.children, 0)
+      : [{ task: node.task, depth: 0, node }];
+    const nestedCount = node.children.length ? node.descendantCount : 1;
+    const nestedTasks = node.children.length ? collectRoadmapNodeTasks(node.children) : [node.task];
+    const progress = aggregateCompletionProgress(nestedTasks);
+    return {
+      id: `epic:${node.task.id}`,
+      title: `[${node.task.id}] ${taskDisplayTitle(node.task)}`,
+      meta: `${nestedCount} task${nestedCount === 1 ? '' : 's'} · ${percentLabel(progress)} done · ${formatShortDate(node.start)} -> ${formatShortDate(node.end)}`,
+      start: node.start,
+      end: node.end,
+      progress,
+      taskCount: nestedCount,
+      rows: childRows
+    };
+  });
+
+  if (ungroupedRoots.length) {
+    const start = ungroupedRoots.reduce((earliest, node) => node.start < earliest ? node.start : earliest, ungroupedRoots[0].start);
+    const end = ungroupedRoots.reduce((latest, node) => node.end > latest ? node.end : latest, ungroupedRoots[0].end);
+    const count = ungroupedRoots.reduce((sum, node) => sum + 1 + node.descendantCount, 0);
+    const nestedTasks = collectRoadmapNodeTasks(ungroupedRoots);
+    const progress = aggregateCompletionProgress(nestedTasks);
+    groups.push({
+      id: 'epic:ungrouped',
+      title: 'No epic',
+      meta: `${count} task${count === 1 ? '' : 's'} · ${percentLabel(progress)} done · ${formatShortDate(start)} -> ${formatShortDate(end)}`,
+      start,
+      end,
+      progress,
+      taskCount: count,
+      rows: flattenRoadmapNodes(ungroupedRoots, 0)
+    });
+  }
+
+  return groups;
+}
+
+function buildRoadmapTree(tasks) {
+  const nodesById = new Map(tasks.map((task) => [task.id, {
+    task,
+    parent: null,
+    children: [],
+    start: task.start,
+    end: task.end,
+    descendantCount: 0
+  }]));
+
+  for (const node of nodesById.values()) {
+    const parentId = node.task.parent && node.task.parent !== 'null' ? node.task.parent : '';
+    const parent = parentId ? nodesById.get(parentId) : null;
+    if (!parent || parent === node) continue;
+    node.parent = parent;
+    parent.children.push(node);
+  }
+
+  const roots = [...nodesById.values()].filter((node) => !node.parent);
+  for (const node of nodesById.values()) {
+    finalizeRoadmapNode(node);
+  }
+  for (const node of nodesById.values()) {
+    node.children.sort(compareRoadmapNodes);
+  }
+
+  return {
+    roots: roots.sort(compareRoadmapNodes),
+    nodes: [...nodesById.values()]
+  };
+}
+
+function finalizeRoadmapNode(node, stack = new Set()) {
+  if (stack.has(node.task.id)) {
+    return node;
+  }
+  stack.add(node.task.id);
+  let start = node.task.start;
+  let end = node.task.end;
+  let descendantCount = 0;
+  for (const child of node.children) {
+    finalizeRoadmapNode(child, stack);
+    if (child.start < start) start = child.start;
+    if (child.end > end) end = child.end;
+    descendantCount += 1 + child.descendantCount;
+  }
+  stack.delete(node.task.id);
+  node.start = start;
+  node.end = end;
+  node.descendantCount = descendantCount;
+  node.progress = aggregateCompletionProgress(node.children.length ? collectRoadmapNodeTasks(node.children) : [node.task]);
+  return node;
+}
+
+function isEpicTask(task) {
+  const type = String(task.type || '').trim().toLowerCase();
+  return type === 'epic' || /^E-\d+/i.test(String(task.id || ''));
+}
+
+function flattenRoadmapNodes(nodes, depth) {
+  return nodes.flatMap((node) => {
+    const row = { task: node.task, depth, node };
+    if (!node.children.length || roadmapCollapsedNodes.has(node.task.id)) {
+      return [row];
+    }
+    return [row, ...flattenRoadmapNodes(node.children, depth + 1)];
+  });
+}
+
+function collectRoadmapNodeTasks(nodes, seen = new Set()) {
+  return nodes.flatMap((node) => {
+    if (!node || seen.has(node.task.id)) {
+      return [];
+    }
+    seen.add(node.task.id);
+    return [node.task, ...collectRoadmapNodeTasks(node.children, seen)];
+  });
+}
+
+function compareRoadmapNodes(a, b) {
+  const startDelta = a.start.getTime() - b.start.getTime();
+  if (startDelta) return startDelta;
+  return compareRoadmapTasks(a.task, b.task);
+}
+
+function renderRoadmapRow(entry, range, index) {
+  const task = entry.task;
+  const node = entry.node;
+  const hasChildren = Boolean(node && node.children.length);
+  const nodeCollapsed = hasChildren && roadmapCollapsedNodes.has(task.id);
+  const start = nodeCollapsed && node ? node.start : task.start;
+  const end = nodeCollapsed && node ? node.end : task.end;
+  const durationDays = Math.max(1, dateDiffDays(start, end) + 1);
+  const left = getPosition(start, range);
+  const width = Math.max(getWidth(start, end, range), 1.4);
+  const progress = nodeCollapsed && node ? node.progress : task.progress;
+  const title = roadmapTooltip(task, start, end, durationDays, nodeCollapsed, progress);
+  const barLabel = nodeCollapsed ? `${durationDays}d · ${percentLabel(progress)}` : `${durationDays}d`;
+  const status = normalizeStatus(task.status) || 'unknown';
+  const statusClass = cssToken(status);
+  const dependencyLabel = task.dependsOn && task.dependsOn.length ? `after ${task.dependsOn.join(', ')}` : '';
+  const estimateLabel = task.estimatedStart || task.estimatedEnd ? 'estimated' : 'explicit';
+  const childLabel = hasChildren ? `${node.descendantCount} nested` : '';
+  const issueLabel = task.scheduleConflict
+    ? '<span class="task-warning">schedule conflict</span>'
+    : task.missingDependencies && task.missingDependencies.length
+      ? `<span class="task-warning">missing ${escapeHtml(task.missingDependencies.join(', '))}</span>`
+      : '';
+  const disclosure = hasChildren
+    ? `<button class="task-disclosure" data-toggle-roadmap-node="${escapeHtml(task.id)}" type="button" aria-label="${nodeCollapsed ? 'Expand' : 'Collapse'} ${escapeHtml(task.id)}" aria-expanded="${nodeCollapsed ? 'false' : 'true'}">${nodeCollapsed ? '+' : '-'}</button>`
+    : '<span class="task-disclosure-spacer" aria-hidden="true"></span>';
+
+  return `
+    <div class="task-row ${index % 2 ? 'task-row-alt' : ''} status-${statusClass} ${task.fullyEstimated ? 'task-row-estimated' : ''} ${nodeCollapsed ? 'task-row-compressed' : ''}" style="--indent:${Number(entry.depth || 0) * 18}px">
+      <div class="task-label">
+        <span class="task-indent" aria-hidden="true"></span>
+        ${disclosure}
+        <button class="task-label-main" data-open-detail="${escapeHtml(task.id)}" type="button">
+          <span><span class="task-id">[${escapeHtml(task.id)}]</span> ${escapeHtml(taskDisplayTitle(task))}</span>
+          <span class="task-status">
+            ${escapeHtml([displayStatus(task.status), task.workload, estimateLabel, dependencyLabel, childLabel].filter(Boolean).join(' / '))}
+            ${issueLabel}
+          </span>
+        </button>
+      </div>
+      <div class="task-bar-area">
+        ${renderGridLines(range)}
+        ${renderTodayLine(range)}
+        <button class="task-bar status-${statusClass} ${task.fullyEstimated ? 'estimated' : ''} ${task.scheduleConflict ? 'conflict' : ''} ${nodeCollapsed ? 'compressed' : ''}" data-open-detail="${escapeHtml(task.id)}" style="left:${left}%;width:${width}%" title="${escapeHtml(title)}" type="button">
+          <span class="task-bar-progress" style="width:${Math.round((progress || 0) * 100)}%"></span>
+          <span class="task-bar-label">${escapeHtml(barLabel)}</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderRangeBar(item, range, className) {
+  const left = getPosition(item.start, range);
+  const width = Math.max(getWidth(item.start, item.end, range), 1.4);
+  const durationDays = Math.max(1, dateDiffDays(item.start, item.end) + 1);
+  const progress = Math.min(Math.max(Number(item.progress) || 0, 0), 1);
+  const label = `${durationDays}d · ${percentLabel(progress)}`;
+  const title = `${item.title}\n${formatShortDate(item.start)} -> ${formatShortDate(item.end)}\n${durationDays}d\n${percentLabel(progress)} done`;
+  return `
+    <div class="${className}" style="left:${left}%;width:${width}%" title="${escapeHtml(title)}">
+      <span class="group-range-bar-progress" style="width:${Math.round(progress * 100)}%"></span>
+      <span class="group-range-bar-label">${escapeHtml(label)}</span>
+    </div>
+  `;
+}
+
+function roadmapTooltip(task, start = task.start, end = task.end, durationDays = task.durationDays, compressed = false, progress = task.progress) {
+  const dates = `${formatShortDate(start)} -> ${formatShortDate(end)}`;
   const source = task.fullyEstimated
     ? 'Dates estimated by dependency order'
     : task.estimatedStart || task.estimatedEnd
@@ -772,7 +1202,61 @@ function roadmapTooltip(task) {
       : 'Explicit dates';
   const deps = task.dependsOn && task.dependsOn.length ? `\nDepends on: ${task.dependsOn.join(', ')}` : '';
   const missing = task.missingDependencies && task.missingDependencies.length ? `\nMissing dependencies: ${task.missingDependencies.join(', ')}` : '';
-  return `${task.id ? `[${task.id}] ` : ''}${taskDisplayTitle(task)}\n${dates}\n${source}\nStatus: ${displayStatus(task.status)}${deps}${missing}`;
+  const mode = compressed ? `\nCompressed range includes nested tasks\n${percentLabel(progress)} done` : '';
+  return `${task.id ? `[${task.id}] ` : ''}${taskDisplayTitle(task)}\n${dates}\n${durationDays || 1}d\n${source}\nStatus: ${displayStatus(task.status)}${mode}${deps}${missing}`;
+}
+
+function setRoadmapGroupMode(mode) {
+  const normalized = normalizeRoadmapGroupMode(mode);
+  if (roadmapGroupMode === normalized) return;
+  roadmapGroupMode = normalized;
+  window.localStorage?.setItem('mapctx:roadmapGroupMode', roadmapGroupMode);
+  roadmapCollapsedGroups.clear();
+  renderRoadmap();
+}
+
+function toggleRoadmapGroup(id) {
+  if (!id) return;
+  roadmapAllCollapsed = false;
+  window.localStorage?.setItem('mapctx:roadmapAllCollapsed', 'false');
+  if (roadmapCollapsedGroups.has(id)) {
+    roadmapCollapsedGroups.delete(id);
+  } else {
+    roadmapCollapsedGroups.add(id);
+  }
+  renderRoadmap();
+}
+
+function toggleRoadmapNode(id) {
+  if (!id) return;
+  if (roadmapCollapsedNodes.has(id)) {
+    roadmapCollapsedNodes.delete(id);
+  } else {
+    roadmapCollapsedNodes.add(id);
+  }
+  renderRoadmap();
+}
+
+function setAllRoadmapGroupsCollapsed(collapsed) {
+  const groups = groupRoadmapTasks(normalizeRoadmapTasks(board.tasks || []));
+  roadmapAllCollapsed = Boolean(collapsed);
+  window.localStorage?.setItem('mapctx:roadmapAllCollapsed', roadmapAllCollapsed ? 'true' : 'false');
+  if (collapsed) {
+    for (const group of groups) roadmapCollapsedGroups.add(group.id);
+  } else {
+    roadmapCollapsedGroups.clear();
+    roadmapCollapsedNodes.clear();
+  }
+  renderRoadmap();
+}
+
+function syncRoadmapCollapsedGroups(groups) {
+  if (!roadmapAllCollapsed) {
+    return;
+  }
+  for (const group of groups) {
+    roadmapCollapsedGroups.add(group.id);
+  }
 }
 
 function renderAll() {
@@ -1007,7 +1491,7 @@ function setProjectFormMessage(message, kind = '') {
   element.className = `form-message ${kind}`.trim();
 }
 
-async function openTaskDetail(taskId) {
+async function openTaskDetail(taskId, selectedRunId = '') {
   const task = findTask(taskId);
   if (!task) {
     return;
@@ -1017,10 +1501,10 @@ async function openTaskDetail(taskId) {
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
   document.getElementById('detail-modal-title').textContent = renderPlainTaskLabel(task);
-  setModalContent(renderIssueShell(task, '<p class="modal-empty">Loading detail file...</p>'));
+  setModalContent(renderIssueShell(task, '<p class="modal-empty">Loading detail file...</p>', selectedRunId));
 
   if (!task.detailPath) {
-    setModalContent(renderIssueShell(task, '<p class="modal-empty">No detail file linked.</p>'));
+    setModalContent(renderIssueShell(task, '<p class="modal-empty">No detail file linked.</p>', selectedRunId));
     return;
   }
 
@@ -1034,10 +1518,10 @@ async function openTaskDetail(taskId) {
       throw new Error(await response.text() || 'Failed to load detail');
     }
     const payload = await response.json();
-    setModalContent(renderIssueShell(task, renderDetailMarkdown(payload.path || task.detailPath, payload.content || '')));
+    setModalContent(renderIssueShell(task, renderDetailMarkdown(payload.path || task.detailPath, payload.content || '', task), selectedRunId));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    setModalContent(renderIssueShell(task, `<p class="modal-error">${escapeHtml(message)}</p>`));
+    setModalContent(renderIssueShell(task, `<p class="modal-error">${escapeHtml(message)}</p>`, selectedRunId));
   }
 }
 
@@ -1045,7 +1529,7 @@ function renderPlainTaskLabel(task) {
   return `[${task.id || '-'}] ${taskDisplayTitle(task)}`;
 }
 
-function renderIssueShell(task, bodyHtml) {
+function renderIssueShell(task, bodyHtml, selectedRunId = '') {
   const title = taskDisplayTitle(task);
   const pills = [
     task.priority ? `<span class="issue-pill priority-${escapeHtml(task.priority)}">${escapeHtml(task.priority)}</span>` : '',
@@ -1069,6 +1553,7 @@ function renderIssueShell(task, bodyHtml) {
         <main class="issue-main">${bodyHtml}</main>
         ${renderIssueSidebar(task)}
       </div>
+      ${renderIssueExecutionContext(task, selectedRunId)}
     </div>
   `;
 }
@@ -1099,30 +1584,120 @@ function renderIssueSidebar(task) {
     `)
     .join('');
 
-  const thread = task.thread && task.thread.exists ? `
-    <section class="issue-side-section">
-      <h4>Agent thread</h4>
-      <div class="agent-card">
-        <span class="agent-avatar">${escapeHtml(agentInitial(task.thread.lastAgentProfile || task.thread.lastRuntime || 'AI'))}</span>
-        <div>
-          <strong>${escapeHtml(task.thread.lastAgentProfile || 'Agent')}</strong>
-          <span>${escapeHtml([task.thread.lastRuntime, task.thread.lastModel].filter(Boolean).join(' · ') || 'runtime unknown')}</span>
-        </div>
-      </div>
-      ${task.thread.latestRunStatus ? `<span class="run-chip">${escapeHtml(task.thread.latestRunStatus)}</span>` : ''}
-      ${task.thread.costUsd ? `<span class="run-chip">${formatCost(task.thread.costUsd)}</span>` : ''}
-    </section>
-  ` : '';
-
   return `
     <aside class="issue-sidebar">
       <section class="issue-side-section">
         <h4>Properties</h4>
         ${rows || '<p class="modal-empty">No properties yet.</p>'}
       </section>
-      ${thread}
     </aside>
   `;
+}
+
+function renderIssueExecutionContext(task, selectedRunId = '') {
+  if (!task.thread || !task.thread.exists) {
+    return '';
+  }
+
+  const runs = getThreadRuns(task.thread);
+  const runCount = runs.length;
+  const contextMeta = [
+    task.thread.status ? `<span class="run-chip">${escapeHtml(task.thread.status)}</span>` : '',
+    runCount ? `<span class="run-chip">${runCount} execution${runCount === 1 ? '' : 's'}</span>` : '<span class="run-chip">context only</span>',
+    task.thread.costUsd ? `<span class="run-chip">${formatCost(task.thread.costUsd)}</span>` : ''
+  ].filter(Boolean).join('');
+  const summary = task.thread.summaryMarkdown || task.thread.summaryPreview || '';
+  const threadLog = task.thread.threadMarkdown || '';
+  const runList = runs.length
+    ? runs.map(run => renderThreadRunCard(task, run, selectedRunId)).join('')
+    : renderThreadRunCard(task, null, selectedRunId);
+
+  return `
+    <section class="modal-section issue-execution-context">
+      <div class="section-title-row">
+        <h3>Execution context</h3>
+        <span>${escapeHtml(task.id || '')}</span>
+      </div>
+      <div class="execution-context-head">
+        <div class="agent-card">
+          <span class="agent-avatar">${escapeHtml(agentInitial(task.thread.lastAgentProfile || task.thread.lastRuntime || 'AI'))}</span>
+          <div>
+            <strong>${escapeHtml(task.thread.lastAgentProfile || 'Agent')}</strong>
+            <span>${escapeHtml([task.thread.lastRuntime, task.thread.lastModel].filter(Boolean).join(' · ') || 'runtime unknown')}</span>
+          </div>
+        </div>
+        <div class="run-chip-row">${contextMeta}</div>
+      </div>
+      ${summary ? `
+        <div class="thread-context-summary">
+          <h4>Working summary</h4>
+          <div class="modal-markdown">${renderThreadSummaryMarkdown(summary)}</div>
+        </div>
+      ` : ''}
+      ${threadLog ? `
+        <div class="thread-context-summary thread-context-log">
+          <h4>Thread log</h4>
+          <div class="modal-markdown">${renderThreadSummaryMarkdown(threadLog)}</div>
+        </div>
+      ` : ''}
+      <div class="thread-run-list">
+        ${runList}
+      </div>
+    </section>
+  `;
+}
+
+function renderThreadRunCard(task, run, selectedRunId = '') {
+  const selected = run?.runId && selectedRunId === run.runId;
+  const stamp = executionItemTimestamp({ task, run });
+  const meta = [
+    run?.status ? `<span class="run-chip">${escapeHtml(run.status)}</span>` : '',
+    run?.runtime ? `<span class="run-chip">${escapeHtml(run.runtime)}</span>` : '',
+    run?.agentProfile ? `<span class="run-chip">${escapeHtml(run.agentProfile)}</span>` : '',
+    run?.model ? `<span class="run-chip">${escapeHtml(run.model)}</span>` : '',
+    run?.costUsd ? `<span class="run-chip">${formatCost(run.costUsd)}</span>` : '',
+    formatTokenUsage(run?.tokenUsage)
+  ].filter(Boolean).join('');
+  const title = run?.runId || 'No run record yet';
+  const body = run?.result || 'Portable execution context exists, but no run result was recorded.';
+
+  return `
+    <article class="thread-run-card ${selected ? 'selected' : ''}" data-thread-run-card="${escapeHtml(run?.runId || '')}">
+      <div class="thread-run-avatar">${escapeHtml(agentInitial(run?.agentProfile || run?.runtime || task.thread.lastAgentProfile || 'AI'))}</div>
+      <div class="thread-run-body">
+        <div class="thread-run-header">
+          <div>
+            <strong>${escapeHtml(title)}</strong>
+            ${stamp ? `<span>${escapeHtml(formatDateTime(stamp))}</span>` : ''}
+          </div>
+          <button
+            class="secondary-button issue-thread-link compact"
+            data-go-execution-task="${escapeHtml(task.id)}"
+            data-go-execution-run="${escapeHtml(run?.runId || '')}"
+            type="button">
+            View execution
+          </button>
+        </div>
+        ${meta ? `<div class="run-chip-row">${meta}</div>` : ''}
+        <p>${escapeHtml(body)}</p>
+      </div>
+    </article>
+  `;
+}
+
+function formatTokenUsage(tokenUsage) {
+  if (!tokenUsage) return '';
+  const parts = [
+    typeof tokenUsage.input === 'number' ? `${tokenUsage.input} in` : '',
+    typeof tokenUsage.output === 'number' ? `${tokenUsage.output} out` : '',
+    typeof tokenUsage.total === 'number' ? `${tokenUsage.total} total` : ''
+  ].filter(Boolean);
+  return parts.length ? `<span class="run-chip">${escapeHtml(parts.join(' · '))}</span>` : '';
+}
+
+function renderThreadSummaryMarkdown(markdown) {
+  const body = String(markdown || '').replace(/^#\s+.*(?:\r?\n)+/, '').trim();
+  return renderSimpleMarkdown(body || markdown);
 }
 
 function renderOwner(task) {
@@ -1141,7 +1716,7 @@ function agentInitial(value) {
   return String(value || 'AI').trim().slice(0, 2).toUpperCase() || 'AI';
 }
 
-function renderDetailMarkdown(detailPath, content) {
+function renderDetailMarkdown(detailPath, content, task = null) {
   const detail = parseDetailContent(content);
   const markdownSections = splitDetailMarkdownSections(detail.description);
   const acceptance = [
@@ -1153,7 +1728,11 @@ function renderDetailMarkdown(detailPath, content) {
     ...extractSectionChecklist(markdownSections, 'steps')
   ];
   const noteBlocks = extractFencedMarkdownBlocks(content);
-  const descriptionSections = markdownSections.filter(section => !isChecklistSection(section.title));
+  const descriptionSections = markdownSections.filter(section => {
+    if (isChecklistSection(section.title)) return false;
+    if (task?.thread?.exists && isExecutionContextSection(section.title)) return false;
+    return true;
+  });
   const descriptionHtml = renderDescriptionSections(detail, descriptionSections, detailPath);
 
   return `
@@ -1237,6 +1816,11 @@ function splitDetailMarkdownSections(markdown) {
 function isChecklistSection(title) {
   const normalized = String(title || '').trim().toLowerCase();
   return normalized === 'acceptance' || normalized === 'steps';
+}
+
+function isExecutionContextSection(title) {
+  const normalized = String(title || '').trim().toLowerCase();
+  return normalized === 'execution context' || normalized === 'thread context';
 }
 
 function extractSectionChecklist(sections, targetTitle) {
@@ -1534,10 +2118,42 @@ window.addEventListener('click', (event) => {
     );
     return;
   }
+  const roadmapModeTrigger = target.closest('[data-roadmap-group-mode]');
+  if (roadmapModeTrigger) {
+    setRoadmapGroupMode(roadmapModeTrigger.getAttribute('data-roadmap-group-mode'));
+    return;
+  }
+  const roadmapCollapseTrigger = target.closest('[data-roadmap-collapse-all]');
+  if (roadmapCollapseTrigger) {
+    setAllRoadmapGroupsCollapsed(roadmapCollapseTrigger.getAttribute('data-roadmap-collapse-all') === 'true');
+    return;
+  }
+  const roadmapGroupTrigger = target.closest('[data-toggle-roadmap-group]');
+  if (roadmapGroupTrigger) {
+    toggleRoadmapGroup(roadmapGroupTrigger.getAttribute('data-toggle-roadmap-group'));
+    return;
+  }
+  const roadmapNodeTrigger = target.closest('[data-toggle-roadmap-node]');
+  if (roadmapNodeTrigger) {
+    toggleRoadmapNode(roadmapNodeTrigger.getAttribute('data-toggle-roadmap-node'));
+    return;
+  }
+  const executionTrigger = target.closest('[data-go-execution-task]');
+  if (executionTrigger) {
+    goToExecutionTask(
+      executionTrigger.getAttribute('data-go-execution-task'),
+      executionTrigger.getAttribute('data-go-execution-run') || ''
+    );
+    return;
+  }
+  if (target.closest('[data-clear-execution-filters]')) {
+    clearExecutionFilters();
+    return;
+  }
   const detailTrigger = target.closest('[data-open-detail]');
   const detailId = detailTrigger ? detailTrigger.getAttribute('data-open-detail') : null;
   if (detailId) {
-    openTaskDetail(detailId);
+    openTaskDetail(detailId, detailTrigger.getAttribute('data-execution-run') || '');
     return;
   }
   const closeTrigger = target.closest("[data-close-modal='detail']");
@@ -1559,6 +2175,18 @@ window.addEventListener('click', (event) => {
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     closeModal();
+    return;
+  }
+  if (event.key === 'Enter' || event.key === ' ') {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
+    const detailTrigger = target.closest('[data-open-detail]');
+    const detailId = detailTrigger ? detailTrigger.getAttribute('data-open-detail') : null;
+    if (detailId) {
+      event.preventDefault();
+      openTaskDetail(detailId, detailTrigger.getAttribute('data-execution-run') || '');
+    }
   }
 });
 
@@ -1566,6 +2194,17 @@ document.getElementById('tab-kanban').addEventListener('click', () => setView('k
 document.getElementById('tab-roadmap').addEventListener('click', () => setView('roadmap'));
 document.getElementById('tab-execution').addEventListener('click', () => setView('execution'));
 document.getElementById('project-form')?.addEventListener('submit', submitProjectForm);
+
+document.addEventListener('change', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+  const key = target.getAttribute('data-execution-date-filter');
+  if (key) {
+    setExecutionDateFilter(key, target.value);
+  }
+});
 
 window.addEventListener('message', (event) => {
   const message = event.data;
@@ -1604,4 +2243,4 @@ if (window.MAPCTX_BOOTSTRAP) {
   renderAll();
 }
 
-setView('kanban');
+setView(activeView);

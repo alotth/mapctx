@@ -1,5 +1,7 @@
 # OpenCode Kanban/Roadmap Plugin
 
+**DEPRECATED:** This package will be removed in E-012 unless a user appears. See [T-059](../../tasks/T-059.md).
+
 This folder keeps the working OpenCode GUI plugin setup in the same repository as the VSCode extension, but isolated from extension sources.
 
 ## Files

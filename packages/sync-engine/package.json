@@ -57,7 +57,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@mapctx/core": "file:../core"
+    "@mapctx/core": "file:../core",
+    "@mapctx/planner": "file:../planner",
+    "@mapctx/store": "file:../store"
   },
   "bundleDependencies": [
     "@mapctx/core"

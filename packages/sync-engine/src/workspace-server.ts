@@ -1,3 +1,7 @@
+// FROZEN: workspace-server.ts is read-only. No new features.
+// Fixes limited to keeping the build green, revisited at external-adoption gate.
+// See: workspace-server is the only host serving workspaceV2.html (used by planned Gantt).
+//
 import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as http from 'http';
@@ -58,6 +62,8 @@ type WorkspaceTaskView = {
   dependsOn?: string[];
   thread: {
     exists: boolean;
+    summaryMarkdown?: string;
+    threadMarkdown?: string;
     summaryPreview?: string;
     status?: string;
     lastRuntime?: string;
@@ -66,8 +72,28 @@ type WorkspaceTaskView = {
     lastRunId?: string;
     latestRunStatus?: string;
     latestRunResult?: string;
+    latestRunStartedAt?: string;
+    latestRunEndedAt?: string;
     runCount: number;
     costUsd?: number;
+    runs: WorkspaceThreadRunView[];
+  };
+};
+
+type WorkspaceThreadRunView = {
+  runId: string;
+  runtime?: string;
+  agentProfile?: string;
+  model?: string;
+  status: string;
+  startedAt: string;
+  endedAt?: string;
+  costUsd?: number;
+  result?: string;
+  tokenUsage?: {
+    input?: number;
+    output?: number;
+    total?: number;
   };
 };
 
@@ -552,13 +578,15 @@ function resolveAssetPath(_activeWorkspace: ActiveWorkspace, assetPath: string):
 }
 
 function readTaskThread(projectRoot: string, taskId: string): WorkspaceTaskView['thread'] {
-  const context = readThreadContext(projectRoot, taskId, { includeRuns: true });
-  if (!context.exists) return { exists: false, runCount: 0 };
+  const context = readThreadContext(projectRoot, taskId, { includeRuns: true, includeThread: true });
+  if (!context.exists) return { exists: false, runCount: 0, runs: [] };
 
   const latestRun = context.runs[context.runs.length - 1];
   const costUsd = sumRunCost(context.runs);
   return {
     exists: true,
+    summaryMarkdown: context.summary || undefined,
+    threadMarkdown: context.thread || undefined,
     summaryPreview: summaryPreview(context.summary),
     status: context.meta?.status || undefined,
     lastRuntime: context.meta?.lastRuntime || undefined,
@@ -567,8 +595,31 @@ function readTaskThread(projectRoot: string, taskId: string): WorkspaceTaskView[
     lastRunId: context.meta?.lastRunId || undefined,
     latestRunStatus: latestRun?.status,
     latestRunResult: latestRun?.result || undefined,
+    latestRunStartedAt: latestRun?.startedAt,
+    latestRunEndedAt: latestRun?.endedAt || undefined,
     runCount: context.runs.length,
-    costUsd: costUsd ?? undefined
+    costUsd: costUsd ?? undefined,
+    runs: context.runs.map(toWorkspaceThreadRun)
+  };
+}
+
+function toWorkspaceThreadRun(run: ThreadRunRecord): WorkspaceThreadRunView {
+  const tokenUsage: WorkspaceThreadRunView['tokenUsage'] = {};
+  if (typeof run.tokenUsage.input === 'number') tokenUsage.input = run.tokenUsage.input;
+  if (typeof run.tokenUsage.output === 'number') tokenUsage.output = run.tokenUsage.output;
+  if (typeof run.tokenUsage.total === 'number') tokenUsage.total = run.tokenUsage.total;
+
+  return {
+    runId: run.runId,
+    runtime: run.runtime || undefined,
+    agentProfile: run.agentProfile || undefined,
+    model: run.model || undefined,
+    status: run.status,
+    startedAt: run.startedAt,
+    endedAt: run.endedAt || undefined,
+    costUsd: typeof run.costUsd === 'number' ? run.costUsd : undefined,
+    result: run.result || undefined,
+    tokenUsage: Object.keys(tokenUsage).length ? tokenUsage : undefined
   };
 }
 

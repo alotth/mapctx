@@ -18,6 +18,7 @@ export interface KanbanTask {
   updated?: string;
   completed?: string;
   milestone?: string;
+  dependsOn?: string[];
   detailPath?: string;
   defaultExpanded?: boolean;
   steps?: Array<{ text: string; completed: boolean }>;
@@ -201,7 +202,7 @@ export class MarkdownKanbanParser {
   private static isTaskTitle(line: string, trimmedLine: string): boolean {
     // 排除属性行和步骤项
     if (line.startsWith('- ') && 
-        (trimmedLine.match(/^\s*- (id|status|type|parent|subIssueProgress|due|tags|priority|workload|steps|defaultExpanded|start|milestone|detail|updated|completed):/) ||
+        (trimmedLine.match(/^\s*- (id|status|type|parent|subIssueProgress|due|tags|priority|workload|steps|defaultExpanded|start|milestone|dependsOn|detail|updated|completed):/) ||
          line.match(/^\s{6,}- \[([ x])\]/))) {
       return false;
     }
@@ -211,7 +212,7 @@ export class MarkdownKanbanParser {
   }
 
   private static parseTaskProperty(line: string, task: KanbanTask): boolean {
-    const propertyMatch = line.match(/^\s+- (id|status|type|parent|subIssueProgress|due|tags|priority|workload|steps|defaultExpanded|start|milestone|detail|updated|completed):\s*(.*)$/);
+    const propertyMatch = line.match(/^\s+- (id|status|type|parent|subIssueProgress|due|tags|priority|workload|steps|defaultExpanded|start|milestone|dependsOn|detail|updated|completed):\s*(.*)$/);
     if (!propertyMatch) return false;
 
     const [, propertyName, propertyValue] = propertyMatch;
@@ -269,6 +270,9 @@ export class MarkdownKanbanParser {
       case 'milestone':
         task.milestone = value;
         break;
+      case 'dependsOn':
+        task.dependsOn = this.parseArrayProperty(value);
+        break;
       case 'detail':
         if (value) {
           task.detailPath = value;
@@ -282,6 +286,12 @@ export class MarkdownKanbanParser {
         break;
     }
     return true;
+  }
+
+  private static parseArrayProperty(value: string): string[] {
+    const match = value.match(/^\[(.*)\]$/);
+    if (!match) return [];
+    return match[1].split(',').map(item => item.trim()).filter(Boolean);
   }
 
   private static parseTaskStep(line: string, task: KanbanTask): boolean {
@@ -379,6 +389,9 @@ export class MarkdownKanbanParser {
     }
     if (task.milestone) {
       properties += `  - milestone: ${task.milestone}\n`;
+    }
+    if (task.dependsOn && task.dependsOn.length > 0) {
+      properties += `  - dependsOn: [${task.dependsOn.join(', ')}]\n`;
     }
     // #region agent log
     if (task.id === 'T-001') {
