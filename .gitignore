@@ -35,3 +35,9 @@ task-sync/dist/
 
 # temp files
 temp/
+
+# Playwright/dev output artifacts
+output/
+
+# Local OpenCode workspace
+.opencode/
