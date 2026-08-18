@@ -2,6 +2,25 @@ export type TaskStatus = "backlog" | "doing" | "review" | "done" | "paused" | "u
 
 export { parseTaskDetailMarkdown, generateTaskDetailMarkdown, type TaskDetail, type TaskStep } from "./detail"
 
+export {
+  parseTasksFile,
+  serializeTasksFile,
+  writeBoard,
+  ensureDetailFile,
+  type Task,
+  type TaskBoard,
+  type LocalStatus,
+  type TaskType,
+  type SpecMode
+} from "./markdown"
+
+export {
+  parseTaskDetailFile,
+  generateTaskDetailFile,
+  readTaskDetailFile,
+  type TaskDetailFile
+} from "./task-detail"
+
 export function normalizeStatus(value: string | undefined | null): TaskStatus {
   const status = String(value || "").trim().toLowerCase()
   if (status === "backlog" || status === "doing" || status === "review" || status === "done" || status === "paused") {
