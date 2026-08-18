@@ -1,0 +1,99 @@
+{
+  "$ref": "#/definitions/CostEvent",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "CostEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "allocatedMicros": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "appliedRateMicrosPerToken": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "billingType": {
+          "enum": [
+            "metered_api",
+            "subscription_included",
+            "subscription_overage",
+            "credits",
+            "fixed",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "cashCents": {
+          "type": "integer"
+        },
+        "costEventId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "costStatus": {
+          "enum": [
+            "reported",
+            "unpriced",
+            "allocated",
+            "estimated"
+          ],
+          "type": "string"
+        },
+        "dispatchId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "planPeriodId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "priceTableVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "shadowMicros": {
+          "type": "integer"
+        },
+        "usageEventId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "costEventId",
+        "dispatchId",
+        "usageEventId",
+        "billingType",
+        "costStatus",
+        "cashCents",
+        "shadowMicros",
+        "allocatedMicros",
+        "planPeriodId",
+        "priceTableVersion",
+        "appliedRateMicrosPerToken"
+      ],
+      "type": "object"
+    }
+  }
+}

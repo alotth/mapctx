@@ -1,0 +1,7 @@
+{
+  "activeTimeMs": 2400000,
+  "idleThresholdMs": 600000,
+  "leadTimeMs": 86400000,
+  "sessionWallClockMs": 3600000,
+  "taskDurationMs": 2400000
+}

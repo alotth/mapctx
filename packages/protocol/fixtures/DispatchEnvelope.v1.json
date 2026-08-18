@@ -1,0 +1,81 @@
+{
+  "attempt": 1,
+  "context": {
+    "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "refs": [
+      {
+        "artifactId": "0a1b2c3d-4e5f-4678-89ab-cdef01234567",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "kind": "spec",
+        "ownerId": "T-048",
+        "ownerKind": "task",
+        "promotedPath": null,
+        "uri": "traycer://epic/e8873251-f6f0-490d-be16-8e5655300237/artifact/mapctx-vnext-t049-external-store-tech-plan",
+        "version": "1"
+      }
+    ],
+    "tokenBudget": 2000
+  },
+  "dispatchId": "9b2e4d71-6c18-4a0f-b3d5-11aa22bb33cc",
+  "executor": {
+    "capabilities": [
+      "worktree",
+      "a2a"
+    ],
+    "kind": "traycer"
+  },
+  "projectId": "2f1c6c3e-0a51-4d2b-9c4a-8b7e1d90a111",
+  "resourceClaims": [
+    {
+      "claimId": "c0ffee00-1111-4222-8333-444444444444",
+      "confidence": "high",
+      "domains": [
+        "PROTOCOL"
+      ],
+      "mode": "write",
+      "paths": [
+        "packages/protocol/**"
+      ],
+      "provenance": "authored",
+      "taskId": "T-048"
+    }
+  ],
+  "schemaVersion": 1,
+  "task": {
+    "acceptance": [
+      "Every entity has an executable schema plus a versioned golden fixture"
+    ],
+    "detailPath": "./tasks/T-048.md",
+    "domains": [
+      "PROTOCOL",
+      "STORE",
+      "DOCS"
+    ],
+    "due": null,
+    "id": "T-048",
+    "parentId": "E-009",
+    "planningState": "in-progress",
+    "priority": "high",
+    "specMode": "strict",
+    "start": null,
+    "tags": [
+      "vnext",
+      "protocol"
+    ],
+    "title": "Define vNext protocol and operational domain model",
+    "type": "task",
+    "workload": "Hard"
+  },
+  "workflowEvidence": [
+    {
+      "artifactId": "0a1b2c3d-4e5f-4678-89ab-cdef01234567",
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "kind": "spec",
+      "ownerId": "T-048",
+      "ownerKind": "task",
+      "promotedPath": null,
+      "uri": "traycer://epic/e8873251-f6f0-490d-be16-8e5655300237/artifact/mapctx-vnext-t049-external-store-tech-plan",
+      "version": "1"
+    }
+  ]
+}

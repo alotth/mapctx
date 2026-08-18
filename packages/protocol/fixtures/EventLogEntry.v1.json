@@ -1,0 +1,14 @@
+{
+  "actor": "mapctx-cli",
+  "causation": [],
+  "eventType": "task.upserted",
+  "logicalClock": 1,
+  "nodeId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+  "occurredAt": "2026-08-15T21:00:00.000Z",
+  "payload": {
+    "taskId": "T-048"
+  },
+  "payloadSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "schemaVersion": 1,
+  "sequence": 1
+}

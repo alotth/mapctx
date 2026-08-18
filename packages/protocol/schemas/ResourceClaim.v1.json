@@ -1,0 +1,65 @@
+{
+  "$ref": "#/definitions/ResourceClaim",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ResourceClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "claimId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "type": "string"
+        },
+        "domains": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "enum": [
+            "read",
+            "write"
+          ],
+          "type": "string"
+        },
+        "paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "provenance": {
+          "enum": [
+            "authored",
+            "filesAffected",
+            "glob-heuristic",
+            "inferred"
+          ],
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^[TE]-\\d{3,}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "claimId",
+        "taskId",
+        "domains",
+        "paths",
+        "mode",
+        "confidence",
+        "provenance"
+      ],
+      "type": "object"
+    }
+  }
+}

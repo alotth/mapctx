@@ -1,0 +1,433 @@
+{
+  "$ref": "#/definitions/DispatchEnvelope",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "DispatchEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "attempt": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "context": {
+          "additionalProperties": false,
+          "properties": {
+            "hash": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "refs": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "artifactId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "contentHash": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "enum": [
+                      "spec",
+                      "ticket",
+                      "story",
+                      "review",
+                      "adr",
+                      "other"
+                    ],
+                    "type": "string"
+                  },
+                  "ownerId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "ownerKind": {
+                    "enum": [
+                      "project",
+                      "epic",
+                      "task",
+                      "dispatch"
+                    ],
+                    "type": "string"
+                  },
+                  "promotedPath": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "uri": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "artifactId",
+                  "ownerKind",
+                  "ownerId",
+                  "uri",
+                  "kind",
+                  "version",
+                  "contentHash",
+                  "promotedPath"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "tokenBudget": {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "refs",
+            "hash"
+          ],
+          "type": "object"
+        },
+        "dispatchId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "executor": {
+          "additionalProperties": false,
+          "properties": {
+            "capabilities": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "capabilities"
+          ],
+          "type": "object"
+        },
+        "projectId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "resourceClaims": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "claimId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "confidence": {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              "domains": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "mode": {
+                "enum": [
+                  "read",
+                  "write"
+                ],
+                "type": "string"
+              },
+              "paths": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "provenance": {
+                "enum": [
+                  "authored",
+                  "filesAffected",
+                  "glob-heuristic",
+                  "inferred"
+                ],
+                "type": "string"
+              },
+              "taskId": {
+                "pattern": "^[TE]-\\d{3,}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "claimId",
+              "taskId",
+              "domains",
+              "paths",
+              "mode",
+              "confidence",
+              "provenance"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "schemaVersion": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "task": {
+          "additionalProperties": false,
+          "properties": {
+            "acceptance": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "detailPath": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "domains": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "due": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "pattern": "^[TE]-\\d{3,}$",
+              "type": "string"
+            },
+            "parentId": {
+              "anyOf": [
+                {
+                  "pattern": "^[TE]-\\d{3,}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "planningState": {
+              "enum": [
+                "backlog",
+                "ready",
+                "blocked",
+                "in-progress",
+                "review",
+                "paused",
+                "done",
+                "cancelled"
+              ],
+              "type": "string"
+            },
+            "priority": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "specMode": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "lite",
+                    "standard",
+                    "strict"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "start": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "tags": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "epic",
+                "feature",
+                "task",
+                "bug",
+                "chore"
+              ],
+              "type": "string"
+            },
+            "workload": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "Easy",
+                    "Normal",
+                    "Hard",
+                    "Extreme"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "type",
+            "parentId",
+            "planningState",
+            "priority",
+            "workload",
+            "tags",
+            "domains",
+            "start",
+            "due",
+            "acceptance",
+            "specMode",
+            "detailPath"
+          ],
+          "type": "object"
+        },
+        "workflowEvidence": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "artifactId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "contentHash": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "kind": {
+                "enum": [
+                  "spec",
+                  "ticket",
+                  "story",
+                  "review",
+                  "adr",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "ownerId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "ownerKind": {
+                "enum": [
+                  "project",
+                  "epic",
+                  "task",
+                  "dispatch"
+                ],
+                "type": "string"
+              },
+              "promotedPath": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "uri": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "artifactId",
+              "ownerKind",
+              "ownerId",
+              "uri",
+              "kind",
+              "version",
+              "contentHash",
+              "promotedPath"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "dispatchId",
+        "attempt",
+        "projectId",
+        "task",
+        "context",
+        "resourceClaims",
+        "workflowEvidence",
+        "executor"
+      ],
+      "type": "object"
+    }
+  }
+}

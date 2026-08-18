@@ -1,0 +1,12 @@
+{
+  "entityKind": "other",
+  "externalKey": "T-048",
+  "metadata": {
+    "role": "canonical"
+  },
+  "ownerId": "T-048",
+  "ownerKind": "task",
+  "provider": "other",
+  "refId": "aaaa1111-bbbb-4ccc-8ddd-eeee22223333",
+  "uri": "mapctx://task/T-048"
+}

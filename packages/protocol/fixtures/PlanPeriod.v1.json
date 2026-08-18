@@ -1,0 +1,10 @@
+{
+  "biller": "anthropic",
+  "fixedCents": 20000,
+  "periodEnd": "2026-08-31T23:59:59.000Z",
+  "periodStart": "2026-08-01T00:00:00.000Z",
+  "planName": "claude-pro",
+  "planPeriodId": "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+  "seats": 1,
+  "status": "open"
+}

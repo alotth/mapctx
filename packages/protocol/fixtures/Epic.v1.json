@@ -1,0 +1,25 @@
+{
+  "goals": [
+    "Define executable contracts",
+    "Replace live Markdown state"
+  ],
+  "id": "E-009",
+  "planningState": "in-progress",
+  "title": "vNext protocol and store",
+  "workflowGates": [
+    {
+      "evidence": [
+        "traycer://e8873251-f6f0-490d-be16-8e5655300237/mapctx-vnext-strategy"
+      ],
+      "name": "product-review",
+      "reason": null,
+      "status": "approved"
+    },
+    {
+      "evidence": [],
+      "name": "vertical-slices",
+      "reason": "localized-low-risk",
+      "status": "skipped"
+    }
+  ]
+}

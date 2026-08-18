@@ -1,0 +1,73 @@
+{
+  "$ref": "#/definitions/ExternalRef",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ExternalRef": {
+      "additionalProperties": false,
+      "properties": {
+        "entityKind": {
+          "enum": [
+            "epic",
+            "artifact",
+            "issue",
+            "project-item",
+            "run",
+            "dispatch",
+            "other"
+          ],
+          "type": "string"
+        },
+        "externalKey": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "metadata": {
+          "additionalProperties": {},
+          "default": {},
+          "type": "object"
+        },
+        "ownerId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "ownerKind": {
+          "enum": [
+            "project",
+            "epic",
+            "task",
+            "dispatch"
+          ],
+          "type": "string"
+        },
+        "provider": {
+          "enum": [
+            "traycer",
+            "github",
+            "orca",
+            "paperclip",
+            "other"
+          ],
+          "type": "string"
+        },
+        "refId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "uri": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "refId",
+        "ownerKind",
+        "ownerId",
+        "provider",
+        "entityKind",
+        "externalKey",
+        "uri"
+      ],
+      "type": "object"
+    }
+  }
+}

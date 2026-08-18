@@ -1,0 +1,72 @@
+{
+  "$ref": "#/definitions/ArtifactRef",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ArtifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "contentHash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "spec",
+            "ticket",
+            "story",
+            "review",
+            "adr",
+            "other"
+          ],
+          "type": "string"
+        },
+        "ownerId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "ownerKind": {
+          "enum": [
+            "project",
+            "epic",
+            "task",
+            "dispatch"
+          ],
+          "type": "string"
+        },
+        "promotedPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uri": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "artifactId",
+        "ownerKind",
+        "ownerId",
+        "uri",
+        "kind",
+        "version",
+        "contentHash",
+        "promotedPath"
+      ],
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,229 @@
+{
+  "$ref": "#/definitions/RunReceipt",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "RunReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "attempt": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "changedFiles": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dispatchId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "endedAt": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "artifactId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "contentHash": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "kind": {
+                "enum": [
+                  "spec",
+                  "ticket",
+                  "story",
+                  "review",
+                  "adr",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "ownerId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "ownerKind": {
+                "enum": [
+                  "project",
+                  "epic",
+                  "task",
+                  "dispatch"
+                ],
+                "type": "string"
+              },
+              "promotedPath": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "uri": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "artifactId",
+              "ownerKind",
+              "ownerId",
+              "uri",
+              "kind",
+              "version",
+              "contentHash",
+              "promotedPath"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "failure": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "category": {
+                  "enum": [
+                    "executor-error",
+                    "timeout",
+                    "policy-violation",
+                    "context-mismatch",
+                    "cancelled-by-operator",
+                    "unknown"
+                  ],
+                  "type": "string"
+                },
+                "message": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "category",
+                "message",
+                "retryable"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "completed",
+            "failed",
+            "blocked",
+            "cancelled"
+          ],
+          "type": "string"
+        },
+        "schemaVersion": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "startedAt": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
+          "type": "string"
+        },
+        "usageEvents": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "cacheTokens": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "coverage": {
+                "enum": [
+                  "full",
+                  "partial",
+                  "none"
+                ],
+                "type": "string"
+              },
+              "dispatchId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "inputTokens": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "model": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "outputTokens": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "provider": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "source": {
+                "enum": [
+                  "harness-transcript",
+                  "provider-api",
+                  "manual",
+                  "absent"
+                ],
+                "type": "string"
+              },
+              "usageEventId": {
+                "format": "uuid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "usageEventId",
+              "dispatchId",
+              "provider",
+              "model",
+              "inputTokens",
+              "cacheTokens",
+              "outputTokens",
+              "source",
+              "coverage"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "dispatchId",
+        "attempt",
+        "outcome",
+        "startedAt",
+        "endedAt",
+        "changedFiles",
+        "usageEvents",
+        "evidence",
+        "failure"
+      ],
+      "type": "object"
+    }
+  }
+}

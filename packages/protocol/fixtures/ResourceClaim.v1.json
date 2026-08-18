@@ -1,0 +1,13 @@
+{
+  "claimId": "c0ffee00-1111-4222-8333-444444444444",
+  "confidence": "high",
+  "domains": [
+    "PROTOCOL"
+  ],
+  "mode": "write",
+  "paths": [
+    "packages/protocol/**"
+  ],
+  "provenance": "authored",
+  "taskId": "T-048"
+}

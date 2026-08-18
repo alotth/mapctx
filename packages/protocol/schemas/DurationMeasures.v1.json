@@ -1,0 +1,39 @@
+{
+  "$ref": "#/definitions/DurationMeasures",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "DurationMeasures": {
+      "additionalProperties": false,
+      "properties": {
+        "activeTimeMs": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "idleThresholdMs": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "leadTimeMs": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sessionWallClockMs": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "taskDurationMs": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sessionWallClockMs",
+        "activeTimeMs",
+        "taskDurationMs",
+        "leadTimeMs",
+        "idleThresholdMs"
+      ],
+      "type": "object"
+    }
+  }
+}

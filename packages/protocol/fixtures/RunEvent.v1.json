@@ -1,0 +1,11 @@
+{
+  "attempt": 1,
+  "dispatchId": "9b2e4d71-6c18-4a0f-b3d5-11aa22bb33cc",
+  "payload": {
+    "agentId": "3b7f74e5-f031-4f78-b90a-3d3a827137f2"
+  },
+  "schemaVersion": 1,
+  "sequence": 0,
+  "timestamp": "2026-08-15T21:00:00.000Z",
+  "type": "started"
+}

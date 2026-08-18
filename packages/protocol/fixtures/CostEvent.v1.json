@@ -1,0 +1,13 @@
+{
+  "allocatedMicros": 80000,
+  "appliedRateMicrosPerToken": 300,
+  "billingType": "subscription_included",
+  "cashCents": 0,
+  "costEventId": "66666666-7777-4888-8999-aaaaaaaaaaaa",
+  "costStatus": "allocated",
+  "dispatchId": "9b2e4d71-6c18-4a0f-b3d5-11aa22bb33cc",
+  "planPeriodId": "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+  "priceTableVersion": "2026-08-01",
+  "shadowMicros": 1250000,
+  "usageEventId": "11111111-2222-4333-8444-555555555555"
+}
