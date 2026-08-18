@@ -11,7 +11,7 @@
 			"request": "launch",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}/packages/vscode-extension",
-				"${workspaceFolder}/example-tasks"
+				"${workspaceFolder}"
 			],
 			"outFiles": [
 				"${workspaceFolder}/packages/vscode-extension/dist/**/*.js"

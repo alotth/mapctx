@@ -25,7 +25,15 @@
     "build:opencode-plugin": "node scripts/build-opencode-plugin.mjs",
     "install:opencode-plugin": "node scripts/install-opencode-plugin.mjs",
     "build:core": "npm run build --workspace @mapctx/core",
-    "build:sync-engine": "npm run build:core && npm run build --workspace @mapctx/sync-engine",
-    "test:sync-engine": "npm run build:core && npm run test --workspace @mapctx/sync-engine"
+    "build:protocol": "npm run build --workspace @mapctx/protocol",
+    "test:protocol": "npm run test --workspace @mapctx/protocol",
+    "build:store": "npm run build:core && npm run build:protocol && npm run build --workspace @mapctx/store",
+    "test:store": "npm run build:core && npm run build:protocol && npm run test --workspace @mapctx/store",
+    "build:sync-engine": "npm run build:core && npm run build:store && npm run build --workspace @mapctx/sync-engine",
+    "test:sync-engine": "npm run build:core && npm run build:store && npm run test --workspace @mapctx/sync-engine",
+    "build:planner": "npm run build:protocol && npm run build --workspace @mapctx/planner",
+    "test:planner": "npm run build:protocol && npm run test --workspace @mapctx/planner",
+    "build:forecast": "npm run build:store && npm run build --workspace @mapctx/forecast",
+    "test:forecast": "npm run test:store && npm run test --workspace @mapctx/forecast"
   }
 }
