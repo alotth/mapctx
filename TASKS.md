@@ -1202,6 +1202,25 @@
   - updated: 2026-08-17
   - detail: ./tasks/T-064.md
 
+### [T-065] Make the duration prior workload-aware and unit-honest
+
+  - id: T-065
+  - status: backlog
+  - type: feature
+  - parent: E-011
+  - subIssueProgress: null
+  - priority: high
+  - workload: Normal
+  - tags: [vnext, forecast, calibration, estimation]
+  - domains: [FORECAST, WEBVIEW, TELEMETRY, TEST]
+  - dependsOn: [T-054, T-064]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-08-17
+  - detail: ./tasks/T-065.md
+
 ### [E-010] Harness-neutral execution with Traycer first
 
   - id: E-010
