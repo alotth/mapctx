@@ -1,5 +1,9 @@
 # Portable Thread Substrate
 
+> **Superseded by ADR 0003.** Kept as historical/current-release documentation.
+> MapCtx vNext does not own transcripts or session continuation; harnesses own
+> them, while MapCtx ingests normalized run events/receipts and artifact refs.
+
 This document defines the first MapCtx contract for portable task conversations and execution continuity.
 
 The goal is to let a task move through execution, review, replanning, and resumed execution without being tied to one runtime's native session model.

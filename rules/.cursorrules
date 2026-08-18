@@ -1,68 +1,18 @@
-# MapCtx Cursor Rules
+# Global Rules
 
-Use these rules when editing `TASKS.md` and `tasks/<ID>.md`.
+- If the repository contains a `TASKS.md` file, ask once per session whether to use the Markdown Kanban standard and load the `mapctx-tasks` skill.
+- If the user agrees, call `skill("mapctx-tasks")` before creating or editing `TASKS.md` or any `./tasks/T-XXX.md` detail files.
+- If the user declines, do not ask again during the same session.
+- Do not load the skill for unrelated work.
+- For JavaScript/TypeScript tooling commands, prefer running via login shell using `zsh -lic` so PATH and shell profile are loaded.
+- Prefer local project CLIs via `npx` (for example: `npx prisma`, `npx next`, `npx eslint`, `npx vitest`) instead of assuming global installs.
+- When a command fails with `command not found`, retry once with `zsh -lic` and `npx` (when applicable) before concluding the tool is unavailable.
 
-## Single-list task model
+## Execution Discipline
 
-- Keep one `## Tasks` section.
-- Store workflow in `status` per task.
-- Do not create board sections by status.
-
-## Required task keys and order
-
-Every task block must contain, in order:
-
-`id`, `status`, `type`, `parent`, `subIssueProgress`, `priority`, `workload`, `tags`, `domains`, `dependsOn`, `start`, `due`, `completed`, `externalId`, `updated`, `detail`.
-
-Field rules:
-
-- `type`: required (`epic|feature|task|bug|chore`).
-- `parent`: required as key; set parent ID for subtasks, else `null`.
-- `subIssueProgress`: required as key; use mostly for epics, else `null`.
-- `domains`: canonical field for scope/conflict checks; `touch` is legacy alias only.
-- Dates: `YYYY-MM-DD`.
-- Unknown scalars: `null`.
-- Empty collections: `[]`.
-
-## Optional extension keys
-
-Only add when needed, after `detail`:
-
-- `iteration`
-- `assignees`
-- `externalLinks`
-- `milestone`
-- `specMode` (`lite|standard|strict|null`)
-
-Do not use `defaultExpanded`.
-
-## Detail files
-
-Use metadata-first detail files:
-
-- Path: `tasks/<ID>.md`
-- Heading: `# <ID>`
-- Keep `description` as the last key
-- Keep planning product-first: user context and outcome before technical notes
-- Place acceptance/steps/notes under `description: |`
-- Do not use fenced ` ```md ` blocks for description format
-
-## Status policy
-
-Default status flow:
-
-- `backlog -> ready-for-do -> doing -> review -> done`
-- `doing <-> paused`
-
-When status changes:
-
-- update `updated`
-- set `completed` when entering completion state (`done` unless custom)
-- reset `completed: null` when leaving completion state
-
-## Project management defaults
-
-1. Model major outcomes as epics.
-2. Break execution into small tasks/subtasks with clear acceptance.
-3. Keep WIP low and dependencies explicit.
-4. Prefer low-conflict edits; append new tasks at the end.
+- Before implementing, state material assumptions when they affect the result. If multiple reasonable interpretations exist, surface them instead of picking silently.
+- Prefer the simplest solution that fully solves the request. Avoid speculative abstractions, configurability, or future-proofing that was not asked for.
+- Make surgical changes. Do not refactor, reformat, or clean up adjacent code unless it is required by the requested change.
+- Clean up only what your change made obsolete. If you notice unrelated dead code or design issues, mention them without changing them unless asked.
+- For non-trivial work, define success with a concrete verification path such as tests, commands, or observable behavior. For trivial work, skip ceremony and execute directly.
+- Use subagents only when complexity justifies them. Default to a single agent for `lite` and most `standard` work; reserve planner/reviewer/evaluator subagents for `strict`, high-risk, or clearly cross-domain tasks.
