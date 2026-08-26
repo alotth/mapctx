@@ -4,11 +4,14 @@ import * as os from "os"
 import * as path from "path"
 import { execFileSync } from "child_process"
 import {
+  MAPCTX_TOML_FILENAME,
   findMapctxToml,
+  readMapctxToml,
   resolveProjectStoreDir,
   writeMapctxToml,
   type GithubBinding,
-  type MapctxTomlConfig
+  type MapctxTomlConfig,
+  type PlansAuthority
 } from "./config"
 import { buildExport } from "./export"
 import { planImport, type ImportPlan } from "./import"
@@ -29,16 +32,133 @@ export type LegacySyncConfig = {
 
 export type ImportDryRunOptions = {
   tasksFilePath: string;
+  /**
+   * Repository root to inspect for cutover preconditions. Omit to report the
+   * board plan only; the CLI always passes it so `--dry-run` can name the
+   * project and the authority transition it would perform.
+   */
+  cwd?: string;
+  legacyConfigPath?: string;
+  mapctxTomlPath?: string;
+};
+
+export type CutoverPreview = {
+  /**
+   * null means "no project identity exists yet"; `mapctx import --commit`
+   * generates the UUID as part of the cutover commit.
+   */
+  projectId: string | null;
+  projectIdSource: "mapctx.toml" | "generated-at-commit";
+  boardTitle: string;
+  tasksFilePath: string;
+  tasksRoot: string;
+  taskCount: number;
+  plansAuthority: { current: PlansAuthority; proposed: PlansAuthority };
+  mapctxTomlPath: string;
+  legacyConfigPath: string;
+  legacyConfigPresent: boolean;
+  storeDir: string | null;
+  blockers: string[];
 };
 
 export type ImportDryRunResult = {
   plan: ImportPlan;
   wouldCommit: boolean;
+  cutover?: CutoverPreview;
 };
+
+function gitDirtyPaths(cwd: string, relativePaths: string[]): string[] {
+  if (relativePaths.length === 0) return [];
+  // Never trim the whole output: porcelain lines start with a two-column
+  // status code, so a leading space on the first line is significant.
+  const status = git(cwd, ["status", "--porcelain", "--", ...relativePaths]);
+  return status
+    .split("\n")
+    .filter(line => line.trim() !== "")
+    .map(line => line.slice(3).trim());
+}
+
+/**
+ * Same preconditions `importCommit` enforces, reported instead of thrown so a
+ * dry run names every reason the cutover would refuse rather than surfacing
+ * only the first one.
+ */
+function previewCutover(plan: ImportPlan, options: ImportDryRunOptions & { cwd: string }): CutoverPreview {
+  const cwd = options.cwd;
+  const tasksFilePath = options.tasksFilePath;
+  const legacyConfigPath = options.legacyConfigPath ?? path.join(cwd, "mapcs.config.json");
+  const mapctxTomlPath = options.mapctxTomlPath ?? path.join(cwd, MAPCTX_TOML_FILENAME);
+  const blockers: string[] = [];
+
+  let projectId: string | null = null;
+  let projectIdSource: CutoverPreview["projectIdSource"] = "generated-at-commit";
+  let current: PlansAuthority = "markdown";
+
+  if (fs.existsSync(mapctxTomlPath)) {
+    blockers.push(`${mapctxTomlPath} already exists; this project has already been imported.`);
+    try {
+      const existing = readMapctxToml(mapctxTomlPath);
+      projectId = existing.projectId;
+      projectIdSource = "mapctx.toml";
+      current = existing.plansAuthority;
+    } catch (error) {
+      blockers.push(`${mapctxTomlPath} is unreadable: ${(error as Error).message}`);
+    }
+  } else {
+    const foreignToml = findMapctxToml(cwd);
+    if (foreignToml) {
+      blockers.push(`Found an unrelated ${MAPCTX_TOML_FILENAME} at ${foreignToml}; a second project store must not be nested under it.`);
+    }
+  }
+
+  const legacyConfigPresent = fs.existsSync(legacyConfigPath);
+  if (!legacyConfigPresent) {
+    blockers.push(`mapctx import requires exactly one pre-cutover config at ${legacyConfigPath}; none found.`);
+  }
+
+  if (plan.errors > 0) {
+    blockers.push(`Board validation failed with ${plan.errors} error(s).`);
+  }
+
+  const trackedPaths = [
+    path.relative(cwd, tasksFilePath),
+    ...plan.tasks
+      .filter(item => item.task.detailPath)
+      .map(item => path.relative(cwd, path.resolve(plan.tasksRoot, item.task.detailPath!)))
+  ];
+  let dirty: string[] = [];
+  try {
+    dirty = gitDirtyPaths(cwd, trackedPaths);
+  } catch (error) {
+    blockers.push(`Could not read git status: ${(error as Error).message}`);
+  }
+  for (const entry of dirty) {
+    blockers.push(`${entry} has pending uncommitted changes; the cutover commit must be the only change.`);
+  }
+
+  return {
+    projectId,
+    projectIdSource,
+    boardTitle: plan.project.boardTitle,
+    tasksFilePath,
+    tasksRoot: plan.tasksRoot,
+    taskCount: plan.taskCount,
+    plansAuthority: { current, proposed: "store" },
+    mapctxTomlPath,
+    legacyConfigPath,
+    legacyConfigPresent,
+    storeDir: projectId ? resolveProjectStoreDir(projectId) : null,
+    blockers
+  };
+}
 
 export function importDryRun(options: ImportDryRunOptions): ImportDryRunResult {
   const plan = planImport(options.tasksFilePath);
-  return { plan, wouldCommit: plan.errors === 0 };
+  if (!options.cwd) {
+    return { plan, wouldCommit: plan.errors === 0 };
+  }
+  const cutover = previewCutover(plan, { ...options, cwd: options.cwd });
+  return { plan, wouldCommit: plan.errors === 0 && cutover.blockers.length === 0, cutover };
 }
 
 export type RecoverStoreOptions = {

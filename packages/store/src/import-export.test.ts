@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import * as fs from "fs"
 import * as path from "path"
-import { importCommit, recoverStoreFromCheckpoint } from "./cutover"
+import { importCommit, importDryRun, recoverStoreFromCheckpoint } from "./cutover"
 import { buildExport } from "./export"
 import { planImport } from "./import"
 import { readMapctxToml } from "./config"
@@ -148,6 +148,66 @@ test("recoverStoreFromCheckpoint rebuilds a fresh store (new node/incarnation, s
     const onDisk = fs.readFileSync(path.join(repoDir, "TASKS.md"), "utf8");
     assert.equal(reExport.tasksMd.content, onDisk, "the recovered store must reproduce the exact checkpoint it recovered from");
     reopened.close();
+  } finally {
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
+test("importDryRun reports the project, board path, task count, and the markdown -> store transition it would perform", () => {
+  const { repoDir, restoreEnv } = setupGoldenRepo();
+  try {
+    const result = importDryRun({ tasksFilePath: path.join(repoDir, "TASKS.md"), cwd: repoDir });
+
+    assert.equal(result.wouldCommit, true);
+    const cutover = result.cutover;
+    assert.ok(cutover, "a dry run given a cwd must preview the cutover, not only the board plan");
+    assert.deepEqual(cutover.blockers, []);
+    assert.equal(cutover.projectId, null, "no project identity exists before the first cutover");
+    assert.equal(cutover.projectIdSource, "generated-at-commit");
+    assert.equal(cutover.storeDir, null);
+    assert.deepEqual(cutover.plansAuthority, { current: "markdown", proposed: "store" });
+    assert.equal(cutover.tasksFilePath, path.join(repoDir, "TASKS.md"));
+    assert.equal(cutover.taskCount, 3);
+    assert.equal(cutover.legacyConfigPresent, true);
+    assert.equal(cutover.mapctxTomlPath, path.join(repoDir, "mapctx.toml"));
+  } finally {
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
+test("importDryRun after cutover names the existing project and refuses a second import instead of reporting wouldCommit", () => {
+  const { repoDir, restoreEnv } = setupGoldenRepo();
+  try {
+    const committed = importCommit({ cwd: repoDir, actor: "first" });
+
+    const result = importDryRun({ tasksFilePath: path.join(repoDir, "TASKS.md"), cwd: repoDir });
+
+    assert.equal(result.wouldCommit, false, "an already-imported repository must never report a committable cutover");
+    const cutover = result.cutover!;
+    assert.equal(cutover.projectId, committed.projectId);
+    assert.equal(cutover.projectIdSource, "mapctx.toml");
+    assert.equal(cutover.storeDir, committed.storeDir);
+    assert.equal(cutover.plansAuthority.current, "store");
+    assert.equal(cutover.legacyConfigPresent, false, "the legacy config is deleted by the cutover commit");
+    assert.ok(cutover.blockers.some(b => b.includes("already been imported")));
+    assert.ok(cutover.blockers.some(b => b.includes("none found")));
+  } finally {
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
+test("importDryRun reports uncommitted board changes as blockers rather than letting the cutover commit sweep them in", () => {
+  const { repoDir, restoreEnv } = setupGoldenRepo();
+  try {
+    fs.appendFileSync(path.join(repoDir, "TASKS.md"), "\n<!-- uncommitted edit -->\n", "utf8");
+
+    const result = importDryRun({ tasksFilePath: path.join(repoDir, "TASKS.md"), cwd: repoDir });
+
+    assert.equal(result.wouldCommit, false);
+    assert.ok(result.cutover!.blockers.some(b => b.includes("TASKS.md") && b.includes("pending uncommitted changes")));
   } finally {
     restoreEnv();
     cleanupDir(repoDir);

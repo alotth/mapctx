@@ -4,7 +4,7 @@ import * as TOML from "smol-toml"
 import { plansAuthoritySchema, uuidSchema } from "@mapctx/protocol"
 import { getMapctxHome } from "@mapctx/core/workspace"
 
-type PlansAuthority = "markdown" | "store"
+export type PlansAuthority = "markdown" | "store"
 
 export const MAPCTX_TOML_FILENAME = "mapctx.toml"
 

@@ -254,10 +254,17 @@ function storeRepairCommand(options: MapctxOptions): void {
 function importDryRunCliCommand(options: MapctxOptions): void {
   const cwd = process.cwd();
   const tasksFilePath = resolveTasksFilePath(cwd, options);
-  const result = importDryRun({ tasksFilePath });
+  const result = importDryRun({
+    tasksFilePath,
+    cwd,
+    legacyConfigPath: options.configPath ? path.resolve(cwd, options.configPath) : undefined
+  });
   print(result, options.json);
   if (result.plan.errors > 0) {
     throw new Error(`Import validation failed with ${result.plan.errors} error(s).`);
+  }
+  if (result.cutover && result.cutover.blockers.length > 0) {
+    throw new Error(`Cutover blocked:\n${result.cutover.blockers.map(b => `- ${b}`).join('\n')}`);
   }
 }
 
