@@ -270,9 +270,15 @@ export const durationMeasuresSchema = z.object({
   activeTimeMs: z.number().int().nonnegative(),
   taskDurationMs: z.number().int().nonnegative(),
   leadTimeMs: z.number().int().nonnegative(),
-  idleThresholdMs: z.number().int().positive()
+  idleThresholdMs: z.number().int().positive(),
+  // Optional for compatibility with v1 snapshots; new measurements always
+  // include this provenance marker.
+  activeTimeCoverage: z.enum(["measured", "substituted", "none"]).optional()
 });
 export type DurationMeasures = z.infer<typeof durationMeasuresSchema>;
+
+export const durationCoverageSchema = z.enum(["measured", "substituted", "none"]);
+export type DurationCoverage = z.infer<typeof durationCoverageSchema>;
 
 export const estimateMethodSchema = z.enum([
   "expert-guess",
@@ -291,6 +297,9 @@ export const estimateSnapshotSchema = z.object({
   estimatorVersion: nonEmptyStringSchema,
   idleThresholdMs: z.number().int().positive(),
   costCoverage: usageCoverageSchema,
+  // Optional keeps previously persisted snapshots readable. Forecasts built
+  // by current code persist explicit coverage here.
+  durationCoverage: durationCoverageSchema.optional(),
   durationP50Ms: z.number().int().nonnegative(),
   durationP90Ms: z.number().int().nonnegative(),
   inputTokensP50: tokenCountSchema,

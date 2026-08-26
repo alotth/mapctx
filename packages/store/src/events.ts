@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite"
 import type { EventLogEntry } from "@mapctx/protocol"
-import { assertTransition, type CostEvent, type EstimateSnapshot, type PlanPeriod, type RunReceipt } from "@mapctx/protocol"
+import { assertTransition, type CostEvent, type EstimateSnapshot, type PlanPeriod, type RunEvent, type RunReceipt } from "@mapctx/protocol"
 import {
   getTaskDetail,
   getTask,
@@ -12,6 +12,7 @@ import {
   insertEstimateSnapshot,
   insertExportCheckpoint,
   insertPlanPeriod,
+  insertRunEvent,
   patchTask,
   replaceOutgoingDependencies,
   replaceOwnerExternalRefs,
@@ -40,6 +41,7 @@ export const EVENT_TYPES = [
   "task.claim-expired",
   "checkpoint.exported",
   "dispatch.attempted",
+  "run.event-recorded",
   "run.receipt-recorded",
   "cost.recorded",
   "plan-period.recorded",
@@ -98,6 +100,7 @@ export type DispatchAttemptedPayload = {
 };
 
 export type RunReceiptRecordedPayload = { receipt: RunReceipt };
+export type RunEventRecordedPayload = { event: RunEvent };
 export type CostRecordedPayload = { cost: CostEvent };
 export type PlanPeriodRecordedPayload = { period: PlanPeriod };
 export type EstimateSnapshotRecordedPayload = { snapshot: EstimateSnapshot };
@@ -199,6 +202,11 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
     case "run.receipt-recorded": {
       const payload = entry.payload as unknown as RunReceiptRecordedPayload;
       applyRunReceipt(db, payload.receipt ?? payload as unknown as RunReceipt, revision);
+      return;
+    }
+    case "run.event-recorded": {
+      const payload = entry.payload as unknown as RunEventRecordedPayload;
+      insertRunEvent(db, payload.event ?? payload as unknown as RunEvent);
       return;
     }
     case "cost.recorded": {

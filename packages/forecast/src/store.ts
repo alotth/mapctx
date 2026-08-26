@@ -1,4 +1,4 @@
-import { listCostEvents, listRunReceipts } from "@mapctx/store"
+import { listCostEvents, listRunEvents, listRunReceipts } from "@mapctx/store"
 import type { EstimateSnapshot } from "@mapctx/protocol"
 import { durationMeasuresFromReceipt } from "./duration"
 import { buildEstimateSnapshot } from "./estimate"
@@ -14,7 +14,10 @@ export function buildEstimateFromStore(
 ): EstimateSnapshot {
   const receipts = listRunReceipts(db, undefined, taskId)
   const samples = receipts.map(receipt => ({
-    duration: durationMeasuresFromReceipt(receipt.startedAt, receipt.endedAt, { idleThresholdMs: options.idleThresholdMs }),
+    duration: durationMeasuresFromReceipt(receipt.startedAt, receipt.endedAt, {
+      idleThresholdMs: options.idleThresholdMs,
+      events: listRunEvents(db, receipt.dispatchId, receipt.attempt)
+    }),
     usageEvents: receipt.usageEvents,
     costEvents: listCostEvents(db, receipt.dispatchId)
   }))

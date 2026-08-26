@@ -5,6 +5,7 @@ import {
   type CostEvent,
   type EstimateSnapshot,
   type PlanPeriod,
+  type RunEvent,
   type RunReceipt,
   type UsageEvent
 } from "@mapctx/protocol"
@@ -581,6 +582,50 @@ export function getRunReceipt(db: DatabaseSync, dispatchId: string, attempt: num
   const row = db.prepare("SELECT receipt_json FROM run_receipt_projection WHERE dispatch_id = ? AND attempt = ?").get(dispatchId, attempt) as { receipt_json: string } | undefined;
   if (!row) return undefined;
   return JSON.parse(row.receipt_json) as RunReceipt;
+}
+
+/** Append-only projection of every schema-valid executor event. */
+export function insertRunEvent(db: DatabaseSync, event: RunEvent): void {
+  db.prepare(`
+    INSERT INTO run_event_projection (
+      dispatch_id, attempt, sequence, schema_version, type, timestamp, payload_json, event_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    event.dispatchId,
+    event.attempt,
+    event.sequence,
+    event.schemaVersion,
+    event.type,
+    event.timestamp,
+    JSON.stringify(event.payload),
+    JSON.stringify(event)
+  );
+}
+
+export function getRunEvent(db: DatabaseSync, dispatchId: string, attempt: number, sequence: number): RunEvent | undefined {
+  const row = db.prepare(
+    "SELECT event_json FROM run_event_projection WHERE dispatch_id = ? AND attempt = ? AND sequence = ?"
+  ).get(dispatchId, attempt, sequence) as { event_json: string } | undefined;
+  return row ? JSON.parse(row.event_json) as RunEvent : undefined;
+}
+
+export function listRunEvents(db: DatabaseSync, dispatchId?: string, attempt?: number): RunEvent[] {
+  let sql = "SELECT event_json FROM run_event_projection";
+  const args: (string | number)[] = [];
+  if (dispatchId !== undefined) {
+    sql += " WHERE dispatch_id = ?";
+    args.push(dispatchId);
+    if (attempt !== undefined) {
+      sql += " AND attempt = ?";
+      args.push(attempt);
+    }
+  } else if (attempt !== undefined) {
+    sql += " WHERE attempt = ?";
+    args.push(attempt);
+  }
+  sql += " ORDER BY dispatch_id ASC, attempt ASC, sequence ASC";
+  const rows = db.prepare(sql).all(...args) as Array<{ event_json: string }>;
+  return rows.map(row => JSON.parse(row.event_json) as RunEvent);
 }
 
 export function listRunReceipts(db: DatabaseSync, dispatchId?: string, taskId?: string): RunReceipt[] {

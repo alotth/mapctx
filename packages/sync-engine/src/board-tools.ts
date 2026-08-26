@@ -81,8 +81,8 @@ export type PlanReport = {
 
 function resolveTasksFile(configPath: string, config: SyncConfig, options: SyncOptions, configExists: boolean): string {
   const dir = configExists ? path.dirname(configPath) : process.cwd();
-  const tasksFile = options.tasksFileOverride || config.tasksFile;
-  return path.resolve(dir, tasksFile);
+  if (options.tasksFileOverride) return path.resolve(process.cwd(), options.tasksFileOverride);
+  return path.resolve(dir, config.tasksFile);
 }
 
 function parseTaskBlocks(content: string): TaskBlock[] {
@@ -532,10 +532,14 @@ function printPlanReport(report: PlanReport, options: SyncOptions): void {
   }
 }
 
-export function validateCommand(options: SyncOptions = {}): ValidateReport {
+export function getValidationReport(options: SyncOptions = {}): ValidateReport {
   const { config, configPath, configExists } = loadConfigOptionalForBoard(options);
   const tasksFilePath = resolveTasksFile(configPath, config, options, configExists);
-  const report = validateBoardInternal(tasksFilePath, config);
+  return validateBoardInternal(tasksFilePath, config);
+}
+
+export function validateCommand(options: SyncOptions = {}): ValidateReport {
+  const report = getValidationReport(options);
   printValidationReport(report, options.json);
   if (report.errors > 0) {
     throw new Error(`Validation failed with ${report.errors} error(s).`);

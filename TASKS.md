@@ -1034,10 +1034,10 @@
 ### [E-009] MapCtx vNext protocol, store, and planning core
 
   - id: E-009
-  - status: backlog
+  - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: null
+  - subIssueProgress: 8/8
   - priority: high
   - workload: Hard
   - tags: [vnext, architecture, planning]
@@ -1045,9 +1045,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-08-26
   - externalId: null
-  - updated: 2026-08-15
+  - updated: 2026-08-26
   - detail: ./tasks/E-009.md
 
 ### [T-048] Define vNext protocol and operational domain model
@@ -1148,7 +1148,7 @@
 ### [T-062] Resolve the board by walking up from cwd, matching store config resolution
 
   - id: T-062
-  - status: backlog
+  - status: done
   - type: bug
   - parent: E-009
   - subIssueProgress: null
@@ -1159,9 +1159,9 @@
   - dependsOn: [T-050]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-08-26
   - externalId: null
-  - updated: 2026-08-17
+  - updated: 2026-08-26
   - detail: ./tasks/T-062.md
 
 ### [T-063] Fix inverted depends-on edges and silent task drops in the planner
@@ -1186,7 +1186,7 @@
 ### [T-064] Persist RunEvent timestamps so activeTime is measured, not substituted
 
   - id: T-064
-  - status: backlog
+  - status: done
   - type: feature
   - parent: E-011
   - subIssueProgress: null
@@ -1197,9 +1197,9 @@
   - dependsOn: [T-054, T-060]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-08-26
   - externalId: null
-  - updated: 2026-08-17
+  - updated: 2026-08-26
   - detail: ./tasks/T-064.md
 
 ### [T-065] Make the duration prior workload-aware and unit-honest
@@ -1213,12 +1213,12 @@
   - workload: Normal
   - tags: [vnext, forecast, calibration, estimation]
   - domains: [FORECAST, WEBVIEW, TELEMETRY, TEST]
-  - dependsOn: [T-054, T-064]
+  - dependsOn: [T-054, T-064, T-056]
   - start: null
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-08-17
+  - updated: 2026-08-26
   - detail: ./tasks/T-065.md
 
 ### [E-010] Harness-neutral execution with Traycer first
@@ -1227,7 +1227,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: null
+  - subIssueProgress: 3/5
   - priority: high
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
@@ -1237,7 +1237,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-08-15
+  - updated: 2026-08-26
   - detail: ./tasks/E-010.md
 
 ### [T-052] Implement DispatchEnvelope, RunEvent, and RunReceipt contracts
@@ -1281,10 +1281,10 @@
 ### [E-011] Delivery forecast and planned-versus-actual UI
 
   - id: E-011
-  - status: backlog
+  - status: doing
   - type: epic
   - parent: null
-  - subIssueProgress: null
+  - subIssueProgress: 3/4
   - priority: high
   - workload: Hard
   - tags: [vnext, forecast, cost, gantt]
@@ -1294,7 +1294,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-08-15
+  - updated: 2026-08-26
   - detail: ./tasks/E-011.md
 
 ### [T-054] Ingest usage events and calculate baseline P50/P90 forecasts
@@ -1319,7 +1319,7 @@
 ### [T-055] Render Kanban and Gantt planned, forecast, and actual layers
 
   - id: T-055
-  - status: backlog
+  - status: done
   - type: feature
   - parent: E-011
   - subIssueProgress: null
@@ -1330,9 +1330,9 @@
   - dependsOn: [T-050, T-051, T-054]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-08-26
   - externalId: null
-  - updated: 2026-08-15
+  - updated: 2026-08-26
   - detail: ./tasks/T-055.md
 
 ### [T-056] Prove first MapCtx-to-Traycer vertical slice
@@ -1346,12 +1346,12 @@
   - workload: Hard
   - tags: [vnext, dogfood, traycer, vertical-slice]
   - domains: [ADAPTER, PLANNER, TELEMETRY, FORECAST, WEBVIEW, TEST]
-  - dependsOn: [T-050, T-051, T-053, T-054, T-055]
+  - dependsOn: [T-050, T-051, T-053, T-054, T-055, T-066]
   - start: null
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-08-15
+  - updated: 2026-08-26
   - detail: ./tasks/T-056.md
 
 ### [E-012] vNext migration, naming, and adoption gates
@@ -1384,12 +1384,12 @@
   - workload: Hard
   - tags: [vnext, mapctx-cli, skills, github, migration]
   - domains: [CLI, SKILLS, SYNC, GITHUB, DOCS, TEST]
-  - dependsOn: [T-050, T-052, T-056]
+  - dependsOn: [T-050, T-052, T-056, T-065]
   - start: null
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-08-15
+  - updated: 2026-08-26
   - detail: ./tasks/T-057.md
 
 ### [T-058] Prove walking-skeleton dispatch through Traycer before waves and forecast
@@ -1449,6 +1449,25 @@
   - updated: 2026-08-16
   - detail: ./tasks/T-059.md
 
+### [T-066] Run the first real cutover and verify the recovery checkpoint
+
+  - id: T-066
+  - status: doing
+  - type: task
+  - parent: E-010
+  - subIssueProgress: null
+  - priority: high
+  - workload: Normal
+  - tags: [vnext, cutover, dogfood, store, recovery]
+  - domains: [STORE, CLI, TEST, DOCS]
+  - dependsOn: [T-055, T-062, T-064]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-08-26
+  - detail: ./tasks/T-066.md
+
 ## Notes
 
 - 2026-05-29 cleanup: `TASKS.md` is the local source of truth; GitHub/Project sync validation and uncertain future workflows are paused until explicitly resumed.
@@ -1461,3 +1480,4 @@
 - 2026-08-16 A4: kill list closed by `T-059`, one disposition per surface — `thread.ts` internalized (removed from `@mapctx/core`'s public API and the VS Code thread panel, but kept as a file since frozen `workspace-server.ts` still imports it directly), `workspace-server.ts` frozen (it hosts workspaceV2, which the Gantt needs), `opencode-plugin` deprecated.
 - 2026-08-16 T-058: walking skeleton closed. Store + protocol survive a real cross-worktree claim/release round trip; `T-050`/`T-051` proceed on that basis. Dispatch/receipt round trip does not yet survive — no store primitive persists `RunReceipt`. New `T-060` closes that gap and now gates `T-054`.
 - 2026-08-15 B1: vertical slice split so evidence lands before breadth. `T-058` walking skeleton (store + dispatch through Traycer, manual, no waves/forecast/UI) now gates `T-050`/`T-051`/`T-054`; `T-056` keeps the full three-task/two-wave/Gantt/forecast/ADR proof, unchanged in scope, and now also depends on `T-051`.
+- 2026-08-26 install gate: global installation remains last. `T-062` and `T-064` gate the first real cutover (`T-066`); then `T-056` proves the full slice, `T-065` calibrates estimates, and `T-057` freezes naming/skills before distribution.

@@ -1,4 +1,5 @@
 import type { DurationCoverage, DurationInput, MeasuredDurations, Session, SessionInterval, Timestamp } from "./types"
+import type { RunEvent } from "@mapctx/protocol"
 
 export const DEFAULT_IDLE_THRESHOLD_MS = 10 * 60 * 1000
 
@@ -133,20 +134,28 @@ export function measureDurations(input: DurationInput): MeasuredDurations {
 export function durationMeasuresFromReceipt(
   startedAt: Timestamp,
   endedAt: Timestamp,
-  options: { readyAt?: Timestamp; idleThresholdMs?: number } = {}
+  options: { readyAt?: Timestamp; idleThresholdMs?: number; events?: readonly Pick<RunEvent, "timestamp">[] } = {}
 ): MeasuredDurations {
-  const session: Session = { timestamps: [startedAt, endedAt] }
+  const startedMs = timestampMs(startedAt)
+  const endedMs = timestampMs(endedAt)
+  // Receipt boundaries define run scope. Boundary and late/out-of-range
+  // events cannot prove intra-run activity and must not alter wall clock.
+  const interiorEvents = (options.events ?? []).filter(event => {
+    const eventMs = timestampMs(event.timestamp)
+    return eventMs > startedMs && eventMs < endedMs
+  })
+  const session: Session = {
+    timestamps: [startedAt, ...interiorEvents.map(event => event.timestamp), endedAt]
+  }
   const measured = measureDurations({
     sessions: [session],
     readyAt: options.readyAt,
     doneAt: endedAt,
     idleThresholdMs: options.idleThresholdMs
   })
-  return {
-    ...measured,
-    activeTimeMs: measured.sessionWallClockMs,
-    activeTimeCoverage: "substituted"
-  }
+  return interiorEvents.length > 0
+    ? measured
+    : { ...measured, activeTimeMs: measured.sessionWallClockMs, activeTimeCoverage: "substituted" }
 }
 
 export const computeDurationMeasures = measureDurations

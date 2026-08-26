@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { getDispatchAttempt, getRunReceipt, listDispatchAttempts, listRunReceipts, listCostEvents, listEstimateSnapshots, listUsageEvents } from "./projections"
-import { recordCostEvent, recordDispatchAttempt, recordEstimateSnapshot, recordRunReceipt } from "./dispatch"
+import { getDispatchAttempt, getRunEvent, getRunReceipt, listDispatchAttempts, listRunEvents, listRunReceipts, listCostEvents, listEstimateSnapshots, listUsageEvents } from "./projections"
+import { recordCostEvent, recordDispatchAttempt, recordEstimateSnapshot, recordRunEvent, recordRunReceipt } from "./dispatch"
 import { StoreHandle } from "./store-handle"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
 import { ENTITY_FIXTURES } from "@mapctx/protocol"
@@ -72,6 +72,18 @@ function seedDispatch(handle: StoreHandle): void {
   assert.equal(result.ok, true);
 }
 
+function runEvent(sequence: number, timestamp: string, type: "started" | "progress" | "completed" = "progress") {
+  return {
+    schemaVersion: 1,
+    dispatchId: DISPATCH_ID,
+    attempt: 1,
+    sequence,
+    type,
+    timestamp,
+    payload: { sequence }
+  } as const;
+}
+
 test("dispatch attempt and receipt persist losslessly and query by task", () => {
   const dir = mkTmpDir("mapctx-store-dispatch-roundtrip-");
   try {
@@ -87,6 +99,30 @@ test("dispatch attempt and receipt persist losslessly and query by task", () => 
     assert.deepEqual(listDispatchAttempts(handle.db, undefined, "T-001").map(d => d.attempt), [1]);
     assert.deepEqual((handle.db.prepare("SELECT usage_event_id, input_tokens, output_tokens FROM usage_event_projection").all() as unknown[]).length, 1);
     handle.close();
+  } finally {
+    cleanupDir(dir);
+  }
+});
+
+test("schema-valid run events persist append-only, round-trip, order, and deduplicate by sequence", () => {
+  const dir = mkTmpDir("mapctx-store-run-events-");
+  try {
+    const handle = StoreHandle.open(dir);
+    seedDispatch(handle);
+    const late = runEvent(2, "2026-08-16T19:55:00.000Z");
+    const early = runEvent(1, "2026-08-16T19:54:10.000Z");
+    assert.deepEqual(recordRunEvent(handle, late, "test"), { ok: true, event: late });
+    assert.deepEqual(recordRunEvent(handle, early, "test"), { ok: true, event: early });
+    assert.deepEqual(listRunEvents(handle.db, DISPATCH_ID, 1), [early, late]);
+    assert.deepEqual(getRunEvent(handle.db, DISPATCH_ID, 1, 1), early);
+    assert.deepEqual(recordRunEvent(handle, early, "test"), { ok: false, reason: "duplicate-run-event" });
+    assert.deepEqual(recordRunEvent(handle, { ...early, type: "heartbeat" }, "test"), { ok: false, reason: "conflicting-run-event" });
+    assert.equal((handle.listEvents().filter(event => event.eventType === "run.event-recorded")).length, 2);
+    handle.close();
+
+    const reopened = StoreHandle.open(dir);
+    assert.deepEqual(listRunEvents(reopened.db, DISPATCH_ID, 1), [early, late]);
+    reopened.close();
   } finally {
     cleanupDir(dir);
   }

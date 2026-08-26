@@ -38,6 +38,7 @@ temp/
 
 # Playwright/dev output artifacts
 output/
+.playwright-cli/
 
 # Local OpenCode workspace
 .opencode/

@@ -100,6 +100,7 @@ export function clearProjections(db: DatabaseSync): void {
     "artifact_ref_projection",
     "workflow_gate_projection",
     "dispatch_projection",
+    "run_event_projection",
     "run_receipt_projection",
     "usage_event_projection",
     "cost_event_projection",

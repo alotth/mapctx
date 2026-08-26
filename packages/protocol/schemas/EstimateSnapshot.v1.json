@@ -39,6 +39,14 @@
           "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
           "type": "string"
         },
+        "durationCoverage": {
+          "enum": [
+            "measured",
+            "substituted",
+            "none"
+          ],
+          "type": "string"
+        },
         "durationP50Ms": {
           "minimum": 0,
           "type": "integer"

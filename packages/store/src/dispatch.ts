@@ -1,7 +1,9 @@
 import {
   assertTransition,
+  canonicalJson,
   evaluateRunReceipt,
   runReceiptSchema,
+  runEventSchema,
   costEventSchema,
   estimateSnapshotSchema,
   planPeriodSchema,
@@ -9,9 +11,10 @@ import {
   type CostEvent,
   type EstimateSnapshot,
   type PlanPeriod,
+  type RunEvent,
   type RunReceipt
 } from "@mapctx/protocol"
-import { getTask, listDispatchAttempts, listRunReceipts } from "./projections"
+import { getDispatchAttempt, getRunEvent, getTask, listDispatchAttempts, listRunReceipts } from "./projections"
 import type { DispatchAttemptRecord } from "./types"
 import { StoreHandle } from "./store-handle"
 import type { DatabaseSync } from "node:sqlite"
@@ -26,6 +29,10 @@ export type DispatchWriteResult =
 export type ReceiptWriteResult =
   | { ok: true; receipt: RunReceipt; dispatch: DispatchAttemptRecord }
   | { ok: false; reason: "dispatch-mismatch" | "unknown-attempt" | "stale-attempt" | "duplicate-receipt" }
+
+export type RunEventWriteResult =
+  | { ok: true; event: RunEvent }
+  | { ok: false; reason: "dispatch-mismatch" | "unknown-attempt" | "duplicate-run-event" | "conflicting-run-event" }
 
 /** Persist one dispatch attempt and move its task into the executor-running state. */
 export function recordDispatchAttempt(
@@ -107,6 +114,40 @@ export function recordRunReceipt(
 }
 
 export const submitRunReceipt = recordRunReceipt;
+
+/** Validate and append one executor event; identity is (dispatch, attempt, sequence). */
+export function recordRunEvent(
+  store: StoreHandle,
+  rawEvent: RunEvent,
+  actor = "store",
+  expectedDispatchId?: string
+): RunEventWriteResult {
+  const parsed = runEventSchema.safeParse(rawEvent);
+  if (!parsed.success) throw new Error(`Invalid RunEvent: ${parsed.error.message}`);
+  const event = parsed.data;
+  if (expectedDispatchId !== undefined && expectedDispatchId !== event.dispatchId) {
+    return { ok: false, reason: "dispatch-mismatch" };
+  }
+  return store.runInWriteTransaction(append => {
+    if (!getDispatchAttempt(store.db, event.dispatchId, event.attempt)) {
+      return { ok: false, reason: "unknown-attempt" };
+    }
+    const existing = getRunEvent(store.db, event.dispatchId, event.attempt, event.sequence);
+    if (existing) {
+      return canonicalJson(existing) === canonicalJson(event)
+        ? { ok: false, reason: "duplicate-run-event" }
+        : { ok: false, reason: "conflicting-run-event" };
+    }
+    append({
+      eventType: "run.event-recorded",
+      actor,
+      payload: { event }
+    });
+    return { ok: true, event };
+  });
+}
+
+export const submitRunEvent = recordRunEvent;
 
 export type CostWriteResult =
   | { ok: true; costEvent: CostEvent }

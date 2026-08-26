@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { allocateMicros, costEventFromUsage } from "./cost"
 import { activeTimeMs, durationMeasuresFromReceipt, measureDurations } from "./duration"
-import { buildEstimateSnapshot } from "./estimate"
+import { buildEstimateSnapshot, durationCoverageFromAssumptions, isPriorFallbackEstimate } from "./estimate"
 
 const usage = {
   usageEventId: "11111111-2222-4333-8444-555555555555",
@@ -79,6 +79,39 @@ test("receipt-only durations report substituted coverage, never measured", () =>
   assert.equal(measures.activeTimeMs, 2 * 60 * 60 * 1000)
 })
 
+test("only strictly interior run events establish measured coverage", () => {
+  const measures = durationMeasuresFromReceipt(
+    "2026-08-17T09:00:00.000Z",
+    "2026-08-17T11:00:00.000Z",
+    { events: [
+      { timestamp: "2026-08-17T08:59:59.000Z" },
+      { timestamp: "2026-08-17T09:00:00.000Z" },
+      { timestamp: "2026-08-17T09:05:00.000Z" },
+      { timestamp: "2026-08-17T11:00:00.000Z" },
+      { timestamp: "2026-08-17T11:00:01.000Z" }
+    ] }
+  )
+  assert.equal(measures.activeTimeCoverage, "measured")
+  assert.equal(measures.activeTimeMs, 5 * 60 * 1000)
+  assert.equal(measures.sessionWallClockMs, 2 * 60 * 60 * 1000)
+})
+
+test("boundary-only and out-of-range run events remain wall-clock substitution", () => {
+  const measures = durationMeasuresFromReceipt(
+    "2026-08-17T09:00:00.000Z",
+    "2026-08-17T11:00:00.000Z",
+    { events: [
+      { timestamp: "2026-08-17T08:59:59.000Z" },
+      { timestamp: "2026-08-17T09:00:00.000Z" },
+      { timestamp: "2026-08-17T11:00:00.000Z" },
+      { timestamp: "2026-08-17T11:00:01.000Z" }
+    ] }
+  )
+  assert.equal(measures.activeTimeCoverage, "substituted")
+  assert.equal(measures.activeTimeMs, measures.sessionWallClockMs)
+  assert.equal(measures.activeTimeMs, 2 * 60 * 60 * 1000)
+})
+
 test("interior timestamps yield measured coverage and exclude the idle gap", () => {
   // Five minutes of work, an eight-hour overnight gap, five more minutes. Wall
   // clock says 8h10m; active time must say 10m. Gaps are held below the
@@ -143,4 +176,46 @@ test("one substituted sample downgrades an otherwise measured estimate", () => {
   )
   const coverage = estimate.assumptions.find(line => line.startsWith("duration coverage:"))
   assert.match(coverage ?? "", /substituted/)
+})
+
+test("durationCoverageFromAssumptions reads the coverage back out of a real snapshot", () => {
+  const noSamples = buildEstimateSnapshot("T-055", [], {
+    estimateId: "42345678-90ab-4cde-8f01-23456789abcd",
+    createdAt: "2026-08-17T00:00:00.000Z"
+  })
+  assert.equal(durationCoverageFromAssumptions(noSamples.assumptions), "none")
+
+  const substitutedSamples = buildEstimateSnapshot(
+    "T-055",
+    [{ duration: durationMeasuresFromReceipt("2026-08-17T09:00:00.000Z", "2026-08-17T11:00:00.000Z") }],
+    { estimateId: "52345678-90ab-4cde-8f01-23456789abcd", createdAt: "2026-08-17T00:00:00.000Z" }
+  )
+  assert.equal(durationCoverageFromAssumptions(substitutedSamples.assumptions), "substituted")
+
+  const measuredSamples = buildEstimateSnapshot(
+    "T-055",
+    [{ duration: measureDurations({ sessions: [{ timestamps: ["2026-08-17T09:00:00.000Z", "2026-08-17T09:05:00.000Z", "2026-08-17T09:10:00.000Z"] }] }) }],
+    { estimateId: "62345678-90ab-4cde-8f01-23456789abcd", createdAt: "2026-08-17T00:00:00.000Z" }
+  )
+  assert.equal(durationCoverageFromAssumptions(measuredSamples.assumptions), "measured")
+})
+
+test("durationCoverageFromAssumptions defaults to none for missing or malformed assumptions", () => {
+  assert.equal(durationCoverageFromAssumptions([]), "none")
+  assert.equal(durationCoverageFromAssumptions(["unrelated assumption"]), "none")
+})
+
+test("isPriorFallbackEstimate flags estimates with no historical samples", () => {
+  const fallback = buildEstimateSnapshot("T-055", [], {
+    estimateId: "72345678-90ab-4cde-8f01-23456789abcd",
+    createdAt: "2026-08-17T00:00:00.000Z"
+  })
+  assert.equal(isPriorFallbackEstimate(fallback), true)
+
+  const historical = buildEstimateSnapshot(
+    "T-055",
+    [{ duration: measureDurations({ sessions: [{ timestamps: ["2026-08-17T09:00:00.000Z", "2026-08-17T09:05:00.000Z", "2026-08-17T09:10:00.000Z"] }] }) }],
+    { estimateId: "82345678-90ab-4cde-8f01-23456789abcd", createdAt: "2026-08-17T00:00:00.000Z" }
+  )
+  assert.equal(isPriorFallbackEstimate(historical), false)
 })

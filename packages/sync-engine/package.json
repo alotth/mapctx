@@ -58,6 +58,7 @@
   },
   "dependencies": {
     "@mapctx/core": "file:../core",
+    "@mapctx/forecast": "file:../forecast",
     "@mapctx/planner": "file:../planner",
     "@mapctx/store": "file:../store"
   },

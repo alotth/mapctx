@@ -1,5 +1,11 @@
-// FROZEN: workspace-server.ts is read-only. No new features.
-// Fixes limited to keeping the build green, revisited at external-adoption gate.
+// FROZEN: workspace-server.ts is read-only, except for one named exception.
+// See T-055 Decisions Taken: the planned/forecast/actual Gantt needs a host,
+// which is the one thing this freeze (T-059, ADR 0003) was kept alive for. The
+// /api/gantt route below is that single passthrough -- it forwards the exact
+// dataset buildGanttDataset() (shared with `mapctx gantt`) computes and adds no
+// duration/wave/collision logic of its own. All other routes remain frozen:
+// no new features beyond keeping the build green until the external-adoption
+// gate.
 // See: workspace-server is the only host serving workspaceV2.html (used by planned Gantt).
 //
 import * as childProcess from 'child_process';
@@ -349,6 +355,19 @@ async function handleRequest(
     return;
   }
 
+  if (url.pathname === '/api/gantt') {
+    if (!activeWorkspace) {
+      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('No active workspace target');
+      return;
+    }
+
+    const dataset = readGanttDatasetFromCli(activeWorkspace);
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache' });
+    response.end(JSON.stringify(dataset));
+    return;
+  }
+
   const relativePath = url.pathname === '/' ? 'workspaceV2.html' : url.pathname.slice(1);
   const filePath = path.resolve(context.htmlRoot, relativePath);
 
@@ -410,6 +429,33 @@ function buildModel(activeWorkspace: ActiveWorkspace | undefined, registryPath?:
     tasksFilePath: path.relative(activeWorkspace.projectRoot, activeWorkspace.tasksFilePath),
     projectRoot: activeWorkspace.projectRoot
   };
+}
+
+/**
+ * The one exception to the freeze (see file header / T-055 Decisions Taken).
+ * Invokes the canonical CLI command and forwards its JSON unchanged. This keeps
+ * store access, cutover rules, forecast math, and planning logic inside the CLI;
+ * the frozen server remains a transport only.
+ */
+function readGanttDatasetFromCli(activeWorkspace: ActiveWorkspace): unknown {
+  const cliPath = path.join(__dirname, 'mapctx-cli.js');
+  const result = childProcess.spawnSync(process.execPath, [
+    cliPath,
+    'gantt',
+    '--json',
+    '--tasks-file',
+    activeWorkspace.tasksFilePath
+  ], {
+    cwd: activeWorkspace.projectRoot,
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024
+  });
+
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error((result.stderr || result.stdout || 'mapctx gantt failed').trim());
+  }
+  return JSON.parse(result.stdout);
 }
 
 function buildTasks(board: TaskBoard, projectRoot: string): WorkspaceTaskView[] {

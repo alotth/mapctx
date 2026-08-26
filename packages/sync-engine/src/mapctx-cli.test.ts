@@ -111,11 +111,11 @@ test('mapctx plan --json and direct planExecution agree on the same board (CLI/l
     dependencyEdges
   });
 
-  assert.deepEqual(cliReport, libraryReport);
   assert.deepEqual((cliReport as { waves: Array<{ taskIds: string[] }> }).waves.map(wave => wave.taskIds), [
     ['T-001', 'T-003'],
     ['T-002']
   ]);
+  assert.deepEqual(cliReport, { ...(libraryReport as Record<string, unknown>), tasksFilePath: path.resolve(fs.realpathSync(tempDir), 'TASKS.md') });
 });
 
 test('real board (this repo TASKS.md): every non-terminal, non-container task is scheduled or named in blockedReasons', () => {

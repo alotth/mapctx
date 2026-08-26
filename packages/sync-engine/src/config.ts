@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import { SyncConfig, SyncOptions } from './types';
+import { findTasksRoot } from '@mapctx/core/workspace';
 import {
   DEFAULT_ALLOWED_STATUSES,
   DEFAULT_COMPLETION_STATUSES,
@@ -148,14 +149,18 @@ export function loadConfigOptionalForBoard(options: SyncOptions = {}): {
   const cwd = process.cwd();
   const configPath = options.configPath
     ? path.resolve(cwd, options.configPath)
-    : path.resolve(cwd, 'mapcs.config.json');
+    : path.join(findTasksRoot(cwd, 'mapcs.config.json') || cwd, 'mapcs.config.json');
 
   if (fs.existsSync(configPath)) {
-    return { ...loadConfig(options), configExists: true };
+    return { ...loadConfig({ ...options, configPath }), configExists: true };
   }
 
-  const tasksFile = options.tasksFileOverride || './TASKS.md';
-  const tasksFilePath = path.resolve(cwd, tasksFile);
+  const tasksRoot = findTasksRoot(cwd);
+  const tasksFilePath = options.tasksFileOverride
+    ? path.resolve(cwd, options.tasksFileOverride)
+    : tasksRoot
+      ? path.join(tasksRoot, 'TASKS.md')
+      : path.resolve(cwd, './TASKS.md');
   if (!fs.existsSync(tasksFilePath)) {
     throw new Error(
       `Config not found: ${configPath}. No tasks file found at ${tasksFilePath}. ` +
@@ -166,7 +171,8 @@ export function loadConfigOptionalForBoard(options: SyncOptions = {}): {
   const config: SyncConfig = {
     owner: 'local',
     repo: path.basename(cwd) || 'local',
-    tasksFile,
+    // Absolute path preserves discovery root when caller runs below repo root.
+    tasksFile: tasksFilePath,
     allowedStatuses: [...DEFAULT_ALLOWED_STATUSES],
     completionStatuses: [...DEFAULT_COMPLETION_STATUSES],
     statusMap: { ...DEFAULT_STATUS_MAP }

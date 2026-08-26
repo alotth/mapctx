@@ -5,6 +5,14 @@
     "DurationMeasures": {
       "additionalProperties": false,
       "properties": {
+        "activeTimeCoverage": {
+          "enum": [
+            "measured",
+            "substituted",
+            "none"
+          ],
+          "type": "string"
+        },
         "activeTimeMs": {
           "minimum": 0,
           "type": "integer"

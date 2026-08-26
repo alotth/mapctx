@@ -21,14 +21,14 @@ test("openDatabase creates schema_migrations and applies migrations exactly once
     // Reopening must not throw and must not re-apply (checksum guard passes silently).
     const db2 = openDatabase(dbPath);
     const rows = db2.prepare("SELECT version FROM schema_migrations ORDER BY version").all() as { version: number }[];
-    assert.deepEqual(rows.map(row => row.version), [1, 2], "migrations should only be recorded once across repeated opens");
+    assert.deepEqual(rows.map(row => row.version), MIGRATIONS.map(migration => migration.version), "migrations should only be recorded once across repeated opens");
     db2.close();
   } finally {
     cleanupDir(dir);
   }
 });
 
-test("existing v1 store upgrades to v2 without losing v1 data", () => {
+test("existing v1 store upgrades without losing v1 data", () => {
   const dir = mkTmpDir("mapctx-store-migration-upgrade-");
   try {
     const dbPath = `${dir}/mapctx.db`;
@@ -44,8 +44,9 @@ test("existing v1 store upgrades to v2 without losing v1 data", () => {
     const sentinel = upgraded.prepare("SELECT value_json FROM store_meta WHERE key = 'sentinel'").get() as { value_json: string };
     assert.equal(sentinel.value_json, JSON.stringify({ kept: true }));
     const versions = upgraded.prepare("SELECT version FROM schema_migrations ORDER BY version").all() as Array<{ version: number }>;
-    assert.deepEqual(versions.map(row => row.version), [1, 2]);
+    assert.deepEqual(versions.map(row => row.version), MIGRATIONS.map(migration => migration.version));
     assert.ok(upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'claim_violation_projection'").get());
+    assert.ok(upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'run_event_projection'").get());
     upgraded.close();
   } finally {
     cleanupDir(dir);

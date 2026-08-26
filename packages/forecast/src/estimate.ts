@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto"
 import { estimateSnapshotSchema, type EstimateSnapshot, type UsageEvent } from "@mapctx/protocol"
 import type { DurationCoverage, EstimateBuildResult, EstimateOptions, ForecastPrior, ForecastSample } from "./types"
 
+const DURATION_COVERAGE_PREFIX = "duration coverage: "
+
 const HOUR_MS = 60 * 60 * 1000
 
 export const DEFAULT_PRIOR: ForecastPrior = {
@@ -108,6 +110,7 @@ export function buildEstimateSnapshot(
     estimatorVersion: options.estimatorVersion ?? "forecast-v1",
     idleThresholdMs: options.idleThresholdMs ?? 600_000,
     costCoverage: coverageOf(historical),
+    durationCoverage,
     durationP50Ms: durations[0],
     durationP90Ms: durations[1],
     inputTokensP50: inputs[0],
@@ -128,3 +131,18 @@ export function buildEstimateSnapshot(
 
 export const createEstimateSnapshot = buildEstimateSnapshot
 export const percentile = quantile
+
+/**
+ * Legacy helper for snapshots written before explicit `durationCoverage` was
+ * added. New consumers should read `snapshot.durationCoverage` directly.
+ */
+export function durationCoverageFromAssumptions(assumptions: readonly string[]): DurationCoverage {
+  const line = assumptions.find(assumption => assumption.startsWith(DURATION_COVERAGE_PREFIX))
+  const value = line?.slice(DURATION_COVERAGE_PREFIX.length).split(" ")[0]
+  return value === "measured" || value === "substituted" || value === "none" ? value : "none"
+}
+
+/** True when the snapshot fell back to the conservative prior for lack of historical samples. */
+export function isPriorFallbackEstimate(snapshot: Pick<EstimateSnapshot, "method">): boolean {
+  return snapshot.method === "expert-guess"
+}

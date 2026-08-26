@@ -17,8 +17,11 @@ import {
   recoverStoreFromCheckpoint,
   releaseClaim,
   recordRunReceipt,
+  listClaimViolations,
   listDispatchAttempts,
+  listEstimateSnapshots,
   listReceiptsForDispatch,
+  listReceiptsForTask,
   renewClaim,
   resolveMapctxToml,
   resolveProjectStoreDir,
@@ -33,7 +36,9 @@ import {
   validateStoreRegime,
   type MapctxTomlConfig
 } from '@mapctx/store';
-import { validateCommand } from './board-tools';
+import { getValidationReport, validateCommand } from './board-tools';
+import { loadConfigOptionalForBoard } from './config';
+import { buildGanttDataset } from './gantt';
 import { SyncOptions } from './types';
 import { parseWorkspaceServerArgs, startWorkspaceServer } from './workspace-server';
 
@@ -71,6 +76,7 @@ function printHelp(): void {
   console.log('  mapctx task show <task-id> [--json]');
   console.log('  mapctx task context <task-id> --budget <n> [--json]');
   console.log('  mapctx plan [--json]');
+  console.log('  mapctx gantt [--json]');
   console.log('  mapctx task claim <task-id> [--json] [--actor name] [--holder json]');
   console.log('  mapctx task renew <task-id> --claim id --token token [--json] [--actor name]');
   console.log('  mapctx task release <task-id> --claim id --token token [--json] [--actor name]');
@@ -144,7 +150,15 @@ function defaultActor(explicit?: string): string {
 }
 
 function resolveTasksFilePath(cwd: string, options: MapctxOptions): string {
-  return options.tasksFileOverride ? path.resolve(cwd, options.tasksFileOverride) : path.join(cwd, 'TASKS.md');
+  if (options.tasksFileOverride) return path.resolve(cwd, options.tasksFileOverride);
+  const { config, configPath, configExists } = loadConfigOptionalForBoard(options);
+  return path.resolve(configExists ? path.dirname(configPath) : cwd, config.tasksFile);
+}
+
+function resolveStoreCheckpointPath(cwd: string, options: MapctxOptions, projectRoot: string): string {
+  return options.tasksFileOverride
+    ? path.resolve(cwd, options.tasksFileOverride)
+    : path.join(projectRoot, 'TASKS.md');
 }
 
 type OpenStoreResult = {
@@ -300,19 +314,39 @@ function exportCliCommand(options: MapctxOptions): void {
   }
 }
 
-function mapctxValidateCliCommand(options: MapctxOptions): void {
+export function mapctxValidateCliCommand(options: MapctxOptions): void {
   const cwd = process.cwd();
 
   let structuralOk = true;
+  let validation: ReturnType<typeof getValidationReport> | null = null;
+  let structuralError: Error | null = null;
   try {
-    validateCommand(options);
-  } catch {
+    if (options.json) {
+      validation = getValidationReport(options);
+      structuralOk = validation.errors === 0;
+    } else {
+      validateCommand(options);
+    }
+  } catch (error) {
     structuralOk = false;
+    structuralError = error instanceof Error ? error : new Error(String(error));
   }
 
-  const storeResult = validateStoreRegime(cwd, cwd);
+  const tasksRoot = validation
+    ? path.dirname(validation.tasksFilePath)
+    : resolveMapctxToml(cwd)?.dir ?? cwd;
+  const storeResult = validateStoreRegime(cwd, tasksRoot);
   if (options.json) {
-    process.stdout.write(`${JSON.stringify(storeResult, null, 2)}\n`);
+    if (validation) {
+      print({ ...validation, store: storeResult }, true);
+    } else {
+      print({
+        error: 'board-resolution-failed',
+        message: structuralError?.message ?? 'Board resolution failed.',
+        tasksFilePath: options.tasksFileOverride ? path.resolve(cwd, options.tasksFileOverride) : null,
+        store: storeResult
+      }, true);
+    }
   } else {
     console.log('');
     console.log(`Store regime: ${storeResult.status}`);
@@ -351,34 +385,37 @@ function taskClaimCommand(taskId: string, options: MapctxOptions): void {
   }
 }
 
-function taskShowCommand(taskId: string, options: MapctxOptions): void {
+export function taskShowCommand(taskId: string, options: MapctxOptions): void {
   const cwd = process.cwd();
   const toml = resolveMapctxToml(cwd);
   if (!toml || toml.config.plansAuthority !== 'store') {
     const tasksFilePath = resolveTasksFilePath(cwd, options);
-    print(queryTaskFromMarkdown(path.dirname(tasksFilePath), taskId, tasksFilePath), options.json);
+    print({ ...queryTaskFromMarkdown(path.dirname(tasksFilePath), taskId, tasksFilePath), tasksFilePath }, options.json);
     return;
   }
   const { handle } = openStoreOrFail(cwd);
   try {
-    print(queryTask(handle.db, taskId), options.json);
+    print({ ...queryTask(handle.db, taskId), tasksFilePath: resolveStoreCheckpointPath(cwd, options, toml.dir) }, options.json);
   } finally {
     handle.close();
   }
 }
 
-function taskContextCommand(taskId: string, options: MapctxOptions): void {
+export function taskContextCommand(taskId: string, options: MapctxOptions): void {
   if (!options.budget) throw new Error('task context requires --budget <n>');
   const cwd = process.cwd();
   const toml = resolveMapctxToml(cwd);
   if (!toml || toml.config.plansAuthority !== 'store') {
     const tasksFilePath = resolveTasksFilePath(cwd, options);
-    print(queryTaskContextFromMarkdown(path.dirname(tasksFilePath), taskId, { budget: options.budget }, tasksFilePath), options.json);
+    print({ ...queryTaskContextFromMarkdown(path.dirname(tasksFilePath), taskId, { budget: options.budget }, tasksFilePath), tasksFilePath }, options.json);
     return;
   }
   const { handle } = openStoreOrFail(cwd);
   try {
-    print(queryTaskContext(handle.db, taskId, { budget: options.budget, tasksRoot: cwd }), options.json);
+    print({
+      ...queryTaskContext(handle.db, taskId, { budget: options.budget, tasksRoot: toml.dir }),
+      tasksFilePath: resolveStoreCheckpointPath(cwd, options, toml.dir)
+    }, options.json);
   } finally {
     handle.close();
   }
@@ -390,7 +427,8 @@ export function mapctxPlanCommand(options: MapctxOptions): void {
   if (!toml || toml.config.plansAuthority !== 'store') {
     // Planning is read-only. Before cutover, use the same TASKS.md fallback
     // as mapcs plan instead of forcing operators to materialize a store.
-    const board = parseTasksFile(resolveTasksFilePath(process.cwd(), options));
+    const tasksFilePath = resolveTasksFilePath(process.cwd(), options);
+    const board = parseTasksFile(tasksFilePath);
     // dependencyEdges is the single source of truth for board-sourced plans; task.dependsOn is
     // omitted here so the same relation is never sent to the planner twice (see T-063).
     const dependencyEdges = board.tasks.flatMap(task => (task.dependsOn ?? []).map(toTaskId => ({
@@ -398,7 +436,7 @@ export function mapctxPlanCommand(options: MapctxOptions): void {
       toTaskId,
       kind: 'depends-on' as const
     })));
-    print(planner.planExecution({
+    const report = planner.planExecution({
       tasks: board.tasks.map(task => ({
         id: task.id,
         title: task.title,
@@ -408,17 +446,19 @@ export function mapctxPlanCommand(options: MapctxOptions): void {
         domains: task.domains ?? task.touch ?? []
       })),
       dependencyEdges
-    }), options.json);
+    });
+    print({ ...(report as Record<string, unknown>), tasksFilePath }, options.json);
     return;
   }
 
-  const { handle } = openStoreOrFail(process.cwd());
+  const cwd = process.cwd();
+  const { handle } = openStoreOrFail(cwd);
   try {
     const tasks = listTasks(handle.db);
     const edges = listDependencies(handle.db);
     // dependencyEdges is the single source of truth here too; task.dependsOn is omitted (see
     // the TASKS.md fallback branch above and T-063).
-    print(planner.planExecution({
+    const report = planner.planExecution({
       tasks: tasks.map(task => ({
         id: task.taskId,
         title: task.title,
@@ -428,7 +468,72 @@ export function mapctxPlanCommand(options: MapctxOptions): void {
         domains: task.domains
       })),
       dependencyEdges: edges.map(edge => ({ fromTaskId: edge.fromTaskId, toTaskId: edge.toTaskId, kind: edge.kind }))
-    }), options.json);
+    });
+    print({ ...(report as Record<string, unknown>), tasksFilePath: resolveStoreCheckpointPath(cwd, options, toml.dir) }, options.json);
+  } finally {
+    handle.close();
+  }
+}
+
+/**
+ * Emits the complete Gantt dataset (planned/forecast/actual/waves/blockers/
+ * collisions/violations) as JSON. Works pre-cutover like `plan`, `task show`,
+ * and `task context` -- planning and forecasting are read-only, so neither
+ * needs a materialized store. Authored planned dates (start/due) are carried
+ * into the dataset so both the CLI and workspace host expose one complete,
+ * query-backed contract. See T-055.
+ */
+export function mapctxGanttCommand(options: MapctxOptions): void {
+  const toml = resolveMapctxToml(process.cwd());
+  if (!toml || toml.config.plansAuthority !== 'store') {
+    const board = parseTasksFile(resolveTasksFilePath(process.cwd(), options));
+    const dependencyEdges = board.tasks.flatMap(task => (task.dependsOn ?? []).map(toTaskId => ({
+      fromTaskId: task.id,
+      toTaskId,
+      kind: 'depends-on' as const
+    })));
+    const dataset = buildGanttDataset({
+      tasks: board.tasks.map(task => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        type: task.type,
+        parentId: task.parent ?? null,
+        start: task.start ?? null,
+        due: task.due ?? null,
+        domains: task.domains ?? task.touch ?? [],
+        // No cutover means no store, so there are no receipts to read yet.
+        receipts: []
+      })),
+      dependencyEdges,
+      mode: 'pre-cutover'
+    });
+    print(dataset, options.json);
+    return;
+  }
+
+  const { handle } = openStoreOrFail(process.cwd());
+  try {
+    const tasks = listTasks(handle.db);
+    const edges = listDependencies(handle.db);
+    const dataset = buildGanttDataset({
+      tasks: tasks.map(task => ({
+        id: task.taskId,
+        title: task.title,
+        status: task.planningState,
+        type: task.type ?? undefined,
+        parentId: task.parentTaskId ?? null,
+        start: task.startDate ?? null,
+        due: task.dueDate ?? null,
+        domains: task.domains,
+        estimateSnapshot: listEstimateSnapshots(handle.db, task.taskId).slice(-1)[0] ?? null,
+        receipts: listReceiptsForTask(handle.db, task.taskId)
+      })),
+      dependencyEdges: edges.map(edge => ({ fromTaskId: edge.fromTaskId, toTaskId: edge.toTaskId, kind: edge.kind })),
+      claimViolations: listClaimViolations(handle.db, {}),
+      mode: 'store'
+    });
+    print(dataset, options.json);
   } finally {
     handle.close();
   }
@@ -612,6 +717,11 @@ async function main(): Promise<void> {
 
   if (command === 'plan') {
     mapctxPlanCommand(options);
+    return;
+  }
+
+  if (command === 'gantt') {
+    mapctxGanttCommand(options);
     return;
   }
 

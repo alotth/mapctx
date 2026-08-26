@@ -266,14 +266,22 @@ export function updateWorkspaceTarget(
   return { registry: nextRegistry, target: nextProject, targetId: nextTargetId, type: "project" }
 }
 
-export function findTasksRoot(startPath: string): string | undefined {
+/**
+ * Find nearest directory containing tasksFile. When walking a git checkout,
+ * stop after checking its root so a similarly named board in a parent folder
+ * cannot be adopted accidentally. Worktrees use a `.git` file, which is
+ * intentionally treated as a repository marker too.
+ */
+export function findTasksRoot(startPath: string, tasksFile = "TASKS.md"): string | undefined {
   let current = path.resolve(startPath)
   if (fs.existsSync(current) && fs.statSync(current).isFile()) {
     current = path.dirname(current)
   }
 
   while (true) {
-    if (fs.existsSync(path.join(current, "TASKS.md"))) return current
+    const candidate = path.isAbsolute(tasksFile) ? tasksFile : path.join(current, tasksFile)
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return current
+    if (fs.existsSync(path.join(current, ".git"))) return undefined
     const parent = path.dirname(current)
     if (parent === current) return undefined
     current = parent

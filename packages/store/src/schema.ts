@@ -243,5 +243,22 @@ CREATE INDEX IF NOT EXISTS idx_claim_violation_kind_path ON claim_violation_proj
 
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, sql: MIGRATION_001_INITIAL },
-  { version: 2, sql: CLAIM_VIOLATION_SCHEMA }
+  { version: 2, sql: CLAIM_VIOLATION_SCHEMA },
+  {
+    version: 3,
+    sql: `
+CREATE TABLE IF NOT EXISTS run_event_projection (
+  dispatch_id TEXT NOT NULL,
+  attempt INTEGER NOT NULL,
+  sequence INTEGER NOT NULL,
+  schema_version INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  timestamp TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  event_json TEXT NOT NULL,
+  PRIMARY KEY (dispatch_id, attempt, sequence)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_run_event_dispatch ON run_event_projection(dispatch_id, attempt, sequence);
+`.trim()
+  }
 ]
