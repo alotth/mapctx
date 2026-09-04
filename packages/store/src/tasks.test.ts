@@ -3,7 +3,7 @@ import test from "node:test"
 import * as fs from "fs"
 import * as path from "path"
 import { importCommit } from "./cutover"
-import { moveTask, updateTask } from "./tasks"
+import { createTask, moveTask, updateTask } from "./tasks"
 import { getTask, getTaskDetail, listDependencies, getActiveClaimForTask } from "./projections"
 import { claimTask, releaseClaim } from "./claims"
 import { StoreHandle } from "./store-handle"
@@ -160,6 +160,64 @@ test("updateTask --depends-on/--blocking replace edges and detail lists together
       const released = releaseClaim(handle, { taskId: "E-100", claimId: claim.claim.claimId, leaseToken: claim.claim.leaseToken, actor: "worker" });
       assert.equal(released.ok, true);
     }
+  } finally {
+    handle.close();
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
+test("createTask auto-assigns the next free id and lands at the end of the board", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const created = createTask(handle, {
+      title: "Created via CLI",
+      priority: "high",
+      tags: ["cli"],
+      domains: ["CORE"],
+      dependsOn: ["T-101"],
+      detail: { summary: "Custom summary", description: "Prose lives in the file, not the store." },
+      actor: "test"
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+    assert.equal(created.taskId, "T-103", "next free sequential id after the golden board");
+
+    const task = getTask(handle.db, "T-103");
+    assert.equal(task!.title, "[T-103] Created via CLI", "board convention: heading title carries the bracketed id");
+    assert.equal(task!.planningState, "backlog");
+    assert.equal(task!.type, "task");
+    assert.equal(task!.detailPath, "./tasks/T-103.md");
+    const maxPosition = getTask(handle.db, "T-102")!.positionKey;
+    assert.ok(task!.positionKey > maxPosition, "new task lands at the end");
+
+    const edges = listDependencies(handle.db).filter(e => e.fromTaskId === "T-103");
+    assert.deepEqual(edges, [{ fromTaskId: "T-103", toTaskId: "T-101", kind: "depends-on" }]);
+    const detail = getTaskDetail(handle.db, "T-103");
+    assert.equal(detail!.summary, "Custom summary");
+    assert.deepEqual(detail!.prerequisites, ["T-101"]);
+    assert.equal(detail!.estimatedEffort, "1d", "default effort when none given");
+  } finally {
+    handle.close();
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
+test("createTask refuses duplicate ids, bad types, unknown parents, unknown deps, and unexportable states", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    assert.equal(createTask(handle, { title: "x", id: "T-101", actor: "t" }).ok, false, "duplicate id");
+    assert.equal(createTask(handle, { title: "x", id: "E-900", actor: "t" }).ok, false, "id prefix must match type");
+    assert.equal(createTask(handle, { title: "x", type: "banana", actor: "t" }).ok, false, "invalid type");
+    assert.equal(createTask(handle, { title: "x", parent: "T-999", actor: "t" }).ok, false, "unknown parent");
+    assert.equal(createTask(handle, { title: "x", dependsOn: ["T-999"], actor: "t" }).ok, false, "unknown dependency");
+    assert.equal(createTask(handle, { title: "x", status: "blocked", actor: "t" }).ok, false, "unexportable state");
+    assert.equal(createTask(handle, { title: "  ", actor: "t" }).ok, false, "missing title");
+
+    const epic = createTask(handle, { title: "New epic", type: "epic", actor: "t" });
+    assert.equal(epic.ok, true);
+    if (epic.ok) assert.match(epic.taskId, /^E-\d+$/, "epic type implies the E- prefix");
   } finally {
     handle.close();
     restoreEnv();

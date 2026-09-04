@@ -267,3 +267,171 @@ export function toPlanningState(status: string): string {
 export function newDispatchId(): string {
   return crypto.randomUUID();
 }
+
+const TASK_TYPES = new Set(["epic", "feature", "task", "bug", "chore"]);
+const TASK_ID_PATTERN = /^(T|E)-\d{3,}$/;
+
+export type CreateTaskOptions = {
+  title: string;
+  id?: string;
+  type?: string;
+  parent?: string | null;
+  status?: string;
+  priority?: string | null;
+  workload?: string | null;
+  tags?: string[];
+  domains?: string[];
+  dependsOn?: string[];
+  blocking?: string[];
+  startDate?: string | null;
+  dueDate?: string | null;
+  /** Initial detail-file fields. `description` prose is Git-authored: it is written to the new detail file, never stored. */
+  detail?: Partial<TaskDetailRecord> & { description?: string };
+  actor: string;
+  now?: () => Date;
+};
+
+export type CreateTaskResult =
+  | { ok: true; taskId: string; detailPath: string }
+  | {
+      ok: false;
+      reason:
+        | "missing-title"
+        | "invalid-id"
+        | "duplicate-id"
+        | "invalid-type"
+        | "unknown-parent"
+        | "unknown-dependency"
+        | "state-not-exportable";
+      message?: string;
+      taskId?: string;
+    };
+
+/**
+ * Registers a new task under store authority: a `task.upserted` event with a
+ * complete TaskRecord, a detail record (structured fields only -- the
+ * description prose is written straight to the new detail file and stays
+ * Git-authored), and the initial dependency edges. The board position is the
+ * end of the current board; the id is `--id` or the next free sequential
+ * number for the prefix implied by the type (E for epic, T otherwise).
+ */
+export function createTask(store: StoreHandle, options: CreateTaskOptions): CreateTaskResult {
+  const now = options.now ?? (() => new Date());
+
+  if (!options.title || options.title.trim() === "") {
+    return { ok: false, reason: "missing-title" };
+  }
+  const type = options.type ?? "task";
+  if (!TASK_TYPES.has(type)) {
+    return { ok: false, reason: "invalid-type", message: `type "${type}" is not in epic|feature|task|bug|chore` };
+  }
+  const status = options.status ?? "backlog";
+  if (!EXPORTABLE_PLANNING_STATES.has(status)) {
+    return {
+      ok: false,
+      reason: "state-not-exportable",
+      message: `planningState "${status}" has no TASKS.md status mapping; the board vocabulary must grow before this state is creatable.`
+    };
+  }
+
+  const tasks = listAllTasks(store);
+  const prefix = type === "epic" ? "E" : "T";
+  let taskId = options.id;
+  if (taskId) {
+    if (!TASK_ID_PATTERN.test(taskId) || (taskId.startsWith("E-") && type !== "epic") || (taskId.startsWith("T-") && type === "epic")) {
+      return { ok: false, reason: "invalid-id", message: `id "${taskId}" must match ${prefix}-### for type ${type}` };
+    }
+    if (tasks.some(t => t.taskId === taskId)) {
+      return { ok: false, reason: "duplicate-id", taskId };
+    }
+  } else {
+    const next = tasks
+      .map(t => t.taskId)
+      .filter(id => id.startsWith(`${prefix}-`))
+      .map(id => Number(id.slice(prefix.length + 1)))
+      .filter(n => Number.isFinite(n));
+    taskId = `${prefix}-${String((next.length > 0 ? Math.max(...next) : 0) + 1).padStart(3, "0")}`;
+    while (tasks.some(t => t.taskId === taskId)) {
+      const n: number = Number(taskId.slice(prefix.length + 1));
+      taskId = `${prefix}-${String(n + 1).padStart(3, "0")}`;
+    }
+  }
+
+  if (options.parent && !getTask(store.db, options.parent)) {
+    return { ok: false, reason: "unknown-parent", message: `parent not found: ${options.parent}` };
+  }
+  for (const target of [...(options.dependsOn ?? []), ...(options.blocking ?? [])]) {
+    if (!getTask(store.db, target)) {
+      return { ok: false, reason: "unknown-dependency", message: `dependency target not found: ${target}` };
+    }
+  }
+
+  return store.runInWriteTransaction(append => {
+    const positionKey = tasks.length > 0 ? Math.max(...tasks.map(t => t.positionKey)) + 1 : 0;
+    const detailPath = `./tasks/${taskId}.md`;
+    const record: TaskRecord = {
+      taskId,
+      positionKey,
+      // Board convention: the heading is "### [ID] Title", so the stored
+      // title carries the bracketed id -- same as the importer reads it.
+      title: `[${taskId}] ${options.title.trim()}`,
+      planningState: status,
+      executionState: "unclaimed",
+      type,
+      parentTaskId: options.parent ?? null,
+      priority: options.priority ?? null,
+      workload: options.workload ?? null,
+      tags: [...(options.tags ?? [])],
+      domains: [...(options.domains ?? [])],
+      startDate: options.startDate ?? null,
+      dueDate: options.dueDate ?? null,
+      completedOn: null,
+      externalId: null,
+      externalLinks: [],
+      assignees: [],
+      detailPath
+    };
+
+    const outgoingEdges: DependencyRecord[] = [
+      ...(options.dependsOn ?? []).map(toTaskId => ({ fromTaskId: taskId, toTaskId, kind: "depends-on" as const })),
+      ...(options.blocking ?? []).map(toTaskId => ({ fromTaskId: taskId, toTaskId, kind: "blocks" as const }))
+    ];
+
+    const requested = options.detail ?? {};
+    const detail: TaskDetailRecord = {
+      taskId,
+      role: requested.role ?? "implementation",
+      impact: requested.impact ?? "medium",
+      estimatedEffort: requested.estimatedEffort ?? "1d",
+      prerequisites: requested.prerequisites ?? [...(options.dependsOn ?? [])],
+      blocking: requested.blocking ?? [...(options.blocking ?? [])],
+      filesAffected: requested.filesAffected ?? [],
+      testsRequired: requested.testsRequired ?? [],
+      summary: requested.summary ?? options.title.trim()
+    };
+
+    append({
+      eventType: "task.upserted",
+      actor: options.actor,
+      occurredAt: now().toISOString(),
+      payload: {
+        task: record,
+        detail,
+        outgoingEdges
+      }
+    });
+
+    return { ok: true, taskId, detailPath };
+  });
+}
+
+function listAllTasks(store: StoreHandle): { taskId: string; positionKey: number }[] {
+  return (
+    store.db
+      .prepare("SELECT task_id, position_key FROM task_projection ORDER BY position_key ASC, task_id ASC")
+      .all() as Record<string, unknown>[]
+  ).map(row => ({
+    taskId: row.task_id as string,
+    positionKey: row.position_key as number
+  }));
+}
