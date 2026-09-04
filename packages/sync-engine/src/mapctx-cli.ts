@@ -12,10 +12,13 @@ import {
   importCommit,
   importDryRun,
   isStoreMaterialized,
+  moveTask,
+  newDispatchId,
   reconcileAccept,
   reconcileDiscard,
   recoverStoreFromCheckpoint,
   releaseClaim,
+  recordDispatchAttempt,
   recordRunReceipt,
   listClaimViolations,
   listDispatchAttempts,
@@ -31,6 +34,8 @@ import {
   queryTaskFromMarkdown,
   queryTaskContext,
   queryTaskContextFromMarkdown,
+  toPlanningState,
+  updateTask,
   listDependencies,
   listTasks,
   validateStoreRegime,
@@ -53,6 +58,13 @@ type MapctxOptions = SyncOptions & {
   receiptPath?: string;
   readReceipt?: boolean;
   budget?: number;
+  status?: string;
+  setPairs?: string[];
+  dependsOn?: string;
+  blocking?: string;
+  dispatchId?: string;
+  executor?: string;
+  contextHash?: string;
 };
 
 function printHelp(): void {
@@ -80,6 +92,18 @@ function printHelp(): void {
   console.log('  mapctx task claim <task-id> [--json] [--actor name] [--holder json]');
   console.log('  mapctx task renew <task-id> --claim id --token token [--json] [--actor name]');
   console.log('  mapctx task release <task-id> --claim id --token token [--json] [--actor name]');
+  console.log('  mapctx task move <task-id> --status <planning-state> [--json] [--actor name]');
+  console.log('    Legal transition under store authority (backlog|ready-for-do|doing|review|done|paused,');
+  console.log('    or canonical backlog|ready|in-progress|review|done|paused). done stamps completedOn and');
+  console.log('    releases any active claim. Store-authority only: Markdown stays the editor pre-cutover.');
+  console.log('  mapctx task update <task-id> [--set key=value ...] [--depends-on a,b] [--blocking x,y] [--json] [--actor name]');
+  console.log('    Whitelisted fields only (title,type,parentTaskId,priority,workload,tags,domains,startDate,dueDate,');
+  console.log('    externalId,specMode,assignees,iteration,milestone; detail.* for role,impact,estimatedEffort,');
+  console.log('    filesAffected,testsRequired,summary,prerequisites,blocking). --depends-on/--blocking replace both');
+  console.log('    the dependency edges and the detail prerequisites/blocking so the two surfaces never diverge.');
+  console.log('  mapctx dispatch create <task-id> [--dispatch-id id] [--status claimed|running] (default claimed) [--executor kind] [--context-hash hash] [--json] [--actor name]');
+  console.log('    New dispatch (fresh id, attempt 1) or --dispatch-id to append attempt max+1 to an existing one.');
+  console.log('    Prints the dispatchId/attempt to feed `mapctx dispatch receipt`.');
   console.log('  mapctx dispatch receipt <dispatch-id> --receipt path [--json] [--actor name]');
   console.log('  mapctx dispatch receipt <dispatch-id> --read --json');
   console.log('  mapctx reconcile <task-id> [--accept | --discard] [--json] [--actor name]');
@@ -123,6 +147,13 @@ function parseArgs(argv: string[]): {
     else if (a === '--holder') options.holder = args[++i];
     else if (a === '--receipt' || a === '--file') options.receiptPath = args[++i];
     else if (a === '--read') options.readReceipt = true;
+    else if (a === '--status') options.status = args[++i];
+    else if (a === '--set') (options.setPairs ??= []).push(args[++i]);
+    else if (a === '--depends-on') options.dependsOn = args[++i];
+    else if (a === '--blocking') options.blocking = args[++i];
+    else if (a === '--dispatch-id') options.dispatchId = args[++i];
+    else if (a === '--executor') options.executor = args[++i];
+    else if (a === '--context-hash') options.contextHash = args[++i];
     else if (a === '--budget') {
       const value = Number(args[++i]);
       if (!Number.isInteger(value) || value < 1) throw new Error('--budget must be a positive integer');
@@ -603,6 +634,158 @@ function dispatchReceiptCommand(dispatchId: string, options: MapctxOptions): voi
   }
 }
 
+/**
+ * Writing tasks is a store-authority operation: in the Markdown regime the
+ * files themselves are authoritative and are edited directly, so a CLI write
+ * path here would create a second writer. Fail closed with that explanation
+ * instead of silently picking a side.
+ */
+function requireStoreAuthority(cwd: string): { toml: { config: MapctxTomlConfig; path: string; dir: string }; handle: StoreHandle; tasksRoot: string } {
+  const toml = resolveMapctxToml(cwd);
+  if (!toml || toml.config.plansAuthority !== 'store') {
+    throw new Error('task write commands require plansAuthority=store (mapctx.toml). Pre-cutover, edit TASKS.md and tasks/<ID>.md directly.');
+  }
+  const { handle } = openStoreOrFail(cwd);
+  return { toml, handle, tasksRoot: toml.dir };
+}
+
+/**
+ * After a store write the canonical Markdown is regenerated so the drift
+ * check keeps passing: the store just changed, so the generated snapshot
+ * must follow in the same operation, or the next validate fails closed.
+ */
+function regenerateCanonicalFiles(handle: StoreHandle, tasksRoot: string): { tasksMd: string; detailFiles: number } {
+  const exported = buildExport(handle.db, { tasksRoot });
+  fs.writeFileSync(exported.tasksMd.path, exported.tasksMd.content, 'utf8');
+  for (const file of exported.taskDetailFiles) {
+    fs.writeFileSync(file.path, file.content, 'utf8');
+  }
+  return { tasksMd: exported.tasksMd.path, detailFiles: exported.taskDetailFiles.length };
+}
+
+function parseSetValue(field: string, raw: string): unknown {
+  if (raw === 'null') return null;
+  const arrayFields = new Set(['tags', 'domains', 'assignees', 'filesAffected', 'testsRequired', 'prerequisites', 'blocking']);
+  if (arrayFields.has(field)) {
+    return raw.trim() === '' ? [] : raw.split(',').map(v => v.trim()).filter(Boolean);
+  }
+  return raw;
+}
+
+export function taskMoveCommand(taskId: string, options: MapctxOptions): void {
+  if (!options.status) throw new Error('task move requires --status <planning-state>');
+  const cwd = process.cwd();
+  const { handle, tasksRoot } = requireStoreAuthority(cwd);
+  try {
+    const result = moveTask(handle, { taskId, to: toPlanningState(options.status), actor: defaultActor(options.actor) });
+    if (!result.ok) {
+      print(result, options.json);
+      throw new Error(`Move refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
+    }
+    const regenerated = regenerateCanonicalFiles(handle, tasksRoot);
+    print({ ...result, regenerated }, options.json);
+  } finally {
+    handle.close();
+  }
+}
+
+export function taskUpdateCommand(taskId: string, options: MapctxOptions): void {
+  const setPairs = options.setPairs ?? [];
+  if (setPairs.length === 0 && options.dependsOn === undefined && options.blocking === undefined) {
+    throw new Error('task update requires --set key=value, --depends-on a,b, or --blocking x,y');
+  }
+  const patch: Record<string, unknown> = {};
+  const detailPatch: Record<string, unknown> = {};
+  for (const pair of setPairs) {
+    const eq = pair.indexOf('=');
+    if (eq < 1) throw new Error(`--set expects key=value, got: ${pair}`);
+    const key = pair.slice(0, eq);
+    const raw = pair.slice(eq + 1);
+    if (key.startsWith('detail.')) {
+      detailPatch[key.slice('detail.'.length)] = parseSetValue(key.slice('detail.'.length), raw);
+    } else {
+      patch[key] = parseSetValue(key, raw);
+    }
+  }
+  const cwd = process.cwd();
+  const { handle, tasksRoot } = requireStoreAuthority(cwd);
+  try {
+    const result = updateTask(handle, {
+      taskId,
+      patch: Object.keys(patch).length > 0 ? patch as never : undefined,
+      detailPatch: Object.keys(detailPatch).length > 0 ? detailPatch as never : undefined,
+      dependsOn: options.dependsOn !== undefined ? (options.dependsOn.trim() === '' ? [] : options.dependsOn.split(',').map(v => v.trim()).filter(Boolean)) : undefined,
+      blocking: options.blocking !== undefined ? (options.blocking.trim() === '' ? [] : options.blocking.split(',').map(v => v.trim()).filter(Boolean)) : undefined,
+      actor: defaultActor(options.actor)
+    });
+    if (!result.ok) {
+      print(result, options.json);
+      throw new Error(`Update refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
+    }
+    const regenerated = regenerateCanonicalFiles(handle, tasksRoot);
+    print({ taskId, ...result, regenerated }, options.json);
+  } finally {
+    handle.close();
+  }
+}
+
+export function dispatchCreateCommand(taskId: string, options: MapctxOptions): void {
+  const cwd = process.cwd();
+  const { handle } = openStoreOrFail(cwd);
+  try {
+    const task = queryTask(handle.db, taskId);
+    if (!task) throw new Error(`Cannot dispatch unknown task: ${taskId}`);
+
+    let dispatchId: string;
+    let attempt: number;
+    if (options.dispatchId) {
+      const history = listDispatchAttempts(handle.db, options.dispatchId);
+      if (history.length === 0) throw new Error(`Unknown dispatch: ${options.dispatchId}`);
+      dispatchId = options.dispatchId;
+      attempt = Math.max(...history.map(a => a.attempt)) + 1;
+    } else {
+      dispatchId = newDispatchId();
+      attempt = 1;
+    }
+
+    // A fresh attempt must enter through "claimed": unclaimed -> running is
+    // not a legal execution transition, and the receipt (or an explicit
+    // transition) is what moves the attempt forward.
+    const status = options.status ?? 'claimed';
+    if (status !== 'claimed' && status !== 'running') {
+      throw new Error(`dispatch create status must be claimed or running, got: ${status}`);
+    }
+    const contextHash = options.contextHash
+      ?? crypto.createHash('sha256').update(JSON.stringify(task)).digest('hex');
+
+    const result = recordDispatchAttempt(handle, {
+      dispatch: {
+        dispatchId,
+        taskId,
+        executorKind: options.executor ?? 'cli',
+        attempt,
+        contextHash,
+        status
+      }
+    }, defaultActor(options.actor));
+    if (!result.ok) {
+      print(result, options.json);
+      throw new Error(`Dispatch refused: ${result.reason}`);
+    }
+    print({
+      ok: true,
+      dispatchId,
+      attempt,
+      taskId,
+      status,
+      executorKind: options.executor ?? 'cli',
+      next: `mapctx dispatch receipt ${dispatchId} --receipt <path>`
+    }, options.json);
+  } finally {
+    handle.close();
+  }
+}
+
 function reconcileCliCommand(taskId: string, options: MapctxOptions): void {
   const cwd = process.cwd();
   const { handle } = openStoreOrFail(cwd);
@@ -734,19 +917,22 @@ async function main(): Promise<void> {
 
   if (command === 'task') {
     const taskId = positional[1];
-    if (!taskId) throw new Error('Usage: mapctx task <claim|renew|release> <task-id> [...]');
+    if (!taskId) throw new Error('Usage: mapctx task <show|context|claim|renew|release|move|update> <task-id> [...]');
     if (subcommand === 'show') { taskShowCommand(taskId, options); return; }
     if (subcommand === 'context') { taskContextCommand(taskId, options); return; }
     if (subcommand === 'claim') { taskClaimCommand(taskId, options); return; }
     if (subcommand === 'renew') { taskRenewCommand(taskId, options); return; }
     if (subcommand === 'release') { taskReleaseCommand(taskId, options); return; }
-    throw new Error('Usage: mapctx task <claim|renew|release> <task-id> [...]');
+    if (subcommand === 'move') { taskMoveCommand(taskId, options); return; }
+    if (subcommand === 'update') { taskUpdateCommand(taskId, options); return; }
+    throw new Error('Usage: mapctx task <show|context|claim|renew|release|move|update> <task-id> [...]');
   }
 
   if (command === 'dispatch') {
+    if (subcommand === 'create' && positional[1]) { dispatchCreateCommand(positional[1], options); return; }
     const dispatchId = positional[1];
     if (subcommand === 'receipt' && dispatchId) { dispatchReceiptCommand(dispatchId, options); return; }
-    throw new Error('Usage: mapctx dispatch receipt <dispatch-id> --receipt <path> [--json]');
+    throw new Error('Usage: mapctx dispatch create <task-id> [...] | mapctx dispatch receipt <dispatch-id> [...]');
   }
 
   if (command === 'reconcile') {
