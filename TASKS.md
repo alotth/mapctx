@@ -331,7 +331,7 @@
 ### [T-016] Publish migration guide for status and naming changes
 
   - id: T-016
-  - status: backlog
+  - status: paused
   - type: chore
   - parent: E-001
   - subIssueProgress: null
@@ -344,13 +344,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-09-04
   - detail: ./tasks/T-016.md
 
 ### [T-017] Define epic-ID migration policy (`T-xxx` -> `E-xxx`)
 
   - id: T-017
-  - status: backlog
+  - status: paused
   - type: task
   - parent: E-001
   - subIssueProgress: null
@@ -363,7 +363,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-09-04
   - detail: ./tasks/T-017.md
 
 ### [E-002] Product-first task specification templates
@@ -445,7 +445,7 @@
 ### [T-021] Add product-oriented example detail files and runbook
 
   - id: T-021
-  - status: backlog
+  - status: paused
   - type: chore
   - parent: E-002
   - subIssueProgress: null
@@ -458,7 +458,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-09-04
   - detail: ./tasks/T-021.md
 
 ### [E-003] Isolated generator/evaluator execution model
@@ -673,7 +673,7 @@
 ### [T-031] Integrate validation and planning checks in CI
 
   - id: T-031
-  - status: backlog
+  - status: paused
   - type: chore
   - parent: E-004
   - subIssueProgress: null
@@ -686,7 +686,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-09-04
   - detail: ./tasks/T-031.md
 
 ### [E-005] Methodology documentation (SDD + BMAD + GSD)
@@ -749,7 +749,7 @@
 ### [T-034] Migrate docs site to single-list model and new status terms
 
   - id: T-034
-  - status: backlog
+  - status: paused
   - type: task
   - parent: E-005
   - subIssueProgress: null
@@ -762,7 +762,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-09-04
   - detail: ./tasks/T-034.md
 
 ### [T-035] Document adopted vs rejected ideas (including implicit naming)
@@ -1227,7 +1227,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 3/5
+  - subIssueProgress: 4/5
   - priority: high
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
@@ -1360,7 +1360,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 1/2
+  - subIssueProgress: 1/4
   - priority: medium
   - workload: Hard
   - tags: [vnext, migration, cli, skills, github]
@@ -1452,7 +1452,7 @@
 ### [T-066] Run the first real cutover and verify the recovery checkpoint
 
   - id: T-066
-  - status: review
+  - status: done
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1463,10 +1463,48 @@
   - dependsOn: [T-055, T-062, T-064]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-04
   - externalId: null
   - updated: 2026-09-04
   - detail: ./tasks/T-066.md
+
+### [T-067] Update README and docs for store authority and the CLI write path
+
+  - id: T-067
+  - status: ready-for-do
+  - type: task
+  - parent: E-012
+  - subIssueProgress: null
+  - priority: medium
+  - workload: null
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/T-067.md
+
+### [T-068] Update mapctx-tasks and mapctx-traycer skills for the CLI write path
+
+  - id: T-068
+  - status: ready-for-do
+  - type: task
+  - parent: E-012
+  - subIssueProgress: null
+  - priority: medium
+  - workload: null
+  - tags: []
+  - domains: [SKILLS]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/T-068.md
 
 ## Notes
 
