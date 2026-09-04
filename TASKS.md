@@ -1452,7 +1452,7 @@
 ### [T-066] Run the first real cutover and verify the recovery checkpoint
 
   - id: T-066
-  - status: doing
+  - status: review
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1465,7 +1465,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-08-26
+  - updated: 2026-09-04
   - detail: ./tasks/T-066.md
 
 ## Notes
