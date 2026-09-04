@@ -195,6 +195,15 @@ export function planImport(tasksFilePath: string): ImportPlan {
       }
     }
 
+    for (const [field, value] of Object.entries(boardTask.droppedFields ?? {})) {
+      issues.push({
+        severity: "error",
+        code: "unrepresentable-field-value",
+        message: `${field} value ${JSON.stringify(value)} is outside the accepted set; importing it would silently discard the authored value.`,
+        taskId
+      });
+    }
+
     const planningState = STATUS_TO_PLANNING[boardTask.status] ?? null;
     if (!planningState) {
       issues.push({ severity: "error", code: "unmapped-status", message: `Status has no planningState mapping: ${boardTask.status}`, taskId });

@@ -32,6 +32,12 @@ export type Task = {
   updated?: string
   detail?: string
   defaultExpanded?: boolean
+  /**
+   * Enumerated fields whose authored value is outside the accepted set. The
+   * parser cannot represent them, so it records what it dropped instead of
+   * discarding it silently; migration and validation surface these by task.
+   */
+  droppedFields?: Record<string, string>
 }
 
 export type TaskBoard = {
@@ -73,6 +79,15 @@ function writeUtf8(filePath: string, content: string): void {
 
 function normalizeBoardStatus(value: string | null | undefined): string {
   return String(value || "").trim().toLowerCase()
+}
+
+function isNullish(value: string): boolean {
+  return value === "" || value === "null"
+}
+
+function recordDropped(task: Task, field: string, value: string): void {
+  if (!task.droppedFields) task.droppedFields = {}
+  task.droppedFields[field] = value
 }
 
 function parseStatus(value: string | undefined, fallback: LocalStatus = "backlog"): LocalStatus {
@@ -200,6 +215,7 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
           break
         case "type":
           currentTask.type = parseTaskType(value)
+          if (!currentTask.type && !isNullish(value)) recordDropped(currentTask, "type", value)
           break
         case "parent":
           currentTask.parent = value === "null" || value === "" ? undefined : value
@@ -209,9 +225,11 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
           break
         case "priority":
           if (value === "high" || value === "medium" || value === "low") currentTask.priority = value
+          else if (!isNullish(value)) recordDropped(currentTask, "priority", value)
           break
         case "workload":
           if (value === "Easy" || value === "Normal" || value === "Hard" || value === "Extreme") currentTask.workload = value
+          else if (!isNullish(value)) recordDropped(currentTask, "workload", value)
           break
         case "tags":
           currentTask.tags = parseArray(value)
@@ -237,6 +255,7 @@ export function parseTasksFile(tasksFilePath: string): TaskBoard {
           break
         case "specMode":
           currentTask.specMode = parseSpecMode(value)
+          if (!currentTask.specMode && !isNullish(value)) recordDropped(currentTask, "specMode", value)
           break
         case "start":
           currentTask.start = value === "null" || value === "" ? undefined : value

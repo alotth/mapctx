@@ -213,3 +213,65 @@ test("importDryRun reports uncommitted board changes as blockers rather than let
     cleanupDir(repoDir);
   }
 });
+
+test("planImport raises unrepresentable-field-value as an error when the parser drops an out-of-enum value", () => {
+  const { repoDir, restoreEnv } = setupGoldenRepo();
+  try {
+    const tasksPath = path.join(repoDir, "TASKS.md");
+    const original = fs.readFileSync(tasksPath, "utf8");
+
+    // `Medium` is not in the workload enum (Easy/Normal/Hard/Extreme). Before
+    // the droppedFields change the parser discarded it silently and the cutover
+    // deleted the authored value without any signal.
+    const drifted = original.replace("  - workload: null", "  - workload: Medium");
+    fs.writeFileSync(tasksPath, drifted, "utf8");
+
+    const plan = planImport(tasksPath);
+    const dropped = plan.issues.filter(i => i.code === "unrepresentable-field-value");
+    assert.equal(dropped.length, 1, "the dropped workload must be surfaced exactly once");
+    assert.equal(dropped[0].taskId, "T-101");
+    assert.equal(dropped[0].severity, "error", "a value that would be deleted must block the import, not warn");
+    assert.ok(dropped[0].message.includes("workload"));
+    assert.ok(plan.errors > 0);
+  } finally {
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
+test("cutover fails closed on prerequisites-dependson-mismatch: dry-run names it as a blocker and importCommit refuses", () => {
+  const { repoDir, restoreEnv } = setupGoldenRepo();
+  try {
+    // T-102 depends on T-101 in TASKS.md; make its detail file claim a
+    // prerequisite the board does not list. Plain `validate` keeps this a
+    // warning, but after the cutover the detail file is regenerated from the
+    // board, so the losing side would be deleted silently.
+    const detailPath = path.join(repoDir, "tasks", "T-102.md");
+    fs.writeFileSync(
+      detailPath,
+      GOLDEN_FILES["tasks/T-102.md"].replace("- prerequisites: [T-101]", "- prerequisites: [T-101, T-999]"),
+      "utf8"
+    );
+
+    const dry = importDryRun({ tasksFilePath: path.join(repoDir, "TASKS.md"), cwd: repoDir });
+    assert.equal(dry.wouldCommit, false, "a mismatching prerequisite must not report a committable cutover");
+    const blocker = dry.cutover!.blockers.find(b => b.includes("prerequisites-dependson-mismatch"));
+    assert.ok(blocker, "dry run must name the mismatch as a cutover blocker");
+    assert.ok(blocker!.includes("T-102"));
+
+    assert.throws(() => importCommit({ cwd: repoDir, actor: "test-actor" }), err => {
+      assert.ok(err instanceof Error);
+      assert.ok(err.message.includes("Cutover refused"), "the refusal must say the board and detail file disagree");
+      assert.ok(err.message.includes("prerequisites-dependson-mismatch"));
+      assert.ok(err.message.includes("T-102"));
+      return true;
+    });
+
+    // Nothing must have leaked: no mapctx.toml, no store, legacy config intact.
+    assert.equal(fs.existsSync(path.join(repoDir, "mapctx.toml")), false);
+    assert.equal(fs.existsSync(path.join(repoDir, "mapcs.config.json")), true);
+  } finally {
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});

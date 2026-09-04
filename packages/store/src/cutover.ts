@@ -67,6 +67,20 @@ export type ImportDryRunResult = {
   cutover?: CutoverPreview;
 };
 
+/**
+ * Warnings that a plain `mapctx validate` may tolerate but a cutover must not:
+ * the store becomes authoritative and immediately rewrites the Markdown from
+ * it, so an unreconciled disagreement is not a warning about the board -- it is
+ * silent deletion of the losing side. Reconcile in Markdown first.
+ */
+const CUTOVER_BLOCKING_WARNING_CODES = new Set(["prerequisites-dependson-mismatch"]);
+
+export function cutoverBlockingIssues(plan: ImportPlan): string[] {
+  return plan.issues
+    .filter(issue => issue.severity === "warning" && CUTOVER_BLOCKING_WARNING_CODES.has(issue.code))
+    .map(issue => `[${issue.code}]${issue.taskId ? ` ${issue.taskId}` : ""}: ${issue.message} Reconcile TASKS.md and the detail file before cutting over; the cutover would overwrite the detail file from the board.`);
+}
+
 function gitDirtyPaths(cwd: string, relativePaths: string[]): string[] {
   if (relativePaths.length === 0) return [];
   // Never trim the whole output: porcelain lines start with a two-column
@@ -119,6 +133,7 @@ function previewCutover(plan: ImportPlan, options: ImportDryRunOptions & { cwd: 
   if (plan.errors > 0) {
     blockers.push(`Board validation failed with ${plan.errors} error(s).`);
   }
+  blockers.push(...cutoverBlockingIssues(plan));
 
   const trackedPaths = [
     path.relative(cwd, tasksFilePath),
@@ -321,6 +336,10 @@ export function importCommit(options: ImportCommitOptions): ImportCommitResult {
   if (plan.errors > 0) {
     const messages = plan.issues.filter(i => i.severity === "error").map(i => `[${i.code}]${i.taskId ? ` ${i.taskId}` : ""}: ${i.message}`);
     throw new Error(`Import validation failed with ${plan.errors} error(s):\n${messages.join("\n")}`);
+  }
+  const blocking = cutoverBlockingIssues(plan);
+  if (blocking.length > 0) {
+    throw new Error(`Cutover refused; the board and its detail files disagree:\n${blocking.join("\n")}`);
   }
 
   const relTasksFile = path.relative(cwd, tasksFilePath);
