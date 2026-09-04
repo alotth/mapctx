@@ -163,7 +163,7 @@
   - status: done
   - type: task
   - parent: E-008
-  - subIssueProgress: null
+  - subIssueProgress: 2/2
   - priority: high
   - workload: Normal
   - tags: [skills, contract]
@@ -1213,7 +1213,7 @@
   - workload: Normal
   - tags: [vnext, forecast, calibration, estimation]
   - domains: [FORECAST, WEBVIEW, TELEMETRY, TEST]
-  - dependsOn: [T-054, T-064, T-056]
+  - dependsOn: [T-054, T-056, T-064]
   - start: null
   - due: null
   - completed: null
@@ -1360,7 +1360,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: null
+  - subIssueProgress: 1/2
   - priority: medium
   - workload: Hard
   - tags: [vnext, migration, cli, skills, github]
