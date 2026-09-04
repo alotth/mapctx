@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ensureWorkspaceRegistry } from '@mapctx/core/workspace';
-import { parseTasksFile } from '@mapctx/core';
+import { generateTaskDetailFile, parseTaskDetailFile, parseTasksFile } from '@mapctx/core';
 import {
   buildExport,
   claimTask,
@@ -14,6 +14,7 @@ import {
   isStoreMaterialized,
   moveTask,
   newDispatchId,
+  createTask,
   reconcileAccept,
   reconcileDiscard,
   recoverStoreFromCheckpoint,
@@ -63,8 +64,24 @@ type MapctxOptions = SyncOptions & {
   dependsOn?: string;
   blocking?: string;
   dispatchId?: string;
+  id?: string;
   executor?: string;
   contextHash?: string;
+  title?: string;
+  type?: string;
+  parent?: string;
+  priority?: string;
+  workload?: string;
+  tags?: string;
+  domains?: string;
+  start?: string;
+  due?: string;
+  role?: string;
+  impact?: string;
+  effort?: string;
+  summary?: string;
+  description?: string;
+  descriptionFile?: string;
 };
 
 function printHelp(): void {
@@ -92,6 +109,12 @@ function printHelp(): void {
   console.log('  mapctx task claim <task-id> [--json] [--actor name] [--holder json]');
   console.log('  mapctx task renew <task-id> --claim id --token token [--json] [--actor name]');
   console.log('  mapctx task release <task-id> --claim id --token token [--json] [--actor name]');
+  console.log('  mapctx task create --title "<title>" [--id T-###] [--type epic|feature|task|bug|chore] [--parent id] [--status planning-state]');
+  console.log('    [--priority p] [--workload w] [--tags a,b] [--domains d,e] [--depends-on a,b] [--blocking x,y]');
+  console.log('    [--start date] [--due date] [--role r] [--impact i] [--effort e] [--summary s]');
+  console.log('    (--description text | --description-file path) [--json] [--actor name]');
+  console.log('    Auto-assigns the next free id for the type prefix (E for epic, T otherwise). The');
+  console.log('    description prose goes into the new detail file and stays Git-authored.');
   console.log('  mapctx task move <task-id> --status <planning-state> [--json] [--actor name]');
   console.log('    Legal transition under store authority (backlog|ready-for-do|doing|review|done|paused,');
   console.log('    or canonical backlog|ready|in-progress|review|done|paused). done stamps completedOn and');
@@ -152,8 +175,24 @@ function parseArgs(argv: string[]): {
     else if (a === '--depends-on') options.dependsOn = args[++i];
     else if (a === '--blocking') options.blocking = args[++i];
     else if (a === '--dispatch-id') options.dispatchId = args[++i];
+    else if (a === '--id') options.id = args[++i];
     else if (a === '--executor') options.executor = args[++i];
     else if (a === '--context-hash') options.contextHash = args[++i];
+    else if (a === '--title') options.title = args[++i];
+    else if (a === '--type') options.type = args[++i];
+    else if (a === '--parent') options.parent = args[++i];
+    else if (a === '--priority') options.priority = args[++i];
+    else if (a === '--workload') options.workload = args[++i];
+    else if (a === '--tags') options.tags = args[++i];
+    else if (a === '--domains') options.domains = args[++i];
+    else if (a === '--start') options.start = args[++i];
+    else if (a === '--due') options.due = args[++i];
+    else if (a === '--role') options.role = args[++i];
+    else if (a === '--impact') options.impact = args[++i];
+    else if (a === '--effort') options.effort = args[++i];
+    else if (a === '--summary') options.summary = args[++i];
+    else if (a === '--description') options.description = args[++i];
+    else if (a === '--description-file') options.descriptionFile = args[++i];
     else if (a === '--budget') {
       const value = Number(args[++i]);
       if (!Number.isInteger(value) || value < 1) throw new Error('--budget must be a positive integer');
@@ -689,6 +728,65 @@ export function taskMoveCommand(taskId: string, options: MapctxOptions): void {
   }
 }
 
+export function splitList(value?: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  return value.trim() === '' ? [] : value.split(',').map(v => v.trim()).filter(Boolean);
+}
+
+/**
+ * Registers a new task under store authority. Auto-assigns the next free
+ * sequential id for the type's prefix (E for epic, T otherwise) unless --id
+ * is given. The description prose (--description / --description-file) is
+ * written straight into the new detail file and stays Git-authored from then
+ * on -- the store never owns prose.
+ */
+export function taskCreateCommand(options: MapctxOptions): void {
+  if (!options.title) throw new Error('task create requires --title "<title>"');
+  const cwd = process.cwd();
+  const { handle, tasksRoot } = requireStoreAuthority(cwd);
+  try {
+    const result = createTask(handle, {
+      title: options.title,
+      id: options.id,
+      type: options.type,
+      parent: options.parent ?? null,
+      status: options.status ? toPlanningState(options.status) : undefined,
+      priority: options.priority ?? null,
+      workload: options.workload ?? null,
+      tags: splitList(options.tags) ?? [],
+      domains: splitList(options.domains) ?? [],
+      dependsOn: splitList(options.dependsOn),
+      blocking: splitList(options.blocking),
+      startDate: options.start ?? null,
+      dueDate: options.due ?? null,
+      detail: {
+        role: options.role,
+        impact: options.impact,
+        estimatedEffort: options.effort,
+        summary: options.summary
+      },
+      actor: defaultActor(options.actor)
+    });
+    if (!result.ok) {
+      print(result, options.json);
+      throw new Error(`Create refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
+    }
+
+    regenerateCanonicalFiles(handle, tasksRoot);
+
+    const description = options.description ?? (options.descriptionFile ? fs.readFileSync(path.resolve(cwd, options.descriptionFile), 'utf8') : undefined);
+    if (description !== undefined) {
+      const detailPath = path.resolve(cwd, result.detailPath);
+      const generated = parseTaskDetailFile(fs.readFileSync(detailPath, 'utf8'));
+      fs.writeFileSync(detailPath, generateTaskDetailFile({ ...generated, description }), 'utf8');
+    }
+
+    print(result, options.json);
+  } finally {
+    handle.close();
+  }
+}
+
 export function taskUpdateCommand(taskId: string, options: MapctxOptions): void {
   const setPairs = options.setPairs ?? [];
   if (setPairs.length === 0 && options.dependsOn === undefined && options.blocking === undefined) {
@@ -916,8 +1014,9 @@ async function main(): Promise<void> {
   }
 
   if (command === 'task') {
+    if (subcommand === 'create') { taskCreateCommand(options); return; }
     const taskId = positional[1];
-    if (!taskId) throw new Error('Usage: mapctx task <show|context|claim|renew|release|move|update> <task-id> [...]');
+    if (!taskId) throw new Error('Usage: mapctx task <create|show|context|claim|renew|release|move|update> [...]');
     if (subcommand === 'show') { taskShowCommand(taskId, options); return; }
     if (subcommand === 'context') { taskContextCommand(taskId, options); return; }
     if (subcommand === 'claim') { taskClaimCommand(taskId, options); return; }
@@ -925,7 +1024,7 @@ async function main(): Promise<void> {
     if (subcommand === 'release') { taskReleaseCommand(taskId, options); return; }
     if (subcommand === 'move') { taskMoveCommand(taskId, options); return; }
     if (subcommand === 'update') { taskUpdateCommand(taskId, options); return; }
-    throw new Error('Usage: mapctx task <show|context|claim|renew|release|move|update> <task-id> [...]');
+    throw new Error('Usage: mapctx task <create|show|context|claim|renew|release|move|update> <task-id> [...]');
   }
 
   if (command === 'dispatch') {

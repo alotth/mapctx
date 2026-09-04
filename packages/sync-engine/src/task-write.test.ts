@@ -7,6 +7,7 @@ import test from 'node:test';
 import {
   dispatchCreateCommand,
   mapctxValidateCliCommand,
+  taskCreateCommand,
   taskMoveCommand,
   taskUpdateCommand
 } from './mapctx-cli';
@@ -187,6 +188,42 @@ test('task update: whitelisted fields land on board and detail file together', (
     mapctxValidateCliCommand({ json: true } as never);
 
     assert.throws(() => taskUpdateCommand('T-201', { setPairs: ['planningState=done'], json: true } as never), /unknown-field/);
+  } finally {
+    restore();
+  }
+});
+
+test('task create: auto id, detail file with Git-authored prose, validate green', () => {
+  const { restore } = setupCutoverRepo();
+  try {
+    execFileSync('node', [require.resolve('./mapctx-cli.js'), 'import', '--commit'], { stdio: 'ignore' });
+
+    taskCreateCommand({
+      title: 'Created by the CLI test',
+      priority: 'low',
+      domains: 'CORE',
+      dependsOn: 'T-201',
+      effort: '2d',
+      description: 'Prose block that only lives in the file.',
+      json: true
+    } as never);
+
+    const onDisk = readTasksMd();
+    assert.ok(onDisk.includes('### [T-202] Created by the CLI test'), 'auto id is the next free sequential one');
+    const block = onDisk.slice(onDisk.indexOf('### [T-202]'));
+    assert.ok(block.includes('- status: backlog'));
+    assert.ok(block.includes('- dependsOn: [T-201]'));
+    assert.ok(block.includes('- detail: ./tasks/T-202.md'));
+
+    const detail = fs.readFileSync(path.join('tasks', 'T-202.md'), 'utf8');
+    assert.ok(detail.includes('- estimatedEffort: 2d'));
+    assert.ok(detail.includes('- prerequisites: [T-201]'));
+    assert.ok(detail.includes('Prose block that only lives in the file.'));
+
+    mapctxValidateCliCommand({ json: true } as never);
+
+    assert.throws(() => taskCreateCommand({ title: 'dup', id: 'T-202', json: true } as never), /duplicate-id/);
+    assert.throws(() => taskCreateCommand({ json: true } as never), /--title/);
   } finally {
     restore();
   }
