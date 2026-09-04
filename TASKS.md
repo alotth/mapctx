@@ -1232,7 +1232,7 @@
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
   - domains: [ADAPTER, PROTOCOL, TELEMETRY]
-  - dependsOn: []
+  - dependsOn: [E-009]
   - start: null
   - due: null
   - completed: null
@@ -1289,7 +1289,7 @@
   - workload: Hard
   - tags: [vnext, forecast, cost, gantt]
   - domains: [FORECAST, TELEMETRY, WEBVIEW]
-  - dependsOn: []
+  - dependsOn: [E-009]
   - start: null
   - due: null
   - completed: null
@@ -1365,7 +1365,7 @@
   - workload: Hard
   - tags: [vnext, migration, cli, skills, github]
   - domains: [CLI, SKILLS, SYNC, GITHUB, DOCS]
-  - dependsOn: []
+  - dependsOn: [E-010, E-011]
   - start: null
   - due: null
   - completed: null
@@ -1438,7 +1438,7 @@
   - parent: E-012
   - subIssueProgress: null
   - priority: medium
-  - workload: Medium
+  - workload: Normal
   - tags: [vnext, cleanup, legacy, adr]
   - domains: [PROTOCOL, SYNC, EXTENSION, DOCS]
   - dependsOn: [T-052]
