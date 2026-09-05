@@ -1360,7 +1360,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 4/5
+  - subIssueProgress: 5/5
   - priority: medium
   - workload: Hard
   - tags: [vnext, migration, cli, skills, github]
@@ -1376,7 +1376,7 @@
 ### [T-057] Unify CLI, consolidate skills, and define GitHub source modes
 
   - id: T-057
-  - status: review
+  - status: done
   - type: feature
   - parent: E-012
   - subIssueProgress: null
@@ -1387,7 +1387,7 @@
   - dependsOn: [T-050, T-052, T-056, T-065]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-05
   - externalId: null
   - updated: 2026-09-05
   - detail: ./tasks/T-057.md
