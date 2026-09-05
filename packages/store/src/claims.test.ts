@@ -116,3 +116,83 @@ test("releaseClaim frees the task for a new claim; a dead lease auto-expires on 
     cleanupDir(dir);
   }
 });
+
+test("claimTask: claiming starts work -- backlog reaches in-progress through the legal path", () => {
+  const { handle, cleanup } = (() => {
+    const storeDir = mkTmpDir("mapctx-claims-");
+    const handle = StoreHandle.open(storeDir);
+    seedOneTask(handle);
+    return { handle, cleanup: () => { handle.close(); cleanupDir(storeDir); } };
+  })();
+  try {
+    const result = claimTask(handle, { taskId: "T-001", actor: "worker" });
+    assert.ok(result.ok);
+    if (result.ok) {
+      assert.equal(result.planningTransitionsTo, "in-progress");
+    }
+    const task = handle.db.prepare("SELECT planning_state FROM task_projection WHERE task_id = 'T-001'").get() as { planning_state: string };
+    assert.equal(task.planning_state, "in-progress", "backlog -> ready -> in-progress, both hops recorded");
+    // A second claimer sees the held lease, and the planning state is untouched.
+    const second = claimTask(handle, { taskId: "T-001", actor: "other" });
+    assert.equal(second.ok, false);
+    assert.equal(getPlanningState(handle, "T-001"), "in-progress");
+    function getPlanningState(h: StoreHandle, id: string): string {
+      return (h.db.prepare("SELECT planning_state FROM task_projection WHERE task_id = ?").get(id) as { planning_state: string }).planning_state;
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test("claimTask: ready claims jump straight to in-progress; done tasks refuse to be claimed", () => {
+  const storeDir = mkTmpDir("mapctx-claims-");
+  const handle = StoreHandle.open(storeDir);
+  try {
+    seedOneTask(handle);
+    // Move the task to ready, then claim: single hop expected.
+    handle.appendEvent({
+      eventType: "task.patched",
+      actor: "test",
+      payload: { taskId: "T-001", patch: { planningState: "ready" }, source: "test" }
+    });
+    const fromReady = claimTask(handle, { taskId: "T-001", actor: "worker" });
+    assert.ok(fromReady.ok);
+    if (fromReady.ok) assert.equal(fromReady.planningTransitionsTo, "in-progress");
+    assert.equal((handle.db.prepare("SELECT planning_state FROM task_projection WHERE task_id = 'T-001'").get() as { planning_state: string }).planning_state, "in-progress");
+
+    // Terminal state: claiming a done task is nonsense and must refuse.
+    handle.appendEvent({
+      eventType: "task.patched",
+      actor: "test",
+      payload: { taskId: "T-001", patch: { planningState: "done" }, source: "test" }
+    });
+    const fromDone = claimTask(handle, { taskId: "T-001", actor: "worker" });
+    assert.equal(fromDone.ok, false);
+    if (!fromDone.ok) assert.equal(fromDone.reason, "terminal-state");
+
+    // Paused stays paused: unpausing is a human decision, not a lease side effect.
+    handle.appendEvent({
+      eventType: "task.upserted",
+      actor: "test",
+      payload: {
+        task: {
+          taskId: "T-002",
+          positionKey: 1,
+          title: "y",
+          planningState: "paused",
+          executionState: "unclaimed",
+          tags: [],
+          domains: [],
+          externalLinks: [],
+          assignees: []
+        }
+      }
+    });
+    const fromPaused = claimTask(handle, { taskId: "T-002", actor: "worker" });
+    assert.ok(fromPaused.ok, "claiming a paused task is allowed");
+    assert.equal((handle.db.prepare("SELECT planning_state FROM task_projection WHERE task_id = 'T-002'").get() as { planning_state: string }).planning_state, "paused", "paused must not auto-resume");
+  } finally {
+    handle.close();
+    cleanupDir(storeDir);
+  }
+});

@@ -1227,7 +1227,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 4/5
+  - subIssueProgress: 5/5
   - priority: high
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
@@ -1338,7 +1338,7 @@
 ### [T-056] Prove first MapCtx-to-Traycer vertical slice
 
   - id: T-056
-  - status: review
+  - status: done
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1349,7 +1349,7 @@
   - dependsOn: [T-050, T-051, T-053, T-054, T-055, T-066]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-05
   - externalId: null
   - updated: 2026-09-05
   - detail: ./tasks/T-056.md
@@ -1360,7 +1360,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 1/5
+  - subIssueProgress: 3/5
   - priority: medium
   - workload: Hard
   - tags: [vnext, migration, cli, skills, github]
@@ -1471,7 +1471,7 @@
 ### [T-067] Update README and docs for store authority and the CLI write path
 
   - id: T-067
-  - status: review
+  - status: done
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1482,7 +1482,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-05
   - externalId: null
   - updated: 2026-09-05
   - detail: ./tasks/T-067.md
@@ -1490,7 +1490,7 @@
 ### [T-068] Update mapctx-tasks and mapctx-traycer skills for the CLI write path
 
   - id: T-068
-  - status: review
+  - status: done
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1501,7 +1501,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-05
   - externalId: null
   - updated: 2026-09-05
   - detail: ./tasks/T-068.md

@@ -14,9 +14,8 @@ export type ClaimOptions = {
 };
 
 export type ClaimResult =
-  | { ok: true; claim: ResourceClaimRecord; expiredPrevious?: string }
-  | { ok: false; reason: "active-claim-held"; activeClaim: ResourceClaimRecord }
-  | { ok: false; reason: "unknown-task" };
+  | { ok: true; claim: ResourceClaimRecord; expiredPrevious?: string; planningTransitionsTo?: string }
+  | { ok: false; reason: "active-claim-held" | "unknown-task" | "terminal-state"; activeClaim?: ResourceClaimRecord };
 
 /**
  * BEGIN IMMEDIATE (via runInWriteTransaction) is what makes this
@@ -32,6 +31,10 @@ export function claimTask(store: StoreHandle, options: ClaimOptions): ClaimResul
   return store.runInWriteTransaction(append => {
     const task = getTask(store.db, options.taskId);
     if (!task) return { ok: false, reason: "unknown-task" };
+
+    if (task.planningState === "done" || task.planningState === "cancelled") {
+      return { ok: false, reason: "terminal-state" } as ClaimResult;
+    }
 
     let active = getActiveClaimForTask(store.db, options.taskId);
     let expiredPrevious: string | undefined;
@@ -64,9 +67,33 @@ export function claimTask(store: StoreHandle, options: ClaimOptions): ClaimResul
       payload: { claimId, taskId: options.taskId, leaseToken, holder: options.holder ?? {}, claimedAt, expiresAt }
     });
 
+    // Claiming is starting work: carry the planning state to in-progress
+    // through the legal path only (no new FSM edges), one event per hop.
+    // Claim events name the cause, so the history stays honest. Paused,
+    // blocked, review, and in-progress tasks are left where they are --
+    // unpausing or reopening is an explicit human decision, never a side
+    // effect of a lease.
+    const CLAIM_PATH: Record<string, string[]> = {
+      backlog: ["ready", "in-progress"],
+      ready: ["in-progress"]
+    };
+    const path = CLAIM_PATH[task.planningState] ?? [];
+    for (const next of path) {
+      append({
+        eventType: "task.patched",
+        actor: options.actor,
+        occurredAt: now().toISOString(),
+        payload: {
+          taskId: options.taskId,
+          patch: { planningState: next, updatedOn: now().toISOString().slice(0, 10) },
+          source: "claim"
+        }
+      });
+    }
+
     const claim = getClaim(store.db, claimId);
     if (!claim) throw new Error("Claim projection missing immediately after task.claimed.");
-    return { ok: true, claim, expiredPrevious };
+    return { ok: true, claim, expiredPrevious, planningTransitionsTo: path.length > 0 ? "in-progress" : undefined } as ClaimResult;
   });
 }
 

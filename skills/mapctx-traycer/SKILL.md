@@ -28,11 +28,7 @@ MapCtx owns planning. Traycer executes. Ticket Markdown is projection, never sou
 
    `dispatch create` prints the `dispatchId`/attempt to feed the receipt step. Use `--dispatch-id` with the same id to append attempt max+1 on a retry instead of creating a fresh dispatch.
 
-6. Move the task to doing before any work starts — the receipt projection requires it (`completed` lands in `review` only from `in-progress`):
-
-   ```sh
-   mapctx task move <task-id> --status doing --json
-   ```
+6. Claiming starts work: `task claim` carries the planning state to doing automatically (backlog goes through ready, one legal hop per event; paused/blocked/review stay put — unpausing is a human decision). No manual `task move --status doing` is needed before work.
 
    Execute the ticket in the assigned worktree. The work is bounded by the claim's lease; renew or release it through `mapctx task renew`/`mapctx task release` with the saved `claimId`/`leaseToken`. Adapter does not spawn agents.
 7. Save normalized `RunReceipt` JSON and submit it through the CLI against the dispatch created in step 5:
