@@ -1205,7 +1205,7 @@
 ### [T-065] Make the duration prior workload-aware and unit-honest
 
   - id: T-065
-  - status: review
+  - status: done
   - type: feature
   - parent: E-011
   - subIssueProgress: null
@@ -1216,7 +1216,7 @@
   - dependsOn: [T-054, T-056, T-064]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-05
   - externalId: null
   - updated: 2026-09-05
   - detail: ./tasks/T-065.md
@@ -1284,7 +1284,7 @@
   - status: doing
   - type: epic
   - parent: null
-  - subIssueProgress: 3/6
+  - subIssueProgress: 4/6
   - priority: high
   - workload: Hard
   - tags: [vnext, forecast, cost, gantt]
@@ -1360,7 +1360,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 3/5
+  - subIssueProgress: 4/5
   - priority: medium
   - workload: Hard
   - tags: [vnext, migration, cli, skills, github]
@@ -1509,7 +1509,7 @@
 ### [T-069] Align docs site and thread-substrate.md with post-cutover framing
 
   - id: T-069
-  - status: review
+  - status: done
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1520,7 +1520,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-05
   - externalId: null
   - updated: 2026-09-05
   - detail: ./tasks/T-069.md
