@@ -1205,7 +1205,7 @@
 ### [T-065] Make the duration prior workload-aware and unit-honest
 
   - id: T-065
-  - status: doing
+  - status: review
   - type: feature
   - parent: E-011
   - subIssueProgress: null
