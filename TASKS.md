@@ -1360,7 +1360,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 1/4
+  - subIssueProgress: 1/5
   - priority: medium
   - workload: Hard
   - tags: [vnext, migration, cli, skills, github]
@@ -1471,7 +1471,7 @@
 ### [T-067] Update README and docs for store authority and the CLI write path
 
   - id: T-067
-  - status: ready-for-do
+  - status: review
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1484,13 +1484,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-09-05
   - detail: ./tasks/T-067.md
 
 ### [T-068] Update mapctx-tasks and mapctx-traycer skills for the CLI write path
 
   - id: T-068
-  - status: doing
+  - status: review
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1505,6 +1505,25 @@
   - externalId: null
   - updated: 2026-09-05
   - detail: ./tasks/T-068.md
+
+### [T-069] Align docs site and thread-substrate.md with post-cutover framing
+
+  - id: T-069
+  - status: backlog
+  - type: task
+  - parent: E-012
+  - subIssueProgress: null
+  - priority: null
+  - workload: null
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/T-069.md
 
 ## Notes
 
