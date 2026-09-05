@@ -19,14 +19,23 @@ MapCtx owns planning. Traycer executes. Ticket Markdown is projection, never sou
 2. Use `@mapctx/adapter-traycer` pure functions to map each planned task to a validated `DispatchEnvelope`, then render a ticket projection. Keep only Traycer-closed frontmatter: `kind`, `title`, `status`.
 3. Write projection under epic artifact directory. This creates a reviewable Markdown artifact, **not** a live Traycer ticket.
 4. Human/operator attaches or recreates projection in Traycer UI. This is required: adapter cannot create Yjs docs, assign live agents, or sync Traycer board state.
-5. For each executable task in wave, claim through MapCtx CLI:
+5. For each executable task in wave, claim through MapCtx CLI, then register the dispatch before any work starts:
 
    ```sh
    mapctx task claim <task-id> --actor traycer --holder '{"provider":"traycer","epic":"<epic-id>"}' --json
+   mapctx dispatch create <task-id> [--executor kind] --json
    ```
 
-6. Human/Traycer runtime creates its dispatch attempt and executes ticket in assigned worktree. Adapter does not spawn agents or create live attempts.
-7. Save normalized `RunReceipt` JSON. Submit through existing CLI:
+   `dispatch create` prints the `dispatchId`/attempt to feed the receipt step. Use `--dispatch-id` with the same id to append attempt max+1 on a retry instead of creating a fresh dispatch.
+
+6. Move the task to doing before any work starts — the receipt projection requires it (`completed` lands in `review` only from `in-progress`):
+
+   ```sh
+   mapctx task move <task-id> --status doing --json
+   ```
+
+   Execute the ticket in the assigned worktree. The work is bounded by the claim's lease; renew or release it through `mapctx task renew`/`mapctx task release` with the saved `claimId`/`leaseToken`. Adapter does not spawn agents.
+7. Save normalized `RunReceipt` JSON and submit it through the CLI against the dispatch created in step 5:
 
    ```sh
    mapctx dispatch receipt <dispatch-id> --receipt <receipt.json> --actor traycer --json
