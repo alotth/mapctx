@@ -12,9 +12,10 @@ This directory contains both authored Markdown docs for the repository and the s
 - `docs/adr/` - durable methodological and architectural decisions
 - `docs/releases/` - release runbooks
 
-During migration, `TASKS.md` and `tasks/<ID>.md` remain current-release
-operational input. vNext moves live state to an external event store and keeps
-these files as deterministic compatibility snapshots/durable context.
+Authority is now `plansAuthority: store` (ADR 0003/0004): live state lives in
+the external project store behind the `mapctx` CLI, and `TASKS.md` plus the
+structured field blocks of `tasks/<ID>.md` are generated, read-only snapshots.
+The `description:` prose blocks stay Git-authored durable intent.
 
 ## Current structure
 

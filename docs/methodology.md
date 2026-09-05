@@ -1,9 +1,11 @@
 # MapCtx Methodology
 
-> **vNext transition:** this document describes current Markdown-era behavior.
-> ADR 0003 replaces Markdown and portable threads as live operational authority.
-> Host workflow rules remain authoritative; updated methodology will land with
-> T-049/T-057 migration tooling.
+> **Authority update (ADR 0003/0004, post-cutover):** the external project
+> store is the live operational authority (`plansAuthority: store`); `TASKS.md`
+> and the structured field blocks of `tasks/<ID>.md` are generated, read-only
+> snapshots. This document still describes the rigor and workflow model, but
+> the writing surfaces below now go through the `mapctx` CLI. Host workflow
+> rules remain authoritative.
 
 MapCtx is contract-first, task-first, and low-token by design.
 
@@ -11,7 +13,7 @@ The system centers on a deterministic local task model and uses lightweight docs
 
 ## Core Position
 
-- `TASKS.md` and `tasks/<ID>.md` are the operational source of truth.
+- The external project store is the operational source of truth; `TASKS.md` and the structured blocks of `tasks/<ID>.md` are generated snapshots. Edits go through the `mapctx` CLI, never direct file writes.
 - Global docs in `docs/` explain project intent, sequencing, and durable decisions, but do not replace task state.
 - Skills and tooling drive behavior; rule files stay short and route the agent into the right workflow.
 - Single-agent execution is the default. Subagents are reserved for complex, high-risk, or cross-domain work.
@@ -20,8 +22,9 @@ The system centers on a deterministic local task model and uses lightweight docs
 
 | Artifact | Purpose | Canonical for state? |
 | --- | --- | --- |
-| `TASKS.md` | backlog, status, dependencies, workload, `specMode`, sync mapping | Yes |
-| `tasks/<ID>.md` | task-local context, acceptance, decisions, implementation notes | Yes |
+| project store (`~/.mapctx/projects/<id>/`) | backlog, status, dependencies, workload, `specMode`, claims, events, actuals | Yes |
+| `TASKS.md` | generated board snapshot (read-only after cutover) | No |
+| `tasks/<ID>.md` | structured block generated (read-only); `description:` prose, decisions, implementation notes stay Git-authored | Prose: Yes; block: No |
 | `docs/PROJECT.md` | living project context, value, constraints, major decisions | No |
 | `docs/ROADMAP.md` | epic/theme order and current delivery path | No |
 | `docs/adr/<number>-*.md` | durable repo-level decisions | No |
@@ -32,7 +35,7 @@ The system centers on a deterministic local task model and uses lightweight docs
 
 Rule of thumb:
 
-- If the information changes task status or execution readiness, keep it in `TASKS.md` or `tasks/<ID>.md`.
+- If the information changes task status or execution readiness, record it through the `mapctx` CLI; never hand-edit the generated board files.
 - If the information explains project-wide direction or durable architecture choices, keep it in `docs/`.
 - If the information helps a runtime resume a conversation or run, keep it in `.mapctx/threads/<ID>/` and link it from the task detail file.
 
@@ -54,10 +57,10 @@ Additional routing cues:
 
 ## Default Workflow
 
-1. Capture or refine work in `TASKS.md` and `tasks/<ID>.md`.
+1. Capture or refine work with `mapctx task create` / `mapctx task update`; board files regenerate.
 2. Keep task details product-first: user context, expected outcome, acceptance, then technical notes.
-3. Run `mapcs validate` before major execution or sync.
-4. Run `mapcs plan` when dependency order or waves matter.
+3. Run `mapctx validate` before major execution or sync.
+4. Run `mapctx plan` when dependency order or waves matter.
 5. Execute directly by default.
 6. Escalate to subagents only when the task is complex enough to justify the extra context and review cost.
 7. Sync with GitHub only through `mapcs` or the sync skill.
@@ -133,7 +136,7 @@ Next likely additions:
 - `mapctx-next`: recommend the next best operator action
 - wave-aware execution on top of planner output
 
-These workflows should read from `TASKS.md`, task detail files, and global docs, then write back with minimal diffs.
+These workflows should read through `mapctx task context` and global docs, then write back through CLI commands with minimal diffs.
 
 ## Document Placement
 
