@@ -1509,7 +1509,7 @@
 ### [T-069] Align docs site and thread-substrate.md with post-cutover framing
 
   - id: T-069
-  - status: doing
+  - status: review
   - type: task
   - parent: E-012
   - subIssueProgress: null
