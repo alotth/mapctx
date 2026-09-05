@@ -7,19 +7,19 @@ Use this flow to compute dependency waves after validation passes.
 Preferred (local binary):
 
 ```bash
-mapcs plan [--config ./mapcs.config.json] [--tasks-file <tasks-path>] [--json] [--mermaid]
+mapctx plan [--config ./mapcs.config.json] [--tasks-file <tasks-path>] [--json] [--mermaid]
 ```
 
 Config-less planning:
 
 ```bash
-mapcs plan --tasks-file ./TASKS.md [--json] [--mermaid]
+mapctx plan --tasks-file ./TASKS.md [--json] [--mermaid]
 ```
 
 Fallback (npx):
 
 ```bash
-npx --yes --package @mapctx/sync-engine mapcs plan [--config ./mapcs.config.json] [--tasks-file <tasks-path>] [--json] [--mermaid]
+npx --yes --package @mapctx/sync-engine mapctx plan [--config ./mapcs.config.json] [--tasks-file <tasks-path>] [--json] [--mermaid]
 ```
 
 ## Output to Capture

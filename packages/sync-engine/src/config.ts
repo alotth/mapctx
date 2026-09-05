@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
-import { SyncConfig, SyncOptions } from './types';
+import { DEFAULT_GITHUB_SOURCE_MODE, GithubSourceMode, SyncConfig, SyncOptions } from './types';
 import { findTasksRoot } from '@mapctx/core/workspace';
 import {
   DEFAULT_ALLOWED_STATUSES,
@@ -79,7 +79,10 @@ export function initConfigCommand(options: SyncOptions = {}): { config: SyncConf
     localWinsFields: [
       'detail',
       'defaultExpanded'
-    ]
+    ],
+    github: {
+      sourceMode: 'projection'
+    }
   };
 
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
@@ -105,6 +108,7 @@ function normalizeLoadedConfig(parsed: SyncConfig): SyncConfig {
     throw new Error('Config must include statusMap.');
   }
 
+  resolveGithubSourceMode(parsed);
   parsed.statusMap = normalizeStatusMap(parsed.statusMap);
   parsed.allowedStatuses = getAllowedStatuses(parsed);
   parsed.completionStatuses = getCompletionStatuses(parsed);
@@ -123,6 +127,34 @@ function normalizeLoadedConfig(parsed: SyncConfig): SyncConfig {
   validateStatusConfig(parsed);
 
   return parsed;
+}
+
+/**
+ * Resolves and validates github.sourceMode (ADR 0003/0004 authority rules).
+ * Absent defaults to `projection`. `canonical` is the future explicit-GitHub
+ * authority mode and is not implemented, so it fails closed here — every sync
+ * command loads config first, so no code path can silently treat GitHub as
+ * canonical.
+ */
+export function resolveGithubSourceMode(config: SyncConfig): GithubSourceMode {
+  const raw = config.github?.sourceMode;
+  if (raw === undefined) {
+    return DEFAULT_GITHUB_SOURCE_MODE;
+  }
+  if (raw !== 'projection' && raw !== 'canonical') {
+    throw new Error(
+      `github.sourceMode must be "projection" or "canonical", got: ${JSON.stringify(raw)}. ` +
+      'MapCtx treats GitHub as a projection of local state (ADR 0003/0004); omit the field for the default.'
+    );
+  }
+  if (raw === 'canonical') {
+    throw new Error(
+      'github.sourceMode "canonical" is not implemented. MapCtx only supports "projection" ' +
+      '(one-way export with import explicit). Failing closed instead of silently treating ' +
+      'GitHub as the source of truth.'
+    );
+  }
+  return raw;
 }
 
 export function loadConfig(options: SyncOptions = {}): { config: SyncConfig; configPath: string } {

@@ -10,30 +10,36 @@ Methodology references:
 - `docs/adr/0001-methodology-and-source-of-truth.md`
 - `docs/adr/0003-vnext-planning-intelligence-and-storage.md`
 
-## Current Skills
+## Core Portfolio (vNext)
 
-- `mapctx-tasks`: current Markdown task operations; migrate to store-backed CLI.
-- `mapctx-plan-engine`: keep and extend with semantic/resource-aware planning.
-- `mapctx-sync-engine`: keep as explicit GitHub adapter, not universal authority.
-- `mapctx-enrich-task`: consolidate into task breakdown/context compilation.
-- `mapctx-correct-course`: consolidate; host planning skills govern requirement revision.
+MapCtx owns exactly four skills. Everything else is harness-owned or retired.
 
-README previously listed Ralph and session-continuation skills that are not part
-of the checked-in current skill set. vNext does not restore them.
+| Skill | Status | Scope |
+|---|---|---|
+| `mapctx-tasks` | core | thin UX over `mapctx task/context` APIs |
+| `mapctx-plan-engine` | core | validate, resource waves, next runnable work, forecast preflight |
+| `mapctx-sync-engine` | core | GitHub source/projection operations with explicit `github.sourceMode` |
+| `mapctx-traycer` | core | Traycer adapter: attach epics, materialize tickets, dispatch waves, ingest receipts |
 
-## vNext Portfolio
+## Retired and harness-owned surfaces
 
-1. `mapctx-tasks`: thin UX over `mapctx task/context` APIs.
-2. `mapctx-plan-engine`: validate, resource waves, next runnable work, forecast preflight.
-3. `mapctx-sync-engine`: GitHub source/projection operations with explicit mode.
-4. `mapctx-traycer`: attach epics, materialize tickets, dispatch waves, ingest receipts, promote artifacts.
+| Directory | Disposition |
+|---|---|
+| `mapctx-enrich-task/` | retired — consolidated into task breakdown/context compilation. Directory removal is follow-up work. |
+| `mapctx-correct-course/` | retired — host planning skills govern requirement revision. Directory removal is follow-up work. |
+| `mapctx-ralph-tasks/` | harness-owned execution loop, not a MapCtx core skill. Repo copy retired. |
 
-Status summaries, next-action selection, sprint views, and context budgeting must
-be deterministic CLI/UI queries, not separate skills. Agent execution loops,
-review, session continuation, worktrees, and transcripts remain harness concerns.
+MapCtx core does not own agent runners, evaluators, transcripts, or sessions.
+ADR 0003 ("Superseded runtime surfaces") is the authority: `thread.ts` is
+internalized, `workspace-server.ts` is frozen, and live execution coordination
+belongs to executors such as Traycer. Status summaries, next-action selection,
+sprint views, and context budgeting must be deterministic CLI/UI queries, not
+separate skills. Agent execution loops, review, session continuation,
+worktrees, and transcripts remain harness concerns.
 
-Skills should become small discovery stubs. Version-matched operational guidance
-comes from the `mapctx` CLI to prevent skill/runtime drift.
+Skills are small discovery stubs. Version-matched operational guidance comes
+from the `mapctx` CLI (canonical; `mapcs` is a deprecated alias for one release
+cycle) to prevent skill/runtime drift.
 
 ## Intended Use
 

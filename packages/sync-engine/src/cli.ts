@@ -47,7 +47,7 @@ function parseArgs(argv: string[]): {
 }
 
 function printHelp(): void {
-  console.log('mapcs CLI');
+  console.log('mapcs CLI (deprecated alias; canonical CLI is `mapctx`)');
   console.log('');
   console.log('Commands:');
   console.log('  mapcs init [--force] [--config path] [--tasks-file path]');
@@ -77,8 +77,17 @@ function printCommandHelp(command: string): void {
   printHelp();
 }
 
+const MAPCS_DEPRECATION_NOTICE =
+  'Warning: `mapcs` is deprecated and will be removed in an upcoming release. ' +
+  'Use `mapctx` instead. See docs/migration-mapcs-to-mapctx.md for the CLI and skill migration guide.';
+
+function printDeprecationNotice(): void {
+  console.error(MAPCS_DEPRECATION_NOTICE);
+}
+
 function main(): void {
   try {
+    printDeprecationNotice();
     const { command, options, from, taskId, help } = parseArgs(process.argv.slice(2));
 
     if (command === 'help' || command === '--help' || command === '-h') {

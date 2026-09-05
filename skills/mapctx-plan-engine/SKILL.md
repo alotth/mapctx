@@ -1,6 +1,6 @@
 ---
 name: mapctx-plan-engine
-description: Validate TASKS.md contract and generate dependency-wave execution plans via mapcs validate/plan; trigger for board QA, DAG checks, and next-wave planning.
+description: Validate TASKS.md contract and generate dependency-wave execution plans via mapctx validate/plan; trigger for board QA, DAG checks, and next-wave planning.
 ---
 
 # Planning Engine
@@ -22,22 +22,22 @@ Keep this file focused on operational flow. Load command details from:
 ## Workflow
 
 1. Run preflight for CLI availability.
-   - Check `command -v mapcs`.
-   - If missing, use `npx --yes --package @mapctx/sync-engine mapcs <command>`.
-   - Do not use `mapcs <command> --help` as a health check.
+   - Check `command -v mapctx`.
+   - If missing, use `npx --yes --package @mapctx/sync-engine mapctx <command>`.
+   - Do not use `mapctx <command> --help` as a health check.
 
 2. Resolve board input.
    - Prefer `./mapcs.config.json` when present.
    - If config is absent but `./TASKS.md` exists, run read-only commands with `--tasks-file ./TASKS.md`.
-   - If config is absent and no tasks file is known, use `mapctx-sync-engine` to create a local-only config with `mapcs init` or ask for the tasks file path.
+   - If config is absent and no tasks file is known, use `mapctx-sync-engine` to create a local-only config with `mapcs init` (the init subcommand lives on the deprecated alias) or ask for the tasks file path.
 
 3. Validate board first.
-   - Run `mapcs validate` before any planning output.
+   - Run `mapctx validate` before any planning output.
    - Include `--tasks-file <path>` when operating without config or outside the board root.
    - If validation fails, stop and report blockers.
 
 4. Generate plan only after validation passes.
-   - Run `mapcs plan`.
+   - Run `mapctx plan`.
    - Include the same `--tasks-file <path>` used during validation.
    - Include `--mermaid` when user asks for graph output.
 
