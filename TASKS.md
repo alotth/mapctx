@@ -1376,7 +1376,7 @@
 ### [T-057] Unify CLI, consolidate skills, and define GitHub source modes
 
   - id: T-057
-  - status: backlog
+  - status: review
   - type: feature
   - parent: E-012
   - subIssueProgress: null
@@ -1389,7 +1389,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-08-26
+  - updated: 2026-09-05
   - detail: ./tasks/T-057.md
 
 ### [T-058] Prove walking-skeleton dispatch through Traycer before waves and forecast
