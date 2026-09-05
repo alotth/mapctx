@@ -41,6 +41,12 @@ export type DurationInput = {
  */
 export type DurationCoverage = "measured" | "substituted" | "none"
 
+/**
+ * Declared task difficulty, mirroring the protocol's `workload` enum. The one
+ * signal available before any history exists for a task.
+ */
+export type Workload = "Easy" | "Normal" | "Hard" | "Extreme"
+
 export type MeasuredDurations = DurationMeasures & {
   activeTimeCoverage: DurationCoverage
 }
@@ -49,6 +55,8 @@ export type ForecastSample = {
   duration: DurationMeasures | MeasuredDurations
   usageEvents?: UsageEvent[]
   costEvents?: CostEvent[]
+  /** Declared workload of the task this sample came from, when known. */
+  workload?: Workload
 }
 
 export type ForecastPrior = {
@@ -71,8 +79,21 @@ export type EstimateOptions = {
   estimatorVersion?: string
   idleThresholdMs?: number
   minHistoricalSamples?: number
+  /** Declared task difficulty; picks the workload-aware prior. */
+  workload?: Workload
   prior?: Partial<ForecastPrior>
   assumptions?: string[]
+}
+
+/**
+ * History-derived duration quantiles for one workload class, the calibrated
+ * replacement for the vendored prior table once actuals accumulate.
+ */
+export type WorkloadBaseline = {
+  workload: Workload
+  sampleCount: number
+  durationP50Ms: number
+  durationP90Ms: number
 }
 
 export type EstimateBuildResult = EstimateSnapshot

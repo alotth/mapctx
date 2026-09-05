@@ -2,7 +2,18 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { allocateMicros, costEventFromUsage } from "./cost"
 import { activeTimeMs, durationMeasuresFromReceipt, measureDurations } from "./duration"
-import { buildEstimateSnapshot, durationCoverageFromAssumptions, isPriorFallbackEstimate } from "./estimate"
+import { buildEstimateSnapshot, durationCoverageFromAssumptions, isPriorFallbackEstimate, workloadBaselines } from "./estimate"
+import { MEASURED_ANCHOR_P50_MS, WORKLOAD_PRIORS } from "./prior"
+
+/** Measured sample with `minutes` of active time, gaps kept under a 3h idle threshold. */
+function measuredDurations(minutes: number) {
+  const base = Date.parse("2026-08-17T09:00:00.000Z")
+  const at = (offset: number) => new Date(base + offset * 60_000).toISOString()
+  return measureDurations({
+    sessions: [{ timestamps: [at(0), at(minutes / 2), at(minutes)] }],
+    idleThresholdMs: 3 * 60 * 60 * 1000
+  })
+}
 
 const usage = {
   usageEventId: "11111111-2222-4333-8444-555555555555",
@@ -218,4 +229,93 @@ test("isPriorFallbackEstimate flags estimates with no historical samples", () =>
     { estimateId: "82345678-90ab-4cde-8f01-23456789abcd", createdAt: "2026-08-17T00:00:00.000Z" }
   )
   assert.equal(isPriorFallbackEstimate(historical), false)
+})
+
+test("prior-derived estimates vary by declared workload", () => {
+  const base = {
+    estimateId: "a2345678-90ab-4cde-8f01-23456789abcd",
+    createdAt: "2026-09-05T00:00:00.000Z"
+  }
+  const easy = buildEstimateSnapshot("T-001", [], { ...base, workload: "Easy" })
+  const extreme = buildEstimateSnapshot("T-001", [], { ...base, workload: "Extreme" })
+  assert.equal(easy.durationP50Ms, WORKLOAD_PRIORS.Easy.durationP50Ms)
+  assert.equal(extreme.durationP50Ms, WORKLOAD_PRIORS.Extreme.durationP50Ms)
+  assert.notEqual(easy.durationP50Ms, extreme.durationP50Ms)
+  // The Easy prior is the measured anchor, minutes-scale — not a human day.
+  assert.equal(easy.durationP50Ms, MEASURED_ANCHOR_P50_MS)
+  assert.ok(easy.durationP50Ms < 60 * 60 * 1000)
+})
+
+test("a prior-derived estimate names the prior it used and stays low confidence", () => {
+  const estimate = buildEstimateSnapshot("T-001", [], {
+    estimateId: "b2345678-90ab-4cde-8f01-23456789abcd",
+    createdAt: "2026-09-05T00:00:00.000Z",
+    workload: "Extreme"
+  })
+  assert.equal(estimate.confidence, "low")
+  assert.equal(estimate.method, "expert-guess")
+  const priorLine = estimate.assumptions.find(line => line.startsWith("prior: workload-aware"))
+  assert.ok(priorLine, "assumptions must state which prior was used")
+  assert.match(priorLine, /Extreme/)
+  assert.match(priorLine, new RegExp(String(WORKLOAD_PRIORS.Extreme.durationP50Ms)))
+  assert.match(priorLine, /not a measurement/, "a prior must be distinguishable from a history-derived estimate")
+})
+
+test("expert-guess transitions to historical-baseline once real actuals exist", () => {
+  const estimateId = "c2345678-90ab-4cde-8f01-23456789abcd"
+  const before = buildEstimateSnapshot("T-001", [], {
+    estimateId,
+    createdAt: "2026-09-05T00:00:00.000Z",
+    workload: "Normal"
+  })
+  assert.equal(before.method, "expert-guess")
+  assert.equal(before.confidence, "low")
+
+  const after = buildEstimateSnapshot("T-001", [{ duration: measuredDurations(10), workload: "Normal" }], {
+    estimateId,
+    createdAt: "2026-09-05T00:00:00.000Z",
+    workload: "Normal"
+  })
+  assert.equal(after.method, "historical-baseline")
+  assert.equal(after.durationP50Ms, 10 * 60 * 1000)
+  // One sample is history, but not enough to claim medium confidence.
+  assert.equal(after.confidence, "low")
+})
+
+test("historical baselines prefer same-workload samples and say so when ungrouped", () => {
+  const estimateId = "d2345678-90ab-4cde-8f01-23456789abcd"
+  const createdAt = "2026-09-05T00:00:00.000Z"
+  const easySample = { duration: measuredDurations(2), workload: "Easy" as const }
+  const extremeSample = { duration: measuredDurations(60), workload: "Extreme" as const }
+
+  const easy = buildEstimateSnapshot("T-001", [easySample, extremeSample], { estimateId, createdAt, workload: "Easy" })
+  assert.equal(easy.durationP50Ms, 2 * 60 * 1000, "an Easy task must not inherit an Extreme sample")
+  assert.equal(easy.durationCoverage, "measured")
+
+  const untagged = buildEstimateSnapshot("T-001", [easySample], {
+    estimateId: "e2345678-90ab-4cde-8f01-23456789abcd",
+    createdAt,
+    workload: "Extreme"
+  })
+  assert.equal(untagged.durationP50Ms, 2 * 60 * 1000, "falls back to the full pool when no sample matches")
+  const fallbackNote = untagged.assumptions.find(line => line.startsWith("no samples declared workload"))
+  assert.ok(fallbackNote, "the ungrouped fallback must be visible in assumptions")
+  assert.match(fallbackNote, /Extreme/)
+})
+
+test("workloadBaselines answers per-workload questions and excludes untagged samples", () => {
+  const baselines = workloadBaselines([
+    { duration: measuredDurations(10), workload: "Easy" },
+    { duration: measuredDurations(20), workload: "Easy" },
+    { duration: measuredDurations(120), workload: "Hard" },
+    { duration: measuredDurations(30) }
+  ])
+  assert.equal(baselines.length, 2)
+  const easy = baselines.find(baseline => baseline.workload === "Easy")
+  const hard = baselines.find(baseline => baseline.workload === "Hard")
+  assert.equal(easy?.sampleCount, 2)
+  assert.equal(easy?.durationP50Ms, 10 * 60 * 1000)
+  assert.equal(easy?.durationP90Ms, 20 * 60 * 1000)
+  assert.equal(hard?.sampleCount, 1)
+  assert.equal(hard?.durationP50Ms, 120 * 60 * 1000)
 })
