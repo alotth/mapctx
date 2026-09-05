@@ -455,7 +455,18 @@ function taskClaimCommand(taskId: string, options: MapctxOptions): void {
   try {
     const holder = options.holder ? (JSON.parse(options.holder) as Record<string, unknown>) : { pid: process.pid, host: os.hostname() };
     const result = claimTask(handle, { taskId, actor: defaultActor(options.actor), holder });
-    print(result, options.json);
+    // Claim auto-carries the planning state to doing (same authority story as
+    // task move), so the canonical board must follow in the same operation or
+    // the next validate drifts. A claiming worktree regenerates ITS OWN
+    // checkout's snapshot; the main checkout commits it on its cadence.
+    let regenerated: { tasksMd: string; detailFiles: number } | undefined;
+    if (result.ok) {
+      const toml = resolveMapctxToml(cwd);
+      if (toml && toml.config.plansAuthority === 'store') {
+        regenerated = regenerateCanonicalFiles(handle, toml.dir);
+      }
+    }
+    print({ ...result, regenerated }, options.json);
     if (!result.ok) throw new Error(`Claim failed: ${result.reason}`);
   } finally {
     handle.close();
