@@ -1338,7 +1338,7 @@
 ### [T-056] Prove first MapCtx-to-Traycer vertical slice
 
   - id: T-056
-  - status: backlog
+  - status: review
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1351,7 +1351,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-08-26
+  - updated: 2026-09-05
   - detail: ./tasks/T-056.md
 
 ### [E-012] vNext migration, naming, and adoption gates
