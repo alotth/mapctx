@@ -667,7 +667,7 @@
             </div>
 
             <div class="alert alert-success">
-                <strong>Methodology:</strong> `TASKS.md` and `tasks/&lt;ID&gt;.md` are the operational source of truth. Global context lives in `docs/PROJECT.md`, `docs/ROADMAP.md`, `docs/methodology.md`, and `docs/adr/`.
+                <strong>Methodology:</strong> The external project store is the live authority (<code>plansAuthority: store</code>, ADR 0003/0004). <code>TASKS.md</code> and the structured field blocks of <code>tasks/&lt;ID&gt;.md</code> are generated, read-only snapshots. Editable surfaces are the <code>mapctx</code> CLI: <code>task create/move/update</code>, <code>dispatch create/receipt</code>, <code>import --dry-run/--commit</code>, <code>store init/repair</code>, and <code>reconcile</code>.
             </div>
             
             <h3>Rules Documentation</h3>
@@ -698,7 +698,7 @@
             <h4>Skill Routing</h4>
             <ul>
                 <li>When a repo has <code>TASKS.md</code>, load <code>mapctx-tasks</code> before edits.</li>
-                <li>Use <code>mapctx-plan-engine</code> for <code>mapcs validate/plan</code>.</li>
+                <li>Use <code>mapctx-plan-engine</code> for <code>mapctx validate/plan</code>.</li>
                 <li>Use <code>mapctx-sync-engine</code> for sync operations.</li>
                 <li>Use <code>mapctx-ralph-tasks</code> for execution loops.</li>
                 <li>Use <code>mapctx-enrich-task</code> to deepen sparse task detail files.</li>
@@ -717,16 +717,20 @@
             <h4>Execution Stance</h4>
             <ul>
                 <li>Default to a single agent for `lite` and most `standard` work.</li>
-                <li>Use `mapcs validate` and `mapcs plan` before larger or dependency-heavy execution.</li>
+                <li>Use <code>mapctx validate</code> and <code>mapctx plan</code> before larger or dependency-heavy execution.</li>
                 <li>Reserve planner/reviewer/evaluator subagents for `strict`, high-risk, or clearly cross-domain work.</li>
             </ul>
 
             <h4>Operational Commands</h4>
-            <pre><code class="code-block-title">safe flow</code><code>mapcs validate
-mapcs plan
-mapcs pull
-mapcs status
-mapcs push</code></pre>
+            <pre><code class="code-block-title">mapctx CLI (editable surfaces)</code><code>mapctx task create | task move | task update
+mapctx dispatch create | dispatch receipt
+mapctx import --dry-run | import --commit
+mapctx store init | store repair
+mapctx reconcile
+
+# read-only checks
+mapctx validate
+mapctx plan</code></pre>
             
             <div class="alert alert-success">
                 <strong>Best Practice:</strong> Keep rule files short and push behavioral detail into skills and references.
@@ -742,7 +746,7 @@ mapcs push</code></pre>
             <h2>Working Model and Repository Layout</h2>
 
             <div class="alert alert-warning">
-                <strong>Current recommendation:</strong> Prefer one repo-level <code>TASKS.md</code>, detail files in <code>tasks/</code>, and lightweight global context in <code>docs/PROJECT.md</code>, <code>docs/ROADMAP.md</code>, and <code>docs/adr/</code>. The patterns below are legacy or advanced variations, not the default methodology.
+                <strong>Current recommendation:</strong> Prefer one repo-level <code>TASKS.md</code>, detail files in <code>tasks/</code>, and lightweight global context in <code>docs/PROJECT.md</code>, <code>docs/ROADMAP.md</code>, and <code>docs/adr/</code>. The patterns below are legacy or advanced variations, not the default methodology. Note that after the vNext cutover (ADR 0003/0004), the store is the live authority and <code>TASKS.md</code> is a generated read-only snapshot — update tasks through the <code>mapctx</code> CLI rather than by editing the file.
             </div>
             
             <p>Choose the organization pattern that best fits your team size and project structure:</p>

@@ -1,8 +1,18 @@
 # Portable Thread Substrate
 
-> **Superseded by ADR 0003.** Kept as historical/current-release documentation.
-> MapCtx vNext does not own transcripts or session continuation; harnesses own
-> them, while MapCtx ingests normalized run events/receipts and artifact refs.
+> **⚠ Historical document — pre-cutover contract (superseded).**
+> This page documents the ADR 0002 contract, in which `TASKS.md` owns board
+> state and threads carry execution continuity. It is superseded by
+> [ADR 0003 — "Planning intelligence with external live state"](adr/0003-vnext-planning-intelligence-and-storage.md)
+> and the cutover rules of
+> [ADR 0004 — "Cutover refuses lossy imports"](adr/0004-cutover-refuses-lossy-imports.md).
+> Under the current authority model (`plansAuthority: store`), the external
+> project store behind the `mapctx` CLI is the live authority, and `TASKS.md`
+> plus the structured field blocks of `tasks/<ID>.md` are generated read-only
+> snapshots. MapCtx vNext also does not own transcripts or session
+> continuation; harnesses own them, while MapCtx ingests normalized run
+> events/receipts and artifact refs. Keep this page as a historical record —
+> do not follow the authority model described below.
 
 This document defines the first MapCtx contract for portable task conversations and execution continuity.
 
