@@ -1357,7 +1357,7 @@
 ### [E-012] vNext migration, naming, and adoption gates
 
   - id: E-012
-  - status: backlog
+  - status: done
   - type: epic
   - parent: null
   - subIssueProgress: 5/5
@@ -1368,9 +1368,9 @@
   - dependsOn: [E-010, E-011]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-05
   - externalId: null
-  - updated: 2026-08-15
+  - updated: 2026-09-05
   - detail: ./tasks/E-012.md
 
 ### [T-057] Unify CLI, consolidate skills, and define GitHub source modes
