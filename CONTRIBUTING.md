@@ -2,7 +2,7 @@
 
 Thanks for contributing.
 
-This repo is workflow-first: keep task data deterministic, keep edits low-conflict, and route automation through skills and `mapcs` commands.
+This repo is workflow-first: keep task data deterministic, keep edits low-conflict, and route automation through skills and the `mapctx` CLI.
 
 Methodology references:
 
@@ -28,15 +28,15 @@ npm run test:sync-engine
 
 ## Task model expectations
 
-- Use a single `## Tasks` list in `TASKS.md`.
-- Do not create status columns (`## Backlog`, `## Doing`, etc.).
-- Keep canonical key order in each task block.
-- Use `tasks/<ID>.md` for long-form details.
-- Default flow: `backlog -> ready-for-do -> doing -> review -> done` (+ `paused`).
-- In detail files, keep unresolved questions under `Open Decisions for Execution`, final dated answers under `Decisions Taken`, and concrete landing spots under `Implementation Notes`.
-- Keep project-wide context in `docs/PROJECT.md`, sequencing in `docs/ROADMAP.md`, and durable decisions in `docs/adr/`.
+This repository is post-cutover (`plansAuthority: store`): `TASKS.md` and the
+structured field blocks of `tasks/<ID>.md` are generated, read-only output.
 
-If a task file exists, use the `mapctx-tasks` skill when editing `TASKS.md` or detail files.
+- Edit tasks through the `mapctx` CLI (`task create/move/update`,
+  `dispatch create/receipt`); never hand-edit `TASKS.md` or the structured blocks of `tasks/*.md`.
+- `mapctx validate` reports drift from manual edits as an error; resolve it with `mapctx reconcile <task-id>` (accept or discard per field), never a silent merge.
+- Default flow: `backlog -> ready-for-do -> doing -> review -> done` (+ `paused`).
+- The `description:` prose block in `tasks/<ID>.md` stays Git-authored: keep unresolved questions under `Open Decisions for Execution`, final dated answers under `Decisions Taken`, and concrete landing spots under `Implementation Notes`.
+- Keep project-wide context in `docs/PROJECT.md`, sequencing in `docs/ROADMAP.md`, and durable decisions in `docs/adr/`.
 
 ## Skills-first workflow
 
@@ -52,11 +52,11 @@ Subagent policy:
 - escalate to planner/reviewer/evaluator flows only for `strict`, `Hard`, `Extreme`, or clearly cross-domain work
 - avoid adding extra workflow ceremony when `TASKS.md` + a task detail file already provide enough context
 
-`mapcs` command flow for safe sync:
+Store-backed operations run through `mapctx` (`mapcs` remains a deprecated GitHub-sync alias):
 
 ```bash
-mapcs validate
-mapcs plan
+mapctx validate
+mapctx plan
 mapcs pull
 mapcs status
 mapcs push
