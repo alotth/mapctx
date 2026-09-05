@@ -40,6 +40,26 @@ MapCtx owns planning. Traycer executes. Ticket Markdown is projection, never sou
 
    Duplicate, stale, unknown, or mismatched receipts must remain rejected. Do not bypass CLI or open SQLite from skill code.
 
+### Retroactive attestation (work that happened outside the flow)
+
+When an agent completed a task without claiming or dispatching (flow error, or work done in an earlier
+session/orchestration), the board can still record it honestly -- never by fabricating state transitions:
+
+1. `mapctx task claim <task-id>` now (claim carries it to doing; the transitions record when the *board learned*).
+2. `mapctx dispatch create <task-id>`.
+3. Submit the receipt with the agent's **true** historical times in `startedAt`/`endedAt` -- the receipt keeps
+   when the work actually happened, the planning transitions keep when it was recorded. The completed receipt
+   on a not-doing task is rejected with this same remedy in the error message.
+
+The orchestrating agent must capture retroactively (from the session/harness, not from memory):
+
+- task id, and any claim/dispatch ids used (or their explicit absence)
+- work start = first session timestamp, work end = last session timestamp (per session; the orchestrator
+  unions them, never `max - min` across sessions)
+- which agent(s)/harness(es) executed, and the orchestrating session id
+- real `changedFiles` (from `git diff`, not from memory)
+- session/transcript references as receipt `evidence` (URIs/ids/hashes only -- never transcript content)
+
 ## Traycer-first flow
 
 1. Parse ticket with `importTraycerTicket`.

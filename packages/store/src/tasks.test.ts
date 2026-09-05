@@ -244,3 +244,62 @@ test("regenerated export reflects moves and updates byte-for-byte (drift stays P
     cleanupDir(repoDir);
   }
 });
+
+test("completed receipt on a task that was never claimed is rejected with the remedy; the retroactive attestation path is accepted", () => {
+  const { repoDir, restoreEnv, handle, committed } = materialize();
+  try {
+    const receiptFor = (dispatchId: string, startedAt: string, endedAt: string) => ({
+      schemaVersion: 1,
+      dispatchId,
+      attempt: 1,
+      outcome: "completed" as const,
+      startedAt,
+      endedAt,
+      changedFiles: ["README.md"],
+      usageEvents: [],
+      evidence: [],
+      failure: null
+    });
+
+    // Register a dispatch without claiming (the flow error this guard exists for).
+    const { recordDispatchAttempt, recordRunReceipt } = require("./dispatch") as typeof import("./dispatch");
+    const dispatch = recordDispatchAttempt(handle, {
+      dispatch: { dispatchId: "3f0b9550-1111-4111-8111-111111111111", taskId: "T-101", executorKind: "agent", attempt: 1, contextHash: "hash", status: "claimed" }
+    }, "orchestrator");
+    assert.ok(dispatch.ok);
+
+    const rejected = recordRunReceipt(handle, receiptFor(
+      "3f0b9550-1111-4111-8111-111111111111",
+      "2026-09-05T10:00:00.000Z",
+      "2026-09-05T10:45:00.000Z"
+    ), "orchestrator");
+    assert.equal(rejected.ok, false);
+    if (!rejected.ok) {
+      assert.equal(rejected.reason, "task-not-in-progress");
+      assert.match(rejected.message!, /claim first/i);
+      assert.match(rejected.message!, /retroactive attestation/);
+    }
+
+    // The retroactive attestation flow: claim now (carries to doing), then the
+    // same receipt with the TRUE historical times is accepted, and the board
+    // lands in review without anyone fabricating the in-progress moment.
+    const claim = require("./claims").claimTask(handle, { taskId: "T-101", actor: "orchestrator" });
+    assert.ok(claim.ok);
+    assert.equal(getTask(handle.db, "T-101")!.planningState, "in-progress");
+
+    const accepted = recordRunReceipt(handle, receiptFor(
+      "3f0b9550-1111-4111-8111-111111111111",
+      "2026-09-05T10:00:00.000Z",
+      "2026-09-05T10:45:00.000Z"
+    ), "orchestrator");
+    assert.equal(accepted.ok, true);
+    const task = getTask(handle.db, "T-101");
+    assert.equal(task!.planningState, "review");
+    assert.equal(task!.executionState, "completed");
+    void committed;
+  } finally {
+    handle.close();
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});

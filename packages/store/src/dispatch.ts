@@ -28,7 +28,11 @@ export type DispatchWriteResult =
 
 export type ReceiptWriteResult =
   | { ok: true; receipt: RunReceipt; dispatch: DispatchAttemptRecord }
-  | { ok: false; reason: "dispatch-mismatch" | "unknown-attempt" | "stale-attempt" | "duplicate-receipt" }
+  | {
+      ok: false;
+      reason: "dispatch-mismatch" | "unknown-attempt" | "stale-attempt" | "duplicate-receipt" | "task-not-in-progress";
+      message?: string;
+    }
 
 export type RunEventWriteResult =
   | { ok: true; event: RunEvent }
@@ -103,6 +107,8 @@ export function recordRunReceipt(
     if (!decision.accepted) return { ok: false, reason: decision.reason };
     const dispatch = listDispatchAttempts(store.db, value.dispatchId).find(a => a.attempt === value.attempt);
     if (!dispatch) return { ok: false, reason: "unknown-attempt" };
+    const guard = receiptPlanningGuard(store, value, dispatch);
+    if (guard) return guard;
     assertReceiptTransitions(store, value, dispatch);
     append({
       eventType: "run.receipt-recorded",
@@ -197,6 +203,29 @@ export function recordEstimateSnapshot(
     append({ eventType: "estimate.snapshot-recorded", actor, payload: { snapshot } })
     return { ok: true, snapshot }
   })
+}
+
+/**
+ * A completed receipt lands the task in review -- but only from in-progress,
+ * because the planning state must say the work was started before it can say
+ * it finished. Rejecting early lets the guard teach the remedy instead of the
+ * raw FSM error surfacing as "Illegal planning transition" with no path
+ * forward. The remedy is also the retroactive-attestation flow: claiming now
+ * carries the task to doing, `dispatch create` registers the attempt, and
+ * this same receipt (with the true startedAt/endedAt from the session) is
+ * then accepted -- the board records when it learned, the receipt keeps when
+ * the work actually happened.
+ */
+function receiptPlanningGuard(store: StoreHandle, receipt: RunReceipt, dispatch: DispatchAttemptRecord): Extract<ReceiptWriteResult, { ok: false }> | null {
+  if (receipt.outcome !== "completed") return null;
+  const task = getTask(store.db, dispatch.taskId);
+  if (!task) return null;
+  if (task.planningState === "in-progress" || task.planningState === "review") return null;
+  return {
+    ok: false,
+    reason: "task-not-in-progress",
+    message: `task ${dispatch.taskId} is "${task.planningState}" -- completed receipts land in review from in-progress only. Claim first: \`mapctx task claim ${dispatch.taskId}\` (carries it to doing). If the work already happened outside the flow, that claim + \`mapctx dispatch create ${dispatch.taskId}\` + this same receipt is the retroactive attestation: the receipt's startedAt/endedAt keep the true times.`
+  };
 }
 
 function assertReceiptTransitions(store: StoreHandle, receipt: RunReceipt, dispatch: DispatchAttemptRecord): void {

@@ -667,7 +667,7 @@ function dispatchReceiptCommand(dispatchId: string, options: MapctxOptions): voi
     const receipt = readReceiptPayload(options) as Parameters<typeof recordRunReceipt>[1];
     const result = recordRunReceipt(handle, receipt, defaultActor(options.actor), dispatchId);
     print(result, options.json);
-    if (!result.ok) throw new Error(`Receipt rejected: ${result.reason}`);
+    if (!result.ok) throw new Error(`Receipt rejected: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
   } finally {
     handle.close();
   }
