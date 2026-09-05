@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadConfig } from './config';
+import { loadConfig, resolveGithubSourceMode } from './config';
 import {
   addIssueToProject,
   clearProjectItemFieldValue,
@@ -276,6 +276,27 @@ function requireGhProjectItems(config: SyncConfig): boolean {
   return Boolean(config.projectId);
 }
 
+/**
+ * Projection mode (the only implemented source mode) keeps GitHub-to-local
+ * writes available, but only as explicit, user-initiated imports. Announce
+ * that on every import path so GitHub is never silently treated as the
+ * authority (ADR 0003/0004). JSON mode routes the notice to stderr so stdout
+ * stays machine-parseable.
+ */
+function announceExplicitImport(command: string, config: SyncConfig, options: SyncOptions): void {
+  if (options.dryRun) return;
+  const mode = resolveGithubSourceMode(config);
+  if (mode !== 'projection') return;
+  const notice =
+    `Note: github.sourceMode is "projection": local state is authoritative and GitHub is a one-way export. ` +
+    `"${command}" is an explicit one-off import from GitHub (ADR 0003/0004).`;
+  if (options.json) {
+    process.stderr.write(`${notice}\n`);
+  } else {
+    console.log(notice);
+  }
+}
+
 type SequenceStyle = {
   prefix: string;
   max: number;
@@ -422,6 +443,7 @@ export function statusCommand(options: SyncOptions = {}): StatusReport {
 
 export function pullCommand(options: SyncOptions = {}): void {
   const { config, configPath } = loadConfig(options);
+  announceExplicitImport('pull', config, options);
   const tasksFilePath = resolveTasksFile(configPath, config, options);
   const board = parseTasksFile(tasksFilePath);
   validateTaskStatuses(board.tasks, config);
@@ -494,6 +516,7 @@ export function pullCommand(options: SyncOptions = {}): void {
 
 export function pushCommand(options: SyncOptions = {}): void {
   const { config, configPath } = loadConfig(options);
+  const sourceMode = resolveGithubSourceMode(config);
   const tasksFilePath = resolveTasksFile(configPath, config, options);
   const board = parseTasksFile(tasksFilePath);
   validateTaskStatuses(board.tasks, config);
@@ -518,7 +541,7 @@ export function pushCommand(options: SyncOptions = {}): void {
 
     if (!issueNumber) {
       if (options.dryRun) {
-        console.log(`[dry-run] create issue for ${task.id} (${task.title})`);
+        if (!options.json) console.log(`[dry-run] create issue for ${task.id} (${task.title})`);
         created++;
       } else {
         const createdIssue = createIssue(config, {
@@ -569,9 +592,11 @@ export function pushCommand(options: SyncOptions = {}): void {
 
     const issueState: 'open' | 'closed' = isCompletionStatus(task.status, config) ? 'closed' : 'open';
     if (options.dryRun) {
-      console.log(`[dry-run] update issue #${issueNumber} from task ${task.id}`);
-      if (!localDetailChangedFromBase) {
-        console.log(`[dry-run] skip body update for ${task.id} (detail unchanged since last pull)`);
+      if (!options.json) {
+        console.log(`[dry-run] update issue #${issueNumber} from task ${task.id}`);
+        if (!localDetailChangedFromBase) {
+          console.log(`[dry-run] skip body update for ${task.id} (detail unchanged since last pull)`);
+        }
       }
       updated++;
     } else {
@@ -592,27 +617,29 @@ export function pushCommand(options: SyncOptions = {}): void {
       const remoteStatusName = config.statusMap[task.status];
       const optionId = statusOptionIds[remoteStatusName];
       if (options.dryRun) {
-        console.log(`[dry-run] ensure issue #${issueNumber} is in project`);
-        if (projectStatusEnabled && optionId) {
-          console.log(`[dry-run] set project status for issue #${issueNumber} -> ${remoteStatusName}`);
-        } else if (projectStatusEnabled) {
-          console.log(`[dry-run] no matching project status option for '${remoteStatusName}'`);
-        }
-        if (config.startDateFieldId) {
-          console.log(task.start
-            ? `[dry-run] set project start date for issue #${issueNumber} -> ${task.start}`
-            : `[dry-run] clear project start date for issue #${issueNumber}`);
-        }
-        if (config.dueDateFieldId) {
-          console.log(task.due
-            ? `[dry-run] set project due date for issue #${issueNumber} -> ${task.due}`
-            : `[dry-run] clear project due date for issue #${issueNumber}`);
-        }
-        if (config.completedDateFieldId) {
-          const completedDate = isCompletionStatus(task.status, config) ? (task.completed || todayISO()) : null;
-          console.log(completedDate
-            ? `[dry-run] set project completed date for issue #${issueNumber} -> ${completedDate}`
-            : `[dry-run] clear project completed date for issue #${issueNumber}`);
+        if (!options.json) {
+          console.log(`[dry-run] ensure issue #${issueNumber} is in project`);
+          if (projectStatusEnabled && optionId) {
+            console.log(`[dry-run] set project status for issue #${issueNumber} -> ${remoteStatusName}`);
+          } else if (projectStatusEnabled) {
+            console.log(`[dry-run] no matching project status option for '${remoteStatusName}'`);
+          }
+          if (config.startDateFieldId) {
+            console.log(task.start
+              ? `[dry-run] set project start date for issue #${issueNumber} -> ${task.start}`
+              : `[dry-run] clear project start date for issue #${issueNumber}`);
+          }
+          if (config.dueDateFieldId) {
+            console.log(task.due
+              ? `[dry-run] set project due date for issue #${issueNumber} -> ${task.due}`
+              : `[dry-run] clear project due date for issue #${issueNumber}`);
+          }
+          if (config.completedDateFieldId) {
+            const completedDate = isCompletionStatus(task.status, config) ? (task.completed || todayISO()) : null;
+            console.log(completedDate
+              ? `[dry-run] set project completed date for issue #${issueNumber} -> ${completedDate}`
+              : `[dry-run] clear project completed date for issue #${issueNumber}`);
+          }
         }
       } else {
         let itemId = projectItemIdByIssue.get(issueNumber);
@@ -663,7 +690,17 @@ export function pushCommand(options: SyncOptions = {}): void {
   }
 
   if (options.dryRun) {
-    console.log(`[dry-run] push summary: create=${created}, update=${updated}`);
+    if (options.json) {
+      process.stdout.write(`${JSON.stringify({
+        dryRun: true,
+        sourceMode,
+        created,
+        updated,
+        conflicts
+      }, null, 2)}\n`);
+    } else {
+      console.log(`[dry-run] push summary: create=${created}, update=${updated}`);
+    }
     return;
   }
 
@@ -674,6 +711,9 @@ export function pushCommand(options: SyncOptions = {}): void {
 
 export function bootstrapCommand(from: 'local' | 'github', options: SyncOptions = {}): void {
   const { config, configPath } = loadConfig(options);
+  if (from === 'github') {
+    announceExplicitImport('bootstrap --from github', config, options);
+  }
   const tasksFilePath = resolveTasksFile(configPath, config, options);
   const requireConfirm = Boolean(config.bootstrap?.requireConfirmFlag);
   if (!options.dryRun && requireConfirm && !options.confirm) {
@@ -768,6 +808,9 @@ export function bootstrapCommand(from: 'local' | 'github', options: SyncOptions 
 
 export function reconcileCommand(taskId: string, options: SyncOptions = {}): void {
   const { config, configPath } = loadConfig(options);
+  if (options.accept === 'remote') {
+    announceExplicitImport('reconcile --accept remote', config, options);
+  }
   const tasksFilePath = resolveTasksFile(configPath, config, options);
   const board = parseTasksFile(tasksFilePath);
   validateTaskStatuses(board.tasks, config);

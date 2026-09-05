@@ -39,6 +39,17 @@ export type TaskBoard = {
   notesSection: string[];
 };
 
+/**
+ * Which side owns the truth for the GitHub binding (ADR 0003/0004).
+ * - `projection`: GitHub is a one-way export of local state. Importing from
+ *   GitHub (pull, bootstrap --from github, reconcile --accept remote) stays
+ *   available but is always an explicit, user-initiated import.
+ * - `canonical`: GitHub is the source of truth. NOT IMPLEMENTED — fails closed.
+ */
+export type GithubSourceMode = 'projection' | 'canonical';
+
+export const DEFAULT_GITHUB_SOURCE_MODE: GithubSourceMode = 'projection';
+
 export type SyncConfig = {
   owner: string;
   repo: string;
@@ -61,6 +72,9 @@ export type SyncConfig = {
   };
   remoteWinsFields?: string[];
   localWinsFields?: string[];
+  github?: {
+    sourceMode?: GithubSourceMode;
+  };
 };
 
 export type SyncOptions = {
