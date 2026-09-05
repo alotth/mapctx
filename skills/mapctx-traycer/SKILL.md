@@ -40,6 +40,19 @@ MapCtx owns planning. Traycer executes. Ticket Markdown is projection, never sou
 
    Duplicate, stale, unknown, or mismatched receipts must remain rejected. Do not bypass CLI or open SQLite from skill code.
 
+### Difficulty discovered mid-flight
+
+When work reveals the task is harder (or easier) than planned, re-classify immediately -- do not let a
+long actual pollute the pool of the wrong difficulty:
+
+```sh
+mapctx task update <task-id> --set workload=Hard --json
+```
+
+Pools are read from the current workload value, so the actual lands in the discovered pool. The
+planned-vs-discovered delta is the estimation-quality signal (T-071); skipping the re-classification
+destroys it and biases every future Easy forecast.
+
 ### Retroactive attestation (work that happened outside the flow)
 
 When an agent completed a task without claiming or dispatching (flow error, or work done in an earlier
