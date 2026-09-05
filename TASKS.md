@@ -1490,7 +1490,7 @@
 ### [T-068] Update mapctx-tasks and mapctx-traycer skills for the CLI write path
 
   - id: T-068
-  - status: ready-for-do
+  - status: doing
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1503,7 +1503,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-09-05
   - detail: ./tasks/T-068.md
 
 ## Notes
