@@ -1205,7 +1205,7 @@
 ### [T-065] Make the duration prior workload-aware and unit-honest
 
   - id: T-065
-  - status: backlog
+  - status: doing
   - type: feature
   - parent: E-011
   - subIssueProgress: null
@@ -1218,7 +1218,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-08-26
+  - updated: 2026-09-05
   - detail: ./tasks/T-065.md
 
 ### [E-010] Harness-neutral execution with Traycer first
@@ -1284,7 +1284,7 @@
   - status: doing
   - type: epic
   - parent: null
-  - subIssueProgress: 3/4
+  - subIssueProgress: 3/5
   - priority: high
   - workload: Hard
   - tags: [vnext, forecast, cost, gantt]
@@ -1509,7 +1509,7 @@
 ### [T-069] Align docs site and thread-substrate.md with post-cutover framing
 
   - id: T-069
-  - status: backlog
+  - status: doing
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1522,8 +1522,27 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-09-05
   - detail: ./tasks/T-069.md
+
+### [T-070] Budget and value ledger: planned budget consumed by actuals, with learning forecast and value estimates
+
+  - id: T-070
+  - status: backlog
+  - type: feature
+  - parent: E-011
+  - subIssueProgress: null
+  - priority: null
+  - workload: null
+  - tags: []
+  - domains: [FORECAST]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/T-070.md
 
 ## Notes
 
