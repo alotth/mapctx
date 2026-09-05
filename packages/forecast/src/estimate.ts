@@ -1,24 +1,19 @@
 import { randomUUID } from "node:crypto"
 import { estimateSnapshotSchema, type EstimateSnapshot, type UsageEvent } from "@mapctx/protocol"
-import type { DurationCoverage, EstimateBuildResult, EstimateOptions, ForecastPrior, ForecastSample } from "./types"
+import { DEFAULT_WORKLOAD, priorForWorkload, WORKLOAD_PRIORS } from "./prior"
+import type {
+  DurationCoverage,
+  EstimateBuildResult,
+  EstimateOptions,
+  ForecastPrior,
+  ForecastSample,
+  Workload,
+  WorkloadBaseline
+} from "./types"
+
+export { DEFAULT_PRIOR, DEFAULT_WORKLOAD, priorForWorkload, WORKLOAD_PRIORS } from "./prior"
 
 const DURATION_COVERAGE_PREFIX = "duration coverage: "
-
-const HOUR_MS = 60 * 60 * 1000
-
-export const DEFAULT_PRIOR: ForecastPrior = {
-  durationP50Ms: 8 * HOUR_MS,
-  durationP90Ms: 16 * HOUR_MS,
-  inputTokensP50: 8_000,
-  inputTokensP90: 16_000,
-  outputTokensP50: 4_000,
-  outputTokensP90: 8_000,
-  cacheTokensP50: 1_000,
-  cacheTokensP90: 2_000,
-  shadowMicrosP50: 4_000_000,
-  shadowMicrosP90: 8_000_000,
-  assumptions: ["no historical actuals", "single implementer", "conservative v1 prior"]
-}
 
 function quantile(values: number[], percentile: 0.5 | 0.9): number {
   if (values.length === 0) return 0
@@ -28,10 +23,11 @@ function quantile(values: number[], percentile: 0.5 | 0.9): number {
 }
 
 function mergedPrior(options: EstimateOptions): ForecastPrior {
+  const workloadPrior = priorForWorkload(options.workload)
   return {
-    ...DEFAULT_PRIOR,
+    ...workloadPrior,
     ...options.prior,
-    assumptions: options.prior?.assumptions ?? DEFAULT_PRIOR.assumptions
+    assumptions: options.prior?.assumptions ?? workloadPrior.assumptions
   }
 }
 
@@ -81,18 +77,31 @@ export function buildEstimateSnapshot(
   const minSamples = options.minHistoricalSamples ?? 1
   const useHistory = samples.length >= minSamples && samples.length > 0
   const historical = useHistory ? samples : []
-  const durations = p50p90(historical.map(sample => sample.duration.activeTimeMs), prior.durationP50Ms, prior.durationP90Ms)
-  const inputs = p50p90(tokenValues(historical, "inputTokens"), prior.inputTokensP50, prior.inputTokensP90)
-  const outputs = p50p90(tokenValues(historical, "outputTokens"), prior.outputTokensP50, prior.outputTokensP90)
-  const caches = p50p90(tokenValues(historical, "cacheTokens"), prior.cacheTokensP50, prior.cacheTokensP90)
-  const shadows = p50p90(shadowValues(historical), prior.shadowMicrosP50, prior.shadowMicrosP90)
+  // Workload grouping: when a workload is declared, prefer same-workload
+  // samples. An Extreme task must not silently inherit an Easy task's
+  // actuals; if none match, fall back to the full pool and say so.
+  const sameWorkload = options.workload === undefined
+    ? historical
+    : historical.filter(sample => sample.workload === options.workload)
+  const pool = sameWorkload.length > 0 ? sameWorkload : historical
+  const durations = p50p90(pool.map(sample => sample.duration.activeTimeMs), prior.durationP50Ms, prior.durationP90Ms)
+  const inputs = p50p90(tokenValues(pool, "inputTokens"), prior.inputTokensP50, prior.inputTokensP90)
+  const outputs = p50p90(tokenValues(pool, "outputTokens"), prior.outputTokensP50, prior.outputTokensP90)
+  const caches = p50p90(tokenValues(pool, "cacheTokens"), prior.cacheTokensP50, prior.cacheTokensP90)
+  const shadows = p50p90(shadowValues(pool), prior.shadowMicrosP50, prior.shadowMicrosP90)
   // Forecast reads activeTimeMs by ADR decision. If the samples it read were
   // themselves substituted wall clock (receipt-only, no interior timestamps),
   // the estimate silently inherits idle time — so say so on the snapshot rather
   // than leave it indistinguishable from a measured forecast. See T-064.
-  const durationCoverage = durationCoverageOf(historical)
+  const durationCoverage = durationCoverageOf(pool)
   const assumptions = [
-    ...(!useHistory ? ["historical actuals unavailable or below minimum sample count; conservative prior used"] : []),
+    ...(!useHistory ? [
+      `prior: workload-aware ${options.workload ?? DEFAULT_WORKLOAD} prior (durationP50 ${prior.durationP50Ms}ms, durationP90 ${prior.durationP90Ms}ms); a declared starting guess, not a measurement`,
+      "historical actuals unavailable or below minimum sample count; conservative prior used"
+    ] : []),
+    ...(useHistory && options.workload !== undefined && sameWorkload.length === 0
+      ? [`no samples declared workload ${options.workload}; all ${historical.length} sample(s) used ungrouped`]
+      : []),
     `forecast input: activeTimeMs; idle threshold ${options.idleThresholdMs ?? 600_000}ms`,
     `duration coverage: ${durationCoverage}${durationCoverage === "substituted"
       ? " (activeTime stood in for wall clock; idle time not excluded)"
@@ -106,7 +115,7 @@ export function buildEstimateSnapshot(
     taskId,
     createdAt: options.createdAt ?? new Date().toISOString(),
     method: useHistory ? "historical-baseline" : "expert-guess",
-    confidence: useHistory && samples.length >= 3 ? "medium" : "low",
+    confidence: useHistory && pool.length >= 3 ? "medium" : "low",
     estimatorVersion: options.estimatorVersion ?? "forecast-v1",
     idleThresholdMs: options.idleThresholdMs ?? 600_000,
     costCoverage: coverageOf(historical),
@@ -145,4 +154,29 @@ export function durationCoverageFromAssumptions(assumptions: readonly string[]):
 /** True when the snapshot fell back to the conservative prior for lack of historical samples. */
 export function isPriorFallbackEstimate(snapshot: Pick<EstimateSnapshot, "method">): boolean {
   return snapshot.method === "expert-guess"
+}
+
+/**
+ * History-derived duration baselines, grouped by declared workload, so
+ * "how long does an Extreme task take here" is answerable instead of averaging
+ * across all difficulties. Samples without a declared workload are excluded —
+ * a baseline without its workload class is exactly the workload-blind average
+ * this replaces. Workloads with no samples are absent from the result.
+ */
+export function workloadBaselines(samples: readonly ForecastSample[]): WorkloadBaseline[] {
+  const byWorkload = new Map<Workload, number[]>()
+  for (const sample of samples) {
+    if (sample.workload === undefined) continue
+    const durations = byWorkload.get(sample.workload) ?? []
+    durations.push(sample.duration.activeTimeMs)
+    byWorkload.set(sample.workload, durations)
+  }
+  return [...byWorkload.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([workload, durations]) => ({
+      workload,
+      sampleCount: durations.length,
+      durationP50Ms: quantile(durations, 0.5),
+      durationP90Ms: quantile(durations, 0.9)
+    }))
 }
