@@ -1528,7 +1528,7 @@
 ### [T-070] Budget and value ledger: planned budget consumed by actuals, with learning forecast and value estimates
 
   - id: T-070
-  - status: backlog
+  - status: review
   - type: feature
   - parent: E-011
   - subIssueProgress: null
@@ -1541,7 +1541,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-09-06
   - detail: ./tasks/T-070.md
 
 ### [T-071] Workload re-attribution: record planned vs discovered difficulty, pool by discovered, measure estimation error
