@@ -1281,10 +1281,10 @@
 ### [E-011] Delivery forecast and planned-versus-actual UI
 
   - id: E-011
-  - status: doing
+  - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 4/6
+  - subIssueProgress: 5/6
   - priority: high
   - workload: Hard
   - tags: [vnext, forecast, cost, gantt]
@@ -1292,9 +1292,9 @@
   - dependsOn: [E-009]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-06
   - externalId: null
-  - updated: 2026-08-26
+  - updated: 2026-09-06
   - detail: ./tasks/E-011.md
 
 ### [T-054] Ingest usage events and calculate baseline P50/P90 forecasts
@@ -1528,7 +1528,7 @@
 ### [T-070] Budget and value ledger: planned budget consumed by actuals, with learning forecast and value estimates
 
   - id: T-070
-  - status: review
+  - status: done
   - type: feature
   - parent: E-011
   - subIssueProgress: null
@@ -1539,7 +1539,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-06
   - externalId: null
   - updated: 2026-09-06
   - detail: ./tasks/T-070.md
