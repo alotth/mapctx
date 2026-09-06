@@ -1547,7 +1547,7 @@
 ### [T-071] Workload re-attribution: record planned vs discovered difficulty, pool by discovered, measure estimation error
 
   - id: T-071
-  - status: backlog
+  - status: doing
   - type: feature
   - parent: E-011
   - subIssueProgress: null
@@ -1560,7 +1560,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-09-06
   - detail: ./tasks/T-071.md
 
 ## Notes
