@@ -44,6 +44,7 @@ import {
 } from '@mapctx/store';
 import { getValidationReport, validateCommand } from './board-tools';
 import { loadConfigOptionalForBoard } from './config';
+import { accountAddCommand, accountBindCommand, accountListCommand, budgetHistoryCommand, budgetSetCommand, budgetStatusCommand, planPeriodRecordCommand } from './budget-cli';
 import { buildGanttDataset } from './gantt';
 import { SyncOptions } from './types';
 import { parseWorkspaceServerArgs, startWorkspaceServer } from './workspace-server';
@@ -82,6 +83,16 @@ type MapctxOptions = SyncOptions & {
   summary?: string;
   description?: string;
   descriptionFile?: string;
+  currency?: string;
+  amount?: string;
+  minutes?: number;
+  note?: string;
+  account?: string;
+  planName?: string;
+  seats?: number;
+  end?: string;
+  project?: boolean;
+  remove?: boolean;
 };
 
 function printHelp(): void {
@@ -131,6 +142,21 @@ function printHelp(): void {
   console.log('  mapctx dispatch receipt <dispatch-id> --read --json');
   console.log('  mapctx reconcile <task-id> [--accept | --discard] [--json] [--actor name]');
   console.log('  mapctx sync status [--json]');
+  console.log('  mapctx account add <name> [--currency USD] [--note text] [--json] [--actor name]');
+  console.log('    Records a paid-plan account ("Codex Pro") in the store. Budgets and plan periods');
+  console.log('    reference accounts; projects declare which accounts they draw from via `bind`.');
+  console.log('  mapctx account list [--json]');
+  console.log('  mapctx account bind <account-id-or-name> [--remove] [--json] [--actor name]');
+  console.log('  mapctx plan-period record --account <id-or-name> --amount <decimal> --start <date|datetime>');
+  console.log('    --end <date|datetime> [--currency c] [--plan-name n] [--seats n] [--json] [--actor name]');
+  console.log('    Records the plan payment on the ACCOUNT (T-070: accounts own plans, projects consume).');
+  console.log('  mapctx budget set <epic-id> (--amount <decimal> | --minutes n) [--currency USD] [--start date]');
+  console.log('    [--end date] [--note text] [--json] [--actor name]   (--project targets the whole project)');
+  console.log('    Event-sourced: every set is a revision; history is kept, latest wins.');
+  console.log('  mapctx budget status <epic-id> [--json]   (--project for the whole project)');
+  console.log('    Planned/spent/remaining/spent% from the cost chain. Scopes with no cost data say');
+  console.log('    "no cost data" -- never zeros that look measured.');
+  console.log('  mapctx budget history <epic-id> [--json]');
 }
 
 function print(value: unknown, json?: boolean): void {
@@ -193,6 +219,24 @@ function parseArgs(argv: string[]): {
     else if (a === '--summary') options.summary = args[++i];
     else if (a === '--description') options.description = args[++i];
     else if (a === '--description-file') options.descriptionFile = args[++i];
+    else if (a === '--currency') options.currency = args[++i];
+    else if (a === '--amount') options.amount = args[++i];
+    else if (a === '--minutes') {
+      const value = Number(args[++i]);
+      if (!Number.isInteger(value) || value < 1) throw new Error('--minutes must be a positive integer');
+      options.minutes = value;
+    }
+    else if (a === '--note') options.note = args[++i];
+    else if (a === '--account') options.account = args[++i];
+    else if (a === '--plan-name') options.planName = args[++i];
+    else if (a === '--seats') {
+      const value = Number(args[++i]);
+      if (!Number.isInteger(value) || value < 1) throw new Error('--seats must be a positive integer');
+      options.seats = value;
+    }
+    else if (a === '--end') options.end = args[++i];
+    else if (a === '--project') options.project = true;
+    else if (a === '--remove') options.remove = true;
     else if (a === '--budget') {
       const value = Number(args[++i]);
       if (!Number.isInteger(value) || value < 1) throw new Error('--budget must be a positive integer');
@@ -1055,6 +1099,25 @@ async function main(): Promise<void> {
   if (command === 'sync' && subcommand === 'status') {
     await syncStatusCommand(options);
     return;
+  }
+
+  if (command === 'account') {
+    if (subcommand === 'add') { accountAddCommand(positional[1], options); return; }
+    if (subcommand === 'list') { accountListCommand(options); return; }
+    if (subcommand === 'bind') { accountBindCommand(positional[1], options); return; }
+    throw new Error('Usage: mapctx account <add|list|bind> [...]');
+  }
+
+  if (command === 'plan-period') {
+    if (subcommand === 'record') { planPeriodRecordCommand(options); return; }
+    throw new Error('Usage: mapctx plan-period record --account <id-or-name> --amount <decimal> --start <date|datetime> --end <date|datetime>');
+  }
+
+  if (command === 'budget') {
+    if (subcommand === 'set') { budgetSetCommand(positional[1], options); return; }
+    if (subcommand === 'status') { budgetStatusCommand(positional[1], options); return; }
+    if (subcommand === 'history') { budgetHistoryCommand(positional[1], options); return; }
+    throw new Error('Usage: mapctx budget <set|status|history> <epic-id> [...]');
   }
 
   printHelp();

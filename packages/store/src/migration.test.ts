@@ -53,6 +53,46 @@ test("existing v1 store upgrades without losing v1 data", () => {
   }
 });
 
+test("existing v3 store upgrades to 004 without losing plan period data", () => {
+  const dir = mkTmpDir("mapctx-store-migration-upgrade-004-");
+  try {
+    const dbPath = `${dir}/mapctx.db`;
+    // Build a genuine v3 store: migrations 001..003 applied, recorded with the
+    // checksums of their current SQL strings (those never change once shipped).
+    const db = new DatabaseSync(dbPath);
+    db.exec("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)");
+    for (const migration of MIGRATIONS.filter(migration => migration.version <= 3)) {
+      db.exec(migration.sql);
+      const checksum = crypto.createHash("sha256").update(migration.sql, "utf8").digest("hex");
+      db.prepare("INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (?, ?, ?)").run(migration.version, checksum, "2026-08-17T00:00:00.000Z");
+    }
+    // A pre-004 plan period: project-scoped era, no account_id column at all.
+    db.prepare(`
+      INSERT INTO plan_period_projection (plan_period_id, biller, plan_name, period_start, period_end, fixed_cents, seats, status)
+      VALUES ('bbbbbbbb-cccc-4ddd-8eee-ffffffffffff', 'anthropic', 'claude-pro', '2026-08-01T00:00:00.000Z', '2026-08-31T23:59:59.000Z', 20000, 1, 'open')
+    `).run();
+    db.close();
+
+    const upgraded = openDatabase(dbPath);
+    try {
+      const versions = upgraded.prepare("SELECT version FROM schema_migrations ORDER BY version").all() as Array<{ version: number }>;
+      assert.deepEqual(versions.map(row => row.version), MIGRATIONS.map(migration => migration.version));
+      const period = upgraded.prepare("SELECT * FROM plan_period_projection WHERE plan_period_id = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff'").get() as Record<string, unknown>;
+      assert.equal(period.biller, "anthropic");
+      assert.equal(period.fixed_cents, 20000);
+      assert.equal(period.account_id, null, "pre-004 rows survive as unassigned (null account)");
+      assert.ok(upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'account_projection'").get());
+      assert.ok(upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'budget_projection'").get());
+      assert.ok(upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'project_account_binding'").get());
+      assert.ok(upgraded.prepare("SELECT 1 FROM budget_projection WHERE 1 = 0").get() === undefined);
+    } finally {
+      upgraded.close();
+    }
+  } finally {
+    cleanupDir(dir);
+  }
+});
+
 test("openDatabase rejects a diverged migration checksum", () => {
   const dir = mkTmpDir("mapctx-store-migration-checksum-");
   try {

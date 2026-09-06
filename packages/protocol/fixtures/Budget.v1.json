@@ -1,0 +1,16 @@
+{
+  "budgetId": "8888ffff-9999-4aaa-8bbb-ccccddddeeee",
+  "minutes": null,
+  "money": {
+    "amountMinor": 20000,
+    "currency": "USD",
+    "decimals": 2
+  },
+  "note": null,
+  "ownerId": "E-009",
+  "ownerKind": "epic",
+  "periodEnd": null,
+  "periodStart": null,
+  "setAt": "2026-08-15T21:00:00.000Z",
+  "unit": "money"
+}

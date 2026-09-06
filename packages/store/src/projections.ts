@@ -1,6 +1,8 @@
 import type { DatabaseSync } from "node:sqlite"
 import {
   assertTransition,
+  type Account,
+  type Budget,
   type ClaimViolation,
   type CostEvent,
   type EstimateSnapshot,
@@ -521,10 +523,11 @@ function rowToCostEvent(row: Record<string, unknown>): CostEvent {
 export function insertPlanPeriod(db: DatabaseSync, period: PlanPeriod): void {
   db.prepare(`
     INSERT INTO plan_period_projection (
-      plan_period_id, biller, plan_name, period_start, period_end,
+      plan_period_id, account_id, biller, plan_name, period_start, period_end,
       fixed_cents, seats, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(plan_period_id) DO UPDATE SET
+      account_id = excluded.account_id,
       biller = excluded.biller,
       plan_name = excluded.plan_name,
       period_start = excluded.period_start,
@@ -532,7 +535,7 @@ export function insertPlanPeriod(db: DatabaseSync, period: PlanPeriod): void {
       fixed_cents = excluded.fixed_cents,
       seats = excluded.seats,
       status = excluded.status
-  `).run(period.planPeriodId, period.biller, period.planName, period.periodStart, period.periodEnd, period.fixedCents, period.seats, period.status)
+  `).run(period.planPeriodId, period.accountId ?? null, period.biller, period.planName, period.periodStart, period.periodEnd, period.fixedCents, period.seats, period.status)
 }
 
 export function getPlanPeriod(db: DatabaseSync, planPeriodId: string): PlanPeriod | undefined {
@@ -540,14 +543,18 @@ export function getPlanPeriod(db: DatabaseSync, planPeriodId: string): PlanPerio
   return row ? rowToPlanPeriod(row) : undefined
 }
 
-export function listPlanPeriods(db: DatabaseSync): PlanPeriod[] {
-  const rows = db.prepare("SELECT * FROM plan_period_projection ORDER BY period_start ASC, plan_period_id ASC").all() as Record<string, unknown>[]
+export function listPlanPeriods(db: DatabaseSync, accountId?: string): PlanPeriod[] {
+  const sql = accountId === undefined
+    ? "SELECT * FROM plan_period_projection ORDER BY period_start ASC, plan_period_id ASC"
+    : "SELECT * FROM plan_period_projection WHERE account_id = ? ORDER BY period_start ASC, plan_period_id ASC"
+  const rows = (accountId === undefined ? db.prepare(sql).all() : db.prepare(sql).all(accountId)) as Record<string, unknown>[]
   return rows.map(rowToPlanPeriod)
 }
 
 function rowToPlanPeriod(row: Record<string, unknown>): PlanPeriod {
   return {
     planPeriodId: row.plan_period_id as string,
+    accountId: (row.account_id as string | null) ?? undefined,
     biller: row.biller as string,
     planName: row.plan_name as string,
     periodStart: row.period_start as string,
@@ -555,6 +562,127 @@ function rowToPlanPeriod(row: Record<string, unknown>): PlanPeriod {
     fixedCents: row.fixed_cents as number,
     seats: row.seats as number,
     status: row.status as PlanPeriod["status"]
+  }
+}
+
+// ---- account_projection (T-070) ----
+
+export function insertAccount(db: DatabaseSync, account: Account): void {
+  db.prepare(`
+    INSERT INTO account_projection (account_id, name, currency, created_at, note)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(account_id) DO UPDATE SET
+      name = excluded.name,
+      currency = excluded.currency,
+      created_at = excluded.created_at,
+      note = excluded.note
+  `).run(account.accountId, account.name, account.currency, account.createdAt, account.note)
+}
+
+export function getAccount(db: DatabaseSync, accountId: string): Account | undefined {
+  const row = db.prepare("SELECT * FROM account_projection WHERE account_id = ?").get(accountId) as Record<string, unknown> | undefined
+  return row ? rowToAccount(row) : undefined
+}
+
+export function listAccounts(db: DatabaseSync): Account[] {
+  const rows = db.prepare("SELECT * FROM account_projection ORDER BY created_at ASC, account_id ASC").all() as Record<string, unknown>[]
+  return rows.map(rowToAccount)
+}
+
+function rowToAccount(row: Record<string, unknown>): Account {
+  return {
+    accountId: row.account_id as string,
+    name: row.name as string,
+    currency: row.currency as string,
+    createdAt: row.created_at as string,
+    note: (row.note as string | null) ?? null
+  }
+}
+
+/**
+ * Replace-all declaration of which accounts a project draws from (the same
+ * replace semantics as dependency edges): each project declares its account
+ * set in one event, so the projection is always exactly the last declaration.
+ */
+export function setProjectAccountBindings(db: DatabaseSync, projectId: string, accountIds: string[], logicalClock: number): void {
+  db.prepare("DELETE FROM project_account_binding WHERE project_id = ?").run(projectId);
+  const insert = db.prepare("INSERT INTO project_account_binding (project_id, account_id, logical_clock) VALUES (?, ?, ?)");
+  for (const accountId of [...accountIds].sort()) {
+    insert.run(projectId, accountId, logicalClock);
+  }
+}
+
+export function listProjectAccountIds(db: DatabaseSync, projectId: string): string[] {
+  const rows = db.prepare("SELECT account_id FROM project_account_binding WHERE project_id = ? ORDER BY account_id ASC").all(projectId) as Array<{ account_id: string }>;
+  return rows.map(row => row.account_id);
+}
+
+// ---- budget_projection (T-070) ----
+
+/**
+ * Every budget.set appends a row: revisions/top-ups stay queryable as
+ * history. `logicalClock` is the setting event's logical clock, so
+ * latest-wins resolution is event-order-correct even for same-instant sets.
+ */
+export function insertBudget(db: DatabaseSync, budget: Budget, logicalClock: number): void {
+  db.prepare(`
+    INSERT INTO budget_projection (
+      budget_id, owner_kind, owner_id, unit, money_json, minutes,
+      period_start, period_end, set_at, note, logical_clock
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    budget.budgetId,
+    budget.ownerKind,
+    budget.ownerId,
+    budget.unit,
+    budget.money === null ? null : JSON.stringify(budget.money),
+    budget.minutes,
+    budget.periodStart,
+    budget.periodEnd,
+    budget.setAt,
+    budget.note,
+    logicalClock
+  )
+}
+
+export function getBudget(db: DatabaseSync, budgetId: string): Budget | undefined {
+  const row = db.prepare("SELECT * FROM budget_projection WHERE budget_id = ?").get(budgetId) as Record<string, unknown> | undefined
+  return row ? rowToBudget(row) : undefined
+}
+
+export function listBudgets(db: DatabaseSync, ownerKind?: string, ownerId?: string): Budget[] {
+  const clauses: string[] = [];
+  const args: string[] = [];
+  if (ownerKind !== undefined) { clauses.push("owner_kind = ?"); args.push(ownerKind); }
+  if (ownerId !== undefined) { clauses.push("owner_id = ?"); args.push(ownerId); }
+  let sql = "SELECT * FROM budget_projection";
+  if (clauses.length > 0) sql += ` WHERE ${clauses.join(" AND ")}`;
+  sql += " ORDER BY logical_clock ASC, budget_id ASC";
+  const rows = db.prepare(sql).all(...args) as Record<string, unknown>[];
+  return rows.map(rowToBudget);
+}
+
+/** Latest budget for an owner: max event logical clock, deterministic tiebreak on id. */
+export function getLatestBudgetFor(db: DatabaseSync, ownerKind: string, ownerId: string): Budget | undefined {
+  const rows = db.prepare(
+    "SELECT * FROM budget_projection WHERE owner_kind = ? AND owner_id = ? ORDER BY logical_clock DESC, budget_id DESC LIMIT 1"
+  ).all(ownerKind, ownerId) as Record<string, unknown>[];
+  return rows.length > 0 ? rowToBudget(rows[0]) : undefined;
+}
+
+function rowToBudget(row: Record<string, unknown>): Budget {
+  const moneyJson = row.money_json as string | null;
+  return {
+    budgetId: row.budget_id as string,
+    ownerKind: row.owner_kind as Budget["ownerKind"],
+    ownerId: row.owner_id as string,
+    unit: row.unit as Budget["unit"],
+    money: moneyJson === null ? null : JSON.parse(moneyJson),
+    minutes: (row.minutes as number | null) ?? null,
+    periodStart: (row.period_start as string | null) ?? null,
+    periodEnd: (row.period_end as string | null) ?? null,
+    setAt: row.set_at as string,
+    note: (row.note as string | null) ?? null
   }
 }
 

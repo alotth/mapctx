@@ -1,10 +1,12 @@
 import type { DatabaseSync } from "node:sqlite"
 import type { EventLogEntry } from "@mapctx/protocol"
-import { assertTransition, type CostEvent, type EstimateSnapshot, type PlanPeriod, type RunEvent, type RunReceipt } from "@mapctx/protocol"
+import { assertTransition, type Account, type Budget, type CostEvent, type EstimateSnapshot, type PlanPeriod, type RunEvent, type RunReceipt } from "@mapctx/protocol"
 import {
   getTaskDetail,
   getTask,
   applyRunReceipt,
+  insertAccount,
+  insertBudget,
   insertCostEvent,
   insertDispatchAttempt,
   insertClaim,
@@ -16,6 +18,7 @@ import {
   patchTask,
   replaceOutgoingDependencies,
   replaceOwnerExternalRefs,
+  setProjectAccountBindings,
   updateClaimState,
   upsertProject,
   upsertTask,
@@ -46,7 +49,10 @@ export const EVENT_TYPES = [
   "cost.recorded",
   "plan-period.recorded",
   "estimate.snapshot-recorded",
-  "claim-violation.detected"
+  "claim-violation.detected",
+  "account.added",
+  "project.accounts-set",
+  "budget.set"
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -105,6 +111,9 @@ export type CostRecordedPayload = { cost: CostEvent };
 export type PlanPeriodRecordedPayload = { period: PlanPeriod };
 export type EstimateSnapshotRecordedPayload = { snapshot: EstimateSnapshot };
 export type ClaimViolationDetectedPayload = { violation: import("@mapctx/protocol").ClaimViolation };
+export type AccountAddedPayload = { account: Account };
+export type ProjectAccountsSetPayload = { projectId: string; accountIds: string[] };
+export type BudgetSetPayload = { budget: Budget };
 
 /**
  * Applies one journal entry to the SQLite projections. Used both by the live
@@ -227,6 +236,21 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
     case "claim-violation.detected": {
       const payload = entry.payload as unknown as ClaimViolationDetectedPayload;
       insertClaimViolation(db, payload.violation);
+      return;
+    }
+    case "account.added": {
+      const payload = entry.payload as unknown as AccountAddedPayload;
+      insertAccount(db, payload.account);
+      return;
+    }
+    case "project.accounts-set": {
+      const payload = entry.payload as unknown as ProjectAccountsSetPayload;
+      setProjectAccountBindings(db, payload.projectId, payload.accountIds, entry.logicalClock);
+      return;
+    }
+    case "budget.set": {
+      const payload = entry.payload as unknown as BudgetSetPayload;
+      insertBudget(db, payload.budget, entry.logicalClock);
       return;
     }
     default:

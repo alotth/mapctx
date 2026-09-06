@@ -1,6 +1,9 @@
 import { PROTOCOL_SCHEMA_VERSION } from "./schema-version";
+import type { Money } from "./money";
 import type {
+  Account,
   ArtifactRef,
+  Budget,
   ClaimViolation,
   CostEvent,
   DependencyEdge,
@@ -31,6 +34,8 @@ export const FIXTURE_IDS = {
   usageEventId: "11111111-2222-4333-8444-555555555555",
   costEventId: "66666666-7777-4888-8999-aaaaaaaaaaaa",
   planPeriodId: "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+  accountId: "7777eeee-8888-4fff-8aaa-bbbbccccdddd",
+  budgetId: "8888ffff-9999-4aaa-8bbb-ccccddddeeee",
   estimateId: "12345678-90ab-4cde-8f01-23456789abcd",
   claimId: "c0ffee00-1111-4222-8333-444444444444",
   artifactId: "0a1b2c3d-4e5f-4678-89ab-cdef01234567",
@@ -189,6 +194,7 @@ export const usageEventFixture: UsageEvent = {
 
 export const planPeriodFixture: PlanPeriod = {
   planPeriodId: FIXTURE_IDS.planPeriodId,
+  accountId: FIXTURE_IDS.accountId,
   biller: "anthropic",
   planName: "claude-pro",
   periodStart: "2026-08-01T00:00:00.000Z",
@@ -196,6 +202,33 @@ export const planPeriodFixture: PlanPeriod = {
   fixedCents: 20000,
   seats: 1,
   status: "open"
+};
+
+export const accountFixture: Account = {
+  accountId: FIXTURE_IDS.accountId,
+  name: "Codex Pro",
+  currency: "USD",
+  createdAt: NOW,
+  note: null
+};
+
+export const moneyFixture: Money = {
+  amountMinor: 200_000_000,
+  currency: "USD",
+  decimals: 6
+};
+
+export const budgetFixture: Budget = {
+  budgetId: FIXTURE_IDS.budgetId,
+  ownerKind: "epic",
+  ownerId: FIXTURE_IDS.epicId,
+  unit: "money",
+  money: { amountMinor: 20_000, currency: "USD", decimals: 2 },
+  minutes: null,
+  periodStart: null,
+  periodEnd: null,
+  setAt: NOW,
+  note: null
 };
 
 export const costEventFixture: CostEvent = {
@@ -317,6 +350,9 @@ export const ENTITY_FIXTURES = {
   UsageEvent: usageEventFixture,
   CostEvent: costEventFixture,
   PlanPeriod: planPeriodFixture,
+  Account: accountFixture,
+  Budget: budgetFixture,
+  Money: moneyFixture,
   DurationMeasures: durationMeasuresFixture,
   EstimateSnapshot: estimateSnapshotFixture,
   ClaimViolation: claimViolationFixture,
