@@ -5,6 +5,17 @@
     "PlanPeriod": {
       "additionalProperties": false,
       "properties": {
+        "accountId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "biller": {
           "minLength": 1,
           "type": "string"

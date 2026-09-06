@@ -1,5 +1,6 @@
 export { PROTOCOL_SCHEMA_VERSION, MIN_COMPATIBLE_SCHEMA_VERSION, checkSchemaCompatibility, assertCompatibleSchemaVersion } from "./schema-version";
 export { canonicalJson, sortKeysDeep } from "./canonical";
+export * from "./money";
 export * from "./primitives";
 export * from "./entities";
 export * from "./envelopes";

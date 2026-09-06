@@ -10,6 +10,7 @@ import {
   tokenCountSchema,
   uuidSchema
 } from "./primitives";
+import { currencyCodeSchema, moneySchema } from "./money";
 
 export const planningStateSchema = z.enum([
   "backlog",
@@ -253,8 +254,17 @@ export type CostEvent = z.infer<typeof costEventSchema>;
 
 export const planPeriodStatusSchema = z.enum(["open", "closed"]);
 
+/**
+ * PlanPeriod is account-scoped as of T-070: the subscription plan is paid to
+ * an Account ("Codex Pro"), not to a project, and projects consume the plan
+ * via allocatedCost rated by shadowCost. `accountId` is optional/null so
+ * pre-004 rows and events (project-scoped era) stay valid data forever;
+ * plan periods recorded through `mapctx plan-period record --account` always
+ * carry it.
+ */
 export const planPeriodSchema = z.object({
   planPeriodId: uuidSchema,
+  accountId: uuidSchema.nullable().optional(),
   biller: nonEmptyStringSchema,
   planName: nonEmptyStringSchema,
   periodStart: isoDateTimeSchema,
@@ -264,6 +274,133 @@ export const planPeriodSchema = z.object({
   status: planPeriodStatusSchema
 });
 export type PlanPeriod = z.infer<typeof planPeriodSchema>;
+
+/**
+ * A subscription/paid-plan account the user pays once ("paguei $200 no Codex
+ * em 05/09"). Accounts are store entities: event-sourced per project store,
+ * with projects declaring which accounts they draw from (project.accounts-set).
+ */
+export const accountSchema = z.object({
+  accountId: uuidSchema,
+  name: nonEmptyStringSchema,
+  currency: currencyCodeSchema,
+  createdAt: isoDateTimeSchema,
+  note: z.string().nullable()
+});
+export type Account = z.infer<typeof accountSchema>;
+
+export const budgetUnitSchema = z.enum(["money", "time"]);
+export const budgetOwnerKindSchema = z.enum(["epic", "project"]);
+
+/**
+ * Budget: the plan that actuals consume. Unit-agnostic (money | time) by
+ * decision -- a money budget is Money minor units of one currency; a time
+ * budget is planned active minutes. Every `budget set` appends a new Budget
+ * row: revisions/top-ups are history in the event log, latest-wins in the
+ * projection (max event logical clock).
+ */
+export const budgetSchema = z
+  .object({
+    budgetId: uuidSchema,
+    ownerKind: budgetOwnerKindSchema,
+    ownerId: nonEmptyStringSchema,
+    unit: budgetUnitSchema,
+    money: moneySchema.nullable(),
+    minutes: z.number().int().positive().nullable(),
+    periodStart: isoDateSchema.nullable(),
+    periodEnd: isoDateSchema.nullable(),
+    setAt: isoDateTimeSchema,
+    note: z.string().nullable()
+  })
+  .superRefine((budget, ctx) => {
+    if (budget.unit === "money" && budget.money === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["money"],
+        message: "money budgets require money"
+      });
+    }
+    if (budget.unit === "time" && budget.minutes === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["minutes"],
+        message: "time budgets require minutes"
+      });
+    }
+    if (budget.unit === "money" && budget.minutes !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["minutes"],
+        message: "money budgets must not carry minutes"
+      });
+    }
+    if (budget.unit === "time" && budget.money !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["money"],
+        message: "time budgets must not carry money"
+      });
+    }
+    if (budget.periodStart !== null && budget.periodEnd !== null && budget.periodStart > budget.periodEnd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["periodEnd"],
+        message: "periodEnd must not precede periodStart"
+      });
+    }
+  });
+export type Budget = z.infer<typeof budgetSchema>;
+
+export const budgetCoverageSchema = z.enum(["no-data", "partial", "full"]);
+
+/**
+ * budget.consumed derivation spec (the rollup every consumer shares):
+ *
+ * Scope(owner): for `epic`, every task descending from the epic id in
+ * task_projection (transitive through parentTaskId); for `project`, every
+ * task in the store. Task order is taskId ASC -- rollups must be
+ * byte-identical on repeated runs and rebuilds.
+ *
+ * Money budgets (currency must be USD -- the denomination of cashCents and
+ * cost micros -- otherwise coverage is "no-data" with reason
+ * "cross-currency-manual"; conversion is manual and explicit, D1):
+ *   - Candidate stream: CostEvent rows joined through dispatch_projection to
+ *     in-scope tasks, ordered by cost_event_id ASC.
+ *   - Real money per row: cashCents when costStatus is "reported"; plus
+ *     allocatedMicros when non-null (subscription share of the plan fee).
+ *   - Rows with neither (unpriced, estimated-only, zero-allocation
+ *     subscription runs) contribute NOTHING to consumed; they count in
+ *     unattributedDispatches. Zeros-that-look-measured are forbidden.
+ *   - consumedMinor = sum(centsToMinorUnits(cashCents)) +
+ *     sum(microsToMinorUnits(allocatedMicros)), computed in the FINER of
+ *     (budget decimals, 6) so every conversion is an exact upward scaling --
+ *     sub-cent allocation micros are routine and must never be rounded away.
+ *     Output `decimals` reports the grid actually used.
+ *   - coverage: "no-data" when the scope has no dispatch with any attributed
+ *     cost; "full" when every scoped dispatch has at least one attributed
+ *     cost event; "partial" otherwise.
+ *
+ * Time budgets: consumedMs = sum(endedAt - startedAt) over accepted
+ * RunReceipts of in-scope dispatches (wall-clock basis -- activeTime is not
+ * yet persisted per run, so the output labels the basis honestly).
+ * coverage follows the same no-data/partial/full rules over receipts.
+ *
+ * Deriving a budget status never mutates the store: rollups are pure reads,
+ * and a spent-over-planned result renders negative remaining -- it is never
+ * clamped and never written back.
+ */
+export const budgetConsumedSchema = z.object({
+  unit: budgetUnitSchema,
+  currency: currencyCodeSchema.nullable(),
+  decimals: z.number().int().min(0).max(18).nullable(),
+  consumedMinor: z.number().int().nullable(),
+  consumedMs: z.number().int().nullable(),
+  coverage: budgetCoverageSchema,
+  reason: z.string().nullable(),
+  scopedDispatches: z.number().int().nonnegative(),
+  unattributedDispatches: z.number().int().nonnegative()
+});
+export type BudgetConsumed = z.infer<typeof budgetConsumedSchema>;
 
 export const durationMeasuresSchema = z.object({
   sessionWallClockMs: z.number().int().nonnegative(),
@@ -360,6 +497,9 @@ export const ENTITY_SCHEMAS = {
   UsageEvent: usageEventSchema,
   CostEvent: costEventSchema,
   PlanPeriod: planPeriodSchema,
+  Account: accountSchema,
+  Budget: budgetSchema,
+  Money: moneySchema,
   DurationMeasures: durationMeasuresSchema,
   EstimateSnapshot: estimateSnapshotSchema,
   ClaimViolation: claimViolationSchema,

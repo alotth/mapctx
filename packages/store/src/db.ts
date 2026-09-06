@@ -107,6 +107,9 @@ export function clearProjections(db: DatabaseSync): void {
     "plan_period_projection",
     "estimate_snapshot_projection",
     "claim_violation_projection",
+    "account_projection",
+    "project_account_binding",
+    "budget_projection",
     "export_checkpoint"
   ];
   for (const table of tables) {

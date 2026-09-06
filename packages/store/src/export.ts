@@ -2,8 +2,9 @@ import * as fs from "fs"
 import * as path from "path"
 import type { DatabaseSync } from "node:sqlite"
 import { generateTaskDetailFile, parseTaskDetailFile, type TaskDetailFile } from "@mapctx/core"
-import { STATUS_TO_PLANNING } from "@mapctx/protocol"
+import { STATUS_TO_PLANNING, formatMoney } from "@mapctx/protocol"
 import { getSingleProject, getTaskDetail, listOutgoingDependencies, listTasks } from "./projections"
+import { budgetStatus } from "./budget"
 import type { ProjectMetadata, TaskRecord } from "./types"
 
 export type ExportedFile = {
@@ -105,9 +106,50 @@ function renderTasksMd(project: ProjectMetadata, tasks: TaskRecord[], db: Databa
 }
 
 /**
+ * The generated budget projection on an epic detail file (T-070 decision D2:
+ * budgets live in the store, the epic detail carries their generated
+ * projection). Rendered only when a budget exists for the epic, so boards
+ * without budgets export byte-identical to before. Field-line format keeps
+ * the description parser's round-trip intact: the first `  - budget*:` line
+ * closes the description block, and later lines are ignored by the parser and
+ * regenerated from the store on every export.
+ */
+function renderBudgetSection(db: DatabaseSync, epicId: string): string {
+  const status = budgetStatus(db, "epic", epicId);
+  if (!status.hasBudget) return "";
+  const lines: string[] = [];
+  lines.push("");
+  if (status.unit === "money" && status.plannedMoney) {
+    const planned = formatMoney(status.plannedMoney);
+    const { currency, decimals } = status.consumed;
+    const consumed = currency && decimals !== null
+      ? formatMoney({ amountMinor: status.consumed.consumedMinor ?? 0, currency, decimals })
+      : "unknown";
+    const remaining = currency && decimals !== null
+      ? formatMoney({ amountMinor: status.remainingMinor ?? 0, currency, decimals })
+      : "unknown";
+    lines.push(`  - budgetUnit: money`);
+    lines.push(`  - budgetPlanned: ${planned}`);
+    lines.push(`  - budgetConsumed: ${consumed}`);
+    lines.push(`  - budgetRemaining: ${remaining}`);
+  } else if (status.unit === "time") {
+    const plannedMinutes = status.plannedMinutes ?? 0;
+    const consumedMinutes = Math.round((status.consumed.consumedMs ?? 0) / 60_000);
+    const remainingMinutes = Math.round((status.remainingMs ?? 0) / 60_000);
+    lines.push(`  - budgetUnit: time`);
+    lines.push(`  - budgetPlanned: ${plannedMinutes}m`);
+    lines.push(`  - budgetConsumed: ${consumedMinutes}m`);
+    lines.push(`  - budgetRemaining: ${remainingMinutes}m`);
+  }
+  lines.push(`  - budgetSpentPct: ${status.spentBp === null ? "unknown" : `${(status.spentBp / 100).toFixed(2)}%`}`);
+  lines.push(`  - budgetCoverage: ${status.consumed.coverage}`);
+  return `${lines.join("\n")}\n`;
+}
+
+/**
  * Pure function over projections + Git-authored description prose. No clock,
  * no mtime, no new UUIDs: same store state + same prose bytes always yields
- * byte-identical output, which is what the drift check and checkpoint
+ * byte-identical output, which is the drift check and checkpoint
  * determinism guarantees depend on.
  */
 export function buildExport(db: DatabaseSync, options: { tasksRoot: string }): ExportResult {
@@ -141,7 +183,11 @@ export function buildExport(db: DatabaseSync, options: { tasksRoot: string }): E
       summary: detail.summary,
       description
     };
-    taskDetailFiles.push({ path: detailFilePath, content: generateTaskDetailFile(detailFile) });
+    let content = generateTaskDetailFile(detailFile);
+    if (task.type === "epic") {
+      content += renderBudgetSection(db, task.taskId);
+    }
+    taskDetailFiles.push({ path: detailFilePath, content });
   }
 
   return { tasksMd, taskDetailFiles };

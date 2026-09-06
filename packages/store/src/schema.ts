@@ -260,5 +260,43 @@ CREATE TABLE IF NOT EXISTS run_event_projection (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS idx_run_event_dispatch ON run_event_projection(dispatch_id, attempt, sequence);
 `.trim()
+  },
+  {
+    // T-070: Account owns the plan; projects consume it. PlanPeriod is
+    // re-scoped from project-scoped to account-scoped (account_id nullable so
+    // pre-004 rows survive as valid data), and the budget ledger projection
+    // lands alongside it. Additive only -- never edit 001 in place post-cutover.
+    version: 4,
+    sql: `
+ALTER TABLE plan_period_projection ADD COLUMN account_id TEXT;
+CREATE TABLE IF NOT EXISTS account_projection (
+  account_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  currency TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  note TEXT
+);
+CREATE TABLE IF NOT EXISTS project_account_binding (
+  project_id TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  logical_clock INTEGER NOT NULL,
+  PRIMARY KEY (project_id, account_id)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_project_account_account ON project_account_binding(account_id);
+CREATE TABLE IF NOT EXISTS budget_projection (
+  budget_id TEXT PRIMARY KEY,
+  owner_kind TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  unit TEXT NOT NULL,
+  money_json TEXT,
+  minutes INTEGER,
+  period_start TEXT,
+  period_end TEXT,
+  set_at TEXT NOT NULL,
+  note TEXT,
+  logical_clock INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_budget_owner ON budget_projection(owner_kind, owner_id, logical_clock);
+`.trim()
   }
 ]

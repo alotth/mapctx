@@ -135,6 +135,66 @@ test("CostEvent has three measures and PlanPeriod is open|closed", () => {
   assert.equal(ENTITY_SCHEMAS.PlanPeriod.safeParse({ ...period, status: "maybe" }).success, false);
 });
 
+test("PlanPeriod is account-scoped but pre-004 rows (accountId absent) stay valid", () => {
+  const { accountId, ...legacy } = ENTITY_FIXTURES.PlanPeriod;
+  void accountId;
+  const parsed = ENTITY_SCHEMAS.PlanPeriod.parse(legacy);
+  assert.equal(parsed.accountId ?? null, null);
+  assert.equal(ENTITY_SCHEMAS.PlanPeriod.safeParse({ ...legacy, accountId: "not-a-uuid" }).success, false);
+});
+
+test("Budget is unit-agnostic (money|time) and refuses mixed units", () => {
+  const budget = ENTITY_SCHEMAS.Budget.parse(ENTITY_FIXTURES.Budget);
+  assert.equal(budget.unit, "money");
+  assert.equal(budget.minutes, null);
+  assert.equal(budget.money?.currency, "USD");
+
+  const timeBudget = {
+    ...budget,
+    budgetId: "9999aaaa-bbbb-4ccc-8ddd-eeeeffff0000",
+    unit: "time" as const,
+    money: null,
+    minutes: 600
+  };
+  assert.equal(ENTITY_SCHEMAS.Budget.parse(timeBudget).minutes, 600);
+
+  assert.equal(
+    ENTITY_SCHEMAS.Budget.safeParse({ ...budget, money: null }).success,
+    false,
+    "money budget without money must fail"
+  );
+  assert.equal(
+    ENTITY_SCHEMAS.Budget.safeParse({ ...budget, unit: "time", minutes: null }).success,
+    false,
+    "time budget without minutes must fail"
+  );
+  assert.equal(
+    ENTITY_SCHEMAS.Budget.safeParse({ ...budget, minutes: 60 }).success,
+    false,
+    "money budget carrying minutes must fail"
+  );
+  assert.equal(
+    ENTITY_SCHEMAS.Budget.safeParse({ ...budget, unit: "time", minutes: 60 }).success,
+    false,
+    "time budget carrying money must fail"
+  );
+  assert.equal(
+    ENTITY_SCHEMAS.Budget.safeParse({ ...budget, periodStart: "2026-09-01", periodEnd: "2026-08-01" }).success,
+    false,
+    "inverted period must fail"
+  );
+});
+
+test("Account carries a currency and Money rejects floats and bad codes", () => {
+  const account = ENTITY_SCHEMAS.Account.parse(ENTITY_FIXTURES.Account);
+  assert.equal(account.currency, "USD");
+  assert.equal(ENTITY_SCHEMAS.Account.safeParse({ ...account, currency: "dollars" }).success, false);
+
+  assert.equal(ENTITY_SCHEMAS.Money.safeParse({ ...ENTITY_FIXTURES.Money, amountMinor: 1.5 }).success, false);
+  assert.equal(ENTITY_SCHEMAS.Money.safeParse({ ...ENTITY_FIXTURES.Money, currency: "usd" }).success, false);
+  assert.equal(ENTITY_SCHEMAS.Money.safeParse({ ...ENTITY_FIXTURES.Money, decimals: -1 }).success, false);
+});
+
 test("duration measures and estimate snapshots are explicit data", () => {
   const duration = ENTITY_SCHEMAS.DurationMeasures.parse(ENTITY_FIXTURES.DurationMeasures);
   assert.ok(duration.idleThresholdMs > 0);
