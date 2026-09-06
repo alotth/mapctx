@@ -298,5 +298,19 @@ CREATE TABLE IF NOT EXISTS budget_projection (
 );
 CREATE INDEX IF NOT EXISTS idx_budget_owner ON budget_projection(owner_kind, owner_id, logical_clock);
 `.trim()
+  },
+  {
+    // T-071: planned-vs-discovered workload stamps. workload_at_dispatch is
+    // frozen at hand-off (the planned guess); workload_at_receipt is frozen at
+    // receipt (the discovered value at run end). Both ride in their events, so
+    // replay rebuilds them. Nullable: pre-005 rows and untagged tasks are null
+    // and stay null -- never guessed. executor_model is the raw executor
+    // identity fact; tiers are derived later, never stored (D5).
+    version: 5,
+    sql: `
+ALTER TABLE dispatch_projection ADD COLUMN workload_at_dispatch TEXT;
+ALTER TABLE dispatch_projection ADD COLUMN executor_model TEXT;
+ALTER TABLE run_receipt_projection ADD COLUMN workload_at_receipt TEXT;
+`.trim()
   }
 ]

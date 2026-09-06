@@ -8,7 +8,8 @@ import type {
   ForecastPrior,
   ForecastSample,
   Workload,
-  WorkloadBaseline
+  WorkloadBaseline,
+  WorkloadEstimationError
 } from "./types"
 
 export { DEFAULT_PRIOR, DEFAULT_WORKLOAD, priorForWorkload, WORKLOAD_PRIORS } from "./prior"
@@ -67,6 +68,60 @@ function p50p90(values: number[], prior50: number, prior90: number): [number, nu
   return values.length === 0 ? [prior50, prior90] : [quantile(values, 0.5), quantile(values, 0.9)]
 }
 
+/** T-071: sample is re-classified when planned and discovered are both set and differ. */
+function isReclassified(sample: ForecastSample): boolean {
+  return sample.workloadPlanned !== undefined && sample.workloadPlanned !== null
+    && sample.workload !== undefined
+    && sample.workloadPlanned !== sample.workload
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  const middle = sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+  return Math.round(middle * 100) / 100
+}
+
+/**
+ * T-071 estimation-error aggregate: per ORIGINAL (planned) workload, how wrong
+ * the up-front guesses were. Only re-classified samples count (planned and
+ * discovered both tagged and different); untagged samples on either side are
+ * excluded -- untagged is never guessed into a class. Deterministic: entries
+ * sorted by planned ASC, transitions by discovered ASC, ratio rounded to 2
+ * decimals. The ratio's denominator is the vendored prior P50 for the planned
+ * workload -- the number planning actually assumed before history existed.
+ */
+export function estimationErrorByPlannedWorkload(samples: readonly ForecastSample[]): WorkloadEstimationError[] {
+  const byPlanned = new Map<Workload, ForecastSample[]>()
+  for (const sample of samples) {
+    if (!isReclassified(sample)) continue
+    const planned = sample.workloadPlanned as Workload
+    const list = byPlanned.get(planned) ?? []
+    list.push(sample)
+    byPlanned.set(planned, list)
+  }
+  return [...byPlanned.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([planned, plannedSamples]) => {
+      const transitionCounts = new Map<Workload, number>()
+      for (const sample of plannedSamples) {
+        const discovered = sample.workload as Workload
+        transitionCounts.set(discovered, (transitionCounts.get(discovered) ?? 0) + 1)
+      }
+      return {
+        planned,
+        reclassifiedCount: plannedSamples.length,
+        medianRatioToPriorP50: median(plannedSamples.map(
+          sample => sample.duration.activeTimeMs / WORKLOAD_PRIORS[planned].durationP50Ms
+        )),
+        transitions: [...transitionCounts.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([discovered, count]) => ({ discovered, count }))
+      }
+    })
+}
+
 /** Build immutable, provenance-rich P50/P90 snapshot. No ML; fallback is explicit prior. */
 export function buildEstimateSnapshot(
   taskId: string,
@@ -77,13 +132,17 @@ export function buildEstimateSnapshot(
   const minSamples = options.minHistoricalSamples ?? 1
   const useHistory = samples.length >= minSamples && samples.length > 0
   const historical = useHistory ? samples : []
-  // Workload grouping: when a workload is declared, prefer same-workload
+  // Workload grouping (T-071: pools key on the DISCOVERED workload, i.e. the
+  // latest declared value): when a workload is declared, prefer same-workload
   // samples. An Extreme task must not silently inherit an Easy task's
-  // actuals; if none match, fall back to the full pool and say so.
+  // actuals; if none match, fall back to the full pool and say so. A
+  // mid-flight re-classification moves the actual here -- re-attribution --
+  // while workloadPlanned keeps the guess for the estimation-error aggregate.
   const sameWorkload = options.workload === undefined
     ? historical
     : historical.filter(sample => sample.workload === options.workload)
   const pool = sameWorkload.length > 0 ? sameWorkload : historical
+  const reattributedInPool = pool.filter(isReclassified).length
   const durations = p50p90(pool.map(sample => sample.duration.activeTimeMs), prior.durationP50Ms, prior.durationP90Ms)
   const inputs = p50p90(tokenValues(pool, "inputTokens"), prior.inputTokensP50, prior.inputTokensP90)
   const outputs = p50p90(tokenValues(pool, "outputTokens"), prior.outputTokensP50, prior.outputTokensP90)
@@ -101,6 +160,14 @@ export function buildEstimateSnapshot(
     ] : []),
     ...(useHistory && options.workload !== undefined && sameWorkload.length === 0
       ? [`no samples declared workload ${options.workload}; all ${historical.length} sample(s) used ungrouped`]
+      : []),
+    ...(reattributedInPool > 0
+      ? [`pool contains ${reattributedInPool} re-attributed sample(s) (planned != discovered); keyed by discovered workload, estimation error tracked per planned workload (T-071)`]
+      : []),
+    ...(options.workload !== undefined
+      && options.workloadPlanned !== undefined && options.workloadPlanned !== null
+      && options.workloadPlanned !== options.workload
+      ? [`workload re-attributed mid-flight: planned ${options.workloadPlanned} -> discovered ${options.workload}; pool keyed by discovered (${options.workload})`]
       : []),
     `forecast input: activeTimeMs; idle threshold ${options.idleThresholdMs ?? 600_000}ms`,
     `duration coverage: ${durationCoverage}${durationCoverage === "substituted"

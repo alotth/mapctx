@@ -4,7 +4,8 @@ import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 import { StoreHandle, recordDispatchAttempt, recordRunEvent, recordRunReceipt } from "@mapctx/store"
-import { buildEstimateFromStore } from "./store"
+import { WORKLOAD_PRIORS } from "./prior"
+import { buildEstimateFromStore, estimationErrorFromStore, workloadDeltaSamplesFromStore } from "./store"
 
 const DISPATCH_ID = "9b2e4d71-6c18-4a0f-b3d5-11aa22bb33cc"
 
@@ -102,6 +103,79 @@ test("store forecast labels receipt-only duration as substituted", () => {
     const estimate = buildEstimateFromStore(handle.db, "T-001")
     assert.equal(estimate.durationCoverage, "substituted")
     assert.equal(estimate.durationP50Ms, 8 * 60 * 60 * 1000 + 10 * 60 * 1000)
+    handle.close()
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// ---- T-071: planned-vs-discovered delta through the real store ----
+
+test("store bridge pools by discovered workload and reports estimation error per planned", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mapctx-forecast-workload-delta-"))
+  try {
+    const handle = StoreHandle.open(dir)
+    // Self-contained seed: plan Easy, hand off, discover Hard, finish.
+    handle.appendEvent({
+      eventType: "project.initialized",
+      actor: "test",
+      payload: { projectId: "p1", boardTitle: "T", workDomains: [], notesMarkdown: "", plansAuthority: "markdown" }
+    })
+    handle.appendEvent({
+      eventType: "task.upserted",
+      actor: "test",
+      payload: {
+        task: {
+          taskId: "T-009",
+          positionKey: 0,
+          title: "x",
+          workload: "Easy",
+          planningState: "in-progress",
+          executionState: "claimed",
+          tags: [],
+          domains: [],
+          externalLinks: [],
+          assignees: []
+        }
+      }
+    })
+    assert.equal(recordDispatchAttempt(handle, {
+      dispatchId: DISPATCH_ID,
+      taskId: "T-009",
+      executorKind: "test",
+      attempt: 1,
+      contextHash: "hash",
+      status: "claimed",
+      actor: "test",
+      executorModel: "glm-4.7"
+    }).ok, true)
+    handle.appendEvent({
+      eventType: "task.patched",
+      actor: "operator",
+      payload: { taskId: "T-009", patch: { workload: "Hard" }, source: "operator" }
+    })
+    assert.equal(recordRunReceipt(handle, receipt(), "test").ok, true)
+
+    const samples = workloadDeltaSamplesFromStore(handle.db)
+    assert.equal(samples.length, 1)
+    assert.equal(samples[0].workload, "Hard", "pool key is the discovered (current) workload")
+    assert.equal(samples[0].workloadPlanned, "Easy", "planned stays frozen at the dispatch stamp")
+
+    const aggregate = estimationErrorFromStore(handle.db)
+    assert.equal(aggregate.length, 1)
+    assert.equal(aggregate[0].planned, "Easy")
+    assert.equal(aggregate[0].reclassifiedCount, 1)
+    assert.deepEqual(aggregate[0].transitions, [{ discovered: "Hard", count: 1 }])
+    const wallClockMs = Date.parse("2026-08-17T01:10:00.000Z") - Date.parse("2026-08-16T17:00:00.000Z")
+    assert.equal(aggregate[0].medianRatioToPriorP50, Math.round(wallClockMs / WORKLOAD_PRIORS.Easy.durationP50Ms * 100) / 100)
+
+    // Pooled forecast for a Hard task reads the re-attributed actual...
+    const hardEstimate = buildEstimateFromStore(handle.db, "T-009", { workload: "Hard" })
+    assert.equal(hardEstimate.durationP50Ms, wallClockMs)
+    assert.ok(hardEstimate.assumptions.some(line => line.includes("re-attributed")))
+    // ...and the Easy pool no longer contains it.
+    const easyEstimate = buildEstimateFromStore(handle.db, "T-009", { workload: "Easy" })
+    assert.ok(easyEstimate.assumptions.some(line => line.startsWith("no samples declared workload Easy")))
     handle.close()
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })

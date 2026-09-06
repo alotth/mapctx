@@ -58,7 +58,16 @@ export function recordDispatchAttempt(
     if (task.executionState !== desiredExecution) {
       assertTransition("execution", task.executionState, desiredExecution);
     }
-    const dispatch = { ...input, status };
+    // T-071: the store freezes the planned workload at hand-off. Server-side
+    // read, never client-supplied -- the stamp must record what the board
+    // believed when the executor took the task, not what a caller asserts.
+    // Untagged tasks stamp null and stay null.
+    const dispatch = {
+      ...input,
+      status,
+      workloadAtDispatch: task.workload ?? null,
+      executorModel: input.executorModel ?? null
+    };
     delete dispatch.actor;
     append({
       eventType: "dispatch.attempted",
@@ -110,10 +119,16 @@ export function recordRunReceipt(
     const guard = receiptPlanningGuard(store, value, dispatch);
     if (guard) return guard;
     assertReceiptTransitions(store, value, dispatch);
+    // T-071: freeze the discovered workload at receipt time. Journaled with
+    // the event so replay reproduces the stamp even though the task's live
+    // workload has moved on by then. Null stays null -- untagged is never
+    // guessed.
+    const task = getTask(store.db, dispatch.taskId);
+    const workloadAtReceipt = task?.workload ?? null;
     append({
       eventType: "run.receipt-recorded",
       actor,
-      payload: { receipt: value }
+      payload: { receipt: value, workloadAtReceipt }
     });
     return { ok: true, receipt: value, dispatch: { ...dispatch, status: value.outcome } };
   });

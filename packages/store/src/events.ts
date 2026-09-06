@@ -102,10 +102,18 @@ export type DispatchAttemptedPayload = {
     attempt: number;
     contextHash: string;
     status: "claimed" | "running" | "completed" | "failed" | "blocked" | "cancelled" | "expired";
+    /** T-071: planned workload frozen at hand-off; null for untagged/pre-005 events. */
+    workloadAtDispatch?: string | null;
+    /** T-071/D5: raw executor identity fact; tiers are derived, never stored. */
+    executorModel?: string | null;
   };
 };
 
-export type RunReceiptRecordedPayload = { receipt: RunReceipt };
+export type RunReceiptRecordedPayload = {
+  receipt: RunReceipt;
+  /** T-071: discovered workload read by the store at receipt time; null for untagged/pre-005 events. */
+  workloadAtReceipt?: string | null;
+};
 export type RunEventRecordedPayload = { event: RunEvent };
 export type CostRecordedPayload = { cost: CostEvent };
 export type PlanPeriodRecordedPayload = { period: PlanPeriod };
@@ -210,7 +218,7 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
     }
     case "run.receipt-recorded": {
       const payload = entry.payload as unknown as RunReceiptRecordedPayload;
-      applyRunReceipt(db, payload.receipt ?? payload as unknown as RunReceipt, revision);
+      applyRunReceipt(db, payload.receipt ?? payload as unknown as RunReceipt, revision, payload.workloadAtReceipt ?? null);
       return;
     }
     case "run.event-recorded": {

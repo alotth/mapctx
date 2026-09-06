@@ -55,8 +55,21 @@ export type ForecastSample = {
   duration: DurationMeasures | MeasuredDurations
   usageEvents?: UsageEvent[]
   costEvents?: CostEvent[]
-  /** Declared workload of the task this sample came from, when known. */
+  /**
+   * DISCOVERED workload of the task this sample came from: its latest declared
+   * value at sample-build time (T-071 last-wins). Historical pools key on
+   * this, so a mid-flight re-classification re-attributes the actual to the
+   * new pool. Undefined = untagged; untagged samples never get guessed into a
+   * pool.
+   */
   workload?: Workload
+  /**
+   * PLANNED workload frozen at dispatch (hand-off). When both this and
+   * `workload` are set and differ, the sample is re-classified and feeds the
+   * estimation-error aggregate. Null/undefined = untagged at hand-off or
+   * pre-T-071 data; never guessed.
+   */
+  workloadPlanned?: Workload | null
 }
 
 export type ForecastPrior = {
@@ -81,8 +94,31 @@ export type EstimateOptions = {
   minHistoricalSamples?: number
   /** Declared task difficulty; picks the workload-aware prior. */
   workload?: Workload
+  /**
+   * Planned workload at hand-off, when known (T-071). When both this and
+   * `workload` are set and differ, the snapshot assumptions carry the
+   * re-attribution note: pools key on discovered, estimation error is tracked
+   * per planned.
+   */
+  workloadPlanned?: Workload | null
   prior?: Partial<ForecastPrior>
   assumptions?: string[]
+}
+
+/**
+ * T-071 estimation-error aggregate for one ORIGINAL (planned) workload class:
+ * how wrong the up-front guesses were. Only re-classified samples (planned
+ * and discovered both set and different) count. Untagged samples are excluded
+ * -- untagged is never guessed into a class.
+ */
+export type WorkloadEstimationError = {
+  planned: Workload
+  /** Re-classified samples with this planned workload. */
+  reclassifiedCount: number
+  /** Median of actualMs / priorP50(planned), 2 decimals. >1 means actuals outran the guess. */
+  medianRatioToPriorP50: number
+  /** Discovered workloads these samples landed in, discovered ASC. */
+  transitions: Array<{ discovered: Workload; count: number }>
 }
 
 /**

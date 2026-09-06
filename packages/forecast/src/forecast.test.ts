@@ -2,8 +2,10 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { allocateMicros, costEventFromUsage } from "./cost"
 import { activeTimeMs, durationMeasuresFromReceipt, measureDurations } from "./duration"
-import { buildEstimateSnapshot, durationCoverageFromAssumptions, isPriorFallbackEstimate, workloadBaselines } from "./estimate"
+import { buildEstimateSnapshot, durationCoverageFromAssumptions, estimationErrorByPlannedWorkload, isPriorFallbackEstimate, workloadBaselines } from "./estimate"
+import { modelTierFor } from "./model-tier"
 import { MEASURED_ANCHOR_P50_MS, WORKLOAD_PRIORS } from "./prior"
+import type { ForecastSample } from "./types"
 
 /** Measured sample with `minutes` of active time, gaps kept under a 3h idle threshold. */
 function measuredDurations(minutes: number) {
@@ -318,4 +320,96 @@ test("workloadBaselines answers per-workload questions and excludes untagged sam
   assert.equal(easy?.durationP90Ms, 20 * 60 * 1000)
   assert.equal(hard?.sampleCount, 1)
   assert.equal(hard?.durationP50Ms, 120 * 60 * 1000)
+})
+
+// ---- T-071: planned-vs-discovered workload delta ----
+
+function workloadSample(minutes: number, workload?: string, workloadPlanned?: string | null): ForecastSample {
+  return {
+    duration: measuredDurations(minutes),
+    workload: workload as ForecastSample["workload"],
+    workloadPlanned: workloadPlanned as ForecastSample["workloadPlanned"]
+  }
+}
+
+test("pools key on the DISCOVERED workload: re-attributed actuals leave the planned pool", () => {
+  const estimateId = "f3456789-90ab-4cde-8f01-23456789abcd"
+  const createdAt = "2026-09-06T00:00:00.000Z"
+  // Planned-Easy runs that were re-classified to Hard mid-flight, plus one
+  // honest Easy run.
+  const reattributed = { duration: measuredDurations(30), workload: "Hard" as const, workloadPlanned: "Easy" as const }
+  const reattributed2 = { duration: measuredDurations(150), workload: "Hard" as const, workloadPlanned: "Easy" as const }
+  const honestEasy = { duration: measuredDurations(2), workload: "Easy" as const }
+
+  const hardPool = buildEstimateSnapshot("T-001", [reattributed, reattributed2, honestEasy], {
+    estimateId, createdAt, workload: "Hard"
+  })
+  assert.equal(hardPool.durationP50Ms, 30 * 60 * 1000, "re-attributed actuals pool under the discovered workload")
+  assert.equal(hardPool.durationP90Ms, 150 * 60 * 1000)
+  const poolNote = hardPool.assumptions.find(line => line.includes("re-attributed"))
+  assert.ok(poolNote, "the pool's re-attributed content must be disclosed in assumptions")
+  assert.match(poolNote, /2 re-attributed sample/)
+
+  const easyPool = buildEstimateSnapshot("T-001", [reattributed, reattributed2, honestEasy], {
+    estimateId: "a4567890-90ab-4cde-8f01-23456789abcd", createdAt, workload: "Easy"
+  })
+  assert.equal(easyPool.durationP50Ms, 2 * 60 * 1000, "the re-attributed actuals no longer pollute the Easy pool")
+  assert.ok(easyPool.assumptions.every(line => !line.includes("re-attributed")), "no re-attribution note when the pool is clean")
+})
+
+test("snapshot carries the task-level re-attribution note when planned differs from discovered", () => {
+  const estimate = buildEstimateSnapshot("T-001", [{ duration: measuredDurations(30), workload: "Hard" }], {
+    estimateId: "b5678901-90ab-4cde-8f01-23456789abcd",
+    createdAt: "2026-09-06T00:00:00.000Z",
+    workload: "Hard",
+    workloadPlanned: "Easy"
+  })
+  const note = estimate.assumptions.find(line => line.startsWith("workload re-attributed"))
+  assert.ok(note)
+  assert.match(note, /planned Easy -> discovered Hard; pool keyed by discovered \(Hard\)/)
+})
+
+test("estimation error aggregates per planned workload, deterministic and untagged-blind", () => {
+  const samples = [
+    workloadSample(30, "Hard", "Easy"),
+    workloadSample(150, "Hard", "Easy"),
+    workloadSample(90, "Extreme", "Easy"),
+    workloadSample(30, "Hard", "Normal"),
+    workloadSample(45, "Hard", null),
+    workloadSample(60, "Easy", "Easy")
+  ]
+  const aggregate = estimationErrorByPlannedWorkload(samples)
+  assert.deepEqual(aggregate.map(entry => entry.planned), ["Easy", "Normal"], "planned ASC; untagged and non-reclassified excluded")
+
+  const easy = aggregate[0]
+  assert.equal(easy.reclassifiedCount, 3)
+  const ratios = [30, 90, 150].map(minutes => Math.round(minutes * 60_000 / WORKLOAD_PRIORS.Easy.durationP50Ms * 100) / 100)
+  assert.equal(easy.medianRatioToPriorP50, ratios[1], "median ratio (odd count = middle element)")
+  assert.deepEqual(easy.transitions, [
+    { discovered: "Extreme", count: 1 },
+    { discovered: "Hard", count: 2 }
+  ], "transitions discovered ASC")
+
+  const normal = aggregate[1]
+  assert.equal(normal.reclassifiedCount, 1)
+  assert.equal(normal.medianRatioToPriorP50, Math.round(30 * 60_000 / WORKLOAD_PRIORS.Normal.durationP50Ms * 100) / 100)
+
+  assert.deepEqual(estimationErrorByPlannedWorkload([]), [])
+})
+
+// ---- T-071/D5: model capability tier lens ----
+
+test("model tier is a derived lens over raw ids; unknown stays unclassified", () => {
+  assert.equal(modelTierFor("claude-opus-4-5"), "frontier")
+  assert.equal(modelTierFor("glm-5.3"), "frontier")
+  assert.equal(modelTierFor("gpt-5.2"), "frontier")
+  assert.equal(modelTierFor("glm-4.7"), "capable")
+  assert.equal(modelTierFor("claude-sonnet-4-5"), "capable")
+  assert.equal(modelTierFor("gemini-2.5-flash"), "capable")
+  assert.equal(modelTierFor("claude-3-5-haiku"), "fast")
+  assert.equal(modelTierFor("gemini-2.5-flash-lite"), "fast", "flash-lite outranks the capable flash pattern")
+  assert.equal(modelTierFor("llama-3.1-8b-instruct"), "local")
+  assert.equal(modelTierFor("totally-unknown-42"), "unclassified")
+  assert.equal(modelTierFor(null), "unclassified")
+  assert.equal(modelTierFor(""), "unclassified")
 })

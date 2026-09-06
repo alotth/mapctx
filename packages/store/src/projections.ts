@@ -21,6 +21,7 @@ import type {
   TaskDetailRecord,
   TaskRecord,
   WorkDomain,
+  WorkloadDeltaRow,
   DispatchAttemptRecord
 } from "./types"
 
@@ -336,20 +337,24 @@ function rowToClaim(row: Record<string, unknown>): ResourceClaimRecord {
 
 export function insertDispatchAttempt(db: DatabaseSync, dispatch: DispatchAttemptRecord): void {
   db.prepare(`
-    INSERT INTO dispatch_projection (dispatch_id, task_id, executor_kind, attempt, context_hash, status)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO dispatch_projection (dispatch_id, task_id, executor_kind, attempt, context_hash, status, workload_at_dispatch, executor_model)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(dispatch_id, attempt) DO UPDATE SET
       task_id = excluded.task_id,
       executor_kind = excluded.executor_kind,
       context_hash = excluded.context_hash,
-      status = excluded.status
+      status = excluded.status,
+      workload_at_dispatch = excluded.workload_at_dispatch,
+      executor_model = excluded.executor_model
   `).run(
     dispatch.dispatchId,
     dispatch.taskId,
     dispatch.executorKind,
     dispatch.attempt,
     dispatch.contextHash,
-    dispatch.status
+    dispatch.status,
+    dispatch.workloadAtDispatch ?? null,
+    dispatch.executorModel ?? null
   );
 }
 
@@ -381,7 +386,9 @@ function rowToDispatchAttempt(row: Record<string, unknown>): DispatchAttemptReco
     executorKind: row.executor_kind as string,
     attempt: row.attempt as number,
     contextHash: row.context_hash as string,
-    status: row.status as DispatchAttemptRecord["status"]
+    status: row.status as DispatchAttemptRecord["status"],
+    workloadAtDispatch: (row.workload_at_dispatch as string | null) ?? null,
+    executorModel: (row.executor_model as string | null) ?? null
   };
 }
 
@@ -389,12 +396,13 @@ function updateDispatchStatus(db: DatabaseSync, dispatchId: string, attempt: num
   db.prepare("UPDATE dispatch_projection SET status = ? WHERE dispatch_id = ? AND attempt = ?").run(status, dispatchId, attempt);
 }
 
-export function insertRunReceipt(db: DatabaseSync, receipt: RunReceipt): void {
+export function insertRunReceipt(db: DatabaseSync, receipt: RunReceipt, workloadAtReceipt: string | null = null): void {
   db.prepare(`
     INSERT INTO run_receipt_projection (
       dispatch_id, attempt, schema_version, outcome, started_at, ended_at,
-      changed_files_json, usage_events_json, evidence_json, failure_json, receipt_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      changed_files_json, usage_events_json, evidence_json, failure_json, receipt_json,
+      workload_at_receipt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     receipt.dispatchId,
     receipt.attempt,
@@ -406,7 +414,8 @@ export function insertRunReceipt(db: DatabaseSync, receipt: RunReceipt): void {
     JSON.stringify(receipt.usageEvents),
     JSON.stringify(receipt.evidence),
     receipt.failure === null ? null : JSON.stringify(receipt.failure),
-    JSON.stringify(receipt)
+    JSON.stringify(receipt),
+    workloadAtReceipt
   );
 
   const insertUsage = db.prepare(`
@@ -775,7 +784,7 @@ export function listRunReceipts(db: DatabaseSync, dispatchId?: string, taskId?: 
   return rows.map(row => JSON.parse(row.receipt_json) as RunReceipt);
 }
 
-export function applyRunReceipt(db: DatabaseSync, receipt: RunReceipt, revision: EventRevision): void {
+export function applyRunReceipt(db: DatabaseSync, receipt: RunReceipt, revision: EventRevision, workloadAtReceipt: string | null = null): void {
   const dispatch = getDispatchAttempt(db, receipt.dispatchId, receipt.attempt);
   if (!dispatch) throw new Error(`Cannot record receipt for unknown dispatch attempt: ${receipt.dispatchId}/${receipt.attempt}`);
   const task = getTask(db, dispatch.taskId);
@@ -810,7 +819,45 @@ export function applyRunReceipt(db: DatabaseSync, receipt: RunReceipt, revision:
     taskPatch.planningState = targetPlanning;
   }
   patchTask(db, task.taskId, taskPatch, revision);
-  insertRunReceipt(db, receipt);
+  insertRunReceipt(db, receipt, workloadAtReceipt);
+}
+
+// ---- T-071 workload delta (planned vs discovered) ----
+
+/**
+ * One accepted receipt per row, joined with its workload stamps and the task's
+ * CURRENT workload. Deterministic order: dispatch_id ASC, attempt ASC. This is
+ * the raw material for the estimation-error aggregate; the last-wins pooling
+ * key is `currentWorkload` (a later re-classification re-attributes the
+ * actual), while `plannedWorkload` keeps the at-hand-off guess frozen.
+ */
+export function listWorkloadDeltaRows(db: DatabaseSync, taskId?: string): WorkloadDeltaRow[] {
+  let sql = `
+    SELECT r.dispatch_id, r.attempt, r.started_at, r.ended_at,
+           d.workload_at_dispatch, d.executor_model, r.workload_at_receipt,
+           d.task_id, t.workload AS current_workload
+    FROM run_receipt_projection r
+    JOIN dispatch_projection d ON d.dispatch_id = r.dispatch_id AND d.attempt = r.attempt
+    JOIN task_projection t ON t.task_id = d.task_id
+  `;
+  const args: string[] = [];
+  if (taskId !== undefined) {
+    sql += " WHERE d.task_id = ?";
+    args.push(taskId);
+  }
+  sql += " ORDER BY r.dispatch_id ASC, r.attempt ASC";
+  const rows = db.prepare(sql).all(...args) as Record<string, unknown>[];
+  return rows.map(row => ({
+    dispatchId: row.dispatch_id as string,
+    attempt: row.attempt as number,
+    taskId: row.task_id as string,
+    plannedWorkload: (row.workload_at_dispatch as string | null) ?? null,
+    atReceiptWorkload: (row.workload_at_receipt as string | null) ?? null,
+    currentWorkload: (row.current_workload as string | null) ?? null,
+    executorModel: (row.executor_model as string | null) ?? null,
+    startedAt: row.started_at as string,
+    endedAt: row.ended_at as string
+  }));
 }
 
 // ---- claim_violation_projection ----
