@@ -1284,7 +1284,7 @@
   - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 5/6
+  - subIssueProgress: 6/6
   - priority: high
   - workload: Hard
   - tags: [vnext, forecast, cost, gantt]
@@ -1547,7 +1547,7 @@
 ### [T-071] Workload re-attribution: record planned vs discovered difficulty, pool by discovered, measure estimation error
 
   - id: T-071
-  - status: doing
+  - status: done
   - type: feature
   - parent: E-011
   - subIssueProgress: null
@@ -1558,7 +1558,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-06
   - externalId: null
   - updated: 2026-09-06
   - detail: ./tasks/T-071.md
