@@ -1,9 +1,8 @@
 # Global Rules
 
-- If the repository contains a `TASKS.md` file, ask once per session whether to use the Markdown Kanban standard and load the `mapctx-tasks` skill.
-- If the user agrees, call `skill("mapctx-tasks")` before creating or editing `TASKS.md` or any `./tasks/T-XXX.md` detail files.
-- If the user declines, do not ask again during the same session.
-- Do not load the skill for unrelated work.
+- This project runs under `plansAuthority: store` (`mapctx.toml`, ADR 0003/0004). `TASKS.md` and the structured field blocks of `tasks/<ID>.md` are generated, read-only snapshots — never edit them directly. Board changes go through the `mapctx` CLI (`task move/update`, `dispatch create/receipt`); a drifted snapshot is fixed via `mapctx reconcile <task-id>`, never by hand.
+- The `description:` prose blocks of `tasks/<ID>.md` are git-authored durable intent and may be edited.
+- When work flows through a Traycer epic, load the `mapctx-traycer` skill before claiming/dispatching: `mapctx task claim`, `mapctx dispatch create`, `mapctx dispatch receipt`. Traycer ticket projections are never the source of truth.
 - For JavaScript/TypeScript tooling commands, prefer running via login shell using `zsh -lic` so PATH and shell profile are loaded.
 - Prefer local project CLIs via `npx` (for example: `npx prisma`, `npx next`, `npx eslint`, `npx vitest`) instead of assuming global installs.
 - When a command fails with `command not found`, retry once with `zsh -lic` and `npx` (when applicable) before concluding the tool is unavailable.

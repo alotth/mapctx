@@ -20,7 +20,7 @@ For operational GitHub sync commands (`status`, `pull`, `push`, `bootstrap`, `re
 
 Before any edit, detect which regime the project is in. Read `plansAuthority` from `mapctx.toml` at repo root; a missing file or missing key means `markdown`. See ADR 0003 §Authority and cutover for the full rule.
 
-- `markdown` regime: nothing changes. Edit `TASKS.md`/`tasks/*.md` directly through the workflow below.
+- `markdown` regime: nothing changes. Edit `TASKS.md`/`tasks/*.md` directly through the workflow below. When the user asks to migrate the project to store authority (v0 → v1), follow `./references/cutover-to-store.md` — it is an explicit, human-confirmed operation (validate → `import --dry-run` → reconcile divergences → `import --commit`), never a side effect of a routine edit.
 - `store` regime: `TASKS.md` and the structured field block of every `tasks/<ID>.md` (`role`, `impact`, `estimatedEffort`, `prerequisites`, `blocking`, `filesAffected`, `testsRequired`, `summary`, and the `TASKS.md` field list) are generated, read-only output. Never hand-edit them.
   - Translate the same request into `mapctx` CLI calls instead, and let the CLI regenerate the snapshot. Do not write the Markdown yourself, even to "match" what the CLI will produce:
     - Register a new task/epic: `mapctx task create --title "<title>" [--type ...] [--parent id] ...`. The CLI auto-assigns the next free id for the type prefix (E for epic, T otherwise); `--description`/`--description-file` prose lands in the new detail file and stays Git-authored.
