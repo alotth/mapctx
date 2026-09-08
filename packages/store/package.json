@@ -1,6 +1,6 @@
 {
   "name": "@mapctx/store",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "External per-project SQLite/event store: journal, projections, import/export, claims",
   "type": "commonjs",

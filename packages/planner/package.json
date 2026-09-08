@@ -1,6 +1,6 @@
 {
   "name": "@mapctx/planner",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Deterministic dependency and resource-claim wave planner",
   "type": "commonjs",
@@ -13,13 +13,17 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/**/*.test.js",
     "clean": "rm -rf dist"
   },
-  "engines": { "node": ">=22.5.0" },
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "dependencies": {
     "@mapctx/protocol": "file:../protocol"
   },

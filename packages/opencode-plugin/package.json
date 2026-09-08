@@ -1,6 +1,6 @@
 {
   "name": "@mapctx/opencode-plugin",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "deprecated": "Removed in E-012 unless a user appears. See T-059.",
   "description": "OpenCode plugin assets and entrypoint for MapCtx workspace",

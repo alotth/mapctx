@@ -1604,7 +1604,7 @@
 ### [T-074] Publish @mapctx packages to npm with the vNext (sync-engine bump, bundled deps, mapcs deprecation ships)
 
   - id: T-074
-  - status: backlog
+  - status: doing
   - type: chore
   - parent: E-010
   - subIssueProgress: null

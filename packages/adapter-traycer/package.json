@@ -1,6 +1,6 @@
 {
   "name": "@mapctx/adapter-traycer",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Pure MapCtx-to-Traycer dispatch and ticket projection adapter",
   "type": "commonjs",
@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@mapctx/planner": "file:../planner",
-    "@mapctx/protocol": "0.1.0"
+    "@mapctx/protocol": "file:../protocol"
   },
   "devDependencies": {
     "tsx": "^4.19.2",
