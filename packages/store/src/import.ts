@@ -93,11 +93,58 @@ function fileHash(filePath: string): string {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath, "utf8"), "utf8").digest("hex");
 }
 
-function assertConfinedToRepo(tasksRoot: string, candidate: string, taskId: string, issues: ImportIssue[]): void {
+/**
+ * Lexical confinement is necessary but not sufficient: the cutover writes
+ * the regenerated detail file through this path and writeFileSync follows
+ * symlinks, so a committed `tasks/T-101.md` symlink could redirect the write
+ * at an unstaged in-repo file or a file outside the repository while the
+ * cleanliness check only ever covered the symlink path itself. Fail closed:
+ * no component of the path may be a symlink, and the file's realpath must
+ * stay beneath the repository root's realpath.
+ */
+function assertRealDetailPath(tasksRoot: string, candidate: string, taskId: string, issues: ImportIssue[]): void {
   const resolved = path.resolve(tasksRoot, candidate);
   const relative = path.relative(tasksRoot, resolved);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     issues.push({ severity: "error", code: "path-escapes-repo", message: `detail path escapes repository root: ${candidate}`, taskId });
+    return;
+  }
+  let probe = tasksRoot;
+  for (const part of relative.split(path.sep)) {
+    if (part === "") continue;
+    probe = path.join(probe, part);
+    let stats: fs.Stats;
+    try {
+      stats = fs.lstatSync(probe);
+    } catch {
+      return; // missing path component: reported by the missing-detail-file check
+    }
+    if (stats.isSymbolicLink()) {
+      let target: string;
+      try { target = fs.realpathSync(probe); } catch { target = "unreadable"; }
+      issues.push({
+        severity: "error",
+        code: "symlinked-detail-path",
+        taskId,
+        message: `detail path component "${path.relative(tasksRoot, probe)}" is a symlink to ${target}; symlinks are refused so a cutover cannot write through them. Replace it with a real file and update the board reference.`
+      });
+      return;
+    }
+  }
+  try {
+    const realRoot = fs.realpathSync(tasksRoot);
+    const realDetail = fs.realpathSync(resolved);
+    const real = path.relative(realRoot, realDetail);
+    if (real.startsWith("..") || path.isAbsolute(real)) {
+      issues.push({
+        severity: "error",
+        code: "path-escapes-repo",
+        taskId,
+        message: `detail path resolves outside the repository: ${candidate} -> ${realDetail}`
+      });
+    }
+  } catch {
+    // unreadable realpath: reported by the missing-detail-file check
   }
 }
 
@@ -167,7 +214,7 @@ export function planImport(tasksFilePath: string): ImportPlan {
       issues.push({ severity: "error", code: "missing-detail-field", message: "Task has no detail path.", taskId });
       return;
     }
-    assertConfinedToRepo(tasksRoot, boardTask.detail, taskId, issues);
+    assertRealDetailPath(tasksRoot, boardTask.detail, taskId, issues);
     const detailPath = path.resolve(tasksRoot, boardTask.detail);
     if (!fs.existsSync(detailPath)) {
       issues.push({ severity: "error", code: "missing-detail-file", message: `Detail file not found: ${boardTask.detail}`, taskId });
@@ -210,6 +257,10 @@ export function planImport(tasksFilePath: string): ImportPlan {
     }
 
     const canonicalDetailPath = `./tasks/${taskId}.md`;
+    if (path.resolve(detailPath) !== path.resolve(tasksRoot, canonicalDetailPath)) {
+      issues.push({ severity: "error", code: "noncanonical-detail-path", taskId,
+        message: `Detail must be at ${canonicalDetailPath}; move the authored file and update its board reference before importing.` });
+    }
 
     const task: TaskRecord = {
       taskId,

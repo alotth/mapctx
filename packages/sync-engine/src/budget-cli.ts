@@ -104,6 +104,8 @@ export function planPeriodRecordCommand(options: BudgetCliOptions): void {
   try {
     const account = requireAccount(handle, options.account);
     const currency = options.currency ?? account.currency;
+    if (currency !== account.currency) throw new Error('plan-period currency must match account currency');
+    if (currency !== 'USD') throw new Error('plan-period recording supports USD only until native currency conversion is supported');
     const money = parseMoneyAmount(options.amount, currency, countDecimals(options.amount));
     if (money.decimals > 2) {
       throw new Error('plan periods are recorded against fixedCents (2 decimals max); use at most cents precision');

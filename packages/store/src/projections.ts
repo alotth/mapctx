@@ -74,6 +74,14 @@ export function getSingleProject(db: DatabaseSync): ProjectMetadata | undefined 
 // ---- task_projection ----
 
 export function upsertTask(db: DatabaseSync, task: TaskRecord, revision: EventRevision): void {
+  // Shared mutation/replay boundary also covers import and reconcile upserts.
+  const visited = new Set([task.taskId]);
+  let ancestor = task.parentTaskId;
+  while (ancestor) {
+    if (visited.has(ancestor)) throw new Error(`Parent cycle detected for ${task.taskId}: ${ancestor}`);
+    visited.add(ancestor);
+    ancestor = getTask(db, ancestor)?.parentTaskId;
+  }
   db.prepare(`
     INSERT INTO task_projection (
       task_id, position_key, title, planning_state, execution_state, type, parent_task_id,

@@ -3,8 +3,8 @@ import { DatabaseSync } from "node:sqlite"
 import type { EventLogEntry } from "@mapctx/protocol"
 import { checkIntegrity, clearProjections, openDatabase, readMetaValue, writeMetaValue } from "./db"
 import { applyEventToProjections } from "./events"
-import { bumpSequenceWatermark, createStoreMeta, readStoreMetaFile, writeStoreMetaFile, type StoreMeta } from "./identity"
-import { listJournalSequences, payloadSha256, readJournalEntry, writeJournalEntrySync } from "./journal"
+import { bumpSequenceWatermark, createStoreMeta, readSequenceWatermark, readStoreMetaFile, withStoreMetaLock, writeStoreMetaFile, type StoreMeta } from "./identity"
+import { listJournalSequences, payloadSha256, readJournalEntry, writeJournalBatchSync, abortJournalBatchSync, type JournalPublicationError } from "./journal"
 
 export type AppendEventInput = {
   eventType: string;
@@ -49,15 +49,24 @@ export class StoreHandle {
   static open(storeDir: string): StoreHandle {
     let meta = readStoreMetaFile(storeDir);
     if (!meta) {
-      meta = createStoreMeta();
-      writeStoreMetaFile(storeDir, meta);
+      // Two concurrent first-opens must not each mint a nodeId: creation is
+      // also read-check-write on store-meta.json, so it runs under the same
+      // cross-process lock as the watermark, with a double-check inside.
+      meta = withStoreMetaLock(storeDir, () => readStoreMetaFile(storeDir) ?? (() => {
+        const created = createStoreMeta();
+        writeStoreMetaFile(storeDir, created);
+        return created;
+      })());
     }
     const db = openDatabase(StoreHandle.dbPathFor(storeDir));
     writeMetaValue(db, "node_id", meta.nodeId);
     writeMetaValue(db, "incarnation_id", meta.incarnationId);
     const handle = new StoreHandle(storeDir, meta, db);
-    handle.reindexPendingJournal();
-    return handle;
+    try {
+      handle.reindexPendingJournal();
+      handle.reconcileSequenceWatermark();
+      return handle;
+    } catch (error) { db.close(); throw error; }
   }
 
   close(): void {
@@ -82,32 +91,32 @@ export class StoreHandle {
    * concurrent appendEvent from another process (SQLite serializes both).
    */
   reindexPendingJournal(): void {
-    const lastIndexed = this.lastIndexedSequence(this.nodeId);
-    const onDisk = listJournalSequences(this.storeDir, this.nodeId);
-    const pending = onDisk.filter(seq => seq > lastIndexed);
-    if (pending.length === 0) return;
-
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      let logicalClock = this.currentLogicalClock();
-      for (const sequence of pending) {
-        const result = readJournalEntry(this.storeDir, this.nodeId, sequence);
-        if (result.status !== "ok") {
-          throw new Error(
-            `Cannot reindex journal entry (${this.nodeId}, ${sequence}): ${result.status === "missing" ? "missing" : result.reason}`
-          );
-        }
-        this.insertEventLogRow(result.entry);
-        applyEventToProjections(this.db, result.entry);
-        logicalClock = Math.max(logicalClock, result.entry.logicalClock);
-      }
-      writeMetaValue(this.db, "logical_clock", logicalClock);
+      this.reindexPendingJournalUnderLock();
       this.db.exec("COMMIT");
-      bumpSequenceWatermark(this.storeDir, this.nodeId, pending[pending.length - 1]);
     } catch (error) {
       this.db.exec("ROLLBACK");
       throw error;
     }
+  }
+
+  private reindexPendingJournalUnderLock(): void {
+    const lastIndexed = this.lastIndexedSequence(this.nodeId);
+    const pending = listJournalSequences(this.storeDir, this.nodeId).filter(seq => seq > lastIndexed);
+    let expected = lastIndexed + 1;
+    let logicalClock = this.currentLogicalClock();
+    for (const sequence of pending) {
+      if (sequence !== expected++) throw new Error(`Journal gap: expected sequence ${expected - 1}, got ${sequence}`);
+      const result = readJournalEntry(this.storeDir, this.nodeId, sequence);
+      if (result.status !== "ok") {
+        throw new Error(`Cannot reindex journal entry (${this.nodeId}, ${sequence}): ${result.status === "missing" ? "missing" : result.reason}`);
+      }
+      this.insertEventLogRow(result.entry);
+      applyEventToProjections(this.db, result.entry);
+      logicalClock = Math.max(logicalClock, result.entry.logicalClock);
+    }
+    writeMetaValue(this.db, "logical_clock", logicalClock);
   }
 
   private insertEventLogRow(entry: EventLogEntry): void {
@@ -115,9 +124,30 @@ export class StoreHandle {
   }
 
   /**
+   * The watermark is bumped after COMMIT, so a crash (or a degraded metadata
+   * write) can leave it behind the sequences mapctx.db actually holds. On
+   * open the intact database is the floor of truth: re-persist the watermark
+   * from it and clear the stale marker. This is also what makes a degraded
+   * watermark recoverable instead of a permanent repair-contract hole.
+   */
+  private reconcileSequenceWatermark(): void {
+    const dbMax = this.lastIndexedSequence(this.nodeId);
+    if (dbMax > readSequenceWatermark(this.storeDir, this.nodeId)) {
+      try { bumpSequenceWatermark(this.storeDir, this.nodeId, dbMax); }
+      catch (error) {
+        process.emitWarning(`Sequence watermark lags committed sequences (${dbMax}); update failed: ${String(error)}`);
+        return;
+      }
+    }
+    if (readMetaValue<string>(this.db, "watermark_stale") !== undefined) {
+      this.db.prepare("DELETE FROM store_meta WHERE key = ?").run("watermark_stale");
+    }
+  }
+
+  /**
    * Appends one event: reindexes any pending journal entries, allocates the
-   * next (nodeId, sequence), fsyncs the journal file, then indexes and
-   * projects it in the same SQLite transaction. The BEGIN IMMEDIATE write
+   * next (nodeId, sequence), validates/indexes its projection, then fsyncs
+   * the journal before committing the SQLite transaction. The BEGIN IMMEDIATE write
    * lock (busy_timeout-bounded) is what serializes concurrent worktrees --
    * a second writer blocks or gets SQLITE_BUSY, never a second winner.
    */
@@ -135,11 +165,13 @@ export class StoreHandle {
    * write (see claims.ts).
    */
   runInWriteTransaction<T>(fn: (append: (input: AppendEventInput) => EventLogEntry) => T): T {
-    this.reindexPendingJournal();
-
-    let maxSequenceWritten = 0;
+    const staged: EventLogEntry[] = [];
+    let published: string | undefined;
+    let appendFailure: unknown;
+    let committed = false;
     this.db.exec("BEGIN IMMEDIATE");
     try {
+      this.reindexPendingJournalUnderLock();
       const append = (input: AppendEventInput): EventLogEntry => {
         const sequence = this.lastIndexedSequence(this.nodeId) + 1;
         const logicalClock = this.currentLogicalClock() + 1;
@@ -156,23 +188,50 @@ export class StoreHandle {
           payloadSha256: payloadSha256(input.payload)
         };
 
-        writeJournalEntrySync(this.storeDir, entry);
-        this.insertEventLogRow(entry);
-        applyEventToProjections(this.db, entry);
-        writeMetaValue(this.db, "logical_clock", logicalClock);
-        maxSequenceWritten = Math.max(maxSequenceWritten, sequence);
+        try {
+          this.insertEventLogRow(entry);
+          applyEventToProjections(this.db, entry);
+          writeMetaValue(this.db, "logical_clock", logicalClock);
+          staged.push(structuredClone(entry));
+        } catch (error) { appendFailure = error; throw error; }
         return entry;
       };
 
       const result = fn(append);
+      if (appendFailure) throw appendFailure;
+      published = writeJournalBatchSync(this.storeDir, staged);
       this.db.exec("COMMIT");
-      if (maxSequenceWritten > 0) {
-        bumpSequenceWatermark(this.storeDir, this.nodeId, maxSequenceWritten);
-      }
+      committed = true;
       return result;
     } catch (error) {
-      this.db.exec("ROLLBACK");
+      // A publication failure thrown by the journal writer carries the path
+      // it had already made visible, so cleanup stays possible even though
+      // `published` was never assigned (see writeJournalBatchSync). The
+      // abort is idempotent: it removes the path (if still present) and
+      // fsyncs the parent so a rejected transaction never replays.
+      const leakedPath = published ?? (error as JournalPublicationError)?.publishedPath;
+      let abortFailure: unknown;
+      try { abortJournalBatchSync(leakedPath); } catch (abortError) { abortFailure = abortError; }
+      try { this.db.exec("ROLLBACK"); } catch { /* the failed transaction is discarded either way */ }
+      if (abortFailure) {
+        throw new Error(`INDETERMINATE transaction outcome at ${this.storeDir}: the mutation was rejected (${String(error)}) but durable journal cleanup failed (${String(abortFailure)}); inspect ${path.join(this.storeDir, "events")} before retrying.`);
+      }
       throw error;
+    } finally {
+      // Commit is already durable. A metadata failure must not turn accepted
+      // work into an apparent rejected mutation that a caller might retry --
+      // but a watermark left behind the committed sequences cannot silently
+      // keep repair's independent-loss guarantee, so the store records an
+      // explicit stale marker (cleared by the next open's reconciliation)
+      // instead of a warning alone.
+      if (committed) {
+        try { bumpSequenceWatermark(this.storeDir, this.nodeId, this.lastIndexedSequence(this.nodeId)); }
+        catch (error) {
+          process.emitWarning(`Journal committed; watermark update failed: ${String(error)}`);
+          try { writeMetaValue(this.db, "watermark_stale", this.nodeId); }
+          catch { /* even the degraded marker could not be recorded */ }
+        }
+      }
     }
   }
 

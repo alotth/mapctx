@@ -26,6 +26,32 @@ export type RepairResult =
  * -- aborts without touching the existing (possibly still-serviceable)
  * mapctx.db, and is reported by exact (nodeId, sequence), never skipped.
  */
+/**
+ * Per-node max(sequence) from the existing mapctx.db, but only when the
+ * database file exists and passes its integrity check -- a corrupt
+ * database's rows prove nothing. Any error reading it simply yields no
+ * floor; the watermark and the journal then stand alone, as before.
+ */
+function intactDatabaseFloor(dbPath: string, dbWasCorrupt: boolean): Record<string, number> {
+  if (dbWasCorrupt || !fs.existsSync(dbPath)) return {};
+  let db;
+  try {
+    db = openDatabase(dbPath);
+  } catch {
+    return {};
+  }
+  try {
+    const rows = db.prepare(
+      "SELECT node_id, MAX(sequence) AS max_sequence FROM event_log GROUP BY node_id"
+    ).all() as Array<{ node_id: string; max_sequence: number }>;
+    return Object.fromEntries(rows.map(row => [row.node_id, row.max_sequence]));
+  } catch {
+    return {};
+  } finally {
+    db.close();
+  }
+}
+
 export function repairStore(storeDir: string): RepairResult {
   const dbPath = StoreHandle.dbPathFor(storeDir);
   const dbWasCorrupt = fs.existsSync(dbPath) ? !checkIntegrity(dbPath) : false;
@@ -34,8 +60,13 @@ export function repairStore(storeDir: string): RepairResult {
   // is the independent cross-check for "how far should this node's journal
   // go" -- directory listing alone cannot tell a fully-deleted trailing
   // file (or an entirely deleted events/<nodeId>/ directory) apart from
-  // "nothing was ever written there".
+  // "nothing was ever written there". A watermark can legitimately lag the
+  // committed state (crash between COMMIT and the bump, or a degraded
+  // metadata write), so when mapctx.db itself is intact its indexed max
+  // sequence per node raises the floor; only when the database is unusable
+  // is the watermark the sole witness.
   const watermarks = readStoreMetaFile(storeDir)?.sequenceWatermarks ?? {};
+  const dbFloor = intactDatabaseFloor(dbPath, dbWasCorrupt);
   const nodeIds = Array.from(new Set([...listJournalNodeIds(storeDir), ...Object.keys(watermarks)])).sort();
   const gaps: RepairGap[] = [];
   const validatedByNode = new Map<string, EventLogEntry[]>();
@@ -43,7 +74,7 @@ export function repairStore(storeDir: string): RepairResult {
   for (const nodeId of nodeIds) {
     const sequences = listJournalSequences(storeDir, nodeId);
     const onDiskMax = sequences.length > 0 ? sequences[sequences.length - 1] : 0;
-    const maxSequence = Math.max(onDiskMax, watermarks[nodeId] ?? 0);
+    const maxSequence = Math.max(onDiskMax, watermarks[nodeId] ?? 0, dbFloor[nodeId] ?? 0);
     const validated: EventLogEntry[] = [];
 
     for (let sequence = 1; sequence <= maxSequence; sequence++) {
