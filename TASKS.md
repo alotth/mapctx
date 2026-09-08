@@ -1227,7 +1227,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 5/5
+  - subIssueProgress: 5/7
   - priority: high
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
@@ -1562,6 +1562,44 @@
   - externalId: null
   - updated: 2026-09-06
   - detail: ./tasks/T-071.md
+
+### [T-072] Fix PR1 P1 findings: journal atomicity, recovery locks, create races, export cycles, cutover prose, currency
+
+  - id: T-072
+  - status: backlog
+  - type: task
+  - parent: E-010
+  - subIssueProgress: null
+  - priority: high
+  - workload: null
+  - tags: []
+  - domains: [STORE, CLI]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/T-072.md
+
+### [T-073] Fix PR1 P2 findings: money safety, drift bypass, blocked receipts, read-only opens, repair locking, legacy sync authority
+
+  - id: T-073
+  - status: backlog
+  - type: task
+  - parent: E-010
+  - subIssueProgress: null
+  - priority: medium
+  - workload: null
+  - tags: []
+  - domains: [STORE, CLI, FORECAST]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/T-073.md
 
 ## Notes
 
