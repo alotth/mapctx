@@ -1,0 +1,37 @@
+{
+  "name": "@mapctx/store",
+  "version": "0.0.0",
+  "private": true,
+  "description": "External per-project SQLite/event store: journal, projections, import/export, claims",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/**/*.test.js",
+    "clean": "rm -rf dist"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "@mapctx/core": "file:../core",
+    "@mapctx/protocol": "file:../protocol",
+    "smol-toml": "^1.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.2",
+    "fast-check": "^4.9.0"
+  }
+}

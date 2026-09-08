@@ -24,7 +24,7 @@ function main() {
   
   if (args.length === 0) {
     console.error('Usage: npm run test:parser <path-to-markdown-file>');
-    console.error('Example: npm run test:parser example-tasks/TASKS.md');
+    console.error('Example: npm run test:parser TASKS.md');
     process.exit(1);
   }
 
@@ -120,4 +120,3 @@ function main() {
 }
 
 main();
-

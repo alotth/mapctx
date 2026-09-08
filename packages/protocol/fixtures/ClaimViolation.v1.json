@@ -1,0 +1,10 @@
+{
+  "detectedAt": "2026-08-15T21:00:00.000Z",
+  "id": "ffff6666-0000-4111-8222-333377778888",
+  "kind": "collision",
+  "path": "packages/protocol/src/index.ts",
+  "source": "derived-from-receipts",
+  "taskAId": "T-049",
+  "taskBId": "T-052",
+  "waveId": "eeee5555-ffff-4000-8111-222266667777"
+}

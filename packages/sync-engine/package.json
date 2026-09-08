@@ -1,6 +1,6 @@
 {
   "name": "@mapctx/sync-engine",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Sync TASKS.md with GitHub Issues and Projects v2",
   "type": "commonjs",
   "main": "./dist/index.js",
@@ -22,11 +22,14 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js dist/mapctx-cli.js && rm -rf dist/workspace-ui && mkdir -p dist/workspace-ui && cp ../vscode-extension/src/html/workspaceV2.* dist/workspace-ui/",
+    "build": "rm -rf node_modules/@mapctx/core && tsc -p tsconfig.json && chmod +x dist/cli.js dist/mapctx-cli.js && rm -rf dist/workspace-ui && mkdir -p dist/workspace-ui && cp ../vscode-extension/src/html/workspaceV2.* dist/workspace-ui/",
     "test": "npm run build && node --test dist/**/*.test.js",
     "clean": "rm -rf dist",
+    "bundle:core": "node ../../scripts/prepare-sync-engine-bundled-core.mjs",
     "pack:check": "npm pack --dry-run",
-    "prepack": "npm run clean && npm run build",
+    "pack:smoke": "node ../../scripts/verify-sync-engine-package.mjs",
+    "prepack": "npm run clean && npm run build && npm run bundle:core",
+    "postpack": "rm -rf node_modules/@mapctx/core",
     "dev:status": "npm run build && node dist/cli.js status --config mapcs.dev.json",
     "dev:pull": "npm run build && node dist/cli.js pull --dry-run --config mapcs.dev.json",
     "dev:push": "npm run build && node dist/cli.js push --dry-run --config mapcs.dev.json"
@@ -54,8 +57,14 @@
     "access": "public"
   },
   "dependencies": {
-    "@mapctx/core": "file:../core"
+    "@mapctx/core": "file:../core",
+    "@mapctx/forecast": "file:../forecast",
+    "@mapctx/planner": "file:../planner",
+    "@mapctx/store": "file:../store"
   },
+  "bundleDependencies": [
+    "@mapctx/core"
+  ],
   "devDependencies": {
     "@types/node": "^24.5.2",
     "typescript": "^5.9.2"

@@ -1,0 +1,81 @@
+{
+  "$ref": "#/definitions/EventLogEntry",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "EventLogEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "causation": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "nodeId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "sequence": {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "nodeId",
+              "sequence"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "eventType": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "logicalClock": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "nodeId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "occurredAt": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "payloadSha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "sequence": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nodeId",
+        "sequence",
+        "logicalClock",
+        "eventType",
+        "schemaVersion",
+        "occurredAt",
+        "actor",
+        "causation",
+        "payload",
+        "payloadSha256"
+      ],
+      "type": "object"
+    }
+  }
+}

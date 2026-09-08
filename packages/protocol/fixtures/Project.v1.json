@@ -1,0 +1,23 @@
+{
+  "id": "2f1c6c3e-0a51-4d2b-9c4a-8b7e1d90a111",
+  "plansAuthority": "markdown",
+  "repoBindings": [
+    {
+      "defaultRef": "main",
+      "path": ".",
+      "url": "https://github.com/alotth/mapctx"
+    }
+  ],
+  "sourceMode": "local-canonical",
+  "title": "mapctx-monorepo",
+  "workflowPolicy": {
+    "policySource": "AGENTS.md",
+    "profile": "host-guardrail-v1",
+    "requiredGates": [
+      "product-review",
+      "architecture",
+      "program-design",
+      "vertical-slices"
+    ]
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "name": "@mapctx/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "description": "vNext executable contracts: entities, envelopes, events, and migration mapping",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "fixtures",
+    "schemas",
+    "docs"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "generate:schemas": "npm run build && node dist/generate-schemas.js",
+    "generate:fixtures": "npm run build && node dist/write-fixtures.js",
+    "generate": "npm run generate:schemas && npm run generate:fixtures",
+    "test": "npm run build && node --test dist/**/*.test.js"
+  },
+  "engines": {
+    "node": ">=18.18"
+  },
+  "dependencies": {
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.24.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.2"
+  }
+}

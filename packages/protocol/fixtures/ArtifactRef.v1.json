@@ -1,0 +1,10 @@
+{
+  "artifactId": "0a1b2c3d-4e5f-4678-89ab-cdef01234567",
+  "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "kind": "spec",
+  "ownerId": "T-048",
+  "ownerKind": "task",
+  "promotedPath": null,
+  "uri": "traycer://epic/e8873251-f6f0-490d-be16-8e5655300237/artifact/mapctx-vnext-t049-external-store-tech-plan",
+  "version": "1"
+}

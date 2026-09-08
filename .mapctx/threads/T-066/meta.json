@@ -1,0 +1,13 @@
+{
+  "taskId": "T-066",
+  "schemaVersion": 1,
+  "status": "doing",
+  "primaryThread": "thread.md",
+  "workingSummary": "summary.md",
+  "preferredRuntime": "claude",
+  "lastRuntime": "claude",
+  "lastAgentProfile": "orchestrator",
+  "lastModel": "claude-opus-5",
+  "lastRunId": "run-2026-08-26T23-44-57Z",
+  "updatedAt": "2026-08-26T23:44:57.000Z"
+}

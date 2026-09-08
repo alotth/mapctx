@@ -119,9 +119,27 @@ Values below are examples. Replace with real task context.
       ## Constraints
       List non-negotiable boundaries and dependencies.
 
+      ## Open Decisions for Execution
+      - [open] Which execution question still needs an explicit answer?
+
+      ## Decisions Taken
+      - [2026-03-06] Record the canonical answer here once a decision is made.
+
+      ## Implementation Notes
+      - Implemented in `path/to/file.ts`.
+      - Direction recorded in `docs/adr/...`.
+
       ## Technical Notes
       Optional implementation hints after product intent is clear.
 
       ## Steps
       - [ ] Define implementation steps.
 ```
+
+Editorial rules for decision tracking inside `description: |`:
+
+- `Open Decisions for Execution` keeps question-shaped items only.
+- Do not delete resolved questions; mark them as `[resolved YYYY-MM-DD]`.
+- Optional deferred questions should use `[deferred YYYY-MM-DD]`.
+- `Decisions Taken` keeps short declarative statements with decision dates.
+- `Implementation Notes` should reference concrete files, routes, migrations, docs, or ADRs.

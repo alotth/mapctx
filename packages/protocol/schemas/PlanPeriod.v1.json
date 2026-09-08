@@ -1,0 +1,67 @@
+{
+  "$ref": "#/definitions/PlanPeriod",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "PlanPeriod": {
+      "additionalProperties": false,
+      "properties": {
+        "accountId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "biller": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "fixedCents": {
+          "type": "integer"
+        },
+        "periodEnd": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
+          "type": "string"
+        },
+        "periodStart": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
+          "type": "string"
+        },
+        "planName": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "planPeriodId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "seats": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "open",
+            "closed"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "planPeriodId",
+        "biller",
+        "planName",
+        "periodStart",
+        "periodEnd",
+        "fixedCents",
+        "seats",
+        "status"
+      ],
+      "type": "object"
+    }
+  }
+}

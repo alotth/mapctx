@@ -1,0 +1,129 @@
+{
+  "$ref": "#/definitions/Epic",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Epic": {
+      "additionalProperties": false,
+      "properties": {
+        "goals": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[TE]-\\d{3,}$",
+          "type": "string"
+        },
+        "planningState": {
+          "enum": [
+            "backlog",
+            "ready",
+            "blocked",
+            "in-progress",
+            "review",
+            "paused",
+            "done",
+            "cancelled"
+          ],
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "workflowGates": {
+          "items": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "evidence": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "name": {
+                    "enum": [
+                      "product-review",
+                      "architecture",
+                      "program-design",
+                      "vertical-slices"
+                    ],
+                    "type": "string"
+                  },
+                  "reason": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "status": {
+                    "const": "skipped",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "status",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "evidence": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "name": {
+                    "enum": [
+                      "product-review",
+                      "architecture",
+                      "program-design",
+                      "vertical-slices"
+                    ],
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "status": {
+                    "enum": [
+                      "pending",
+                      "approved",
+                      "rejected"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "status",
+                  "reason"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "goals",
+        "planningState",
+        "workflowGates"
+      ],
+      "type": "object"
+    }
+  }
+}

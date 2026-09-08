@@ -1,7 +1,11 @@
 # ADR-0002: Portable Thread Substrate
 
-- Status: Accepted
+- Status: Superseded by ADR 0003
 - Date: 2026-05-08
+
+> Historical decision. Harnesses now own sessions/transcripts. MapCtx vNext
+> stores normalized dispatch/events/receipts externally and promotes only durable
+> decisions or evidence references to Git.
 
 ## Context
 

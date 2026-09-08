@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Markdown Kanban Roadmap - VS Code extension for task management with Kanban boards">
-    <title>Markdown Kanban Roadmap - Developer Documentation</title>
+    <meta name="description" content="MapCtx documentation for task workflows, AI skills, sync operations, and contract-first project context">
+    <title>MapCtx - Documentation</title>
     <style>
         * {
             margin: 0;
@@ -404,20 +404,20 @@
 <body>
     <div class="container">
         <header>
-            <h1>Markdown Kanban Roadmap</h1>
-            <p class="subtitle">VS Code extension for task management with interactive Kanban boards</p>
+            <h1>MapCtx</h1>
+            <p class="subtitle">Task-first project context, planning, and sync tooling for AI-assisted workflows</p>
             <div style="margin-top: 15px;">
                 <span class="badge badge-vscode">VS Code</span>
-                <span class="badge badge-markdown">Markdown</span>
-                <span class="badge badge-kanban">Kanban</span>
+                <span class="badge badge-markdown">AI-first</span>
+                <span class="badge badge-kanban">Sync</span>
             </div>
             <div class="nav-links">
                 <a href="#installation">Installation</a>
                 <a href="#usage">Usage</a>
                 <a href="#format">Task Format</a>
-                <a href="#ai-rules">AI Development Rules</a>
-                <a href="#organization">Team Organization</a>
-                <a href="https://github.com/alotth/markdown-kanban-roadmap" target="_blank">GitHub</a>
+                <a href="#ai-rules">AI Workflow</a>
+                <a href="#organization">Working Model</a>
+                <a href="https://github.com/alotth/mapctx" target="_blank">GitHub</a>
             </div>
         </header>
         
@@ -428,8 +428,8 @@
                 <li><a href="#usage">Usage</a></li>
                 <li><a href="#format">Task Format</a></li>
                 <li><a href="#features">Features</a></li>
-                <li><a href="#ai-rules">AI Development Rules</a></li>
-                <li><a href="#organization">Team Organization</a></li>
+                <li><a href="#ai-rules">AI Workflow</a></li>
+                <li><a href="#organization">Working Model</a></li>
                 <li><a href="#examples">Examples</a></li>
             </ul>
         </div>
@@ -447,232 +447,24 @@
             
             <div class="rules-container">
                 <h4>Copy Cursor Rules</h4>
-                <div class="rules-content" id="cursorRulesContent"># Markdown Kanban & Roadmap - Cursor Rules
+                <div class="rules-content" id="cursorRulesContent"># Global Rules
 
-> **Note for AI Assistants**: These rules are suggested guidelines for AI assistants to understand how to properly create and manage tasks in the Markdown Kanban format. When working with `TASKS.md` files, follow these rules to ensure compatibility with the VS Code Markdown Kanban extension.
+- If the repository contains a `TASKS.md` file, ask once per session whether to use the Markdown Kanban standard and load the `mapctx-tasks` skill.
+- If the user agrees, call `skill("mapctx-tasks")` before creating or editing `TASKS.md` or any `./tasks/T-XXX.md` detail files.
+- If the user declines, do not ask again during the same session.
+- Do not load the skill for unrelated work.
+- For JavaScript/TypeScript tooling commands, prefer running via login shell using `zsh -lic` so PATH and shell profile are loaded.
+- Prefer local project CLIs via `npx` (for example: `npx prisma`, `npx next`, `npx eslint`, `npx vitest`) instead of assuming global installs.
+- When a command fails with `command not found`, retry once with `zsh -lic` and `npx` (when applicable) before concluding the tool is unavailable.
 
-This file defines the rules for creating and managing tasks in the Markdown Kanban format that works with the VS Code Markdown Kanban extension.
+## Execution Discipline
 
-## TASKS.md File Structure
-
-The `TASKS.md` file must follow the Kanban format with these required sections:
-
-- **Backlog**: Tasks that haven't been started yet
-- **Doing**: Tasks currently in progress
-- **Review**: Tasks awaiting review
-- **Done**: Completed tasks
-- **Paused**: Temporarily paused tasks
-- **Notes**: General project notes (optional)
-
-## Task Format
-
-### Basic Structure
-
-Each task must follow this format:
-
-```markdown
-### Task Name
-
-  - id: T-001
-  - tags: [tag1, tag2, tag3]
-  - priority: high|medium|low
-  - workload: Easy|Normal|Hard|Extreme
-  - milestone: sprint-26-1_1
-  - start: YYYY-MM-DD
-  - due: YYYY-MM-DD
-  - updated: YYYY-MM-DD
-  - completed: YYYY-MM-DD
-  - detail: ./tasks/T-001.md
-  - defaultExpanded: true|false
-```
-
-### Task Properties
-
-#### Required
-
-- **`id`**: Unique task identifier (format: `T-XXX` where XXX is a sequential number)
-  - Example: `T-001`, `T-002`, `T-010`
-
-#### Optional
-
-- **`tags`**: Array of tags for categorization
-  - Format: `[tag1, tag2, tag3]`
-  - Example: `[backend, frontend, ui, components]`
-  - Use descriptive and consistent tags
-
-- **`priority`**: Priority level
-  - Values: `high`, `medium`, `low`
-
-- **`workload`**: Estimated effort
-  - Values: `Easy`, `Normal`, `Hard`, `Extreme`
-
-- **`milestone`**: Milestone or marker the task belongs to
-  - Suggested format: `sprint-year-month_number` (e.g., `sprint-26-1_1` for January 2026, sprint 1)
-  - Can use custom strings (e.g., `reconciliation-nn`, `timezone-utc`)
-
-- **`start`**: Start date
-  - Format: `YYYY-MM-DD`
-  - Example: `2025-12-01`
-
-- **`due`**: Due date
-  - Format: `YYYY-MM-DD`
-  - Example: `2026-01-15`
-
-- **`updated`**: Last update date
-  - Format: `YYYY-MM-DD`
-  - Update whenever the task is modified
-
-- **`completed`**: Completion date
-  - Format: `YYYY-MM-DD`
-  - Filled when task is moved to "Done"
-
-- **`detail`**: Path to detail file
-  - Format: `./tasks/T-XXX.md`
-  - Example: `./tasks/T-001.md`
-  - Points to a markdown file with detailed description
-
-- **`defaultExpanded`**: Whether task should be expanded by default
-  - Values: `true` or `false`
-  - When `true`, task shows all details when loaded
-
-### Inline Description
-
-If not using a detail file (`detail`), you can include inline description:
-
-```markdown
-### Task Name
-
-  - id: T-001
-  - tags: [backend]
-  - priority: high
-    ```md
-    Detailed task description here.
-    Can contain multiple lines and markdown formatting.
-    ```
-```
-
-## Detail Files (tasks/T-XXX.md)
-
-When using `detail: ./tasks/T-XXX.md`, the file must follow this format:
-
-```markdown
-# T-001
-
-  - steps:
-      - [ ] Step 1 (not completed)
-      - [x] Step 2 (completed)
-      - [ ] Step 3 (not completed)
-    ```md
-    Detailed task description.
-    Can include context, requirements, examples, etc.
-    ```
-```
-
-### Steps Format
-
-- Use `- [ ]` for uncompleted steps
-- Use `- [x]` for completed steps
-- Indentation: minimum 6 spaces before `-`
-- Example:
-
-  ```markdown
-  - steps:
-      - [ ] Research existing patterns
-      - [x] Create schema design
-      - [ ] Implement endpoints
-  ```
-
-## Important Rules
-
-1. **Indentation**: All task properties must have 2 spaces indentation
-2. **Date Format**: Always use `YYYY-MM-DD` for all dates
-3. **Unique IDs**: Each task must have a unique ID in format `T-XXX`
-4. **Tags**: Use arrays in format `[tag1, tag2]` with commas and spaces
-5. **Descriptions**: Use markdown code blocks with ` ```md ` for descriptions
-6. **Steps**: Only in detail files, not in main TASKS.md
-7. **Sections**: Maintain Kanban sections (Backlog, Doing, Review, Done, Paused)
-
-## Status Flow
-
-- **Backlog** → **Doing**: When work starts
-- **Doing** → **Review**: When awaiting review
-- **Review** → **Done**: When approved/completed
-- **Doing** → **Paused**: When temporarily paused
-- **Paused** → **Doing**: When resumed
-
-## Complete Examples
-
-### Simple Task (no detail file)
-
-```markdown
-### Implement user authentication
-
-  - id: T-010
-  - tags: [authentication, security, backend, frontend]
-  - priority: high
-  - workload: Hard
-  - milestone: sprint-26-1_2
-  - start: 2026-01-15
-  - due: 2026-02-15
-```
-
-### Task with Inline Description
-
-```markdown
-### Create analytics dashboard
-
-  - id: T-011
-  - tags: [frontend, dashboard, analytics, visualization]
-  - priority: medium
-  - milestone: sprint-26-1_2
-  - start: 2026-01-15
-  - due: 2026-02-10
-    ```md
-    Create an analytics visualization with charts and metrics.
-    Include filters by date and category.
-    ```
-```
-
-### Task with Detail File
-
-```markdown
-### Implement n:n reconciliation between multiple sources
-
-  - id: T-001
-  - tags: [reconciliation, multiple-sources, n-to-n, backend, database]
-  - priority: high
-  - workload: Hard
-  - milestone: sprint-26-1_1
-  - start: 2026-01-01
-  - due: 2026-01-26
-  - detail: ./tasks/T-001.md
-  - defaultExpanded: false
-```
-
-## Common Mistakes to Avoid
-
-1. Don't use incorrect indentation (must be 2 spaces for properties)
-2. Don't mix date formats (always `YYYY-MM-DD`)
-3. Don't forget to update `updated` when modifying tasks
-4. Don't put steps directly in TASKS.md (only in detail files)
-5. Don't use duplicate IDs
-6. Don't forget to move tasks between sections when status changes
-
-## Best Practices
-
-1. Use sequential IDs (`T-001`, `T-002`, etc.)
-2. Keep tags consistent and descriptive
-3. Update `updated` whenever you modify a task
-4. Use `detail` for complex tasks with many steps
-5. Set `defaultExpanded: true` for important tasks
-6. Use milestones to group related tasks
-7. Keep Kanban sections organized
-
-## References
-
-- See `example-tasks/TASKS.md` for complete examples
-- See `example-tasks/tasks/` for detail file examples
-- See `example-tasks/README.md` for detailed documentation</div>
+- Before implementing, state material assumptions when they affect the result. If multiple reasonable interpretations exist, surface them instead of picking silently.
+- Prefer the simplest solution that fully solves the request. Avoid speculative abstractions, configurability, or future-proofing that was not asked for.
+- Make surgical changes. Do not refactor, reformat, or clean up adjacent code unless it is required by the requested change.
+- Clean up only what your change made obsolete. If you notice unrelated dead code or design issues, mention them without changing them unless asked.
+- For non-trivial work, define success with a concrete verification path such as tests, commands, or observable behavior. For trivial work, skip ceremony and execute directly.
+- Use subagents only when complexity justifies them. Default to a single agent for `lite` and most `standard` work; reserve planner/reviewer/evaluator subagents for `strict`, high-risk, or clearly cross-domain tasks.</div>
                 <button class="copy-button" onclick="copyRules()">Copy Rules</button>
             </div>
             
@@ -683,13 +475,13 @@ When using `detail: ./tasks/T-XXX.md`, the file must follow this format:
             <h3>From VS Code Marketplace</h3>
             <ol>
                 <li>Open VS Code Extensions view (<code>Ctrl+Shift+X</code> / <code>Cmd+Shift+X</code>)</li>
-                <li>Search for "Markdown Kanban Roadmap"</li>
+                <li>Search for "MapCtx"</li>
                 <li>Click <strong>Install</strong></li>
             </ol>
             
             <h3>From VSIX File</h3>
             <div class="terminal">
-                <code>code --install-extension markdown-kanban-roadmap-*.vsix</code>
+                <code>code --install-extension mapctx-*.vsix</code>
             </div>
             
             <div class="alert alert-info">
@@ -705,29 +497,36 @@ When using `detail: ./tasks/T-XXX.md`, the file must follow this format:
             
             <pre><code class="code-block-title">TASKS.md</code><code># Tasks - project-name
 
-## Backlog
+## Work Domains
 
-### My First Task
+- API: backend API and integrations
+- WEB: frontend and UX
+
+## Tasks
+
+### [T-001] Build auth endpoint
 
   - id: T-001
-  - tags: [backend, api]
+  - status: backlog
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
   - priority: high
-  - workload: Medium
-  - start: 2026-01-15
-  - due: 2026-01-30
-
-## Doing
-
-## Review
-
-## Done
-
-## Paused
+  - workload: Normal
+  - tags: [auth, backend]
+  - domains: [API]
+  - dependsOn: []
+  - start: 2026-04-02
+  - due: 2026-04-08
+  - completed: null
+  - externalId: null
+  - updated: 2026-04-02
+  - detail: ./tasks/T-001.md
 
 ## Notes</code></pre>
             
             <h3>2. Open Kanban View</h3>
-            <p>You have three ways to open the Kanban board:</p>
+            <p>You have three ways to open the task board:</p>
             <ul>
                 <li><strong>Button in editor:</strong> Click the "Kanban" button in the editor toolbar</li>
                 <li><strong>Command Palette:</strong> <code>Ctrl+Shift+P</code> → "Open Kanban Board"</li>
@@ -748,87 +547,63 @@ When using `detail: ./tasks/T-XXX.md`, the file must follow this format:
             <h2>Task Format</h2>
             
             <h3>Required Properties</h3>
-            <div class="feature-grid">
-                <div class="feature-card">
-                    <h4>ID</h4>
-                    <code>- id: T-001</code>
-                    <p>Unique identifier in format <code>T-XXX</code></p>
-                </div>
-            </div>
-            
-            <h3>Optional Properties</h3>
-            <div class="feature-grid">
-                <div class="feature-card">
-                    <h4>Tags</h4>
-                    <code>- tags: [backend, frontend, ui]</code>
-                    <p>Array of tags for categorization</p>
-                </div>
-                
-                <div class="feature-card">
-                    <h4>Priority</h4>
-                    <code>- priority: high|medium|low</code>
-                    <p>Task priority level</p>
-                </div>
-                
-                <div class="feature-card">
-                    <h4>Workload</h4>
-                    <code>- workload: Easy|Normal|Hard|Extreme</code>
-                    <p>Estimated effort required</p>
-                </div>
-                
-                <div class="feature-card">
-                    <h4>Dates</h4>
-                    <code>- start: YYYY-MM-DD<br>- due: YYYY-MM-DD</code>
-                    <p>Start and due dates</p>
-                </div>
-                
-                <div class="feature-card">
-                    <h4>Milestone</h4>
-                    <code>- milestone: sprint-26-1_1</code>
-                    <p>Group related tasks</p>
-                </div>
-                
-                <div class="feature-card">
-                    <h4>Detail File</h4>
-                    <code>- detail: ./tasks/T-001.md</code>
-                    <p>Link to detailed task file</p>
-                </div>
-            </div>
-            
+            <p>Each task block should include the canonical keys in this order:</p>
+            <pre><code>id, status, type, parent, subIssueProgress, priority, workload, tags, domains, dependsOn, start, due, completed, externalId, updated, detail</code></pre>
+
+            <h3>Optional Extensions</h3>
+            <p>Add only when needed, after <code>detail</code>:</p>
+            <pre><code>iteration, assignees, externalLinks, milestone, specMode</code></pre>
+
             <h3>Complete Example</h3>
-            <p>Example with detail file reference:</p>
-            <pre><code class="code-block-title">TASKS.md</code><code>### Implement user authentication
+            <pre><code class="code-block-title">TASKS.md</code><code>### [T-010] Implement user authentication
 
   - id: T-010
-  - tags: [authentication, security, backend, frontend]
+  - status: ready-for-do
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
   - priority: high
   - workload: Hard
-  - milestone: sprint-26-1_2
-  - start: 2026-01-15
-  - due: 2026-02-15
+  - tags: [authentication, backend]
+  - domains: [API]
+  - dependsOn: []
+  - start: 2026-04-02
+  - due: 2026-04-10
+  - completed: null
+  - externalId: null
+  - updated: 2026-04-02
   - detail: ./tasks/T-010.md
-  - defaultExpanded: false</code></pre>
-            
+  - specMode: standard</code></pre>
+
             <p>Corresponding detail file:</p>
             <pre><code class="code-block-title">tasks/T-010.md</code><code># T-010
 
-  - steps:
-      - [ ] Set up JWT token generation
-      - [ ] Implement login endpoint
-      - [ ] Create registration flow
-      - [ ] Add password reset functionality
-    ```md
-    Implement complete authentication system with JWT tokens.
-    Include login, registration, and password reset functionality.
-    
-    Requirements:
-    - Secure token storage
-    - Refresh token mechanism
-    - Password hashing with bcrypt
-    ```</code></pre>
-            
+  - role: feature
+  - impact: high
+  - estimatedEffort: 2d
+  - prerequisites: []
+  - blocking: []
+  - filesAffected: [src/auth]
+  - testsRequired: [npm test]
+  - summary: Implement login and token flow for the web app.
+  - description: |
+      ## Product Context
+      Users need secure access with clear session behavior.
+
+      ## User Story
+      As a user, I want to log in safely so I can access protected features.
+
+      ## Acceptance
+      - [ ] Login endpoint works with valid credentials.
+      - [ ] Invalid credentials return consistent errors.
+      - [ ] Session/token behavior is documented.
+
+      ## Steps
+      - [ ] Implement endpoint and validation.
+      - [ ] Add tests and update docs.</code></pre>
+
             <div class="alert alert-warning">
-                <strong>Important:</strong> Use exactly 2 spaces for indentation. All task properties must be indented with 2 spaces.
+                <strong>Important:</strong> Keep low-conflict deterministic formatting. Prefer editing only the target task block.
             </div>
         </section>
         
@@ -837,17 +612,17 @@ When using `detail: ./tasks/T-XXX.md`, the file must follow this format:
             
             <h3>Kanban Board View</h3>
             <div class="image-container">
-                <img src="https://raw.githubusercontent.com/alotth/markdown-kanban-roadmap/main/imgs/image-kanban.png" alt="Kanban Board View" />
+                <img src="https://raw.githubusercontent.com/alotth/mapctx/main/packages/vscode-extension/imgs/image-kanban.png" alt="Kanban Board View" />
             </div>
             
             <h3>Roadmap View</h3>
             <div class="image-container">
-                <img src="https://raw.githubusercontent.com/alotth/markdown-kanban-roadmap/main/imgs/image-roadmap.png" alt="Roadmap View" />
+                <img src="https://raw.githubusercontent.com/alotth/mapctx/main/packages/vscode-extension/imgs/image-roadmap.png" alt="Roadmap View" />
             </div>
             
             <h3>How to Open Kanban</h3>
             <div class="image-container">
-                <img src="https://raw.githubusercontent.com/alotth/markdown-kanban-roadmap/main/imgs/image-to-open.png" alt="How to Open Kanban" />
+                <img src="https://raw.githubusercontent.com/alotth/mapctx/main/packages/vscode-extension/imgs/image-to-open.png" alt="How to Open Kanban" />
             </div>
             
             <h3>Feature Overview</h3>
@@ -885,10 +660,14 @@ When using `detail: ./tasks/T-XXX.md`, the file must follow this format:
         </section>
         
         <section id="ai-rules" class="section">
-            <h2>AI Development Rules</h2>
+            <h2>AI Workflow and Rules</h2>
             
             <div class="alert alert-info">
-                <strong>For AI Assistants:</strong> This extension includes comprehensive rules for AI assistants to properly create and manage tasks. These rules ensure compatibility and maintain consistency across projects.
+                <strong>For AI Assistants:</strong> MapCtx is skill-first. Keep rule files lightweight and route behavior through dedicated skills.
+            </div>
+
+            <div class="alert alert-success">
+                <strong>Methodology:</strong> The external project store is the live authority (<code>plansAuthority: store</code>, ADR 0003/0004). <code>TASKS.md</code> and the structured field blocks of <code>tasks/&lt;ID&gt;.md</code> are generated, read-only snapshots. Editable surfaces are the <code>mapctx</code> CLI: <code>task create/move/update</code>, <code>dispatch create/receipt</code>, <code>import --dry-run/--commit</code>, <code>store init/repair</code>, and <code>reconcile</code>.
             </div>
             
             <h3>Rules Documentation</h3>
@@ -897,78 +676,78 @@ When using `detail: ./tasks/T-XXX.md`, the file must follow this format:
             <div class="feature-grid">
                 <div class="feature-card">
                     <h4>.cursorrules</h4>
-                    <p>Rules for Cursor IDE - copy to User Rules</p>
-                    <code><a href="https://github.com/alotth/markdown-kanban-roadmap/blob/main/rules/.cursorrules" target="_blank">rules/.cursorrules</a></code>
+                    <p>Lightweight global routing rules for Cursor</p>
+                    <code><a href="https://github.com/alotth/mapctx/blob/main/rules/.cursorrules" target="_blank">rules/.cursorrules</a></code>
                 </div>
                 
                 <div class="feature-card">
                     <h4>AGENTS.md</h4>
-                    <p>Comprehensive rules for any AI assistant working with Markdown Kanban files</p>
-                    <code><a href="https://github.com/alotth/markdown-kanban-roadmap/blob/main/rules/AGENTS.md" target="_blank">rules/AGENTS.md</a></code>
+                    <p>Global rules that trigger skills in task repositories</p>
+                    <code><a href="https://github.com/alotth/mapctx/blob/main/rules/AGENTS.md" target="_blank">rules/AGENTS.md</a></code>
                 </div>
                 
                 <div class="feature-card">
                     <h4>CLAUDE.md</h4>
-                    <p>Specific rules and quick reference for Claude AI</p>
-                    <code><a href="https://github.com/alotth/markdown-kanban-roadmap/blob/main/rules/CLAUDE.md" target="_blank">rules/CLAUDE.md</a></code>
+                    <p>Same routing policy for Claude-compatible agents</p>
+                    <code><a href="https://github.com/alotth/mapctx/blob/main/rules/CLAUDE.md" target="_blank">rules/CLAUDE.md</a></code>
                 </div>
             </div>
             
             <h3>Key Rules for AI Assistants</h3>
-            
-            <h4>Task Creation</h4>
-            <ul>
-                <li>Always use format <code>### Task Name</code> for task titles</li>
-                <li>Include unique <code>id: T-XXX</code> (find next available ID)</li>
-                <li>Use 2 spaces indentation for all properties</li>
-                <li>Place tasks in correct Kanban sections (Backlog, Doing, Review, Done, Paused)</li>
-                <li>Use date format <code>YYYY-MM-DD</code> for all dates</li>
-            </ul>
-            
-            <h4>Task Properties</h4>
-            <ul>
-                <li><strong>Required:</strong> <code>id</code></li>
-                <li><strong>Optional:</strong> <code>tags</code>, <code>priority</code>, <code>workload</code>, <code>start</code>, <code>due</code>, <code>milestone</code>, <code>detail</code>, <code>defaultExpanded</code></li>
-                <li>Tags must be in array format: <code>[tag1, tag2, tag3]</code></li>
-                <li>Priority values: <code>high</code>, <code>medium</code>, <code>low</code></li>
-                <li>Workload values: <code>Easy</code>, <code>Normal</code>, <code>Hard</code>, <code>Extreme</code></li>
-            </ul>
-            
-            <h4>File Structure</h4>
-            <pre><code class="code-block-title">TASKS.md structure</code><code># Tasks - project-name
 
-## Backlog
-## Doing
-## Review
-## Done
-## Paused
-## Notes</code></pre>
-            
-            <h4>Detail Files</h4>
-            <p>For complex tasks, create separate detail files:</p>
-            <pre><code class="code-block-title">tasks/T-001.md</code><code># T-001
+            <h4>Skill Routing</h4>
+            <ul>
+                <li>When a repo has <code>TASKS.md</code>, load <code>mapctx-tasks</code> before edits.</li>
+                <li>Use <code>mapctx-plan-engine</code> for <code>mapctx validate/plan</code>.</li>
+                <li>Use <code>mapctx-sync-engine</code> for sync operations.</li>
+                <li>Use <code>mapctx-ralph-tasks</code> for execution loops.</li>
+                <li>Use <code>mapctx-enrich-task</code> to deepen sparse task detail files.</li>
+                <li>Use <code>mapctx-correct-course</code> when scope shifts mid-execution.</li>
+            </ul>
 
-  - steps:
-      - [ ] Step 1
-      - [x] Step 2 (completed)
-      - [ ] Step 3
-    ```md
-    Detailed task description here.
-    Can include multiple lines and formatting.
-    ```</code></pre>
+            <h4>Task Model</h4>
+            <ul>
+                <li>Single list under <code>## Tasks</code> with status in <code>status:</code>.</li>
+                <li>Keep canonical key order and deterministic formatting.</li>
+                <li>Use <code>tasks/&lt;ID&gt;.md</code> for detailed context.</li>
+                <li>Default flow is <code>backlog -&gt; ready-for-do -&gt; doing -&gt; review -&gt; done</code> (+ paused).</li>
+                <li>Scale rigor with <code>specMode</code> and <code>workload</code> instead of making every task heavy.</li>
+            </ul>
+
+            <h4>Execution Stance</h4>
+            <ul>
+                <li>Default to a single agent for `lite` and most `standard` work.</li>
+                <li>Use <code>mapctx validate</code> and <code>mapctx plan</code> before larger or dependency-heavy execution.</li>
+                <li>Reserve planner/reviewer/evaluator subagents for `strict`, high-risk, or clearly cross-domain work.</li>
+            </ul>
+
+            <h4>Operational Commands</h4>
+            <pre><code class="code-block-title">mapctx CLI (editable surfaces)</code><code>mapctx task create | task move | task update
+mapctx dispatch create | dispatch receipt
+mapctx import --dry-run | import --commit
+mapctx store init | store repair
+mapctx reconcile
+
+# read-only checks
+mapctx validate
+mapctx plan</code></pre>
             
             <div class="alert alert-success">
-                <strong>Best Practice:</strong> When working with <code>TASKS.md</code> files, always refer to the rules in <code>rules/</code> directory to ensure proper format and compatibility.
+                <strong>Best Practice:</strong> Keep rule files short and push behavioral detail into skills and references.
             </div>
             
             <h3>Quick Reference</h3>
             <div class="terminal">
-                <code># Task format<br>### Task Name<br><br>  - id: T-001<br>  - tags: [tag1, tag2]<br>  - priority: high<br>  - workload: Medium<br>  - start: 2026-01-15<br>  - due: 2026-01-30</code>
+                <code># Task format<br>### [T-001] Task name<br><br>  - id: T-001<br>  - status: backlog<br>  - type: task<br>  - tags: [tag1, tag2]<br>  - domains: [API]<br>  - updated: 2026-04-02<br>  - detail: ./tasks/T-001.md</code>
             </div>
         </section>
         
         <section id="organization" class="section">
-            <h2>Team Organization Patterns</h2>
+            <h2>Working Model and Repository Layout</h2>
+
+            <div class="alert alert-warning">
+                <strong>Current recommendation:</strong> Prefer one repo-level <code>TASKS.md</code>, detail files in <code>tasks/</code>, and lightweight global context in <code>docs/PROJECT.md</code>, <code>docs/ROADMAP.md</code>, and <code>docs/adr/</code>. The patterns below are legacy or advanced variations, not the default methodology. Note that after the vNext cutover (ADR 0003/0004), the store is the live authority and <code>TASKS.md</code> is a generated read-only snapshot — update tasks through the <code>mapctx</code> CLI rather than by editing the file.
+            </div>
             
             <p>Choose the organization pattern that best fits your team size and project structure:</p>
             
@@ -1215,12 +994,12 @@ Branch: tasks/kanban
   - detail: ./tasks/T-020.md</code></pre>
             
             <div class="alert alert-info">
-                <strong>Tip:</strong> See the <code>example-tasks/</code> directory in the repository for complete working examples.
+                <strong>Tip:</strong> See the root <code>TASKS.md</code> and <code>tasks/</code> files in the repository for complete working examples.
             </div>
         </section>
         
         <footer>
-            <p><a href="https://github.com/alotth/markdown-kanban-roadmap" target="_blank">View on GitHub</a></p>
+            <p><a href="https://github.com/alotth/mapctx" target="_blank">View on GitHub</a></p>
             <p style="margin-top: 10px; opacity: 0.8;">Made for developers</p>
         </footer>
     </div>

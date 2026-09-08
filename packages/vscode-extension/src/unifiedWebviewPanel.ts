@@ -4,21 +4,6 @@ import * as fs from 'fs';
 
 import { MarkdownKanbanParser, KanbanBoard, KanbanTask } from './markdownParser';
 import { normalizeStatusLoose } from '@mapctx/core';
-import { readThreadContext, type ThreadRunRecord } from '@mapctx/core/thread';
-
-type WorkspaceThreadSummary = {
-    exists: boolean;
-    summaryPreview?: string;
-    status?: string;
-    lastRuntime?: string;
-    lastAgentProfile?: string;
-    lastModel?: string;
-    lastRunId?: string;
-    latestRunStatus?: string;
-    latestRunResult?: string;
-    runCount: number;
-    costUsd?: number;
-};
 
 type WorkspaceTask = {
     id: string;
@@ -31,11 +16,12 @@ type WorkspaceTask = {
     startDate?: string;
     dueDate?: string;
     completed?: string;
+    updated?: string;
     priority?: string;
     workload?: string;
     tags?: string[];
+    dependsOn?: string[];
     detailPath?: string;
-    thread?: WorkspaceThreadSummary;
 };
 
 type WorkspaceTargetType = 'organization' | 'project';
@@ -94,9 +80,7 @@ export class UnifiedWebviewPanel {
     private _document?: vscode.TextDocument;
     private _workspaceModel: WorkspaceModel = 'unknown';
     private _detailFilePaths: Set<string> = new Set();
-    private _threadFilePaths: Set<string> = new Set();
     private _detailWatchers: vscode.FileSystemWatcher[] = [];
-    private _threadWatchers: vscode.FileSystemWatcher[] = [];
     private _boardWatcher?: vscode.FileSystemWatcher;
     private _activeTargetOverride?: string;
 
@@ -266,47 +250,16 @@ export class UnifiedWebviewPanel {
                     startDate: task.startDate,
                     dueDate: task.dueDate,
                     completed: task.completed,
+                    updated: task.updated,
                     priority: task.priority,
                     workload: task.workload,
                     tags: task.tags,
-                    detailPath: task.detailPath,
-                    thread: this._readTaskThread(task.id)
+                    dependsOn: task.dependsOn,
+                    detailPath: task.detailPath
                 });
             }
         }
         return rows;
-    }
-
-    private _readTaskThread(taskId: string): WorkspaceThreadSummary {
-        if (!this._document) {
-            return { exists: false, runCount: 0 };
-        }
-
-        const repoRoot = this._getRepoRoot();
-        try {
-            const context = readThreadContext(repoRoot, taskId, { includeRuns: true });
-            if (!context.exists) {
-                return { exists: false, runCount: 0 };
-            }
-
-            const latestRun = context.runs[context.runs.length - 1];
-            const costUsd = this._sumRunCost(context.runs);
-            return {
-                exists: true,
-                summaryPreview: this._summaryPreview(context.summary),
-                status: context.meta?.status || undefined,
-                lastRuntime: context.meta?.lastRuntime || undefined,
-                lastAgentProfile: context.meta?.lastAgentProfile || undefined,
-                lastModel: context.meta?.lastModel || undefined,
-                lastRunId: context.meta?.lastRunId || undefined,
-                latestRunStatus: latestRun?.status,
-                latestRunResult: latestRun?.result || undefined,
-                runCount: context.runs.length,
-                costUsd: costUsd ?? undefined
-            };
-        } catch {
-            return { exists: false, runCount: 0 };
-        }
     }
 
     private _readProjectRegistry(): ProjectRegistry {
@@ -435,7 +388,7 @@ export class UnifiedWebviewPanel {
 
     private _buildWorkspaceTargets(registry: ProjectRegistry, tasks: WorkspaceTask[]): WorkspaceTarget[] {
         const activeTaskCount = tasks.length;
-        const activeThreadCount = tasks.filter(task => task.thread?.exists).length;
+        const activeThreadCount = 0;
         const projectsByOrganization = new Map<string, ProjectRegistryProject[]>();
         const orphanProjects: ProjectRegistryProject[] = [];
 
@@ -563,11 +516,6 @@ export class UnifiedWebviewPanel {
             if (line) body.push(line.replace(/^[-*]\s+/, ''));
         }
         return body.join(' ').trim() || undefined;
-    }
-
-    private _sumRunCost(runs: ThreadRunRecord[]): number | null {
-        const total = runs.reduce((sum, run) => sum + (typeof run.costUsd === 'number' ? run.costUsd : 0), 0);
-        return total > 0 ? Number(total.toFixed(4)) : null;
     }
 
     private _detectWorkspaceModel(markdownText: string): WorkspaceModel {
@@ -704,13 +652,13 @@ export class UnifiedWebviewPanel {
             return;
         }
 
-        if (this._detailFilePaths.has(documentPath) || this._threadFilePaths.has(documentPath)) {
+        if (this._detailFilePaths.has(documentPath)) {
             this.loadMarkdownFile(this._document);
         }
     }
 
     public handleActiveEditorChange(document: vscode.TextDocument) {
-        if (this._detailFilePaths.has(document.uri.fsPath) || this._threadFilePaths.has(document.uri.fsPath)) {
+        if (this._detailFilePaths.has(document.uri.fsPath)) {
             return;
         }
         this.loadMarkdownFile(document);
@@ -731,7 +679,6 @@ export class UnifiedWebviewPanel {
         this._disposeWatchers();
 
         this._detailFilePaths.clear();
-        this._threadFilePaths.clear();
         if (!this._document || !this._board) return;
 
         for (const column of this._board.columns) {
@@ -744,29 +691,10 @@ export class UnifiedWebviewPanel {
             }
         }
 
-        const repoRoot = this._getRepoRoot();
-        for (const column of this._board.columns) {
-            if (this._isNonTaskColumn(column.title)) continue;
-            for (const task of column.tasks) {
-                if (!this._isTaskIdInCurrentBoard(task.id)) continue;
-                const threadDir = path.join(repoRoot, '.mapctx', 'threads', task.id);
-                for (const fileName of ['thread.md', 'summary.md', 'meta.json']) {
-                    const candidate = path.join(threadDir, fileName);
-                    if (fs.existsSync(candidate)) {
-                        this._threadFilePaths.add(candidate);
-                    }
-                }
-            }
-        }
-
         this._boardWatcher = this._createFileWatcher(this._document.uri);
 
         for (const detailPath of this._detailFilePaths) {
             this._detailWatchers.push(this._createFileWatcher(vscode.Uri.file(detailPath)));
-        }
-
-        for (const threadPath of this._threadFilePaths) {
-            this._threadWatchers.push(this._createFileWatcher(vscode.Uri.file(threadPath)));
         }
     }
 
@@ -776,9 +704,6 @@ export class UnifiedWebviewPanel {
 
         this._detailWatchers.forEach(watcher => watcher.dispose());
         this._detailWatchers = [];
-
-        this._threadWatchers.forEach(watcher => watcher.dispose());
-        this._threadWatchers = [];
     }
 
     private _createFileWatcher(uri: vscode.Uri): vscode.FileSystemWatcher {

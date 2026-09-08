@@ -1,0 +1,24 @@
+{
+  "assumptions": [
+    "single implementer",
+    "no store work"
+  ],
+  "cacheTokensP50": 1000,
+  "cacheTokensP90": 2000,
+  "confidence": "low",
+  "costCoverage": "partial",
+  "createdAt": "2026-08-15T21:00:00.000Z",
+  "durationP50Ms": 10800000,
+  "durationP90Ms": 21600000,
+  "estimateId": "12345678-90ab-4cde-8f01-23456789abcd",
+  "estimatorVersion": "v1",
+  "idleThresholdMs": 600000,
+  "inputTokensP50": 8000,
+  "inputTokensP90": 16000,
+  "method": "expert-guess",
+  "outputTokensP50": 4000,
+  "outputTokensP90": 8000,
+  "shadowMicrosP50": 4000000,
+  "shadowMicrosP90": 8000000,
+  "taskId": "T-048"
+}

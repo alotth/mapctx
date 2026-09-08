@@ -44,5 +44,8 @@
   "localWinsFields": [
     "detail",
     "defaultExpanded"
-  ]
+  ],
+  "github": {
+    "sourceMode": "projection"
+  }
 }

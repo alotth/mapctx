@@ -108,6 +108,7 @@ Rules:
 - Keep `description` as the last metadata key in detail files.
 - Keep planning product-first and avoid over-constraining technical implementation too early.
 - Place product context and user-value sections before technical notes.
+- Use decision tracking sections only when they add signal; when present, preserve question history separately from final answers.
 - Suggested heading order inside `description`:
   - `## Product Context`
   - `## User Story`
@@ -115,9 +116,22 @@ Rules:
   - `## Acceptance`
   - `## Non-Goals`
   - `## Constraints`
+  - `## Open Decisions for Execution` (optional)
+  - `## Decisions Taken` (optional)
+  - `## Implementation Notes` (optional)
   - `## Technical Notes` (optional during planning)
+- `## Open Decisions for Execution` rules:
+  - Keep each item as a question.
+  - Use `[open]`, `[resolved YYYY-MM-DD]`, or `[deferred YYYY-MM-DD]`.
+  - Do not remove old questions just because they were answered.
+- `## Decisions Taken` rules:
+  - Keep each item as a dated statement, never a question.
+  - Treat this section as the canonical record of the answer.
+- `## Implementation Notes` rules:
+  - Record where the decision landed: files, routes, migrations, ADRs, or rollout notes.
 - Place implementation steps and checklists inside `description` only after product intent is clear.
 - Do not use separate `acceptance`, `steps`, `objective`, or fenced ```` ```md ... ``` ```` sections.
+- Under `plansAuthority: store` (ADR 0003 §Authority and cutover), `role` through `summary` above are generated, read-only output; only `description:` prose stays hand-authored. Check the regime first — see `## Authority Regime (Required)` in `SKILL.md`.
 
 ## Minimal Task Block Example
 

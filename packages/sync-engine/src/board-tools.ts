@@ -81,8 +81,8 @@ export type PlanReport = {
 
 function resolveTasksFile(configPath: string, config: SyncConfig, options: SyncOptions, configExists: boolean): string {
   const dir = configExists ? path.dirname(configPath) : process.cwd();
-  const tasksFile = options.tasksFileOverride || config.tasksFile;
-  return path.resolve(dir, tasksFile);
+  if (options.tasksFileOverride) return path.resolve(process.cwd(), options.tasksFileOverride);
+  return path.resolve(dir, config.tasksFile);
 }
 
 function parseTaskBlocks(content: string): TaskBlock[] {
@@ -188,6 +188,18 @@ function validateDate(value: string | undefined | null): boolean {
 
 function validateSpecMode(value: Task['specMode'] | undefined): boolean {
   return value === undefined || value === 'lite' || value === 'standard' || value === 'strict';
+}
+
+function compareIsoDates(left: string | undefined | null, right: string | undefined | null): number {
+  if (!left || !right) return 0;
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function parseSubIssueProgress(value: string | undefined): { completed: number; total: number } | null {
+  if (!value || value === 'null') return null;
+  const match = value.trim().match(/^(\d+)\/(\d+)$/);
+  if (!match) return null;
+  return { completed: Number(match[1]), total: Number(match[2]) };
 }
 
 function validateBoardInternal(tasksFilePath: string, config: SyncConfig): ValidateReport {
@@ -345,10 +357,62 @@ function validateBoardInternal(tasksFilePath: string, config: SyncConfig): Valid
     const normalizedStatus = normalizeStatus(task.status);
     const completed = task.completed;
     if (completionStatuses.has(normalizedStatus) && !completed) {
-      add({ severity: 'warning', code: 'completion-date-missing', message: 'Task is in completion state but `completed` is null.', taskId });
+      add({ severity: 'error', code: 'completion-date-missing', message: 'Task is in completion state but `completed` is null.', taskId });
     }
     if (!completionStatuses.has(normalizedStatus) && completed) {
-      add({ severity: 'warning', code: 'completion-date-unexpected', message: 'Task is not in completion state but `completed` is set.', taskId });
+      add({ severity: 'error', code: 'completion-date-unexpected', message: 'Task is not in completion state but `completed` is set.', taskId });
+    }
+    if (compareIsoDates(task.completed, task.start) < 0) {
+      add({ severity: 'error', code: 'completed-before-start', message: '`completed` cannot be before `start`.', taskId });
+    }
+    if (compareIsoDates(task.due, task.start) < 0) {
+      add({ severity: 'error', code: 'due-before-start', message: '`due` cannot be before `start`.', taskId });
+    }
+  }
+
+  // Derived sub-issue progress must describe the board's actual children.
+  // A malformed value remains a shape warning; a well-formed contradiction is
+  // an error because downstream scheduling would otherwise trust stale data.
+  for (const task of board.tasks) {
+    const progress = parseSubIssueProgress(task.subIssueProgress);
+    if (!progress) continue;
+    const children = board.tasks.filter(child => child.parent === task.id);
+    const actualCompleted = children.filter(child => completionStatuses.has(normalizeStatus(child.status))).length;
+    if (progress.total !== children.length || progress.completed !== actualCompleted || progress.completed > progress.total) {
+      add({
+        severity: 'error',
+        code: 'subissue-progress-drift',
+        message: `subIssueProgress ${task.subIssueProgress} disagrees with ${actualCompleted}/${children.length} completed children.`,
+        taskId: task.id
+      });
+    }
+  }
+
+  // A single bulk-written `updated` date is an informational smell. It does
+  // not prove corruption, so keep severity warning and report once per date.
+  const updatedCounts = new Map<string, number>();
+  for (const task of board.tasks) {
+    if (!task.updated) continue;
+    updatedCounts.set(task.updated, (updatedCounts.get(task.updated) || 0) + 1);
+  }
+  for (const [updated, count] of updatedCounts) {
+    if (count < 10) continue;
+    add({ severity: 'warning', code: 'bulk-updated-timestamp', message: `${count} tasks share updated date ${updated}; verify event history.`, taskId: undefined });
+  }
+
+  // Parent links form a second graph. Detect self-ancestor/cycles separately
+  // from dependency cycles so malformed hierarchy cannot hide in valid deps.
+  const parentById = new Map(board.tasks.map(task => [task.id, task.parent]));
+  for (const task of board.tasks) {
+    const seen = new Set<string>([task.id]);
+    let parent = task.parent;
+    while (parent) {
+      if (seen.has(parent)) {
+        add({ severity: 'error', code: 'parent-cycle', message: `Parent cycle detected through ${parent}.`, taskId: task.id });
+        break;
+      }
+      seen.add(parent);
+      parent = parentById.get(parent);
     }
   }
 
@@ -468,10 +532,14 @@ function printPlanReport(report: PlanReport, options: SyncOptions): void {
   }
 }
 
-export function validateCommand(options: SyncOptions = {}): ValidateReport {
+export function getValidationReport(options: SyncOptions = {}): ValidateReport {
   const { config, configPath, configExists } = loadConfigOptionalForBoard(options);
   const tasksFilePath = resolveTasksFile(configPath, config, options, configExists);
-  const report = validateBoardInternal(tasksFilePath, config);
+  return validateBoardInternal(tasksFilePath, config);
+}
+
+export function validateCommand(options: SyncOptions = {}): ValidateReport {
+  const report = getValidationReport(options);
   printValidationReport(report, options.json);
   if (report.errors > 0) {
     throw new Error(`Validation failed with ${report.errors} error(s).`);

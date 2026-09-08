@@ -96,7 +96,7 @@
 		{
 			"label": "Test Parser",
 			"type": "shell",
-			"command": "npm run test:parser -- example-tasks/TASKS.md",
+			"command": "npm run test:parser -- TASKS.md",
 			"presentation": {
 				"reveal": "always",
 				"panel": "dedicated",

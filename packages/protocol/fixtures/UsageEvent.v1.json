@@ -1,0 +1,11 @@
+{
+  "cacheTokens": 400,
+  "coverage": "partial",
+  "dispatchId": "9b2e4d71-6c18-4a0f-b3d5-11aa22bb33cc",
+  "inputTokens": 1200,
+  "model": "claude-sonnet",
+  "outputTokens": 800,
+  "provider": "anthropic",
+  "source": "harness-transcript",
+  "usageEventId": "11111111-2222-4333-8444-555555555555"
+}

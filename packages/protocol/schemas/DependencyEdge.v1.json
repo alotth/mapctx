@@ -1,0 +1,32 @@
+{
+  "$ref": "#/definitions/DependencyEdge",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "DependencyEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "fromTaskId": {
+          "pattern": "^[TE]-\\d{3,}$",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "blocks",
+            "depends-on"
+          ],
+          "type": "string"
+        },
+        "toTaskId": {
+          "pattern": "^[TE]-\\d{3,}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fromTaskId",
+        "toTaskId",
+        "kind"
+      ],
+      "type": "object"
+    }
+  }
+}

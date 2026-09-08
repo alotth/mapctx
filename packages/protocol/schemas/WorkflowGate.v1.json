@@ -1,0 +1,86 @@
+{
+  "$ref": "#/definitions/WorkflowGate",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "WorkflowGate": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "evidence": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "name": {
+              "enum": [
+                "product-review",
+                "architecture",
+                "program-design",
+                "vertical-slices"
+              ],
+              "type": "string"
+            },
+            "reason": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "status": {
+              "const": "skipped",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "status",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "evidence": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "name": {
+              "enum": [
+                "product-review",
+                "architecture",
+                "program-design",
+                "vertical-slices"
+              ],
+              "type": "string"
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "status": {
+              "enum": [
+                "pending",
+                "approved",
+                "rejected"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "status",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  }
+}

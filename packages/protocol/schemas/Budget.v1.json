@@ -1,0 +1,119 @@
+{
+  "$ref": "#/definitions/Budget",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Budget": {
+      "additionalProperties": false,
+      "properties": {
+        "budgetId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "minutes": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "money": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "amountMinor": {
+                  "type": "integer"
+                },
+                "currency": {
+                  "pattern": "^[A-Z]{3}$",
+                  "type": "string"
+                },
+                "decimals": {
+                  "maximum": 18,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "amountMinor",
+                "currency",
+                "decimals"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ownerId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "ownerKind": {
+          "enum": [
+            "epic",
+            "project"
+          ],
+          "type": "string"
+        },
+        "periodEnd": {
+          "anyOf": [
+            {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "periodStart": {
+          "anyOf": [
+            {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "setAt": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
+          "type": "string"
+        },
+        "unit": {
+          "enum": [
+            "money",
+            "time"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "budgetId",
+        "ownerKind",
+        "ownerId",
+        "unit",
+        "money",
+        "minutes",
+        "periodStart",
+        "periodEnd",
+        "setAt",
+        "note"
+      ],
+      "type": "object"
+    }
+  }
+}

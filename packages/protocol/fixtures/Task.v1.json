@@ -1,0 +1,25 @@
+{
+  "acceptance": [
+    "Every entity has an executable schema plus a versioned golden fixture"
+  ],
+  "detailPath": "./tasks/T-048.md",
+  "domains": [
+    "PROTOCOL",
+    "STORE",
+    "DOCS"
+  ],
+  "due": null,
+  "id": "T-048",
+  "parentId": "E-009",
+  "planningState": "in-progress",
+  "priority": "high",
+  "specMode": "strict",
+  "start": null,
+  "tags": [
+    "vnext",
+    "protocol"
+  ],
+  "title": "Define vNext protocol and operational domain model",
+  "type": "task",
+  "workload": "Hard"
+}

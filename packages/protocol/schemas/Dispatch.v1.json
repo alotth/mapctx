@@ -1,0 +1,52 @@
+{
+  "$ref": "#/definitions/Dispatch",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Dispatch": {
+      "additionalProperties": false,
+      "properties": {
+        "attempt": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "contextHash": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "dispatchId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "executorKind": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "claimed",
+            "running",
+            "completed",
+            "failed",
+            "blocked",
+            "cancelled",
+            "expired"
+          ],
+          "type": "string"
+        },
+        "taskId": {
+          "pattern": "^[TE]-\\d{3,}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dispatchId",
+        "taskId",
+        "executorKind",
+        "attempt",
+        "contextHash",
+        "status"
+      ],
+      "type": "object"
+    }
+  }
+}

@@ -27,7 +27,7 @@ logger.info('Development mode started', {
 
 // Example: Test markdown parsing
 function testMarkdownParsing() {
-  const exampleFile = path.join(process.cwd(), 'example-tasks', 'TASKS.md');
+  const exampleFile = path.join(process.cwd(), 'TASKS.md');
   
   if (!fs.existsSync(exampleFile)) {
     logger.warn('Example file not found', { exampleFile });
@@ -99,4 +99,3 @@ setTimeout(() => {
   console.log('\n=== Development mode completed ===');
   console.log('Check .logs/dev-mode.log for detailed logs');
 }, 2000);
-

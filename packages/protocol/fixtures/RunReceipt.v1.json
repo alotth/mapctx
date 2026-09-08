@@ -1,0 +1,37 @@
+{
+  "attempt": 1,
+  "changedFiles": [
+    "packages/protocol/src/index.ts"
+  ],
+  "dispatchId": "9b2e4d71-6c18-4a0f-b3d5-11aa22bb33cc",
+  "endedAt": "2026-08-15T22:00:00.000Z",
+  "evidence": [
+    {
+      "artifactId": "0a1b2c3d-4e5f-4678-89ab-cdef01234567",
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "kind": "spec",
+      "ownerId": "T-048",
+      "ownerKind": "task",
+      "promotedPath": null,
+      "uri": "traycer://epic/e8873251-f6f0-490d-be16-8e5655300237/artifact/mapctx-vnext-t049-external-store-tech-plan",
+      "version": "1"
+    }
+  ],
+  "failure": null,
+  "outcome": "completed",
+  "schemaVersion": 1,
+  "startedAt": "2026-08-15T21:00:00.000Z",
+  "usageEvents": [
+    {
+      "cacheTokens": 400,
+      "coverage": "partial",
+      "dispatchId": "9b2e4d71-6c18-4a0f-b3d5-11aa22bb33cc",
+      "inputTokens": 1200,
+      "model": "claude-sonnet",
+      "outputTokens": 800,
+      "provider": "anthropic",
+      "source": "harness-transcript",
+      "usageEventId": "11111111-2222-4333-8444-555555555555"
+    }
+  ]
+}

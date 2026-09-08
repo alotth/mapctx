@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
-import { SyncConfig, SyncOptions } from './types';
+import { DEFAULT_GITHUB_SOURCE_MODE, GithubSourceMode, SyncConfig, SyncOptions } from './types';
+import { findTasksRoot } from '@mapctx/core/workspace';
 import {
   DEFAULT_ALLOWED_STATUSES,
   DEFAULT_COMPLETION_STATUSES,
@@ -78,7 +79,10 @@ export function initConfigCommand(options: SyncOptions = {}): { config: SyncConf
     localWinsFields: [
       'detail',
       'defaultExpanded'
-    ]
+    ],
+    github: {
+      sourceMode: 'projection'
+    }
   };
 
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
@@ -104,6 +108,7 @@ function normalizeLoadedConfig(parsed: SyncConfig): SyncConfig {
     throw new Error('Config must include statusMap.');
   }
 
+  resolveGithubSourceMode(parsed);
   parsed.statusMap = normalizeStatusMap(parsed.statusMap);
   parsed.allowedStatuses = getAllowedStatuses(parsed);
   parsed.completionStatuses = getCompletionStatuses(parsed);
@@ -122,6 +127,34 @@ function normalizeLoadedConfig(parsed: SyncConfig): SyncConfig {
   validateStatusConfig(parsed);
 
   return parsed;
+}
+
+/**
+ * Resolves and validates github.sourceMode (ADR 0003/0004 authority rules).
+ * Absent defaults to `projection`. `canonical` is the future explicit-GitHub
+ * authority mode and is not implemented, so it fails closed here — every sync
+ * command loads config first, so no code path can silently treat GitHub as
+ * canonical.
+ */
+export function resolveGithubSourceMode(config: SyncConfig): GithubSourceMode {
+  const raw = config.github?.sourceMode;
+  if (raw === undefined) {
+    return DEFAULT_GITHUB_SOURCE_MODE;
+  }
+  if (raw !== 'projection' && raw !== 'canonical') {
+    throw new Error(
+      `github.sourceMode must be "projection" or "canonical", got: ${JSON.stringify(raw)}. ` +
+      'MapCtx treats GitHub as a projection of local state (ADR 0003/0004); omit the field for the default.'
+    );
+  }
+  if (raw === 'canonical') {
+    throw new Error(
+      'github.sourceMode "canonical" is not implemented. MapCtx only supports "projection" ' +
+      '(one-way export with import explicit). Failing closed instead of silently treating ' +
+      'GitHub as the source of truth.'
+    );
+  }
+  return raw;
 }
 
 export function loadConfig(options: SyncOptions = {}): { config: SyncConfig; configPath: string } {
@@ -148,14 +181,18 @@ export function loadConfigOptionalForBoard(options: SyncOptions = {}): {
   const cwd = process.cwd();
   const configPath = options.configPath
     ? path.resolve(cwd, options.configPath)
-    : path.resolve(cwd, 'mapcs.config.json');
+    : path.join(findTasksRoot(cwd, 'mapcs.config.json') || cwd, 'mapcs.config.json');
 
   if (fs.existsSync(configPath)) {
-    return { ...loadConfig(options), configExists: true };
+    return { ...loadConfig({ ...options, configPath }), configExists: true };
   }
 
-  const tasksFile = options.tasksFileOverride || './TASKS.md';
-  const tasksFilePath = path.resolve(cwd, tasksFile);
+  const tasksRoot = findTasksRoot(cwd);
+  const tasksFilePath = options.tasksFileOverride
+    ? path.resolve(cwd, options.tasksFileOverride)
+    : tasksRoot
+      ? path.join(tasksRoot, 'TASKS.md')
+      : path.resolve(cwd, './TASKS.md');
   if (!fs.existsSync(tasksFilePath)) {
     throw new Error(
       `Config not found: ${configPath}. No tasks file found at ${tasksFilePath}. ` +
@@ -166,7 +203,8 @@ export function loadConfigOptionalForBoard(options: SyncOptions = {}): {
   const config: SyncConfig = {
     owner: 'local',
     repo: path.basename(cwd) || 'local',
-    tasksFile,
+    // Absolute path preserves discovery root when caller runs below repo root.
+    tasksFile: tasksFilePath,
     allowedStatuses: [...DEFAULT_ALLOWED_STATUSES],
     completionStatuses: [...DEFAULT_COMPLETION_STATUSES],
     statusMap: { ...DEFAULT_STATUS_MAP }

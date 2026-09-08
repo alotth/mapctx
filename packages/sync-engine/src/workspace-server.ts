@@ -1,3 +1,13 @@
+// FROZEN: workspace-server.ts is read-only, except for one named exception.
+// See T-055 Decisions Taken: the planned/forecast/actual Gantt needs a host,
+// which is the one thing this freeze (T-059, ADR 0003) was kept alive for. The
+// /api/gantt route below is that single passthrough -- it forwards the exact
+// dataset buildGanttDataset() (shared with `mapctx gantt`) computes and adds no
+// duration/wave/collision logic of its own. All other routes remain frozen:
+// no new features beyond keeping the build green until the external-adoption
+// gate.
+// See: workspace-server is the only host serving workspaceV2.html (used by planned Gantt).
+//
 import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as http from 'http';
@@ -58,6 +68,8 @@ type WorkspaceTaskView = {
   dependsOn?: string[];
   thread: {
     exists: boolean;
+    summaryMarkdown?: string;
+    threadMarkdown?: string;
     summaryPreview?: string;
     status?: string;
     lastRuntime?: string;
@@ -66,8 +78,28 @@ type WorkspaceTaskView = {
     lastRunId?: string;
     latestRunStatus?: string;
     latestRunResult?: string;
+    latestRunStartedAt?: string;
+    latestRunEndedAt?: string;
     runCount: number;
     costUsd?: number;
+    runs: WorkspaceThreadRunView[];
+  };
+};
+
+type WorkspaceThreadRunView = {
+  runId: string;
+  runtime?: string;
+  agentProfile?: string;
+  model?: string;
+  status: string;
+  startedAt: string;
+  endedAt?: string;
+  costUsd?: number;
+  result?: string;
+  tokenUsage?: {
+    input?: number;
+    output?: number;
+    total?: number;
   };
 };
 
@@ -323,6 +355,19 @@ async function handleRequest(
     return;
   }
 
+  if (url.pathname === '/api/gantt') {
+    if (!activeWorkspace) {
+      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('No active workspace target');
+      return;
+    }
+
+    const dataset = readGanttDatasetFromCli(activeWorkspace);
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache' });
+    response.end(JSON.stringify(dataset));
+    return;
+  }
+
   const relativePath = url.pathname === '/' ? 'workspaceV2.html' : url.pathname.slice(1);
   const filePath = path.resolve(context.htmlRoot, relativePath);
 
@@ -384,6 +429,33 @@ function buildModel(activeWorkspace: ActiveWorkspace | undefined, registryPath?:
     tasksFilePath: path.relative(activeWorkspace.projectRoot, activeWorkspace.tasksFilePath),
     projectRoot: activeWorkspace.projectRoot
   };
+}
+
+/**
+ * The one exception to the freeze (see file header / T-055 Decisions Taken).
+ * Invokes the canonical CLI command and forwards its JSON unchanged. This keeps
+ * store access, cutover rules, forecast math, and planning logic inside the CLI;
+ * the frozen server remains a transport only.
+ */
+function readGanttDatasetFromCli(activeWorkspace: ActiveWorkspace): unknown {
+  const cliPath = path.join(__dirname, 'mapctx-cli.js');
+  const result = childProcess.spawnSync(process.execPath, [
+    cliPath,
+    'gantt',
+    '--json',
+    '--tasks-file',
+    activeWorkspace.tasksFilePath
+  ], {
+    cwd: activeWorkspace.projectRoot,
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024
+  });
+
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error((result.stderr || result.stdout || 'mapctx gantt failed').trim());
+  }
+  return JSON.parse(result.stdout);
 }
 
 function buildTasks(board: TaskBoard, projectRoot: string): WorkspaceTaskView[] {
@@ -552,13 +624,15 @@ function resolveAssetPath(_activeWorkspace: ActiveWorkspace, assetPath: string):
 }
 
 function readTaskThread(projectRoot: string, taskId: string): WorkspaceTaskView['thread'] {
-  const context = readThreadContext(projectRoot, taskId, { includeRuns: true });
-  if (!context.exists) return { exists: false, runCount: 0 };
+  const context = readThreadContext(projectRoot, taskId, { includeRuns: true, includeThread: true });
+  if (!context.exists) return { exists: false, runCount: 0, runs: [] };
 
   const latestRun = context.runs[context.runs.length - 1];
   const costUsd = sumRunCost(context.runs);
   return {
     exists: true,
+    summaryMarkdown: context.summary || undefined,
+    threadMarkdown: context.thread || undefined,
     summaryPreview: summaryPreview(context.summary),
     status: context.meta?.status || undefined,
     lastRuntime: context.meta?.lastRuntime || undefined,
@@ -567,8 +641,31 @@ function readTaskThread(projectRoot: string, taskId: string): WorkspaceTaskView[
     lastRunId: context.meta?.lastRunId || undefined,
     latestRunStatus: latestRun?.status,
     latestRunResult: latestRun?.result || undefined,
+    latestRunStartedAt: latestRun?.startedAt,
+    latestRunEndedAt: latestRun?.endedAt || undefined,
     runCount: context.runs.length,
-    costUsd: costUsd ?? undefined
+    costUsd: costUsd ?? undefined,
+    runs: context.runs.map(toWorkspaceThreadRun)
+  };
+}
+
+function toWorkspaceThreadRun(run: ThreadRunRecord): WorkspaceThreadRunView {
+  const tokenUsage: WorkspaceThreadRunView['tokenUsage'] = {};
+  if (typeof run.tokenUsage.input === 'number') tokenUsage.input = run.tokenUsage.input;
+  if (typeof run.tokenUsage.output === 'number') tokenUsage.output = run.tokenUsage.output;
+  if (typeof run.tokenUsage.total === 'number') tokenUsage.total = run.tokenUsage.total;
+
+  return {
+    runId: run.runId,
+    runtime: run.runtime || undefined,
+    agentProfile: run.agentProfile || undefined,
+    model: run.model || undefined,
+    status: run.status,
+    startedAt: run.startedAt,
+    endedAt: run.endedAt || undefined,
+    costUsd: typeof run.costUsd === 'number' ? run.costUsd : undefined,
+    result: run.result || undefined,
+    tokenUsage: Object.keys(tokenUsage).length ? tokenUsage : undefined
   };
 }
 

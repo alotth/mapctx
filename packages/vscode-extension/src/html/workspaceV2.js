@@ -13,22 +13,38 @@ let board = {
   activeTargetId: null,
   activeProjectId: null
 };
-let activeView = 'kanban';
+
+const VIEW_MODES = ['kanban', 'roadmap', 'execution'];
+let activeView = normalizeView(window.localStorage?.getItem('mapctx:activeView'));
 let railExpanded = window.localStorage?.getItem('mapctx:railExpanded') === 'true';
 let projectFormMode = 'create';
 let editingTargetId = null;
 let editingTargetType = null;
+let pendingExecutionTaskId = null;
+let pendingExecutionRunId = null;
+
+const ROADMAP_GROUP_MODES = ['wave', 'epic'];
+let roadmapGroupMode = normalizeRoadmapGroupMode(window.localStorage?.getItem('mapctx:roadmapGroupMode'));
+let roadmapAllCollapsed = window.localStorage?.getItem('mapctx:roadmapAllCollapsed') === 'true';
+const roadmapCollapsedGroups = new Set();
+const executionFilters = {
+  from: window.localStorage?.getItem('mapctx:executionFrom') || '',
+  to: window.localStorage?.getItem('mapctx:executionTo') || ''
+};
 
 const DEFAULT_STATUS_ORDER = ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused'];
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_DURATION_DAYS = 1;
 const RANGE_PADDING_DAYS = 7;
-const WORKLOAD_DURATION_DAYS = {
-  easy: 1,
-  normal: 2,
-  hard: 3,
-  extreme: 5
-};
+// Shortest duration a task-bar in the duration lane is still drawn as: real
+// durations here run from minutes to multi-day (measured ~28x shorter than
+// authored estimatedEffort on this board -- see T-055 Decisions Taken), and a
+// log scale sends anything at/under this to log(0). Below the floor we still
+// show a real (labeled) minimum-width bar rather than let the scale decide.
+const DURATION_LOG_FLOOR_MS = 60 * 1000;
+
+let ganttDataset = null;
+let ganttDatasetError = null;
+let ganttDatasetLoading = false;
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -44,6 +60,14 @@ function normalizeStatus(status) {
     return '';
   }
   return String(status).trim().toLowerCase();
+}
+
+function normalizeRoadmapGroupMode(value) {
+  return ROADMAP_GROUP_MODES.includes(value) ? value : 'wave';
+}
+
+function normalizeView(value) {
+  return VIEW_MODES.includes(value) ? value : 'kanban';
 }
 
 function displayStatus(status) {
@@ -82,13 +106,14 @@ function cssToken(value) {
 }
 
 function setView(view) {
-  activeView = view;
-  document.getElementById('tab-kanban').classList.toggle('active', view === 'kanban');
-  document.getElementById('tab-roadmap').classList.toggle('active', view === 'roadmap');
-  document.getElementById('tab-execution').classList.toggle('active', view === 'execution');
-  document.getElementById('kanban-view').classList.toggle('active', view === 'kanban');
-  document.getElementById('roadmap-view').classList.toggle('active', view === 'roadmap');
-  document.getElementById('execution-view').classList.toggle('active', view === 'execution');
+  activeView = normalizeView(view);
+  window.localStorage?.setItem('mapctx:activeView', activeView);
+  document.getElementById('tab-kanban').classList.toggle('active', activeView === 'kanban');
+  document.getElementById('tab-roadmap').classList.toggle('active', activeView === 'roadmap');
+  document.getElementById('tab-execution').classList.toggle('active', activeView === 'execution');
+  document.getElementById('kanban-view').classList.toggle('active', activeView === 'kanban');
+  document.getElementById('roadmap-view').classList.toggle('active', activeView === 'roadmap');
+  document.getElementById('execution-view').classList.toggle('active', activeView === 'execution');
 }
 
 function projectInitials(target) {
@@ -254,45 +279,171 @@ function renderKanban() {
   root.innerHTML = `<div class="kanban-grid">${columnsHtml}</div>`;
 }
 
+async function loadGanttDataset() {
+  if (ganttDatasetLoading || ganttDataset) return;
+  ganttDatasetLoading = true;
+  ganttDatasetError = null;
+  if (hasVsCodeApi) {
+    ganttDatasetLoading = false;
+    ganttDatasetError = 'Planning Gantt runs in `mapctx workspace`; the VS Code webview keeps Kanban and task detail only.';
+    renderRoadmap();
+    return;
+  }
+  try {
+    const response = await fetch('/api/gantt', { cache: 'no-store' });
+    if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
+    ganttDataset = await response.json();
+  } catch (error) {
+    ganttDatasetError = error instanceof Error ? error.message : String(error);
+  } finally {
+    ganttDatasetLoading = false;
+    renderRoadmap();
+  }
+}
+
 function renderRoadmap() {
   const root = document.getElementById('roadmap-view');
-  const tasks = normalizeRoadmapTasks(board.tasks || []);
-  if (!tasks.length) {
+  const rawTasks = board.tasks || [];
+  if (!rawTasks.length) {
     root.innerHTML = '<p class="empty">No tasks found for this roadmap.</p>';
     return;
   }
 
-  const range = getDateRange(tasks);
-  const summary = roadmapSummary(tasks);
+  if (!ganttDataset) {
+    root.innerHTML = ganttDatasetError
+      ? `<p class="modal-error">Could not load the Gantt dataset: ${escapeHtml(ganttDatasetError)}</p>`
+      : '<p class="empty">Loading plan, forecast, and actuals&hellip;</p>';
+    if (!ganttDatasetError) loadGanttDataset();
+    return;
+  }
+
+  const tasks = normalizeRoadmapTasks(rawTasks);
+  const calendarWindows = ganttDataset.calendarWindows || [];
+  const groups = groupRoadmapTasks(tasks);
+  syncRoadmapCollapsedGroups(groups);
+  const summary = roadmapSummary(tasks, groups);
+  const groupMetricLabel = roadmapGroupMode === 'epic' ? 'groups' : 'waves';
+  const timelineLabel = roadmapGroupMode === 'epic' ? 'Epic / task' : 'Execution order';
+  const maxDurationMs = maxDurationAcrossDataset(ganttDataset);
 
   root.innerHTML = `
     <div class="roadmap-layout">
       <section class="roadmap-hero" aria-label="Roadmap summary">
         <div class="roadmap-hero-copy">
-          <span class="roadmap-kicker">Projected plan</span>
+          <span class="roadmap-kicker">Delivery plan</span>
           <strong>${escapeHtml(summary.finishLabel)}</strong>
           <span>${escapeHtml(summary.rangeLabel)}</span>
         </div>
         <div class="roadmap-metrics">
           <div><strong>${summary.total}</strong><span>tasks</span></div>
-          <div><strong>${summary.open}</strong><span>open</span></div>
-          <div><strong>${summary.estimated}</strong><span>estimated</span></div>
-          <div><strong>${summary.waves}</strong><span>waves</span></div>
+          <div><strong>${summary.withForecast}</strong><span>forecasted</span></div>
+          <div><strong>${summary.withActual}</strong><span>with actuals</span></div>
+          <div><strong>${summary.groups}</strong><span>${escapeHtml(groupMetricLabel)}</span></div>
         </div>
+        ${renderRoadmapControls()}
         <div class="roadmap-legend" aria-label="Roadmap legend">
-          <span><i class="legend-dot actual"></i> explicit date</span>
-          <span><i class="legend-dot estimated"></i> estimated</span>
+          <span><i class="legend-dot planned"></i> planned (authored, epic/root level)</span>
+          <span><i class="legend-dot forecast"></i> forecast range (P50&ndash;P90)</span>
+          <span><i class="legend-dot actual"></i> actual (measured)</span>
           <span><i class="legend-line"></i> today</span>
         </div>
       </section>
+      ${renderForecastConfidenceBanner(ganttDataset)}
       <div class="roadmap-surface" tabindex="0" aria-label="Roadmap timeline">
-        <div class="timeline">
-          <div class="timeline-header">
-            <div class="timeline-label">Execution order</div>
-            <div class="timeline-grid">${renderTicks(range)}</div>
-          </div>
-          ${renderRoadmapGroups(tasks, range)}
+        ${renderCalendarChannel(calendarWindows)}
+        <div class="duration-lane-header">
+          <span>${escapeHtml(timelineLabel)}</span>
+          <span class="duration-lane-header-scale">Duration lane &mdash; shared log scale, floor &lt;1m</span>
         </div>
+        ${renderDurationAxis(maxDurationMs)}
+        ${renderRoadmapGroups(groups, maxDurationMs)}
+      </div>
+    </div>
+  `;
+}
+
+function renderForecastConfidenceBanner(dataset) {
+  if (!dataset.allForecastsArePriorFallback) return '';
+  const prior = (dataset.tasks || []).find(task => task.forecast?.isPriorFallback)?.forecast;
+  const priorLabel = prior
+    ? ` (P50 ${formatDurationMs(prior.durationP50Ms)} / P90 ${formatDurationMs(prior.durationP90Ms)})`
+    : '';
+  return `
+    <div class="gantt-banner gantt-banner-prior" role="note">
+      No calibrated estimates yet &mdash; every forecast below derives from the same default prior
+      ${escapeHtml(priorLabel)}, not measured data.
+    </div>
+  `;
+}
+
+function renderCalendarChannel(calendarWindows) {
+  if (!calendarWindows.length) {
+    return `
+      <div class="calendar-channel calendar-channel-empty">
+        <span>No delivery dates committed yet.</span>
+        <span class="calendar-channel-hint">Planned dates appear here once an epic or root task is authored with a start/due date.</span>
+      </div>
+    `;
+  }
+
+  const items = calendarWindows.map((window) => ({
+    ...window,
+    startDate: parseDate(window.start),
+    dueDate: parseDate(window.due)
+  })).filter((window) => window.startDate && window.dueDate);
+  const range = getDateRange(items.map((item) => ({ start: item.startDate, end: item.dueDate })));
+  return `
+    <div class="calendar-channel">
+      <div class="timeline-header">
+        <div class="timeline-label">Committed delivery dates</div>
+        <div class="timeline-grid">${renderTicks(range)}</div>
+      </div>
+      ${items.map((item) => renderCalendarRow(item, range)).join('')}
+    </div>
+  `;
+}
+
+function renderCalendarRow(item, range) {
+  const durationLabel = formatDurationMs(item.durationMs);
+  return `
+    <div class="calendar-row">
+      <div class="calendar-row-label">
+        <button class="task-label-main" data-open-detail="${escapeHtml(item.id)}" type="button">
+          <span><span class="task-id">[${escapeHtml(item.id)}]</span> ${escapeHtml(item.title)}</span>
+          <span class="task-status">${escapeHtml(item.kind)} / ${escapeHtml(item.coverage)} dates / ${escapeHtml(durationLabel)}</span>
+        </button>
+      </div>
+      <div class="calendar-row-bar-area">
+        ${renderGridLines(range)}
+        ${renderTodayLine(range)}
+        ${renderCalendarRangeBar(item, range)}
+      </div>
+    </div>
+  `;
+}
+
+function renderRoadmapControls() {
+  const modeButtons = ROADMAP_GROUP_MODES.map((mode) => {
+    const active = roadmapGroupMode === mode;
+    return `
+      <button
+        class="roadmap-control-button ${active ? 'active' : ''}"
+        data-roadmap-group-mode="${escapeHtml(mode)}"
+        type="button"
+        aria-pressed="${active ? 'true' : 'false'}">
+        ${escapeHtml(mode === 'epic' ? 'Epic' : 'Wave')}
+      </button>
+    `;
+  }).join('');
+
+  return `
+    <div class="roadmap-controls" aria-label="Roadmap controls">
+      <div class="roadmap-toggle" role="group" aria-label="Group roadmap by">
+        ${modeButtons}
+      </div>
+      <div class="roadmap-action-row">
+        <button class="roadmap-control-button" data-roadmap-collapse-all="false" type="button">Expand</button>
+        <button class="roadmap-control-button" data-roadmap-collapse-all="true" type="button">Collapse</button>
       </div>
     </div>
   `;
@@ -302,19 +453,35 @@ function renderExecution() {
   const root = document.getElementById('execution-view');
   const tasks = board.tasks || [];
   const withThreads = tasks.filter(task => task.thread && task.thread.exists);
+  const executionItems = getExecutionItems(withThreads);
+  const filteredItems = executionItems.filter(matchesExecutionItemDateFilter);
+  const filteredThreadCount = new Set(filteredItems.map(item => item.task.id)).size;
+  const filteredRunCount = filteredItems.filter(item => item.run).length;
+  const filteredCost = filteredItems.reduce((sum, item) => sum + (item.run?.costUsd || (!item.run ? item.task.thread?.costUsd || 0 : 0)), 0);
 
   const summaryHtml = `
+    <div class="execution-toolbar">
+      <label>
+        <span>From</span>
+        <input type="date" data-execution-date-filter="from" value="${escapeHtml(executionFilters.from)}">
+      </label>
+      <label>
+        <span>To</span>
+        <input type="date" data-execution-date-filter="to" value="${escapeHtml(executionFilters.to)}">
+      </label>
+      <button class="secondary-button execution-clear" data-clear-execution-filters type="button">Clear</button>
+    </div>
     <div class="execution-summary">
       <div>
-        <span class="metric-value">${withThreads.length}</span>
-        <span class="metric-label">threads</span>
+        <span class="metric-value">${filteredThreadCount}</span>
+        <span class="metric-label">contexts</span>
       </div>
       <div>
-        <span class="metric-value">${tasks.reduce((sum, task) => sum + (task.thread?.runCount || 0), 0)}</span>
-        <span class="metric-label">runs</span>
+        <span class="metric-value">${filteredRunCount}</span>
+        <span class="metric-label">executions</span>
       </div>
       <div>
-        <span class="metric-value">${formatCost(tasks.reduce((sum, task) => sum + (task.thread?.costUsd || 0), 0))}</span>
+        <span class="metric-value">${formatCost(filteredCost)}</span>
         <span class="metric-label">tracked cost</span>
       </div>
     </div>
@@ -325,28 +492,84 @@ function renderExecution() {
     return;
   }
 
-  const rows = withThreads
-    .map(task => `
-      <article class="execution-row">
+  if (filteredItems.length === 0) {
+    root.innerHTML = `${summaryHtml}<p class="empty">No executions match the selected dates.</p>`;
+    return;
+  }
+
+  const rows = filteredItems
+    .map(({ task, run }) => {
+      const key = executionItemKey(task, run);
+      const stamp = executionItemTimestamp({ task, run });
+      const result = run?.result || (!run ? task.thread.summaryPreview : '');
+      return `
+      <article
+        class="execution-row"
+        data-open-detail="${escapeHtml(task.id)}"
+        data-execution-task="${escapeHtml(task.id)}"
+        data-execution-run="${escapeHtml(run?.runId || '')}"
+        data-execution-key="${escapeHtml(key)}"
+        tabindex="0"
+        role="button">
         <div class="execution-main">
           <div class="execution-title">${renderTaskLabel(task)}</div>
           <div class="execution-meta">
-            ${renderThreadBadges(task.thread)}
-            ${task.thread.lastModel ? `<span class="pill">${escapeHtml(task.thread.lastModel)}</span>` : ''}
-            ${task.thread.runCount ? `<span class="pill">${task.thread.runCount} run${task.thread.runCount === 1 ? '' : 's'}</span>` : ''}
-            ${task.thread.costUsd ? `<span class="pill">${formatCost(task.thread.costUsd)}</span>` : ''}
+            ${renderExecutionBadges(task.thread, run)}
+            ${run?.runId ? `<span class="pill run-id">${escapeHtml(run.runId)}</span>` : ''}
           </div>
-          ${task.thread.summaryPreview ? `<div class="thread-summary">${escapeHtml(task.thread.summaryPreview)}</div>` : ''}
+          ${result ? `<div class="thread-summary">${escapeHtml(result)}</div>` : ''}
         </div>
         <div class="execution-side">
-          <span class="run-status">${escapeHtml(task.thread.latestRunStatus || 'thread')}</span>
-          ${task.thread.latestRunResult ? `<span class="run-result">${escapeHtml(task.thread.latestRunResult)}</span>` : ''}
+          <span class="run-status">${escapeHtml(run?.status || task.thread.latestRunStatus || 'context')}</span>
+          ${stamp ? `<span class="run-result">${escapeHtml(formatDateTime(stamp))}</span>` : ''}
         </div>
       </article>
-    `)
+    `;
+    })
     .join('');
 
   root.innerHTML = `${summaryHtml}<div class="execution-list">${rows}</div>`;
+  focusPendingExecutionTask();
+}
+
+function getExecutionItems(threadTasks) {
+  const items = [];
+  for (const task of threadTasks) {
+    const runs = getThreadRuns(task.thread);
+    if (!runs.length) {
+      items.push({ task, run: null });
+      continue;
+    }
+    for (const run of runs) {
+      items.push({ task, run });
+    }
+  }
+
+  return items.sort((a, b) => {
+    const aTime = executionItemTimestamp(a)?.getTime() || 0;
+    const bTime = executionItemTimestamp(b)?.getTime() || 0;
+    if (aTime !== bTime) return bTime - aTime;
+    return renderPlainTaskLabel(a.task).localeCompare(renderPlainTaskLabel(b.task));
+  });
+}
+
+function getThreadRuns(thread) {
+  return Array.isArray(thread?.runs)
+    ? thread.runs.filter(run => run && run.runId)
+    : [];
+}
+
+function executionItemKey(task, run) {
+  return `${task.id || 'task'}::${run?.runId || 'context'}`;
+}
+
+function executionItemTimestamp(item) {
+  return parseExecutionTimestamp(
+    item.run?.startedAt ||
+    item.run?.endedAt ||
+    item.task.thread?.latestRunStartedAt ||
+    item.task.thread?.latestRunEndedAt
+  );
 }
 
 function renderThreadBadges(thread) {
@@ -358,6 +581,96 @@ function renderThreadBadges(thread) {
     thread.lastRuntime ? `<span class="pill">${escapeHtml(thread.lastRuntime)}</span>` : '',
     thread.lastAgentProfile ? `<span class="pill">${escapeHtml(thread.lastAgentProfile)}</span>` : ''
   ].join('');
+}
+
+function renderExecutionBadges(thread, run) {
+  if (!thread || !thread.exists) {
+    return '';
+  }
+  const stamp = executionItemTimestamp({ task: { thread }, run });
+  return [
+    run?.status || thread.latestRunStatus ? `<span class="pill thread-pill">${escapeHtml(run?.status || thread.latestRunStatus)}</span>` : '<span class="pill thread-pill">thread</span>',
+    run?.runtime || thread.lastRuntime ? `<span class="pill">${escapeHtml(run?.runtime || thread.lastRuntime)}</span>` : '',
+    run?.agentProfile || thread.lastAgentProfile ? `<span class="pill">${escapeHtml(run?.agentProfile || thread.lastAgentProfile)}</span>` : '',
+    run?.model || thread.lastModel ? `<span class="pill">${escapeHtml(run?.model || thread.lastModel)}</span>` : '',
+    run?.costUsd ? `<span class="pill">${formatCost(run.costUsd)}</span>` : '',
+    stamp ? `<span class="pill">${escapeHtml(formatDateTime(stamp))}</span>` : ''
+  ].join('');
+}
+
+function matchesExecutionItemDateFilter(item) {
+  const stamp = executionItemTimestamp(item);
+  if (!stamp) {
+    return !executionFilters.from && !executionFilters.to;
+  }
+  const from = parseDate(executionFilters.from);
+  const to = parseDate(executionFilters.to);
+  if (from && stamp < from) return false;
+  if (to && stamp > addDays(to, 1)) return false;
+  return true;
+}
+
+function parseExecutionTimestamp(value) {
+  if (!value) return null;
+  const stamp = new Date(value);
+  if (Number.isNaN(stamp.getTime())) return null;
+  return stamp;
+}
+
+function formatDateTime(value) {
+  const stamp = parseExecutionTimestamp(value);
+  if (!stamp) return '';
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(stamp);
+}
+
+function setExecutionDateFilter(key, value) {
+  if (!['from', 'to'].includes(key)) return;
+  executionFilters[key] = value || '';
+  window.localStorage?.setItem(`mapctx:execution${key === 'from' ? 'From' : 'To'}`, executionFilters[key]);
+  renderExecution();
+}
+
+function clearExecutionFilters() {
+  executionFilters.from = '';
+  executionFilters.to = '';
+  window.localStorage?.setItem('mapctx:executionFrom', '');
+  window.localStorage?.setItem('mapctx:executionTo', '');
+  renderExecution();
+}
+
+function goToExecutionTask(taskId, runId = '') {
+  pendingExecutionTaskId = taskId || null;
+  pendingExecutionRunId = runId || null;
+  const task = findTask(taskId);
+  const run = runId ? getThreadRuns(task?.thread).find(item => item.runId === runId) : null;
+  if (task && (executionFilters.from || executionFilters.to) && !matchesExecutionItemDateFilter({ task, run })) {
+    executionFilters.from = '';
+    executionFilters.to = '';
+    window.localStorage?.setItem('mapctx:executionFrom', '');
+    window.localStorage?.setItem('mapctx:executionTo', '');
+  }
+  closeDetailModal();
+  setView('execution');
+  renderExecution();
+}
+
+function focusPendingExecutionTask() {
+  if (!pendingExecutionTaskId) return;
+  const escapeSelector = window.CSS && typeof window.CSS.escape === 'function'
+    ? window.CSS.escape
+    : (value) => String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+  const key = pendingExecutionRunId
+    ? `${pendingExecutionTaskId}::${pendingExecutionRunId}`
+    : '';
+  const row = key
+    ? document.querySelector(`[data-execution-key="${escapeSelector(key)}"]`)
+    : document.querySelector(`[data-execution-task="${escapeSelector(pendingExecutionTaskId)}"]`);
+  if (!row) return;
+  row.classList.add('highlight');
+  row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  window.setTimeout(() => row.classList.remove('highlight'), 1600);
+  pendingExecutionTaskId = null;
+  pendingExecutionRunId = null;
 }
 
 function formatCost(value) {
@@ -406,6 +719,23 @@ function progressFromStatus(status) {
   return 0.25;
 }
 
+function isTaskComplete(task) {
+  return normalizeStatus(task.status) === 'done' || Boolean(task.completed);
+}
+
+function aggregateCompletionProgress(tasks) {
+  const items = (tasks || []).filter(Boolean);
+  if (!items.length) {
+    return 0;
+  }
+  return items.filter(isTaskComplete).length / items.length;
+}
+
+function percentLabel(value) {
+  const bounded = Math.min(Math.max(Number(value) || 0, 0), 1);
+  return `${Math.round(bounded * 100)}%`;
+}
+
 function todayDate() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -415,127 +745,29 @@ function dateDiffDays(start, end) {
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / ONE_DAY_MS));
 }
 
-function durationForTask(task, fallbackEnd) {
-  const start = parseDate(task.startDate);
-  if (start && fallbackEnd) {
-    return Math.max(1, dateDiffDays(start, fallbackEnd) + 1);
-  }
-  const workload = String(task.workload || '').trim().toLowerCase();
-  return WORKLOAD_DURATION_DAYS[workload] || DEFAULT_DURATION_DAYS;
-}
-
 function normalizeRoadmapTasks(list) {
   const source = Array.isArray(list) ? list : [];
-  const byId = new Map(source.map((task) => [task.id, task]));
-  const computed = new Map();
-  const today = todayDate();
-
-  function compute(task, stack = []) {
-    if (!task || !task.id) {
-      return null;
-    }
-    if (computed.has(task.id)) {
-      return computed.get(task.id);
-    }
-
-    const inCycle = stack.includes(task.id);
-    if (inCycle) {
-      const start = parseDate(task.startDate) || today;
-      const explicitEnd = parseDate(task.completed) || parseDate(task.dueDate) || parseDate(task.updated);
-      const duration = durationForTask(task, explicitEnd);
-      const end = explicitEnd || addDays(start, duration - 1);
-      const normalized = {
-        ...task,
-        start,
-        end,
-        durationDays: Math.max(1, dateDiffDays(start, end) + 1),
-        estimatedStart: !task.startDate,
-        estimatedEnd: !explicitEnd,
-        fullyEstimated: !task.startDate && !explicitEnd,
-        missingDependencies: [],
-        scheduleConflict: true,
-        wave: 1,
-        progress: progressFromStatus(task.status)
-      };
-      computed.set(task.id, normalized);
-      return normalized;
-    }
-
-    const dependencies = (task.dependsOn || []).filter(Boolean);
-    const knownDependencySchedules = dependencies
-      .filter((dependencyId) => byId.has(dependencyId))
-      .map((dependencyId) => compute(byId.get(dependencyId), [...stack, task.id]))
-      .filter(Boolean);
-
-    const missingDependencies = dependencies.filter((dependencyId) => !byId.has(dependencyId));
-    const dependencyEnd = knownDependencySchedules.reduce((latest, dependency) => {
-      if (!latest || dependency.end > latest) return dependency.end;
-      return latest;
-    }, null);
-    const dependencyWave = knownDependencySchedules.reduce((latest, dependency) => Math.max(latest, dependency.wave || 1), 0);
-
-    let start = parseDate(task.startDate);
-    const due = parseDate(task.dueDate);
-    const completed = parseDate(task.completed);
-    const updated = parseDate(task.updated);
-    const explicitEnd = completed || due || updated;
-    const duration = durationForTask(task, explicitEnd);
-    let end = explicitEnd;
-    const hasExplicitStart = Boolean(start);
-    const hasExplicitEnd = Boolean(explicitEnd);
-
-    if (!start && end) {
-      start = addDays(end, -(duration - 1));
-    }
-    if (!start) {
-      start = dependencyEnd ? addDays(dependencyEnd, 1) : today;
-    }
-    if (!end) {
-      end = addDays(start, duration - 1);
-    }
-    if (start > end) {
-      start = addDays(end, -(duration - 1));
-    }
-
-    const dependencyReady = dependencyEnd ? addDays(dependencyEnd, 1) : null;
-    let scheduleConflict = false;
-    if (dependencyReady && start < dependencyReady) {
-      if (hasExplicitStart) {
-        scheduleConflict = true;
-      } else {
-        start = dependencyReady;
-        end = addDays(start, duration - 1);
-      }
-    }
-
-    const normalized = {
+  const datasetById = new Map((ganttDataset?.tasks || []).map((task) => [task.id, task]));
+  const violations = ganttDataset?.claimViolations || [];
+  return source.map((task) => {
+    const data = datasetById.get(task.id) || {};
+    return {
       ...task,
-      start,
-      end,
-      durationDays: Math.max(1, dateDiffDays(start, end) + 1),
-      estimatedStart: !hasExplicitStart,
-      estimatedEnd: !hasExplicitEnd,
-      fullyEstimated: !hasExplicitStart && !hasExplicitEnd,
-      missingDependencies,
-      scheduleConflict: scheduleConflict || inCycle,
-      wave: Math.max(1, dependencyWave + 1),
+      wave: data.wave ?? null,
+      planned: data.planned ?? null,
+      forecast: data.forecast ?? null,
+      actual: data.actual ?? null,
+      blockedReasons: data.blockedReasons || [],
+      collisions: data.collisions || [],
+      claimViolations: violations.filter((item) => item.taskAId === task.id || item.taskBId === task.id),
       progress: progressFromStatus(task.status)
     };
-    computed.set(task.id, normalized);
-    return normalized;
-  }
-
-  return source
-    .map((task) => compute(task))
-    .filter(Boolean)
-    .sort(compareRoadmapTasks);
+  }).sort(compareRoadmapTasks);
 }
 
 function compareRoadmapTasks(a, b) {
-  const waveDelta = (a.wave || 1) - (b.wave || 1);
+  const waveDelta = (a.wave ?? Number.MAX_SAFE_INTEGER) - (b.wave ?? Number.MAX_SAFE_INTEGER);
   if (waveDelta) return waveDelta;
-  const startDelta = a.start.getTime() - b.start.getTime();
-  if (startDelta) return startDelta;
   const statusDelta = statusOrderIndex(a.status) - statusOrderIndex(b.status);
   if (statusDelta) return statusDelta;
   return String(a.id || '').localeCompare(String(b.id || ''));
@@ -546,20 +778,17 @@ function statusOrderIndex(status) {
   return index === -1 ? DEFAULT_STATUS_ORDER.length : index;
 }
 
-function roadmapSummary(tasks) {
+function roadmapSummary(tasks, groups = []) {
   const total = tasks.length;
-  const open = tasks.filter((task) => normalizeStatus(task.status) !== 'done').length;
-  const estimated = tasks.filter((task) => task.estimatedStart || task.estimatedEnd).length;
-  const waves = tasks.reduce((max, task) => Math.max(max, task.wave || 1), 0);
-  const minStart = tasks.reduce((earliest, task) => task.start < earliest ? task.start : earliest, tasks[0].start);
-  const maxEnd = tasks.reduce((latest, task) => task.end > latest ? task.end : latest, tasks[0].end);
+  const windows = ganttDataset?.calendarWindows || [];
+  const maxDue = windows.map((item) => item.due).sort().slice(-1)[0];
   return {
     total,
-    open,
-    estimated,
-    waves,
-    finishLabel: `Finish ${formatShortDate(maxEnd)}`,
-    rangeLabel: `${formatShortDate(minStart)} -> ${formatShortDate(maxEnd)}`
+    withForecast: tasks.filter((task) => task.forecast).length,
+    withActual: tasks.filter((task) => task.actual).length,
+    groups: groups.length,
+    finishLabel: maxDue ? `Finish ${formatShortDate(parseDate(maxDue))}` : 'No delivery date',
+    rangeLabel: windows.length ? `${windows.length} committed delivery window${windows.length === 1 ? '' : 's'}` : 'Calendar commitments absent'
   };
 }
 
@@ -691,50 +920,27 @@ function getIsoWeek(date) {
   return Math.ceil((((temp.getTime() - yearStart.getTime()) / ONE_DAY_MS) + 1) / 7);
 }
 
-function renderRoadmapGroups(tasks, range) {
-  const groups = groupRoadmapTasks(tasks);
+function renderRoadmapGroups(groups, maxDurationMs) {
   return groups.map((group) => {
-    const rows = group.items.map((task, index) => {
-      const left = getPosition(task.start, range);
-      const width = Math.max(getWidth(task.start, task.end, range), 1.4);
-      const title = roadmapTooltip(task);
-      const status = normalizeStatus(task.status) || 'unknown';
-      const statusClass = cssToken(status);
-      const dependencyLabel = task.dependsOn && task.dependsOn.length ? `after ${task.dependsOn.join(', ')}` : '';
-      const estimateLabel = task.estimatedStart || task.estimatedEnd ? 'estimated' : 'explicit';
-      const issueLabel = task.scheduleConflict
-        ? '<span class="task-warning">schedule conflict</span>'
-        : task.missingDependencies && task.missingDependencies.length
-          ? `<span class="task-warning">missing ${escapeHtml(task.missingDependencies.join(', '))}</span>`
-          : '';
-      return `
-        <div class="task-row ${index % 2 ? 'task-row-alt' : ''} status-${statusClass} ${task.fullyEstimated ? 'task-row-estimated' : ''}">
-          <button class="task-label" data-open-detail="${escapeHtml(task.id)}" type="button">
-            <span><span class="task-id">[${escapeHtml(task.id)}]</span> ${escapeHtml(taskDisplayTitle(task))}</span>
-            <span class="task-status">
-              ${escapeHtml([displayStatus(task.status), task.workload, estimateLabel, dependencyLabel].filter(Boolean).join(' / '))}
-              ${issueLabel}
+    const collapsed = roadmapCollapsedGroups.has(group.id);
+    const rows = collapsed ? '' : group.rows.map((entry, index) => renderRoadmapRow(entry, maxDurationMs, index)).join('');
+    return `
+      <section class="milestone-group ${collapsed ? 'collapsed' : 'expanded'}">
+        <div class="milestone-header">
+          <button
+            class="milestone-label milestone-toggle"
+            data-toggle-roadmap-group="${escapeHtml(group.id)}"
+            type="button"
+            aria-expanded="${collapsed ? 'false' : 'true'}">
+            <span class="disclosure" aria-hidden="true">${collapsed ? '+' : '-'}</span>
+            <span class="milestone-title-text">
+              <span>${escapeHtml(group.title)}</span>
+              <small>${escapeHtml(group.meta)}</small>
             </span>
           </button>
-          <div class="task-bar-area">
-            ${renderGridLines(range)}
-            ${renderTodayLine(range)}
-            <button class="task-bar status-${statusClass} ${task.fullyEstimated ? 'estimated' : ''} ${task.scheduleConflict ? 'conflict' : ''}" data-open-detail="${escapeHtml(task.id)}" style="left:${left}%;width:${width}%" title="${escapeHtml(title)}" type="button">
-              <span class="task-bar-progress" style="width:${Math.round(task.progress * 100)}%"></span>
-              <span class="task-bar-label">${escapeHtml(`${task.durationDays}d`)}</span>
-            </button>
+          <div class="milestone-summary-area">
+            <span class="group-signal">${escapeHtml(group.signal)}</span>
           </div>
-        </div>
-      `;
-    }).join('');
-    return `
-      <section class="milestone-group">
-        <div class="milestone-header">
-          <div class="milestone-label">
-            <span>${escapeHtml(group.title)}</span>
-            <small>${escapeHtml(group.meta)}</small>
-          </div>
-          <div class="milestone-line"></div>
         </div>
         ${rows}
       </section>
@@ -743,36 +949,287 @@ function renderRoadmapGroups(tasks, range) {
 }
 
 function groupRoadmapTasks(tasks) {
+  if (roadmapGroupMode === 'epic') {
+    return groupRoadmapTasksByEpic(tasks);
+  }
+  return groupRoadmapTasksByWave(tasks);
+}
+
+function groupRoadmapTasksByWave(tasks) {
   const grouped = new Map();
   for (const task of tasks) {
-    const wave = task.wave || 1;
+    if (!isDurationLaneTask(task)) continue;
+    const wave = task.wave ?? 'blocked';
     grouped.set(wave, [...(grouped.get(wave) || []), task]);
   }
 
   return Array.from(grouped.entries())
-    .sort(([a], [b]) => a - b)
+    .sort(([a], [b]) => a === 'blocked' ? 1 : b === 'blocked' ? -1 : Number(a) - Number(b))
     .map(([wave, items]) => {
       const sortedItems = [...items].sort(compareRoadmapTasks);
-      const start = sortedItems.reduce((earliest, task) => task.start < earliest ? task.start : earliest, sortedItems[0].start);
-      const end = sortedItems.reduce((latest, task) => task.end > latest ? task.end : latest, sortedItems[0].end);
+      const progress = aggregateCompletionProgress(sortedItems);
+      const blockedCount = sortedItems.filter(task => task.blockedReasons.length).length;
+      const collisionCount = sortedItems.reduce((sum, task) => sum + task.collisions.length, 0);
       return {
-        title: `Wave ${wave}`,
-        meta: `${sortedItems.length} task${sortedItems.length === 1 ? '' : 's'} · ${formatShortDate(start)} -> ${formatShortDate(end)}`,
-        items: sortedItems
+        id: `wave:${wave}`,
+        title: wave === 'blocked' ? 'Not scheduled' : `Wave ${wave}`,
+        meta: `${sortedItems.length} task${sortedItems.length === 1 ? '' : 's'} · ${percentLabel(progress)} complete`,
+        signal: [blockedCount ? `${blockedCount} blocked` : '', collisionCount ? `${collisionCount} serialized claim${collisionCount === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ') || 'No execution warnings',
+        progress,
+        taskCount: sortedItems.length,
+        rows: sortedItems.map((task) => ({ task, depth: 0, node: null }))
       };
     });
 }
 
-function roadmapTooltip(task) {
-  const dates = `${formatShortDate(task.start)} -> ${formatShortDate(task.end)}`;
-  const source = task.fullyEstimated
-    ? 'Dates estimated by dependency order'
-    : task.estimatedStart || task.estimatedEnd
-      ? 'Partial date estimate'
-      : 'Explicit dates';
-  const deps = task.dependsOn && task.dependsOn.length ? `\nDepends on: ${task.dependsOn.join(', ')}` : '';
-  const missing = task.missingDependencies && task.missingDependencies.length ? `\nMissing dependencies: ${task.missingDependencies.join(', ')}` : '';
-  return `${task.id ? `[${task.id}] ` : ''}${taskDisplayTitle(task)}\n${dates}\n${source}\nStatus: ${displayStatus(task.status)}${deps}${missing}`;
+function groupRoadmapTasksByEpic(tasks) {
+  const byId = new Map(tasks.map(task => [task.id, task]));
+  const epicFor = (task) => {
+    let cursor = task;
+    const seen = new Set();
+    while (cursor && !seen.has(cursor.id)) {
+      seen.add(cursor.id);
+      if (isEpicTask(cursor)) return cursor;
+      cursor = cursor.parent ? byId.get(cursor.parent) : null;
+    }
+    return null;
+  };
+  const grouped = new Map();
+  for (const task of tasks) {
+    if (!isDurationLaneTask(task)) continue;
+    const epic = epicFor(task);
+    const id = epic ? epic.id : 'ungrouped';
+    grouped.set(id, { epic, tasks: [...(grouped.get(id)?.tasks || []), task] });
+  }
+  return [...grouped.entries()].map(([id, value]) => {
+    const sorted = value.tasks.sort(compareRoadmapTasks);
+    const blockedCount = sorted.filter(task => task.blockedReasons.length).length;
+    const collisionCount = sorted.reduce((sum, task) => sum + task.collisions.length, 0);
+    return {
+      id: `epic:${id}`,
+      title: value.epic ? `[${value.epic.id}] ${taskDisplayTitle(value.epic)}` : 'No epic',
+      meta: `${sorted.length} task${sorted.length === 1 ? '' : 's'} · ${percentLabel(aggregateCompletionProgress(sorted))} complete`,
+      signal: [blockedCount ? `${blockedCount} blocked` : '', collisionCount ? `${collisionCount} serialized claim${collisionCount === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ') || 'No execution warnings',
+      rows: sorted.map(task => ({ task, depth: 0, node: null }))
+    };
+  }).sort((a, b) => a.title.localeCompare(b.title));
+}
+
+function isDurationLaneTask(task) {
+  return Boolean(task.forecast || task.actual || task.blockedReasons.length || task.collisions.length || task.claimViolations.length);
+}
+
+function isEpicTask(task) {
+  const type = String(task.type || '').trim().toLowerCase();
+  return type === 'epic' || /^E-\d+/i.test(String(task.id || ''));
+}
+
+function renderRoadmapRow(entry, maxDurationMs, index) {
+  const task = entry.task;
+  const status = normalizeStatus(task.status) || 'unknown';
+  const statusClass = cssToken(status);
+  const blocked = task.blockedReasons.map(reason => reason.message).join(' · ');
+  const collision = task.collisions.map(item => {
+    const cause = [...item.domains, ...item.paths].join(', ');
+    return `serialized with ${item.withTaskId}${cause ? ` (${cause})` : ''}`;
+  }).join(' · ');
+  const violations = task.claimViolations.map(item => `${item.kind}: ${item.path}`).join(' · ');
+  const statusMeta = [displayStatus(task.status), task.wave ? `Wave ${task.wave}` : 'Not scheduled', blocked, collision, violations].filter(Boolean);
+  const warningClass = task.blockedReasons.length || task.claimViolations.length ? 'has-warning' : '';
+
+  return `
+    <div class="task-row gantt-task-row ${index % 2 ? 'task-row-alt' : ''} status-${statusClass} ${warningClass}" style="--indent:${Number(entry.depth || 0) * 18}px">
+      <div class="task-label">
+        <span class="task-indent" aria-hidden="true"></span>
+        <span class="task-state-mark status-${statusClass}" aria-hidden="true"></span>
+        <button class="task-label-main" data-open-detail="${escapeHtml(task.id)}" type="button">
+          <span><span class="task-id">[${escapeHtml(task.id)}]</span> ${escapeHtml(taskDisplayTitle(task))}</span>
+          <span class="task-status">${escapeHtml(statusMeta.join(' / '))}</span>
+        </button>
+      </div>
+      ${renderDurationCell(task, maxDurationMs)}
+    </div>
+  `;
+}
+
+function renderDurationCell(task, maxDurationMs) {
+  const forecast = task.forecast;
+  const actual = task.actual;
+  if (!forecast && !actual) {
+    return `<div class="duration-cell duration-cell-empty"><span>No duration data</span></div>`;
+  }
+
+  const p90Width = forecast ? durationScalePercent(forecast.durationP90Ms, maxDurationMs) : 0;
+  const p50Width = forecast ? durationScalePercent(forecast.durationP50Ms, maxDurationMs) : 0;
+  const actualWidth = actual ? durationScalePercent(actual.durationMs, maxDurationMs) : 0;
+  const tooltip = forecast
+    ? `Forecast ${formatDurationMs(forecast.durationP50Ms)} P50 to ${formatDurationMs(forecast.durationP90Ms)} P90\nConfidence: ${forecast.confidence}\nMethod: ${forecast.method}\nEstimator: ${forecast.estimatorVersion}\nCoverage: ${forecast.durationCoverage}`
+    : 'No forecast available';
+  const actualTooltip = actual
+    ? `Actual ${formatDurationMs(actual.durationMs)}\nOutcome: ${actual.outcome}\n${actual.startedAt} -> ${actual.endedAt}`
+    : '';
+
+  return `
+    <div class="duration-cell">
+      <button class="duration-plot" data-open-detail="${escapeHtml(task.id)}" type="button" title="${escapeHtml(`${tooltip}${actualTooltip ? `\n\n${actualTooltip}` : ''}`)}" aria-label="${escapeHtml(durationAriaLabel(task))}">
+        ${renderDurationGuides(maxDurationMs)}
+        ${forecast ? `
+          <span class="forecast-p90" style="width:${p90Width}%" aria-hidden="true"></span>
+          <span class="forecast-p50" style="width:${p50Width}%" aria-hidden="true"></span>
+          <span class="forecast-label">P50 ${escapeHtml(formatDurationMs(forecast.durationP50Ms))} / P90 ${escapeHtml(formatDurationMs(forecast.durationP90Ms))}</span>
+        ` : '<span class="forecast-label forecast-label-empty">No forecast</span>'}
+        ${actual ? `
+          <span class="actual-bar ${actual.exceedsP90 ? 'exceeds-p90' : ''}" style="width:${actualWidth}%" aria-hidden="true"></span>
+          <span class="actual-label">Actual ${escapeHtml(formatDurationMs(actual.durationMs))}</span>
+        ` : ''}
+      </button>
+      <div class="duration-signals">
+        ${renderProvenanceBadge(forecast)}
+        ${renderVarianceBadge(task)}
+      </div>
+    </div>
+  `;
+}
+
+function renderProvenanceBadge(forecast) {
+  if (!forecast) return '<span class="signal-badge signal-muted">no forecast</span>';
+  const coverageClass = `coverage-${cssToken(forecast.durationCoverage)}`;
+  const label = forecast.isPriorFallback
+    ? 'prior / uncalibrated'
+    : `${forecast.confidence} confidence / ${forecast.durationCoverage}`;
+  return `<span class="signal-badge ${coverageClass}" title="${escapeHtml(`${forecast.method} · ${forecast.estimatorVersion}`)}">${escapeHtml(label)}</span>`;
+}
+
+function renderVarianceBadge(task) {
+  const actual = task.actual;
+  if (!actual) return '<span class="signal-badge signal-muted">awaiting actual</span>';
+  if (actual.actualVsPlannedRatio !== null) {
+    const ratio = actual.actualVsPlannedRatio;
+    const label = ratio > 1 ? `${formatRatio(ratio)} over plan` : `${formatRatio(1 / Math.max(ratio, 0.0001))} under plan`;
+    return `<span class="signal-badge ${ratio > 1 ? 'signal-danger' : 'signal-good'}">${escapeHtml(label)}</span>`;
+  }
+  if (actual.actualVsP90Ratio !== null) {
+    const ratio = actual.actualVsP90Ratio;
+    const label = ratio > 1 ? `${formatRatio(ratio)} over P90` : `${formatRatio(ratio)} of P90`;
+    return `<span class="signal-badge ${ratio > 1 ? 'signal-danger' : 'signal-good'}">${escapeHtml(label)}</span>`;
+  }
+  return '<span class="signal-badge signal-muted">actual, no baseline</span>';
+}
+
+function durationAriaLabel(task) {
+  const parts = [`${task.id} ${taskDisplayTitle(task)}`];
+  if (task.forecast) parts.push(`forecast P50 ${formatDurationMs(task.forecast.durationP50Ms)}, P90 ${formatDurationMs(task.forecast.durationP90Ms)}, ${task.forecast.confidence} confidence, ${task.forecast.durationCoverage} coverage`);
+  if (task.actual) parts.push(`actual ${formatDurationMs(task.actual.durationMs)}`);
+  if (task.blockedReasons.length) parts.push(task.blockedReasons.map(item => item.message).join(', '));
+  return parts.join('. ');
+}
+
+function maxDurationAcrossDataset(dataset) {
+  const values = (dataset.tasks || []).flatMap(task => [task.forecast?.durationP90Ms, task.actual?.durationMs].filter(Number.isFinite));
+  return Math.max(DURATION_LOG_FLOOR_MS, ...values);
+}
+
+function durationScalePercent(value, maxDurationMs) {
+  if (!Number.isFinite(value) || value <= 0) return 4;
+  if (maxDurationMs <= DURATION_LOG_FLOOR_MS) return 100;
+  const clamped = Math.max(DURATION_LOG_FLOOR_MS, Math.min(value, maxDurationMs));
+  const normalized = (Math.log(clamped) - Math.log(DURATION_LOG_FLOOR_MS)) / (Math.log(maxDurationMs) - Math.log(DURATION_LOG_FLOOR_MS));
+  return 4 + normalized * 96;
+}
+
+function formatDurationMs(value) {
+  if (!Number.isFinite(value) || value < 0) return 'no data';
+  if (value < DURATION_LOG_FLOOR_MS) return '<1m';
+  const minutes = value / 60_000;
+  if (minutes < 60) return `${formatCompactNumber(minutes)}m`;
+  const hours = minutes / 60;
+  if (hours < 24) return `${formatCompactNumber(hours)}h`;
+  return `${formatCompactNumber(hours / 24)}d`;
+}
+
+function formatCompactNumber(value) {
+  if (value >= 10) return String(Math.round(value));
+  return value.toFixed(1).replace(/\.0$/, '');
+}
+
+function formatRatio(value) {
+  if (!Number.isFinite(value)) return 'n/a';
+  return `${value >= 10 ? Math.round(value) : value.toFixed(1).replace(/\.0$/, '')}×`;
+}
+
+function durationTickValues(maxDurationMs) {
+  const candidates = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 4 * 60 * 60_000, 8 * 60 * 60_000, ONE_DAY_MS, 3 * ONE_DAY_MS, 7 * ONE_DAY_MS];
+  const visible = candidates.filter(value => value <= maxDurationMs);
+  if (!visible.includes(maxDurationMs)) visible.push(maxDurationMs);
+  return [...new Set(visible)].sort((a, b) => a - b);
+}
+
+function renderDurationAxis(maxDurationMs) {
+  return `
+    <div class="duration-axis" aria-hidden="true">
+      <span class="duration-axis-label">Task / execution truth</span>
+      <div class="duration-axis-track">
+        ${durationTickValues(maxDurationMs).map(value => `<span style="left:${durationScalePercent(value, maxDurationMs)}%">${escapeHtml(formatDurationMs(value))}</span>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderDurationGuides(maxDurationMs) {
+  return durationTickValues(maxDurationMs).map(value => `<i class="duration-guide" style="left:${durationScalePercent(value, maxDurationMs)}%"></i>`).join('');
+}
+
+function renderCalendarRangeBar(item, range) {
+  const left = getPosition(item.startDate, range);
+  const width = Math.max(getWidth(item.startDate, item.dueDate, range), 1.4);
+  const title = `${item.title}\n${item.start} -> ${item.due}\n${formatDurationMs(item.durationMs)}\n${item.coverage} authored dates`;
+  return `
+    <div class="calendar-range-bar ${item.coverage === 'partial' ? 'partial' : ''}" style="left:${left}%;width:${width}%" title="${escapeHtml(title)}">
+      <span class="group-range-bar-label">${escapeHtml(formatDurationMs(item.durationMs))}</span>
+    </div>
+  `;
+}
+
+function setRoadmapGroupMode(mode) {
+  const normalized = normalizeRoadmapGroupMode(mode);
+  if (roadmapGroupMode === normalized) return;
+  roadmapGroupMode = normalized;
+  window.localStorage?.setItem('mapctx:roadmapGroupMode', roadmapGroupMode);
+  roadmapCollapsedGroups.clear();
+  renderRoadmap();
+}
+
+function toggleRoadmapGroup(id) {
+  if (!id) return;
+  roadmapAllCollapsed = false;
+  window.localStorage?.setItem('mapctx:roadmapAllCollapsed', 'false');
+  if (roadmapCollapsedGroups.has(id)) {
+    roadmapCollapsedGroups.delete(id);
+  } else {
+    roadmapCollapsedGroups.add(id);
+  }
+  renderRoadmap();
+}
+
+function setAllRoadmapGroupsCollapsed(collapsed) {
+  const groups = groupRoadmapTasks(normalizeRoadmapTasks(board.tasks || []));
+  roadmapAllCollapsed = Boolean(collapsed);
+  window.localStorage?.setItem('mapctx:roadmapAllCollapsed', roadmapAllCollapsed ? 'true' : 'false');
+  if (collapsed) {
+    for (const group of groups) roadmapCollapsedGroups.add(group.id);
+  } else {
+    roadmapCollapsedGroups.clear();
+  }
+  renderRoadmap();
+}
+
+function syncRoadmapCollapsedGroups(groups) {
+  if (!roadmapAllCollapsed) {
+    return;
+  }
+  for (const group of groups) {
+    roadmapCollapsedGroups.add(group.id);
+  }
 }
 
 function renderAll() {
@@ -1007,7 +1464,7 @@ function setProjectFormMessage(message, kind = '') {
   element.className = `form-message ${kind}`.trim();
 }
 
-async function openTaskDetail(taskId) {
+async function openTaskDetail(taskId, selectedRunId = '') {
   const task = findTask(taskId);
   if (!task) {
     return;
@@ -1017,10 +1474,10 @@ async function openTaskDetail(taskId) {
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
   document.getElementById('detail-modal-title').textContent = renderPlainTaskLabel(task);
-  setModalContent(renderIssueShell(task, '<p class="modal-empty">Loading detail file...</p>'));
+  setModalContent(renderIssueShell(task, '<p class="modal-empty">Loading detail file...</p>', selectedRunId));
 
   if (!task.detailPath) {
-    setModalContent(renderIssueShell(task, '<p class="modal-empty">No detail file linked.</p>'));
+    setModalContent(renderIssueShell(task, '<p class="modal-empty">No detail file linked.</p>', selectedRunId));
     return;
   }
 
@@ -1034,10 +1491,10 @@ async function openTaskDetail(taskId) {
       throw new Error(await response.text() || 'Failed to load detail');
     }
     const payload = await response.json();
-    setModalContent(renderIssueShell(task, renderDetailMarkdown(payload.path || task.detailPath, payload.content || '')));
+    setModalContent(renderIssueShell(task, renderDetailMarkdown(payload.path || task.detailPath, payload.content || '', task), selectedRunId));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    setModalContent(renderIssueShell(task, `<p class="modal-error">${escapeHtml(message)}</p>`));
+    setModalContent(renderIssueShell(task, `<p class="modal-error">${escapeHtml(message)}</p>`, selectedRunId));
   }
 }
 
@@ -1045,7 +1502,7 @@ function renderPlainTaskLabel(task) {
   return `[${task.id || '-'}] ${taskDisplayTitle(task)}`;
 }
 
-function renderIssueShell(task, bodyHtml) {
+function renderIssueShell(task, bodyHtml, selectedRunId = '') {
   const title = taskDisplayTitle(task);
   const pills = [
     task.priority ? `<span class="issue-pill priority-${escapeHtml(task.priority)}">${escapeHtml(task.priority)}</span>` : '',
@@ -1069,6 +1526,7 @@ function renderIssueShell(task, bodyHtml) {
         <main class="issue-main">${bodyHtml}</main>
         ${renderIssueSidebar(task)}
       </div>
+      ${renderIssueExecutionContext(task, selectedRunId)}
     </div>
   `;
 }
@@ -1099,30 +1557,120 @@ function renderIssueSidebar(task) {
     `)
     .join('');
 
-  const thread = task.thread && task.thread.exists ? `
-    <section class="issue-side-section">
-      <h4>Agent thread</h4>
-      <div class="agent-card">
-        <span class="agent-avatar">${escapeHtml(agentInitial(task.thread.lastAgentProfile || task.thread.lastRuntime || 'AI'))}</span>
-        <div>
-          <strong>${escapeHtml(task.thread.lastAgentProfile || 'Agent')}</strong>
-          <span>${escapeHtml([task.thread.lastRuntime, task.thread.lastModel].filter(Boolean).join(' · ') || 'runtime unknown')}</span>
-        </div>
-      </div>
-      ${task.thread.latestRunStatus ? `<span class="run-chip">${escapeHtml(task.thread.latestRunStatus)}</span>` : ''}
-      ${task.thread.costUsd ? `<span class="run-chip">${formatCost(task.thread.costUsd)}</span>` : ''}
-    </section>
-  ` : '';
-
   return `
     <aside class="issue-sidebar">
       <section class="issue-side-section">
         <h4>Properties</h4>
         ${rows || '<p class="modal-empty">No properties yet.</p>'}
       </section>
-      ${thread}
     </aside>
   `;
+}
+
+function renderIssueExecutionContext(task, selectedRunId = '') {
+  if (!task.thread || !task.thread.exists) {
+    return '';
+  }
+
+  const runs = getThreadRuns(task.thread);
+  const runCount = runs.length;
+  const contextMeta = [
+    task.thread.status ? `<span class="run-chip">${escapeHtml(task.thread.status)}</span>` : '',
+    runCount ? `<span class="run-chip">${runCount} execution${runCount === 1 ? '' : 's'}</span>` : '<span class="run-chip">context only</span>',
+    task.thread.costUsd ? `<span class="run-chip">${formatCost(task.thread.costUsd)}</span>` : ''
+  ].filter(Boolean).join('');
+  const summary = task.thread.summaryMarkdown || task.thread.summaryPreview || '';
+  const threadLog = task.thread.threadMarkdown || '';
+  const runList = runs.length
+    ? runs.map(run => renderThreadRunCard(task, run, selectedRunId)).join('')
+    : renderThreadRunCard(task, null, selectedRunId);
+
+  return `
+    <section class="modal-section issue-execution-context">
+      <div class="section-title-row">
+        <h3>Execution context</h3>
+        <span>${escapeHtml(task.id || '')}</span>
+      </div>
+      <div class="execution-context-head">
+        <div class="agent-card">
+          <span class="agent-avatar">${escapeHtml(agentInitial(task.thread.lastAgentProfile || task.thread.lastRuntime || 'AI'))}</span>
+          <div>
+            <strong>${escapeHtml(task.thread.lastAgentProfile || 'Agent')}</strong>
+            <span>${escapeHtml([task.thread.lastRuntime, task.thread.lastModel].filter(Boolean).join(' · ') || 'runtime unknown')}</span>
+          </div>
+        </div>
+        <div class="run-chip-row">${contextMeta}</div>
+      </div>
+      ${summary ? `
+        <div class="thread-context-summary">
+          <h4>Working summary</h4>
+          <div class="modal-markdown">${renderThreadSummaryMarkdown(summary)}</div>
+        </div>
+      ` : ''}
+      ${threadLog ? `
+        <div class="thread-context-summary thread-context-log">
+          <h4>Thread log</h4>
+          <div class="modal-markdown">${renderThreadSummaryMarkdown(threadLog)}</div>
+        </div>
+      ` : ''}
+      <div class="thread-run-list">
+        ${runList}
+      </div>
+    </section>
+  `;
+}
+
+function renderThreadRunCard(task, run, selectedRunId = '') {
+  const selected = run?.runId && selectedRunId === run.runId;
+  const stamp = executionItemTimestamp({ task, run });
+  const meta = [
+    run?.status ? `<span class="run-chip">${escapeHtml(run.status)}</span>` : '',
+    run?.runtime ? `<span class="run-chip">${escapeHtml(run.runtime)}</span>` : '',
+    run?.agentProfile ? `<span class="run-chip">${escapeHtml(run.agentProfile)}</span>` : '',
+    run?.model ? `<span class="run-chip">${escapeHtml(run.model)}</span>` : '',
+    run?.costUsd ? `<span class="run-chip">${formatCost(run.costUsd)}</span>` : '',
+    formatTokenUsage(run?.tokenUsage)
+  ].filter(Boolean).join('');
+  const title = run?.runId || 'No run record yet';
+  const body = run?.result || 'Portable execution context exists, but no run result was recorded.';
+
+  return `
+    <article class="thread-run-card ${selected ? 'selected' : ''}" data-thread-run-card="${escapeHtml(run?.runId || '')}">
+      <div class="thread-run-avatar">${escapeHtml(agentInitial(run?.agentProfile || run?.runtime || task.thread.lastAgentProfile || 'AI'))}</div>
+      <div class="thread-run-body">
+        <div class="thread-run-header">
+          <div>
+            <strong>${escapeHtml(title)}</strong>
+            ${stamp ? `<span>${escapeHtml(formatDateTime(stamp))}</span>` : ''}
+          </div>
+          <button
+            class="secondary-button issue-thread-link compact"
+            data-go-execution-task="${escapeHtml(task.id)}"
+            data-go-execution-run="${escapeHtml(run?.runId || '')}"
+            type="button">
+            View execution
+          </button>
+        </div>
+        ${meta ? `<div class="run-chip-row">${meta}</div>` : ''}
+        <p>${escapeHtml(body)}</p>
+      </div>
+    </article>
+  `;
+}
+
+function formatTokenUsage(tokenUsage) {
+  if (!tokenUsage) return '';
+  const parts = [
+    typeof tokenUsage.input === 'number' ? `${tokenUsage.input} in` : '',
+    typeof tokenUsage.output === 'number' ? `${tokenUsage.output} out` : '',
+    typeof tokenUsage.total === 'number' ? `${tokenUsage.total} total` : ''
+  ].filter(Boolean);
+  return parts.length ? `<span class="run-chip">${escapeHtml(parts.join(' · '))}</span>` : '';
+}
+
+function renderThreadSummaryMarkdown(markdown) {
+  const body = String(markdown || '').replace(/^#\s+.*(?:\r?\n)+/, '').trim();
+  return renderSimpleMarkdown(body || markdown);
 }
 
 function renderOwner(task) {
@@ -1141,7 +1689,7 @@ function agentInitial(value) {
   return String(value || 'AI').trim().slice(0, 2).toUpperCase() || 'AI';
 }
 
-function renderDetailMarkdown(detailPath, content) {
+function renderDetailMarkdown(detailPath, content, task = null) {
   const detail = parseDetailContent(content);
   const markdownSections = splitDetailMarkdownSections(detail.description);
   const acceptance = [
@@ -1153,7 +1701,11 @@ function renderDetailMarkdown(detailPath, content) {
     ...extractSectionChecklist(markdownSections, 'steps')
   ];
   const noteBlocks = extractFencedMarkdownBlocks(content);
-  const descriptionSections = markdownSections.filter(section => !isChecklistSection(section.title));
+  const descriptionSections = markdownSections.filter(section => {
+    if (isChecklistSection(section.title)) return false;
+    if (task?.thread?.exists && isExecutionContextSection(section.title)) return false;
+    return true;
+  });
   const descriptionHtml = renderDescriptionSections(detail, descriptionSections, detailPath);
 
   return `
@@ -1237,6 +1789,11 @@ function splitDetailMarkdownSections(markdown) {
 function isChecklistSection(title) {
   const normalized = String(title || '').trim().toLowerCase();
   return normalized === 'acceptance' || normalized === 'steps';
+}
+
+function isExecutionContextSection(title) {
+  const normalized = String(title || '').trim().toLowerCase();
+  return normalized === 'execution context' || normalized === 'thread context';
 }
 
 function extractSectionChecklist(sections, targetTitle) {
@@ -1534,10 +2091,37 @@ window.addEventListener('click', (event) => {
     );
     return;
   }
+  const roadmapModeTrigger = target.closest('[data-roadmap-group-mode]');
+  if (roadmapModeTrigger) {
+    setRoadmapGroupMode(roadmapModeTrigger.getAttribute('data-roadmap-group-mode'));
+    return;
+  }
+  const roadmapCollapseTrigger = target.closest('[data-roadmap-collapse-all]');
+  if (roadmapCollapseTrigger) {
+    setAllRoadmapGroupsCollapsed(roadmapCollapseTrigger.getAttribute('data-roadmap-collapse-all') === 'true');
+    return;
+  }
+  const roadmapGroupTrigger = target.closest('[data-toggle-roadmap-group]');
+  if (roadmapGroupTrigger) {
+    toggleRoadmapGroup(roadmapGroupTrigger.getAttribute('data-toggle-roadmap-group'));
+    return;
+  }
+  const executionTrigger = target.closest('[data-go-execution-task]');
+  if (executionTrigger) {
+    goToExecutionTask(
+      executionTrigger.getAttribute('data-go-execution-task'),
+      executionTrigger.getAttribute('data-go-execution-run') || ''
+    );
+    return;
+  }
+  if (target.closest('[data-clear-execution-filters]')) {
+    clearExecutionFilters();
+    return;
+  }
   const detailTrigger = target.closest('[data-open-detail]');
   const detailId = detailTrigger ? detailTrigger.getAttribute('data-open-detail') : null;
   if (detailId) {
-    openTaskDetail(detailId);
+    openTaskDetail(detailId, detailTrigger.getAttribute('data-execution-run') || '');
     return;
   }
   const closeTrigger = target.closest("[data-close-modal='detail']");
@@ -1559,6 +2143,18 @@ window.addEventListener('click', (event) => {
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     closeModal();
+    return;
+  }
+  if (event.key === 'Enter' || event.key === ' ') {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
+    const detailTrigger = target.closest('[data-open-detail]');
+    const detailId = detailTrigger ? detailTrigger.getAttribute('data-open-detail') : null;
+    if (detailId) {
+      event.preventDefault();
+      openTaskDetail(detailId, detailTrigger.getAttribute('data-execution-run') || '');
+    }
   }
 });
 
@@ -1566,6 +2162,17 @@ document.getElementById('tab-kanban').addEventListener('click', () => setView('k
 document.getElementById('tab-roadmap').addEventListener('click', () => setView('roadmap'));
 document.getElementById('tab-execution').addEventListener('click', () => setView('execution'));
 document.getElementById('project-form')?.addEventListener('submit', submitProjectForm);
+
+document.addEventListener('change', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+  const key = target.getAttribute('data-execution-date-filter');
+  if (key) {
+    setExecutionDateFilter(key, target.value);
+  }
+});
 
 window.addEventListener('message', (event) => {
   const message = event.data;
@@ -1580,7 +2187,21 @@ window.addEventListener('message', (event) => {
       activeTargetId: message.activeTargetId || message.activeProjectId || null,
       activeProjectId: message.activeProjectId || null
     };
+    ganttDataset = null;
+    ganttDatasetError = null;
+    ganttDatasetLoading = false;
     renderAll();
+  }
+  if (message.type === 'ganttDataset') {
+    ganttDataset = message.dataset || null;
+    ganttDatasetError = null;
+    ganttDatasetLoading = false;
+    renderRoadmap();
+  }
+  if (message.type === 'ganttDatasetError') {
+    ganttDatasetError = message.message || 'Could not build Gantt dataset';
+    ganttDatasetLoading = false;
+    renderRoadmap();
   }
   if (message.type === 'selectedFolder' && message.inputId && message.path) {
     const input = document.getElementById(message.inputId);
@@ -1604,4 +2225,4 @@ if (window.MAPCTX_BOOTSTRAP) {
   renderAll();
 }
 
-setView('kanban');
+setView(activeView);

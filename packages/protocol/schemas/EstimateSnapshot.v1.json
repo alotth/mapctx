@@ -1,0 +1,130 @@
+{
+  "$ref": "#/definitions/EstimateSnapshot",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "EstimateSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cacheTokensP50": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cacheTokensP90": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "type": "string"
+        },
+        "costCoverage": {
+          "enum": [
+            "full",
+            "partial",
+            "none"
+          ],
+          "type": "string"
+        },
+        "createdAt": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
+          "type": "string"
+        },
+        "durationCoverage": {
+          "enum": [
+            "measured",
+            "substituted",
+            "none"
+          ],
+          "type": "string"
+        },
+        "durationP50Ms": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "durationP90Ms": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "estimateId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "estimatorVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "idleThresholdMs": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "inputTokensP50": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "inputTokensP90": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "method": {
+          "enum": [
+            "expert-guess",
+            "historical-baseline",
+            "workload-table",
+            "calibrated"
+          ],
+          "type": "string"
+        },
+        "outputTokensP50": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "outputTokensP90": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "shadowMicrosP50": {
+          "type": "integer"
+        },
+        "shadowMicrosP90": {
+          "type": "integer"
+        },
+        "taskId": {
+          "pattern": "^[TE]-\\d{3,}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "estimateId",
+        "taskId",
+        "createdAt",
+        "method",
+        "confidence",
+        "estimatorVersion",
+        "idleThresholdMs",
+        "costCoverage",
+        "durationP50Ms",
+        "durationP90Ms",
+        "inputTokensP50",
+        "inputTokensP90",
+        "outputTokensP50",
+        "outputTokensP90",
+        "cacheTokensP50",
+        "cacheTokensP90",
+        "shadowMicrosP50",
+        "shadowMicrosP90",
+        "assumptions"
+      ],
+      "type": "object"
+    }
+  }
+}
