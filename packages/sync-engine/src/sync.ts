@@ -443,7 +443,7 @@ export function statusCommand(options: SyncOptions = {}): StatusReport {
 }
 
 export function pullCommand(options: SyncOptions = {}): void {
-  assertLegacySyncWriterAllowed('pull', options.configPath);
+  assertLegacySyncWriterAllowed('pull', options.configPath, options.tasksFileOverride);
   const { config, configPath } = loadConfig(options);
   announceExplicitImport('pull', config, options);
   const tasksFilePath = resolveTasksFile(configPath, config, options);
@@ -517,7 +517,7 @@ export function pullCommand(options: SyncOptions = {}): void {
 }
 
 export function pushCommand(options: SyncOptions = {}): void {
-  assertLegacySyncWriterAllowed('push', options.configPath);
+  assertLegacySyncWriterAllowed('push', options.configPath, options.tasksFileOverride);
   const { config, configPath } = loadConfig(options);
   const sourceMode = resolveGithubSourceMode(config);
   const tasksFilePath = resolveTasksFile(configPath, config, options);
@@ -713,7 +713,7 @@ export function pushCommand(options: SyncOptions = {}): void {
 }
 
 export function bootstrapCommand(from: 'local' | 'github', options: SyncOptions = {}): void {
-  assertLegacySyncWriterAllowed('bootstrap', options.configPath);
+  assertLegacySyncWriterAllowed('bootstrap', options.configPath, options.tasksFileOverride);
   const { config, configPath } = loadConfig(options);
   if (from === 'github') {
     announceExplicitImport('bootstrap --from github', config, options);
@@ -811,7 +811,7 @@ export function bootstrapCommand(from: 'local' | 'github', options: SyncOptions 
 }
 
 export function reconcileCommand(taskId: string, options: SyncOptions = {}): void {
-  assertLegacySyncWriterAllowed('reconcile', options.configPath);
+  assertLegacySyncWriterAllowed('reconcile', options.configPath, options.tasksFileOverride);
   const { config, configPath } = loadConfig(options);
   if (options.accept === 'remote') {
     announceExplicitImport('reconcile --accept remote', config, options);

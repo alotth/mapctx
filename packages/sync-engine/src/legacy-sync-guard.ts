@@ -21,8 +21,13 @@ import * as path from 'path'
  */
 export type LegacySyncMutation = 'pull' | 'push' | 'bootstrap' | 'reconcile';
 
-export function assertLegacySyncWriterAllowed(operation: LegacySyncMutation, configPath?: string): void {
+export function assertLegacySyncWriterAllowed(operation: LegacySyncMutation, configPath?: string, tasksFileOverride?: string): void {
   const roots = new Set<string>([process.cwd()]);
+  // T-075 review P2: --tasks-file overrides the config-declared path in
+  // resolveTasksFile, so the guard must follow the override too.
+  if (tasksFileOverride) {
+    roots.add(path.dirname(path.resolve(process.cwd(), tasksFileOverride)));
+  }
   if (configPath) {
     const resolvedConfig = path.resolve(process.cwd(), configPath);
     roots.add(path.dirname(resolvedConfig));

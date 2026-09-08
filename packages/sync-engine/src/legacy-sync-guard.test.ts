@@ -113,3 +113,31 @@ test('R13 P3#6: out-of-repo config with absolute tasksFile into a store-authorit
     fs.rmSync(configDir, { recursive: true, force: true });
   }
 });
+
+// T-075 review P2: --tasks-file overrides the config-declared path, so a
+// markdown-authority cwd invoking pull against a store-authority repo's
+// TASKS.md through the override must also be refused.
+test('R13 review P2: --tasks-file override into a store-authority repo is refused from anywhere', () => {
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mapctx-r13-override-repo-'));
+  const cwdDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mapctx-r13-override-cwd-'));
+  const previousCwd = process.cwd();
+  try {
+    fs.writeFileSync(
+      path.join(repoDir, 'mapctx.toml'),
+      'schemaVersion = 1\nprojectId = "55555555-5555-4555-8555-555555555555"\nplansAuthority = "store"\n',
+      'utf8'
+    );
+    fs.writeFileSync(path.join(repoDir, 'TASKS.md'), '# board\n', 'utf8');
+    process.chdir(cwdDir);
+    assert.throws(
+      () => pullCommand({ tasksFileOverride: path.join(repoDir, 'TASKS.md') }),
+      /plansAuthority=store/,
+      'the override must be authority-checked exactly like the config-declared tasksFile'
+    );
+    assert.equal(fs.readFileSync(path.join(repoDir, 'TASKS.md'), 'utf8'), '# board\n');
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+    fs.rmSync(cwdDir, { recursive: true, force: true });
+  }
+});
