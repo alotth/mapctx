@@ -42,3 +42,4 @@ output/
 
 # Local OpenCode workspace
 .opencode/
+*.tgz
