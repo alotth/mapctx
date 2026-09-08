@@ -815,13 +815,17 @@ export function applyRunReceipt(db: DatabaseSync, receipt: RunReceipt, revision:
   updateDispatchStatus(db, receipt.dispatchId, receipt.attempt, targetExecution);
 
   const taskPatch: Partial<TaskRecord> = { executionState: targetExecution };
+  // R9: a blocked RUN is recorded (dispatch + execution carry blocked), but
+  // the planning projection must stay exportable: "blocked" has no TASKS.md
+  // status vocabulary (see EXPORTABLE_PLANNING_STATES in tasks.ts), so moving
+  // planning there would make every export/validate fail closed. The blocked
+  // attempt is fully visible in the store; planning stays where the operator
+  // left it until an explicit move.
   const targetPlanning = targetExecution === "completed"
     ? "review"
     : targetExecution === "failed"
       ? (task.planningState === "in-progress" || task.planningState === "blocked" ? "ready" : undefined)
-      : targetExecution === "blocked"
-        ? "blocked"
-        : undefined;
+      : undefined;
   if (targetPlanning !== undefined && task.planningState !== targetPlanning) {
     assertPlanningReceiptTransition(task.planningState, targetPlanning);
     taskPatch.planningState = targetPlanning;

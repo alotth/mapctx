@@ -8,6 +8,8 @@ import {
   dispatchCreateCommand,
   mapctxValidateCliCommand,
   taskCreateCommand,
+  dispatchReceiptCommand,
+  taskClaimCommand,
   taskMoveCommand,
   taskUpdateCommand
 } from './mapctx-cli';
@@ -265,6 +267,54 @@ test('dispatch create: fresh dispatch then attempt+1 on the same dispatch id', (
     assert.equal(retry.attempt, 2, 'retry appends max(attempt)+1 to the same dispatch');
 
     assert.throws(() => dispatchCreateCommand('T-201', { dispatchId: '00000000-0000-0000-0000-000000000000', json: true } as never), /Unknown dispatch/);
+  } finally {
+    restore();
+  }
+});
+
+test('R10: dispatch receipt regenerates the canonical board (review status, zero drift)', () => {
+  const { restore } = setupCutoverRepo();
+  try {
+    execFileSync('node', [require.resolve('./mapctx-cli.js'), 'import', '--commit'], { stdio: 'ignore' });
+
+    // Orchestrator flow: claim (auto -> doing), dispatch create, receipt.
+    taskClaimCommand('T-201', { json: true } as never);
+    assert.ok(readTasksMd().slice(readTasksMd().indexOf('### [T-201]')).includes('- status: doing'));
+
+    // A fresh dispatch generates its own id; capture the JSON output to learn it.
+    let captured = '';
+    const originalWrite = process.stdout.write;
+    process.stdout.write = ((chunk: unknown) => { captured += String(chunk); return true; }) as typeof process.stdout.write;
+    try {
+      dispatchCreateCommand('T-201', { executor: 'test', json: true } as never);
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+    const dispatchId = (JSON.parse(captured) as { dispatchId: string }).dispatchId;
+    assert.ok(dispatchId, 'dispatch create must report the new dispatch id');
+
+    const receiptPath = path.join(process.cwd(), 'receipt.json');
+    fs.writeFileSync(receiptPath, JSON.stringify({
+      schemaVersion: 1,
+      dispatchId,
+      attempt: 1,
+      outcome: 'completed',
+      startedAt: '2026-09-08T12:00:00.000Z',
+      endedAt: '2026-09-08T12:10:00.000Z',
+      changedFiles: ['tasks/T-201.md'],
+      usageEvents: [],
+      evidence: [],
+      failure: null
+    }), 'utf8');
+
+    dispatchReceiptCommand(dispatchId, { receiptPath, json: true } as never);
+
+    const onDisk = readTasksMd();
+    const t201Block = onDisk.slice(onDisk.indexOf('### [T-201]'));
+    assert.ok(t201Block.includes('- status: review'), 'completed receipt must move the board to review');
+
+    // The board was regenerated in the same operation: no drift, validate green.
+    mapctxValidateCliCommand({ json: true } as never);
   } finally {
     restore();
   }

@@ -287,7 +287,7 @@ type OpenStoreResult = {
  * pre-cutover, and tooling must never silently fall back to treating
  * Markdown as authoritative.
  */
-function openStoreOrFail(cwd: string): OpenStoreResult {
+function openStoreOrFail(cwd: string, options: { mode?: 'write' | 'read' } = {}): OpenStoreResult {
   const toml = resolveMapctxToml(cwd);
   if (!toml) {
     throw new Error('No mapctx.toml found in this repository or its parents. Run `mapctx import --commit` first.');
@@ -298,6 +298,18 @@ function openStoreOrFail(cwd: string): OpenStoreResult {
   const storeDir = resolveProjectStoreDir(toml.config.projectId);
   if (!isStoreMaterialized(storeDir)) {
     throw new Error(`Store not materialized at ${storeDir}. Run \`mapctx store init\`.`);
+  }
+  // R14: query commands observe the store through a read-only handle -- they
+  // cannot migrate, reindex, or write metadata. Pending maintenance is
+  // surfaced as an explicit condition instead of being healed silently.
+  if (options.mode === 'read') {
+    const handle = StoreHandle.openReadOnly(storeDir);
+    const maintenance = handle.maintenanceNeeded();
+    if (maintenance) {
+      handle.close();
+      throw new Error(`Store maintenance needed, refusing to read stale state: ${maintenance}`);
+    }
+    return { toml, storeDir, handle };
   }
   return { toml, storeDir, handle: StoreHandle.open(storeDir) };
 }
@@ -493,7 +505,7 @@ export function mapctxValidateCliCommand(options: MapctxOptions): void {
   }
 }
 
-function taskClaimCommand(taskId: string, options: MapctxOptions): void {
+export function taskClaimCommand(taskId: string, options: MapctxOptions): void {
   const cwd = process.cwd();
   const { handle } = openStoreOrFail(cwd);
   try {
@@ -525,7 +537,7 @@ export function taskShowCommand(taskId: string, options: MapctxOptions): void {
     print({ ...queryTaskFromMarkdown(path.dirname(tasksFilePath), taskId, tasksFilePath), tasksFilePath }, options.json);
     return;
   }
-  const { handle } = openStoreOrFail(cwd);
+  const { handle } = openStoreOrFail(cwd, { mode: 'read' });
   try {
     print({ ...queryTask(handle.db, taskId), tasksFilePath: resolveStoreCheckpointPath(cwd, options, toml.dir) }, options.json);
   } finally {
@@ -584,7 +596,7 @@ export function mapctxPlanCommand(options: MapctxOptions): void {
   }
 
   const cwd = process.cwd();
-  const { handle } = openStoreOrFail(cwd);
+  const { handle } = openStoreOrFail(cwd, { mode: 'read' });
   try {
     const tasks = listTasks(handle.db);
     const edges = listDependencies(handle.db);
@@ -644,7 +656,7 @@ export function mapctxGanttCommand(options: MapctxOptions): void {
     return;
   }
 
-  const { handle } = openStoreOrFail(process.cwd());
+  const { handle } = openStoreOrFail(process.cwd(), { mode: 'read' });
   try {
     const tasks = listTasks(handle.db);
     const edges = listDependencies(handle.db);
@@ -706,7 +718,7 @@ function readReceiptPayload(options: MapctxOptions): unknown {
   throw new Error('dispatch receipt requires --receipt <path> or JSON on stdin');
 }
 
-function dispatchReceiptCommand(dispatchId: string, options: MapctxOptions): void {
+export function dispatchReceiptCommand(dispatchId: string, options: MapctxOptions): void {
   const cwd = process.cwd();
   const { handle } = openStoreOrFail(cwd);
   try {
@@ -721,7 +733,25 @@ function dispatchReceiptCommand(dispatchId: string, options: MapctxOptions): voi
     }
     const receipt = readReceiptPayload(options) as Parameters<typeof recordRunReceipt>[1];
     const result = recordRunReceipt(handle, receipt, defaultActor(options.actor), dispatchId);
-    print(result, options.json);
+    // R10: accepted receipts mutate generated state (completed moves planning
+    // to review, failed moves it to ready; time-budget consumption changes),
+    // so the canonical files must follow in the same operation -- exactly like
+    // claim/move do. An export failure is reported DISTINCTLY: the receipt is
+    // already accepted and persisted, so callers must not blindly retry.
+    let regenerated: { tasksMd: string; detailFiles: number } | undefined;
+    let exportError: string | undefined;
+    if (result.ok) {
+      const toml = resolveMapctxToml(cwd);
+      if (toml && toml.config.plansAuthority === 'store') {
+        try {
+          regenerated = regenerateCanonicalFiles(handle, toml.dir);
+        } catch (error) {
+          exportError = error instanceof Error ? error.message : String(error);
+        }
+      }
+    }
+    print({ ...result, regenerated, exportError }, options.json);
+    if (exportError) throw new Error(`Receipt accepted and persisted, but canonical export failed: ${exportError}`);
     if (!result.ok) throw new Error(`Receipt rejected: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
   } finally {
     handle.close();
@@ -925,6 +955,21 @@ export function dispatchCreateCommand(taskId: string, options: MapctxOptions): v
       print(result, options.json);
       throw new Error(`Dispatch refused: ${result.reason}`);
     }
+    // R10: a dispatch attempt can change generated budget sections (scoped
+    // dispatches feed the budget rollup), so keep the canonical snapshot in
+    // the same operation. Export failure stays distinct from admission.
+    let regenerated: { tasksMd: string; detailFiles: number } | undefined;
+    let exportError: string | undefined;
+    {
+      const toml = resolveMapctxToml(cwd);
+      if (toml && toml.config.plansAuthority === 'store') {
+        try {
+          regenerated = regenerateCanonicalFiles(handle, toml.dir);
+        } catch (error) {
+          exportError = error instanceof Error ? error.message : String(error);
+        }
+      }
+    }
     print({
       ok: true,
       dispatchId,
@@ -932,8 +977,11 @@ export function dispatchCreateCommand(taskId: string, options: MapctxOptions): v
       taskId,
       status,
       executorKind: options.executor ?? 'cli',
+      regenerated,
+      exportError,
       next: `mapctx dispatch receipt ${dispatchId} --receipt <path>`
     }, options.json);
+    if (exportError) throw new Error(`Dispatch accepted and persisted, but canonical export failed: ${exportError}`);
   } finally {
     handle.close();
   }

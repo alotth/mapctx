@@ -1,10 +1,11 @@
 import * as path from "path"
 import { DatabaseSync } from "node:sqlite"
 import type { EventLogEntry } from "@mapctx/protocol"
-import { checkIntegrity, clearProjections, openDatabase, readMetaValue, writeMetaValue } from "./db"
+import { checkIntegrity, clearProjections, openDatabase, openDatabaseReadOnly, readMetaValue, schemaMaintenanceNeeded, writeMetaValue } from "./db"
 import { applyEventToProjections } from "./events"
 import { bumpSequenceWatermark, createStoreMeta, readSequenceWatermark, readStoreMetaFile, withStoreMetaLock, writeStoreMetaFile, type StoreMeta } from "./identity"
 import { listJournalSequences, payloadSha256, readJournalEntry, writeJournalBatchSync, abortJournalBatchSync, type JournalPublicationError } from "./journal"
+import { assertNotUnderMaintenance } from "./maintenance"
 
 export type AppendEventInput = {
   eventType: string;
@@ -47,6 +48,9 @@ export class StoreHandle {
    * commit is transparently healed.
    */
   static open(storeDir: string): StoreHandle {
+    // R12: repair swaps the database file; opening while a live process holds
+    // the maintenance lock would interleave with the replacement.
+    assertNotUnderMaintenance(storeDir);
     let meta = readStoreMetaFile(storeDir);
     if (!meta) {
       // Two concurrent first-opens must not each mint a nodeId: creation is
@@ -67,6 +71,45 @@ export class StoreHandle {
       handle.reconcileSequenceWatermark();
       return handle;
     } catch (error) { db.close(); throw error; }
+  }
+
+  /**
+   * Read-only open (R14): a diagnostic open that cannot mutate the store.
+   * No migrations, no identity metadata writes, no journal replay, no
+   * watermark reconciliation. Pending maintenance is surfaced explicitly
+   * through maintenanceNeeded() instead of being silently applied -- a query
+   * against a store that needs maintenance must say so, never mutate.
+   */
+  static openReadOnly(storeDir: string): StoreHandle {
+    assertNotUnderMaintenance(storeDir);
+    const meta = readStoreMetaFile(storeDir);
+    if (!meta) {
+      throw new Error(`Cannot open read-only: store not materialized at ${storeDir}. Run "mapctx store init" first.`);
+    }
+    const db = openDatabaseReadOnly(StoreHandle.dbPathFor(storeDir));
+    return new StoreHandle(storeDir, meta, db);
+  }
+
+  /**
+   * R14 read-only maintenance report: null when queries are safe, or a
+   * named condition (schema maintenance, pending journal) a query should
+   * surface instead of healing. Only meaningful on a read-only handle; the
+   * writable open heals these itself.
+   */
+  maintenanceNeeded(): string | null {
+    const schema = schemaMaintenanceNeeded(this.db);
+    if (schema) return schema;
+    let lastIndexed = 0;
+    try {
+      lastIndexed = this.lastIndexedSequence(this.nodeId);
+    } catch {
+      return "event_log unreadable (run repair)";
+    }
+    const pending = listJournalSequences(this.storeDir, this.nodeId).filter(seq => seq > lastIndexed);
+    if (pending.length > 0) {
+      return `journal holds ${pending.length} unindexed entr${pending.length === 1 ? "y" : "ies"} (run "mapctx store repair" to materialize)`;
+    }
+    return null;
   }
 
   close(): void {
@@ -165,6 +208,10 @@ export class StoreHandle {
    * write (see claims.ts).
    */
   runInWriteTransaction<T>(fn: (append: (input: AppendEventInput) => EventLogEntry) => T): T {
+    // R12: a write that started before repair acquired its lock, or against a
+    // handle already open across the swap, must refuse rather than append
+    // into a database inode repair is about to replace.
+    assertNotUnderMaintenance(this.storeDir);
     const staged: EventLogEntry[] = [];
     let published: string | undefined;
     let appendFailure: unknown;

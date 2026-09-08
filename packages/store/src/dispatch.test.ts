@@ -6,6 +6,8 @@ import { claimTask, releaseClaim, renewClaim } from "./claims"
 import { repairStore } from "./repair"
 import { StoreHandle } from "./store-handle"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
+import { buildExport } from "./export"
+import { getTask } from "./projections"
 import { ENTITY_FIXTURES } from "@mapctx/protocol"
 
 const DISPATCH_ID = "9b2e4d71-6c18-4a0f-b3d5-11aa22bb33cc"
@@ -317,3 +319,27 @@ for (const action of ["release", "expire", "reclaim"] as const) {
     } finally { handle.close(); cleanupDir(dir); }
   });
 }
+
+// R9: an accepted blocked receipt must not make the store unexportable.
+test("R9: blocked receipt keeps dispatch/execution blocked and planning exportable", () => {
+  const root = mkTmpDir("mapctx-dispatch-r9-");
+  const handle = StoreHandle.open(root);
+  try {
+    seedDispatch(handle);
+    const blocked = receipt("completed");
+    const blockedReceipt = { ...blocked, outcome: "blocked" as const, changedFiles: [], usageEvents: [] };
+    const result = recordRunReceipt(handle, blockedReceipt, "test", DISPATCH_ID);
+    assert.equal(result.ok, true, `blocked receipt rejected: ${JSON.stringify(result)}`);
+
+    const task = getTask(handle.db, "T-001");
+    assert.equal(task?.executionState, "blocked", "execution records the blocked run");
+    assert.equal(task?.planningState, "in-progress", "planning stays exportable");
+
+    const exported = buildExport(handle.db, { tasksRoot: root });
+    assert.ok(exported.tasksMd.content.includes("- status: doing"), "board round-trips the exportable state (doing = in-progress)");
+    assert.ok(!exported.tasksMd.content.includes("- status: blocked"));
+  } finally {
+    handle.close();
+    cleanupDir(root);
+  }
+});

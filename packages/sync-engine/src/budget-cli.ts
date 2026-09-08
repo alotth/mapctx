@@ -187,7 +187,7 @@ function resolveOwner(handle: StoreHandle, ownerArg: string): { ownerKind: Budge
 
 export function budgetStatusCommand(ownerArg: string | undefined, options: BudgetCliOptions): void {
   if (!ownerArg && !options.project) throw new Error('Usage: mapctx budget status <epic-id> [--json]');
-  const { handle } = requireStoreAuthorityForBudget(process.cwd());
+  const { handle } = requireStoreAuthorityForBudget(process.cwd(), { mode: 'read' });
   try {
     const { ownerKind, ownerId } = options.project
       ? resolveProjectOwner(handle)
@@ -205,7 +205,7 @@ export function budgetStatusCommand(ownerArg: string | undefined, options: Budge
 
 export function budgetHistoryCommand(ownerArg: string | undefined, options: BudgetCliOptions): void {
   if (!ownerArg && !options.project) throw new Error('Usage: mapctx budget history <epic-id> [--json]');
-  const { handle } = requireStoreAuthorityForBudget(process.cwd());
+  const { handle } = requireStoreAuthorityForBudget(process.cwd(), { mode: 'read' });
   try {
     const { ownerKind, ownerId } = options.project
       ? resolveProjectOwner(handle)

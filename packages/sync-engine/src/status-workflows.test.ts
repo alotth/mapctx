@@ -12,6 +12,12 @@ function makeTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'mapcs-'));
 }
 
+function inTempDir(tempDir: string, run: () => void): void {
+  const previousCwd = process.cwd();
+  process.chdir(tempDir);
+  try { run(); } finally { process.chdir(previousCwd); }
+}
+
 function writeConfig(tempDir: string, config: Partial<SyncConfig>): string {
   const merged: SyncConfig = {
     owner: 'acme',
@@ -217,7 +223,7 @@ test('custom completionStatuses drive completed semantics on pull', () => {
   });
 
   try {
-    pullCommand({ configPath });
+    inTempDir(tempDir, () => pullCommand({ configPath }));
     const parsed = parseTasksFile(tasksFilePath);
     const released = parsed.tasks.find(task => task.id === 'T-001');
     const build = parsed.tasks.find(task => task.id === 'T-002');
@@ -339,9 +345,11 @@ test('roundtrip pull/push/bootstrap preserves custom statuses', () => {
   });
 
   try {
-    pullCommand({ configPath });
-    pushCommand({ configPath, dryRun: true });
-    bootstrapCommand('github', { configPath });
+    inTempDir(tempDir, () => {
+      pullCommand({ configPath });
+      pushCommand({ configPath, dryRun: true });
+      bootstrapCommand('github', { configPath });
+    });
 
     const parsed = parseTasksFile(tasksFilePath);
     const byId = new Map(parsed.tasks.map(task => [task.id, task.status]));
@@ -469,7 +477,7 @@ test('bootstrap from github keeps existing id prefix for new tasks', () => {
   });
 
   try {
-    bootstrapCommand('github', { configPath });
+    inTempDir(tempDir, () => bootstrapCommand('github', { configPath }));
     const parsed = parseTasksFile(tasksFilePath);
     const imported = parsed.tasks.find(task => task.externalId === 'github:issue:92');
     assert.equal(imported?.id, 'E-010');
@@ -525,7 +533,7 @@ test('bootstrap from github honors configured idGeneration preferredPrefix', () 
   });
 
   try {
-    bootstrapCommand('github', { configPath });
+    inTempDir(tempDir, () => bootstrapCommand('github', { configPath }));
     const parsed = parseTasksFile(tasksFilePath);
     const imported = parsed.tasks.find(task => task.externalId === 'github:issue:94');
     assert.equal(imported?.id, 'E-001');

@@ -62,6 +62,45 @@ export function openDatabase(dbPath: string, options: OpenDatabaseOptions = {}):
   return db;
 }
 
+/**
+ * Read-only open of an EXISTING database (R14): no file creation, no
+ * migrations, no metadata writes. Query commands must observe the store
+ * without changing it -- including the maintenance state, which they surface
+ * instead of healing.
+ */
+export function openDatabaseReadOnly(dbPath: string, options: OpenDatabaseOptions = {}): DatabaseSync {
+  if (!fs.existsSync(dbPath)) {
+    throw new Error(`Cannot open read-only: database not found at ${dbPath}`);
+  }
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  db.exec(`PRAGMA busy_timeout = ${options.busyTimeoutMs ?? 5000}`);
+  return db;
+}
+
+/**
+ * Read-only schema state: which migrations are pending, and whether any
+ * applied migration checksum diverges. Never applies anything.
+ */
+export function schemaMaintenanceNeeded(db: DatabaseSync): string | null {
+  try {
+    const applied = db.prepare(
+      "SELECT version, checksum FROM schema_migrations ORDER BY version ASC"
+    ).all() as Array<{ version: number; checksum: string }>;
+    for (const migration of MIGRATIONS) {
+      const existing = applied.find(row => row.version === migration.version);
+      if (!existing) {
+        return `schema migration ${migration.version} is pending (run the materialization path: mapctx store init or repair)`;
+      }
+      if (existing.checksum !== checksumOf(migration.sql)) {
+        return `schema migration ${migration.version} checksum mismatch on disk (run repair)`;
+      }
+    }
+    return null;
+  } catch (error) {
+    return `schema state unreadable: ${String(error)}`;
+  }
+}
+
 export function checkIntegrity(dbPath: string): boolean {
   if (!fs.existsSync(dbPath)) return false;
   try {

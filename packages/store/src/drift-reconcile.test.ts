@@ -102,3 +102,76 @@ test("validateStoreRegime fails closed as not-materialized when plansAuthority=s
     cleanupDir(repoDir);
   }
 });
+
+// R8: a byte mismatch that per-task map comparison cannot attribute (swapped
+// task blocks, parser-ignored prose) must still yield hasDrift -- never a
+// silent "no drift" fallback to the parser.
+function extractTaskBlock(tasksMdPath: string, taskId: string): { block: string; start: number; end: number } {
+  const lines = fs.readFileSync(tasksMdPath, "utf8").split("\n");
+  const start = lines.findIndex(line => line.trim().startsWith(`### [${taskId}]`));
+  assert.ok(start >= 0, `block not found for ${taskId}`);
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (lines[i].startsWith("### [") || lines[i].startsWith("## ")) {
+      end = i;
+      break;
+    }
+  }
+  return { block: lines.slice(start, end).join("\n"), start, end };
+}
+
+test("R8: swapping two whole task blocks is drift even though parsed fields match", () => {
+  const { repoDir, restoreEnv } = setupGoldenRepo();
+  try {
+    importCommit({ cwd: repoDir, actor: "test" });
+    const tasksMdPath = path.join(repoDir, "TASKS.md");
+    assert.equal(validateStoreRegime(repoDir, repoDir).status, "store-authority");
+
+    const a = extractTaskBlock(tasksMdPath, "T-101");
+    const b = extractTaskBlock(tasksMdPath, "T-102");
+    let content = fs.readFileSync(tasksMdPath, "utf8");
+    const aLines = content.split("\n");
+    // Replace b's span first (higher indices), then a's, keeping byte counts
+    // aligned so only ORDER changes -- no per-task field differs.
+    aLines.splice(b.start, b.end - b.start, a.block);
+    const bLines = aLines.join("\n").split("\n");
+    const aStartAfter = bLines.findIndex(line => line.trim().startsWith(`### [T-101]`));
+    const aEndAfter = bLines.findIndex((line, i) => i > aStartAfter && (line.startsWith("### [") || line.startsWith("## ")));
+    bLines.splice(aStartAfter, aEndAfter - aStartAfter, b.block);
+    fs.writeFileSync(tasksMdPath, bLines.join("\n"), "utf8");
+
+    const status = validateStoreRegime(repoDir, repoDir);
+    if (status.status === "store-authority") {
+      assert.equal(status.drift.hasDrift, true, "swapped task blocks preserve parsed fields but still drift");
+    } else {
+      assert.fail("expected store-authority regime");
+    }
+  } finally {
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
+test("R8: parser-ignored prose inside a task block still reports drift", () => {
+  const { repoDir, restoreEnv } = setupGoldenRepo();
+  try {
+    importCommit({ cwd: repoDir, actor: "test" });
+    const tasksMdPath = path.join(repoDir, "TASKS.md");
+
+    const a = extractTaskBlock(tasksMdPath, "T-101");
+    let content = fs.readFileSync(tasksMdPath, "utf8");
+    const lines = content.split("\n");
+    lines.splice(a.end, 0, "free-form prose the parser ignores entirely");
+    fs.writeFileSync(tasksMdPath, lines.join("\n"), "utf8");
+
+    const status = validateStoreRegime(repoDir, repoDir);
+    if (status.status === "store-authority") {
+      assert.equal(status.drift.hasDrift, true, "byte-level prose change must not collapse to no-drift");
+    } else {
+      assert.fail("expected store-authority regime");
+    }
+  } finally {
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});

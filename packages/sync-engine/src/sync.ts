@@ -33,6 +33,7 @@ import {
   validateTaskStatuses
 } from './statuses';
 import { ensureDir, parseExternalIssueNumber, sha256, todayISO, unique } from './utils';
+import { assertLegacySyncWriterAllowed } from './legacy-sync-guard'
 
 function resolveTasksFile(configPath: string, config: SyncConfig, options: SyncOptions): string {
   const dir = path.dirname(configPath);
@@ -442,6 +443,7 @@ export function statusCommand(options: SyncOptions = {}): StatusReport {
 }
 
 export function pullCommand(options: SyncOptions = {}): void {
+  assertLegacySyncWriterAllowed('pull', options.configPath);
   const { config, configPath } = loadConfig(options);
   announceExplicitImport('pull', config, options);
   const tasksFilePath = resolveTasksFile(configPath, config, options);
@@ -515,6 +517,7 @@ export function pullCommand(options: SyncOptions = {}): void {
 }
 
 export function pushCommand(options: SyncOptions = {}): void {
+  assertLegacySyncWriterAllowed('push', options.configPath);
   const { config, configPath } = loadConfig(options);
   const sourceMode = resolveGithubSourceMode(config);
   const tasksFilePath = resolveTasksFile(configPath, config, options);
@@ -710,6 +713,7 @@ export function pushCommand(options: SyncOptions = {}): void {
 }
 
 export function bootstrapCommand(from: 'local' | 'github', options: SyncOptions = {}): void {
+  assertLegacySyncWriterAllowed('bootstrap', options.configPath);
   const { config, configPath } = loadConfig(options);
   if (from === 'github') {
     announceExplicitImport('bootstrap --from github', config, options);
@@ -807,6 +811,7 @@ export function bootstrapCommand(from: 'local' | 'github', options: SyncOptions 
 }
 
 export function reconcileCommand(taskId: string, options: SyncOptions = {}): void {
+  assertLegacySyncWriterAllowed('reconcile', options.configPath);
   const { config, configPath } = loadConfig(options);
   if (options.accept === 'remote') {
     announceExplicitImport('reconcile --accept remote', config, options);

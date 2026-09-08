@@ -1,7 +1,9 @@
 import {
+  addMinorUnits,
   budgetSchema,
   centsToMinorUnits,
   microsToMinorUnits,
+  scaleMinorUnits,
   type Account,
   type Budget,
   type BudgetConsumed,
@@ -88,6 +90,13 @@ export type BudgetWriteResult =
 /**
  * Appends one budget.set event. Revisions/top-ups are new events -- history
  * lives in the log, the projection resolves latest-wins by event order.
+ *
+ * R15: dated MONEY budgets are refused at the write path. CostEvent carries
+ * no occurrence timestamp (only its dispatch), so period-scoped money
+ * consumption cannot be computed honestly yet; presenting period metadata
+ * beside a lifetime sum would misreport remaining. Dated TIME budgets are
+ * accepted: receipt intervals carry startedAt/endedAt, which
+ * rollupTimeConsumed attributes by documented interval intersection.
  */
 export function recordBudgetSet(
   store: StoreHandle,
@@ -97,6 +106,11 @@ export function recordBudgetSet(
   const parsed = budgetSchema.safeParse(rawBudget);
   if (!parsed.success) throw new Error(`Invalid Budget: ${parsed.error.message}`);
   const budget = parsed.data;
+  if (budget.unit === "money" && (budget.periodStart !== null || budget.periodEnd !== null)) {
+    throw new Error(
+      "Dated money budgets are not supported: cost events carry no occurrence timestamp, so period consumption cannot be attributed. Re-set the budget without start/end dates."
+    );
+  }
   return store.runInWriteTransaction(append => {
     if (budget.ownerKind === "epic" && !getTask(store.db, budget.ownerId)) {
       return { ok: false, reason: "unknown-owner" };
@@ -198,10 +212,17 @@ export function rollupMoneyConsumed(db: DatabaseSync, taskIds: string[], planned
   let consumedMinor = 0;
   const attributedDispatches = new Set<string>();
   for (const row of costRows) {
-    const cashAttributed = row.cost_status === "reported" && row.cash_cents > 0;
-    const allocatedAttributed = row.allocated_micros !== null && row.allocated_micros > 0;
-    if (cashAttributed) consumedMinor += centsToMinorUnits(row.cash_cents, grid);
-    if (row.allocated_micros !== null) consumedMinor += microsToMinorUnits(row.allocated_micros, grid);
+    // R16 signed-cost policy: negative values are credits/adjustments. A
+    // reported cash row and a non-null allocated row are attributed regardless
+    // of sign and enter the sum signed -- netting matches the signed
+    // remaining-budget arithmetic (never clamped). Coverage never depends on
+    // sign; unpriced/estimated-only rows still contribute nothing.
+    const cashAttributed = row.cost_status === "reported" && row.cash_cents !== 0;
+    const allocatedAttributed = row.allocated_micros !== null && row.allocated_micros !== 0;
+    if (cashAttributed) consumedMinor = addMinorUnits(consumedMinor, centsToMinorUnits(row.cash_cents, grid));
+    if (row.allocated_micros !== null) {
+      consumedMinor = addMinorUnits(consumedMinor, microsToMinorUnits(row.allocated_micros, grid));
+    }
     if (cashAttributed || allocatedAttributed) attributedDispatches.add(row.dispatch_id);
   }
   const unattributed = dispatches.length - attributedDispatches.size;
@@ -232,12 +253,25 @@ export function rollupMoneyConsumed(db: DatabaseSync, taskIds: string[], planned
  * startedAt). activeTime is not persisted per run yet, so the output labels
  * this basis through the reason field rather than implying measured active
  * time.
+ *
+ * R15 period attribution: when a dated budget declares [periodStart,
+ * periodEnd], a receipt contributes the INTERSECTION of its wall-clock
+ * interval with the period window (receipts straddling a period boundary
+ * count only their in-period span; receipts entirely outside contribute
+ * zero and are not attributed to the period). Undated budgets keep the
+ * lifetime sum.
  */
-export function rollupTimeConsumed(db: DatabaseSync, taskIds: string[]): BudgetConsumed {
+export function rollupTimeConsumed(
+  db: DatabaseSync,
+  taskIds: string[],
+  period: { start: string; end: string } | null = null
+): BudgetConsumed {
   const dispatches = scopedDispatches(db, taskIds);
   if (dispatches.length === 0) {
     return noConsumedData("time", "no-dispatches");
   }
+  const periodStartMs = period ? Date.parse(period.start) : null;
+  const periodEndMs = period ? Date.parse(period.end) : null;
   const placeholders = dispatches.map(() => "?").join(", ");
   const receipts = listRunReceipts(db).filter(receipt =>
     dispatches.includes(receipt.dispatchId) &&
@@ -246,7 +280,11 @@ export function rollupTimeConsumed(db: DatabaseSync, taskIds: string[]): BudgetC
   const receiptsByDispatch = new Map<string, number>();
   let consumedMs = 0;
   for (const receipt of receipts) {
-    const deltaMs = Date.parse(receipt.endedAt) - Date.parse(receipt.startedAt);
+    const startedMs = Date.parse(receipt.startedAt);
+    const endedMs = Date.parse(receipt.endedAt);
+    const fromMs = period ? Math.max(startedMs, periodStartMs as number) : startedMs;
+    const toMs = period ? Math.min(endedMs, periodEndMs as number) : endedMs;
+    const deltaMs = toMs - fromMs;
     if (deltaMs > 0) {
       consumedMs += deltaMs;
       receiptsByDispatch.set(receipt.dispatchId, (receiptsByDispatch.get(receipt.dispatchId) ?? 0) + deltaMs);
@@ -271,7 +309,9 @@ export function rollupTimeConsumed(db: DatabaseSync, taskIds: string[]): BudgetC
     reason: receipts.length === 0
       ? "no-receipt-data"
       : attributed === 0
-        ? "no-positive-receipt-intervals"
+        ? period
+          ? "no-receipt-time-in-period"
+          : "no-positive-receipt-intervals"
         : unattributed > 0
           ? "partial-receipt-coverage"
           : null,
@@ -329,8 +369,11 @@ const NO_BUDGET_STATUS: Omit<BudgetStatus, "ownerKind" | "ownerId" | "consumed">
 export function budgetStatus(db: DatabaseSync, ownerKind: BudgetOwnerKind, ownerId: string): BudgetStatus {
   const budget = getLatestBudgetFor(db, ownerKind, ownerId);
   const taskIds = budgetScopeTaskIds(db, ownerKind, ownerId);
+  const timePeriod = budget?.unit === "time" && budget.periodStart && budget.periodEnd
+    ? { start: budget.periodStart, end: budget.periodEnd }
+    : null;
   const consumed = budget?.unit === "time"
-    ? rollupTimeConsumed(db, taskIds)
+    ? rollupTimeConsumed(db, taskIds, timePeriod)
     : rollupMoneyConsumed(db, taskIds, budget?.money ?? { amountMinor: 0, currency: "USD", decimals: 2 });
 
   if (!budget) {
@@ -339,8 +382,14 @@ export function budgetStatus(db: DatabaseSync, ownerKind: BudgetOwnerKind, owner
   if (budget.unit === "money") {
     const plannedMoney = budget.money ?? { amountMinor: 0, currency: "USD", decimals: 2 };
     const grid = consumed.decimals ?? Math.max(plannedMoney.decimals, 6);
-    const plannedGridMinor = plannedMoney.amountMinor * 10 ** (grid - plannedMoney.decimals);
+    const plannedGridMinor = scaleMinorUnits(plannedMoney.amountMinor, 10 ** (grid - plannedMoney.decimals));
     const spent = consumed.consumedMinor ?? 0;
+    // R15: legacy dated money budgets (written before the dated-money refusal)
+    // still report lifetime sums -- the consumed basis is labeled so the
+    // period metadata is never mistaken for period-scoped attribution.
+    const consumedLabeled = budget.periodStart || budget.periodEnd
+      ? { ...consumed, reason: consumed.reason ?? "dated-money-budget-lifetime-basis" }
+      : consumed;
     return {
       ...NO_BUDGET_STATUS,
       ownerKind,
@@ -349,9 +398,11 @@ export function budgetStatus(db: DatabaseSync, ownerKind: BudgetOwnerKind, owner
       budgetId: budget.budgetId,
       unit: "money",
       plannedMoney,
-      consumed,
+      consumed: consumedLabeled,
       remainingMinor: plannedGridMinor - spent,
-      spentBp: plannedGridMinor > 0 ? Math.floor((spent * 10_000) / plannedGridMinor) : null,
+      spentBp: plannedGridMinor > 0
+        ? Number((BigInt(spent) * 10_000n) / BigInt(plannedGridMinor))
+        : null,
       periodStart: budget.periodStart,
       periodEnd: budget.periodEnd,
       setAt: budget.setAt
@@ -369,7 +420,9 @@ export function budgetStatus(db: DatabaseSync, ownerKind: BudgetOwnerKind, owner
     plannedMinutes: budget.minutes,
     consumed,
     remainingMs: plannedMs - spentMs,
-    spentBp: plannedMs > 0 ? Math.floor((spentMs * 10_000) / plannedMs) : null,
+    spentBp: plannedMs > 0
+      ? Number((BigInt(spentMs) * 10_000n) / BigInt(plannedMs))
+      : null,
     periodStart: budget.periodStart,
     periodEnd: budget.periodEnd,
     setAt: budget.setAt

@@ -38,7 +38,21 @@ export function checkDrift(db: DatabaseSync, tasksRoot: string): DriftReport {
 
   const onDiskTasksMd = fs.existsSync(exported.tasksMd.path) ? fs.readFileSync(exported.tasksMd.path, "utf8") : "";
   if (normalizeBytes(onDiskTasksMd) !== normalizeBytes(exported.tasksMd.content)) {
-    issues.push(...diffTasksMdPerTask(exported.tasksMd.path, onDiskTasksMd, exported.tasksMd.content));
+    const attributed = diffTasksMdPerTask(exported.tasksMd.path, onDiskTasksMd, exported.tasksMd.content);
+    // R8: the boolean decision is byte-mismatch driven, independent of
+    // attribution. Swapped task blocks, parser-ignored prose, or equivalent
+    // heading spellings can vanish under per-task map comparison -- they
+    // still drift, and must surface as a board-level issue rather than a
+    // silent "no drift".
+    if (attributed.length === 0) {
+      issues.push({
+        taskId: BOARD_METADATA_SENTINEL,
+        file: exported.tasksMd.path,
+        reason: "TASKS.md bytes differ from store authority but parsed tasks/metadata match (order swap, ignored prose, or equivalent spelling)"
+      });
+    } else {
+      issues.push(...attributed);
+    }
   }
 
   for (const file of exported.taskDetailFiles) {
@@ -83,6 +97,14 @@ function diffTasksMdPerTask(onDiskPath: string, onDiskContent: string, exportedC
       normalizeBytes((onDiskBoard.notesSection ?? []).join("\n")) !== normalizeBytes((exportedBoard.notesSection ?? []).join("\n"));
     if (boardMetaChanged) {
       issues.push({ taskId: BOARD_METADATA_SENTINEL, file: onDiskPath, reason: "board title/work domains/notes drift" });
+    }
+
+    // Explicit order comparison: identical task sets in a different order
+    // preserve every per-task field, so map comparison cannot see it.
+    const onDiskOrder = onDiskBoard.tasks.map(t => t.id).join(",");
+    const exportedOrder = exportedBoard.tasks.map(t => t.id).join(",");
+    if (onDiskOrder !== exportedOrder) {
+      issues.push({ taskId: BOARD_METADATA_SENTINEL, file: onDiskPath, reason: "task block order drift" });
     }
 
     return issues;

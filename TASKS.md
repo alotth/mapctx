@@ -1585,7 +1585,7 @@
 ### [T-073] Fix PR1 P2 findings: money safety, drift bypass, blocked receipts, read-only opens, repair locking, legacy sync authority
 
   - id: T-073
-  - status: backlog
+  - status: doing
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1598,7 +1598,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-09-08
   - detail: ./tasks/T-073.md
 
 ### [T-074] Publish @mapctx packages to npm with the vNext (sync-engine bump, bundled deps, mapcs deprecation ships)
@@ -1611,13 +1611,13 @@
   - priority: null
   - workload: null
   - tags: []
-  - domains: [RELEASE]
+  - domains: [SYNC, CLI]
   - dependsOn: []
   - start: null
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-09-08
   - detail: ./tasks/T-074.md
 
 ## Notes

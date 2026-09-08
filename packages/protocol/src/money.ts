@@ -17,8 +17,14 @@ export const currencyCodeSchema = z
 
 export const moneyDecimalsSchema = z.number().int().min(0).max(18);
 
+const MAX_SAFE_MINOR = BigInt(Number.MAX_SAFE_INTEGER);
+
 export const moneySchema = z.object({
-  amountMinor: z.number().int(),
+  amountMinor: z
+    .number()
+    .int()
+    .min(-Number.MAX_SAFE_INTEGER)
+    .max(Number.MAX_SAFE_INTEGER),
   currency: currencyCodeSchema,
   decimals: moneyDecimalsSchema
 });
@@ -58,9 +64,15 @@ export function parseMoneyAmount(text: string, currency: string, decimals: numbe
       `amount ${text} carries more precision than ${decimals} decimal(s) allow; exact representation required`
     );
   }
-  const whole = Number(wholeRaw);
-  const fraction = Number(fractionRaw.padEnd(decimals, "0") || "0");
-  const amountMinor = whole * 10 ** decimals + fraction;
+  const whole = BigInt(wholeRaw);
+  const fraction = BigInt(fractionRaw.padEnd(decimals, "0") || "0");
+  const amountMinorBig = whole * 10n ** BigInt(decimals) + fraction;
+  if (amountMinorBig > MAX_SAFE_MINOR) {
+    throw new Error(
+      `amount ${text} minor units exceed the safe-integer range (>${Number.MAX_SAFE_INTEGER}); exact representation required`
+    );
+  }
+  const amountMinor = Number(amountMinorBig);
   const parsed = moneySchema.parse({
     amountMinor: negative ? -amountMinor : amountMinor,
     currency,
@@ -72,11 +84,11 @@ export function parseMoneyAmount(text: string, currency: string, decimals: numbe
 /** Money -> plain decimal string with exactly `decimals` digits ("200.000000", "200" at 0 decimals). */
 export function minorUnitsToDecimalString(amountMinor: number, decimals: number): string {
   const negative = amountMinor < 0;
-  const abs = Math.abs(amountMinor);
-  const divisor = 10 ** decimals;
-  const whole = Math.floor(abs / divisor);
+  const abs = BigInt(Math.abs(amountMinor));
+  const divisor = 10n ** BigInt(decimals);
+  const whole = abs / divisor;
   if (decimals === 0) return `${negative ? "-" : ""}${whole}`;
-  const fraction = String(abs % divisor).padStart(decimals, "0");
+  const fraction = (abs % divisor).toString().padStart(decimals, "0");
   return `${negative ? "-" : ""}${whole}.${fraction}`;
 }
 
@@ -88,7 +100,7 @@ export function minorUnitsToDecimalString(amountMinor: number, decimals: number)
  */
 export function centsToMinorUnits(cents: number, decimals: number): number {
   assertConvertible(cents, "cents");
-  if (decimals >= 2) return cents * 10 ** (decimals - 2);
+  if (decimals >= 2) return scaleChecked(cents, 10n ** BigInt(decimals - 2), "cents");
   const collapse = 10 ** (2 - decimals);
   if (cents % collapse !== 0) {
     throw new Error(`cannot convert ${cents} cents to ${decimals}-decimal minor units without loss`);
@@ -103,12 +115,60 @@ export function centsToMinorUnits(cents: number, decimals: number): number {
  */
 export function microsToMinorUnits(micros: number, decimals: number): number {
   assertConvertible(micros, "micros");
-  if (decimals >= 6) return micros * 10 ** (decimals - 6);
+  if (decimals >= 6) return scaleChecked(micros, 10n ** BigInt(decimals - 6), "micros");
   const collapse = 10 ** (6 - decimals);
   if (micros % collapse !== 0) {
     throw new Error(`cannot convert ${micros} micros to ${decimals}-decimal minor units without loss`);
   }
   return micros / collapse;
+}
+
+/**
+ * Exact integer scaling (grid conversion between decimal precisions, e.g.
+ * cents -> micros, or a planned budget onto a finer rollup grid). Throws when
+ * the scaled result leaves the safe-integer range: a silently rounded amount
+ * would corrupt every downstream sum, so the conversion surfaces loudly.
+ * R7 guard: sums and intermediate grid conversions get the same protection.
+ */
+export function scaleMinorUnits(amountMinor: number, factor: number): number {
+  if (!Number.isInteger(factor)) {
+    throw new Error(`scale factor must be an integer, got: ${factor}`);
+  }
+  return scaleChecked(amountMinor, BigInt(factor), "amount");
+}
+
+/**
+ * Exact integer sum of minor-unit amounts (budget rollup accumulation).
+ * Throws when the total leaves the safe-integer range: a silently wrapped
+ * or rounded aggregate would corrupt remaining/spent reporting.
+ */
+export function addMinorUnits(...amounts: number[]): number {
+  let total = 0n;
+  for (const amount of amounts) {
+    if (!Number.isSafeInteger(amount)) {
+      throw new Error(`summand must be a safe integer, got: ${amount}`);
+    }
+    total += BigInt(amount);
+    const abs = total < 0n ? -total : total;
+    if (abs > MAX_SAFE_MINOR) {
+      throw new Error(`aggregate sum exceeds the safe-integer range; refusing silently-wrapped money`);
+    }
+  }
+  return Number(total);
+}
+
+function scaleChecked(amount: number, factor: bigint, unit: string): number {
+  if (!Number.isSafeInteger(amount)) {
+    throw new Error(`${unit} must be a safe integer, got: ${amount}`);
+  }
+  const scaled = BigInt(amount) * factor;
+  const abs = scaled < 0n ? -scaled : scaled;
+  if (abs > MAX_SAFE_MINOR) {
+    throw new Error(
+      `${unit} ${amount} scaled by ${factor} exceeds the safe-integer range; refusing silently-rounded money`
+    );
+  }
+  return Number(scaled);
 }
 
 function assertConvertible(value: number, unit: string): void {

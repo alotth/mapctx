@@ -3,6 +3,7 @@ import test from "node:test"
 import * as fs from "fs"
 import * as path from "path"
 import { listTasks } from "./projections"
+import { acquireMaintenanceLock, readMaintenanceLock } from "./maintenance"
 import { repairStore } from "./repair"
 import { StoreHandle, storeDbIntegrityOk } from "./store-handle"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
@@ -130,6 +131,63 @@ test("store repair with an intact, non-corrupt store is a safe no-op reprojectio
     const reopened = StoreHandle.open(dir);
     assert.equal(listTasks(reopened.db).length, 5);
     reopened.close();
+  } finally {
+    cleanupDir(dir);
+  }
+});
+
+// R12: repair swaps the database file, so a live maintenance lock must
+// exclude openers and writers for the duration -- refused, never interleaved.
+test("R12: live maintenance lock refuses open and writes; repair refuses too", () => {
+  const dir = mkTmpDir("mapctx-store-repair-lock-");
+  try {
+    const handle = StoreHandle.open(dir);
+    seedFiveTasks(handle);
+
+    const lock = acquireMaintenanceLock(dir);
+    try {
+      assert.throws(() => StoreHandle.open(dir), /under maintenance/, "open must refuse under a live maintenance lock");
+      assert.throws(
+        () => handle.appendEvent({ eventType: "task.upserted", actor: "test", payload: { task: { taskId: "T-099", positionKey: 99, title: "x", planningState: "backlog", executionState: "unclaimed", tags: [], domains: [], externalLinks: [], assignees: [] } } }),
+        /under maintenance/,
+        "a handle open across the lock must refuse new writes"
+      );
+      assert.throws(() => repairStore(dir), /under maintenance/, "repair must refuse a live holder");
+    } finally {
+      lock.release();
+    }
+
+    // After release everything works again and no event was lost or duplicated.
+    assert.equal(repairStore(dir).status, "ok");
+    handle.close();
+    const reopened = StoreHandle.open(dir);
+    try {
+      assert.equal(listTasks(reopened.db).length, 5, "journal identity survived the refused writers untouched");
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    cleanupDir(dir);
+  }
+});
+
+test("R12: a stale maintenance lock left by a dead process is stolen, not a permanent brick", async () => {
+  const dir = mkTmpDir("mapctx-store-repair-stale-lock-");
+  try {
+    const handle = StoreHandle.open(dir);
+    seedFiveTasks(handle);
+    handle.close();
+
+    // A PID that provably belongs to no live process.
+    const child = (await import("child_process")).spawn("sleep", ["1"]);
+    const deadPid = child.pid as number;
+    child.kill("SIGKILL");
+    await new Promise(resolve => child.once("exit", resolve));
+    fs.writeFileSync(path.join(dir, "maintenance.lock"), JSON.stringify({ pid: deadPid, takenAt: "2026-09-08T00:00:00.000Z" }), "utf8");
+
+    assert.equal(repairStore(dir).status, "ok", "a dead holder's lock must be stealable");
+    const lock = readMaintenanceLock(dir);
+    assert.equal(lock, null, "the stolen lock must not persist");
   } finally {
     cleanupDir(dir);
   }

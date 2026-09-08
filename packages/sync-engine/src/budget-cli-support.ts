@@ -32,7 +32,7 @@ export type StoreAuthorityContext = {
  * with the remedy instead of silently picking a side (same rule as task
  * write commands).
  */
-export function requireStoreAuthorityForBudget(cwd: string): StoreAuthorityContext {
+export function requireStoreAuthorityForBudget(cwd: string, options: { mode?: 'write' | 'read' } = {}): StoreAuthorityContext {
   const toml = resolveMapctxToml(cwd);
   if (!toml) {
     throw new Error('No mapctx.toml found in this repository or its parents. Run `mapctx import --commit` first.');
@@ -43,6 +43,17 @@ export function requireStoreAuthorityForBudget(cwd: string): StoreAuthorityConte
   const storeDir = resolveProjectStoreDir(toml.config.projectId);
   if (!isStoreMaterialized(storeDir)) {
     throw new Error(`Store not materialized at ${storeDir}. Run \`mapctx store init\`.`);
+  }
+  // R14: read commands (budget status/history) observe through a read-only
+  // handle; maintenance pending is surfaced instead of healed silently.
+  if (options.mode === 'read') {
+    const handle = StoreHandle.openReadOnly(storeDir);
+    const maintenance = handle.maintenanceNeeded();
+    if (maintenance) {
+      handle.close();
+      throw new Error(`Store maintenance needed, refusing to read stale state: ${maintenance}`);
+    }
+    return { toml, handle, tasksRoot: toml.dir };
   }
   return { toml, handle: StoreHandle.open(storeDir), tasksRoot: toml.dir };
 }

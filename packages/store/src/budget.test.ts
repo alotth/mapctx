@@ -368,6 +368,146 @@ test("time rollup consumes receipt wall clock and reports its basis", () => {
   }
 })
 
+// R15: dated money budgets cannot be attributed (CostEvent has no occurrence
+// timestamp), so the write path refuses them instead of misreporting.
+test("R15: dated money budgets are refused at budget.set", () => {
+  const handle = seedStore();
+  try {
+    addTask(handle, "E-345", null)
+    assert.throws(
+      () => recordBudgetSet(handle, { ...moneyBudget("E-345", 10_000), periodStart: "2026-09-01", periodEnd: "2026-09-30" }, "test"),
+      /Dated money budgets are not supported/
+    )
+    // Undated money budgets keep working.
+    const undated = moneyBudget("E-345", 10_000)
+    assert.deepEqual(recordBudgetSet(handle, undated, "test"), { ok: true, budget: undated })
+  } finally {
+    handle.close()
+    cleanupDir(handle.storeDir)
+  }
+})
+
+// R15: dated time budgets attribute receipts by interval intersection --
+// only the in-period span of each receipt counts, receipts entirely outside
+// the window contribute zero and are not attributed.
+test("R15: dated time budgets consume only the receipt/period intersection", () => {
+  const handle = seedStore();
+  try {
+    addTask(handle, "E-346", null)
+    addTask(handle, "T-347", "E-346")
+    recordBudgetSet(handle, {
+      budgetId: crypto.randomUUID(),
+      ownerKind: "epic",
+      ownerId: "E-346",
+      unit: "time",
+      money: null,
+      minutes: 60,
+      periodStart: "2026-09-02",
+      periodEnd: "2026-10-01",
+      setAt: NOW,
+      note: null
+    }, "test")
+
+    // One dispatch per receipt (a second receipt on the same attempt is a
+    // duplicate, and a completed task refuses a new dispatch) -- three child
+    // tasks, each with its own dispatch and receipt.
+    const tasks = ["T-357", "T-358", "T-359"]
+    const dispatchIds = tasks.map((taskId, index) => {
+      addTask(handle, taskId, "E-346")
+      addDispatch(handle, crypto.randomUUID(), taskId)
+      return (handle.db.prepare("SELECT dispatch_id FROM dispatch_projection WHERE task_id = ?").get(taskId) as { dispatch_id: string }).dispatch_id
+    })
+
+    // Before the period: contributes nothing, not attributed.
+    addReceipt(handle, dispatchIds[0], "2026-09-01T10:00:00.000Z", "2026-09-01T10:20:00.000Z")
+    // Inside the period: full 30 minutes.
+    addReceipt(handle, dispatchIds[1], "2026-09-10T08:00:00.000Z", "2026-09-10T08:30:00.000Z")
+    // Straddling the period end (Oct 1 00:00 UTC): only the in-period 5 minutes count.
+    addReceipt(handle, dispatchIds[2], "2026-09-30T23:55:00.000Z", "2026-10-01T00:05:00.000Z")
+
+    const status = budgetStatus(handle.db, "epic", "E-346")
+    assert.equal(status.consumed.consumedMs, 35 * 60_000, "30 in-period + 5 in-period straddle")
+    assert.equal(status.consumed.coverage, "partial", "outside-period receipt is not attributed")
+    assert.equal(status.consumed.reason, "partial-receipt-coverage")
+    assert.equal(status.remainingMs, 25 * 60_000)
+
+    // Undated budget on the same store still reports the lifetime sum.
+    recordBudgetSet(handle, {
+      budgetId: crypto.randomUUID(),
+      ownerKind: "epic",
+      ownerId: "E-346",
+      unit: "time",
+      money: null,
+      minutes: 120,
+      periodStart: null,
+      periodEnd: null,
+      setAt: NOW,
+      note: null
+    }, "test")
+    const lifetime = budgetStatus(handle.db, "epic", "E-346")
+    assert.equal(lifetime.consumed.consumedMs, 60 * 60_000, "20 + 30 + 10 lifetime minutes")
+  } finally {
+    handle.close()
+    cleanupDir(handle.storeDir)
+  }
+})
+
+// R16 signed-cost policy: negative values are credits; they net into the sum
+// signed and count as attribution. Allocated and reported follow one policy.
+test("R16: negative costs net as credits with sign-independent coverage", () => {
+  const handle = seedStore();
+  try {
+    addTask(handle, "E-348", null)
+    addTask(handle, "T-349", "E-348")
+    recordBudgetSet(handle, moneyBudget("E-348", 10_000), "test")
+
+    addDispatch(handle, crypto.randomUUID(), "T-349")
+    const d = handle.db.prepare("SELECT dispatch_id FROM dispatch_projection WHERE task_id = 'T-349'").get() as { dispatch_id: string }
+    // Reported $10 charge and a reported $5 credit on the SAME dispatch must
+    // net to $5 (the old code yielded $10, ignoring the credit entirely).
+    addCost(handle, crypto.randomUUID(), d.dispatch_id, { cashCents: 1000, costStatus: "reported" })
+    addCost(handle, crypto.randomUUID(), d.dispatch_id, { cashCents: -500, costStatus: "reported" })
+
+    const cashNet = budgetStatus(handle.db, "epic", "E-348")
+    assert.equal(cashNet.consumed.consumedMinor, 5_000_000, "10 USD - 5 USD credit = 5 USD")
+    assert.equal(cashNet.consumed.coverage, "full", "a credit row is still measured data")
+    assert.equal(cashNet.remainingMinor, 95_000_000, "planned 100 USD minus 5 USD net spent")
+
+    // Allocated negatives follow the same policy.
+    recordBudgetSet(handle, { ...moneyBudget("E-348", 10_000), budgetId: crypto.randomUUID() }, "test")
+    addCost(handle, crypto.randomUUID(), d.dispatch_id, { allocatedMicros: 8_000_000, costStatus: "allocated" })
+    addCost(handle, crypto.randomUUID(), d.dispatch_id, { allocatedMicros: -3_000_000, costStatus: "allocated" })
+    const allocatedNet = budgetStatus(handle.db, "epic", "E-348")
+    assert.equal(allocatedNet.consumed.consumedMinor, 10_000_000, "5 USD net cash + 8 USD - 3 USD allocated")
+  } finally {
+    handle.close()
+    cleanupDir(handle.storeDir)
+  }
+})
+
+// R7: rollup accumulation throws beyond the safe-integer range instead of
+// silently wrapping the aggregate.
+test("R7: money rollup refuses aggregates beyond safe-integer range", () => {
+  const handle = seedStore();
+  try {
+    addTask(handle, "E-355", null)
+    addTask(handle, "T-356", "E-355")
+    recordBudgetSet(handle, { ...moneyBudget("E-355", 10_000), money: { amountMinor: 10_000, currency: "USD", decimals: 2 } }, "test")
+
+    addDispatch(handle, crypto.randomUUID(), "T-356")
+    const d = handle.db.prepare("SELECT dispatch_id FROM dispatch_projection WHERE task_id = 'T-356'").get() as { dispatch_id: string }
+    // Each row converts safely on its own (micros pass through at grid 6), but
+    // their SUM exceeds Number.MAX_SAFE_INTEGER -- accumulation must refuse.
+    addCost(handle, crypto.randomUUID(), d.dispatch_id, { allocatedMicros: 8_000_000_000_000_000, costStatus: "reported", cashCents: 0 })
+    addCost(handle, crypto.randomUUID(), d.dispatch_id, { allocatedMicros: 8_000_000_000_000_000, costStatus: "reported", cashCents: 0 })
+
+    assert.throws(() => budgetStatus(handle.db, "epic", "E-355"), /safe-integer range/)
+  } finally {
+    handle.close()
+    cleanupDir(handle.storeDir)
+  }
+})
+
 test("rollup determinism: status JSON is byte-identical across reads and after full journal rebuild", () => {
   const handle = seedStore()
   let first = ""

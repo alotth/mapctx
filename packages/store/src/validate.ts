@@ -19,7 +19,7 @@ export type StoreSemanticReport = {
 export type StoreValidateResult =
   | { status: "no-project"; }
   | { status: "markdown-authority"; projectId: string }
-  | { status: "not-materialized"; projectId: string; storeDir: string }
+  | { status: "not-materialized"; projectId: string; storeDir: string; maintenanceNeeded?: string }
   | { status: "store-authority"; projectId: string; drift: DriftReport; semantic: StoreSemanticReport };
 
 /** Validate fields whose authority exists only in the event-backed store. */
@@ -72,8 +72,15 @@ export function validateStoreRegime(cwd: string, tasksRoot: string): StoreValida
     return { status: "not-materialized", projectId: resolved.config.projectId, storeDir };
   }
 
-  const handle = StoreHandle.open(storeDir);
+  // R14: validation is a diagnostic read -- observe through a read-only
+  // handle and surface pending maintenance as an explicit result instead of
+  // healing it as a side effect.
+  const handle = StoreHandle.openReadOnly(storeDir);
   try {
+    const maintenance = handle.maintenanceNeeded();
+    if (maintenance) {
+      return { status: "not-materialized", projectId: resolved.config.projectId, storeDir, maintenanceNeeded: maintenance };
+    }
     const drift = checkDrift(handle.db, tasksRoot);
     const semantic = validateStoreSemantics(handle);
     return { status: "store-authority", projectId: resolved.config.projectId, drift, semantic };

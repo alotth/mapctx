@@ -1,10 +1,10 @@
 import * as fs from "fs"
-import * as os from "os"
 import * as path from "path"
 import type { EventLogEntry } from "@mapctx/protocol"
 import { checkIntegrity, openDatabase, writeMetaValue } from "./db"
 import { applyEventToProjections } from "./events"
 import { readStoreMetaFile } from "./identity"
+import { acquireMaintenanceLock, assertNotUnderMaintenance } from "./maintenance"
 import { listJournalNodeIds, listJournalSequences, readJournalEntry } from "./journal"
 import { insertEventLogRow, StoreHandle } from "./store-handle"
 
@@ -53,6 +53,16 @@ function intactDatabaseFloor(dbPath: string, dbWasCorrupt: boolean): Record<stri
 }
 
 export function repairStore(storeDir: string): RepairResult {
+  assertNotUnderMaintenance(storeDir);
+  const maintenanceLock = acquireMaintenanceLock(storeDir);
+  try {
+    return repairStoreUnderLock(storeDir);
+  } finally {
+    maintenanceLock.release();
+  }
+}
+
+function repairStoreUnderLock(storeDir: string): RepairResult {
   const dbPath = StoreHandle.dbPathFor(storeDir);
   const dbWasCorrupt = fs.existsSync(dbPath) ? !checkIntegrity(dbPath) : false;
 
@@ -102,7 +112,7 @@ export function repairStore(storeDir: string): RepairResult {
     .concat(...validatedByNode.values())
     .sort((a, b) => a.logicalClock - b.logicalClock || a.nodeId.localeCompare(b.nodeId) || a.sequence - b.sequence);
 
-  const tempDbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mapctx-repair-")), "mapctx.db");
+  const tempDbPath = path.join(storeDir, `mapctx.db.rebuild-${process.pid}-${Date.now()}`);
   const tempDb = openDatabase(tempDbPath);
   try {
     const meta = readStoreMetaFile(storeDir);
@@ -129,13 +139,30 @@ export function repairStore(storeDir: string): RepairResult {
     tempDb.close();
   }
 
+  // R12: replace without first deleting the working database. rename over an
+  // existing file is atomic on the same filesystem, and the temp DB is built
+  // inside the store directory precisely for that guarantee (the old code
+  // unlinked the target before renaming, so an interruption after the unlink
+  // left the prior serviceable database gone). The temp DB was checkpointed
+  // and closed, so the old -wal/-shm files belong to the replaced inode and
+  // are removed; a suffix rename happens only when the replacement has one.
   for (const suffix of ["", "-wal", "-shm"]) {
     const target = `${dbPath}${suffix}`;
-    if (fs.existsSync(target)) fs.rmSync(target, { force: true });
     const source = `${tempDbPath}${suffix}`;
-    if (fs.existsSync(source)) fs.renameSync(source, target);
+    if (fs.existsSync(source)) {
+      fs.renameSync(source, target);
+    } else if (fs.existsSync(target)) {
+      fs.rmSync(target, { force: true });
+    }
   }
-  fs.rmSync(path.dirname(tempDbPath), { recursive: true, force: true });
+  // The temp replacement lives inside the store directory and every suffix
+  // was renamed into place above; any leftover temp file (a failed suffix
+  // rename) must still be cleaned individually -- never the store directory
+  // itself.
+  fs.rmSync(tempDbPath, { force: true });
+  for (const suffix of ["-wal", "-shm"]) {
+    fs.rmSync(`${tempDbPath}${suffix}`, { force: true });
+  }
 
   return { status: "ok", dbWasCorrupt, eventsReplayed: allEntries.length };
 }

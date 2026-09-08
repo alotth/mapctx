@@ -368,6 +368,10 @@ export const budgetCoverageSchema = z.enum(["no-data", "partial", "full"]);
  *     in-scope tasks, ordered by cost_event_id ASC.
  *   - Real money per row: cashCents when costStatus is "reported"; plus
  *     allocatedMicros when non-null (subscription share of the plan fee).
+ *     Negative values are credits/adjustments (R16 signed policy): they enter
+ *     the sum signed and still count as attribution -- coverage never depends
+ *     on sign, and the signed net matches the never-clamped remaining
+ *     arithmetic. Zero-valued rows contribute nothing and stay unattributed.
  *   - Rows with neither (unpriced, estimated-only, zero-allocation
  *     subscription runs) contribute NOTHING to consumed; they count in
  *     unattributedDispatches. Zeros-that-look-measured are forbidden.
@@ -375,15 +379,24 @@ export const budgetCoverageSchema = z.enum(["no-data", "partial", "full"]);
  *     sum(microsToMinorUnits(allocatedMicros)), computed in the FINER of
  *     (budget decimals, 6) so every conversion is an exact upward scaling --
  *     sub-cent allocation micros are routine and must never be rounded away.
- *     Output `decimals` reports the grid actually used.
+ *     Every conversion and partial sum is checked against the safe-integer
+ *     range and throws instead of silently rounding or wrapping (R7). Output
+ *     `decimals` reports the grid actually used.
  *   - coverage: "no-data" when the scope has no dispatch with any attributed
  *     cost; "full" when every scoped dispatch has at least one attributed
  *     cost event; "partial" otherwise.
+ *   - Period scope: dated MONEY budgets are refused at the write path
+ *     (CostEvent carries no occurrence timestamp, so period consumption
+ *     cannot be attributed); legacy dated money budgets report lifetime sums
+ *     with reason "dated-money-budget-lifetime-basis" (R15).
  *
- * Time budgets: consumedMs = sum(endedAt - startedAt) over accepted
- * RunReceipts of in-scope dispatches (wall-clock basis -- activeTime is not
- * yet persisted per run, so the output labels the basis honestly).
- * coverage follows the same no-data/partial/full rules over receipts.
+ * Time budgets: consumedMs = sum over accepted RunReceipts of in-scope
+ * dispatches of the intersection of [startedAt, endedAt] with the declared
+ * [periodStart, periodEnd] when the budget is dated (undated budgets sum the
+ * full intervals) -- wall-clock basis, activeTime is not yet persisted per
+ * run, so the output labels the basis honestly. A receipt entirely outside
+ * the period contributes zero and is not attributed (R15). coverage follows
+ * the same no-data/partial/full rules over receipts.
  *
  * Deriving a budget status never mutates the store: rollups are pure reads,
  * and a spent-over-planned result renders negative remaining -- it is never

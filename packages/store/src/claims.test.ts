@@ -1,6 +1,9 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { claimTask, releaseClaim, renewClaim } from "./claims"
+import { recordDispatchAttempt, recordRunReceipt } from "./dispatch"
+import { moveTask } from "./tasks"
+import { getTask } from "./projections"
 import { StoreHandle } from "./store-handle"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
 
@@ -194,5 +197,157 @@ test("claimTask: ready claims jump straight to in-progress; done tasks refuse to
   } finally {
     handle.close();
     cleanupDir(storeDir);
+  }
+});
+
+// R11: lease status and executor state are separate concerns. Releasing or
+// expiring a lease underneath a live attempt must not silently reset the
+// execution projection (the old code performed running -> unclaimed, which
+// then made the attempt's later valid receipt unreceivable).
+test("R11: releasing a lease under a running dispatch preserves execution and its receipt", () => {
+  const dir = mkTmpDir("mapctx-store-claims-r11-release-");
+  const handle = StoreHandle.open(dir);
+  try {
+    seedOneTask(handle);
+    const claim = claimTask(handle, { taskId: "T-001", actor: "agent-1" });
+    assert.ok(claim.ok);
+    if (!claim.ok) return;
+
+    const dispatchId = "6c1f5e2a-1111-4a0f-b3d5-11aa22bb33cc";
+    const created = recordDispatchAttempt(handle, {
+      dispatchId,
+      taskId: "T-001",
+      executorKind: "test",
+      attempt: 1,
+      contextHash: "hash",
+      status: "running"
+    }, "test");
+    assert.equal(created.ok, true);
+    assert.equal(getTask(handle.db, "T-001")?.executionState, "running");
+
+    // The orchestrator loses its lease while the executor is mid-run.
+    const released = releaseClaim(handle, { taskId: "T-001", claimId: claim.claim.claimId, leaseToken: claim.claim.leaseToken, actor: "test" });
+    assert.equal(released.ok, true);
+    assert.equal(getTask(handle.db, "T-001")?.executionState, "running", "release must not reset a running execution");
+
+    // The executor's valid receipt must still be receivable.
+    const receipt = recordRunReceipt(handle, {
+      schemaVersion: 1,
+      dispatchId,
+      attempt: 1,
+      outcome: "completed",
+      startedAt: "2026-09-08T12:00:00.000Z",
+      endedAt: "2026-09-08T12:05:00.000Z",
+      changedFiles: [],
+      usageEvents: [],
+      evidence: [],
+      failure: null
+    }, "test", dispatchId);
+    assert.equal(receipt.ok, true, `receipt must remain receivable: ${JSON.stringify(receipt)}`);
+    assert.equal(getTask(handle.db, "T-001")?.executionState, "completed");
+  } finally {
+    handle.close();
+    cleanupDir(dir);
+  }
+});
+
+test("R11: a done task refuses both claim and fresh dispatch", () => {
+  const dir = mkTmpDir("mapctx-store-claims-r11-terminal-");
+  const handle = StoreHandle.open(dir);
+  try {
+    seedOneTask(handle);
+    // Reach done through the only legal route: claim -> dispatch -> receipt.
+    const claim = claimTask(handle, { taskId: "T-001", actor: "agent-1" });
+    assert.ok(claim.ok);
+    if (!claim.ok) return;
+    const dispatchId = "6c1f5e2a-2222-4a0f-b3d5-11aa22bb33cc";
+    assert.equal(recordDispatchAttempt(handle, {
+      dispatchId,
+      taskId: "T-001",
+      executorKind: "test",
+      attempt: 1,
+      contextHash: "hash",
+      status: "claimed"
+    }, "test").ok, true);
+    assert.equal(recordRunReceipt(handle, {
+      schemaVersion: 1,
+      dispatchId,
+      attempt: 1,
+      outcome: "completed",
+      startedAt: "2026-09-08T12:00:00.000Z",
+      endedAt: "2026-09-08T12:05:00.000Z",
+      changedFiles: [],
+      usageEvents: [],
+      evidence: [],
+      failure: null
+    }, "test", dispatchId).ok, true);
+    const moved = moveTask(handle, { taskId: "T-001", to: "done", actor: "reviewer" });
+    assert.equal(moved.ok, true);
+    void claim;
+
+    const laterClaim = claimTask(handle, { taskId: "T-001", actor: "agent-2" });
+    assert.equal(laterClaim.ok, false, "done tasks must refuse claims");
+    if (!laterClaim.ok) assert.equal(laterClaim.reason, "terminal-state");
+
+    assert.throws(
+      () => recordDispatchAttempt(handle, {
+        dispatchId: "6c1f5e2a-4444-4a0f-b3d5-11aa22bb33cc",
+        taskId: "T-001",
+        executorKind: "test",
+        attempt: 1,
+        contextHash: "hash",
+        status: "claimed"
+      }, "test"),
+      /Cannot dispatch terminal task/
+    );
+  } finally {
+    handle.close();
+    cleanupDir(dir);
+  }
+});
+
+test("R11: completed execution is not reset when planning moves to done", () => {
+  const dir = mkTmpDir("mapctx-store-claims-r11-done-");
+  const handle = StoreHandle.open(dir);
+  try {
+    seedOneTask(handle);
+    const claim = claimTask(handle, { taskId: "T-001", actor: "agent-1" });
+    assert.ok(claim.ok);
+    if (!claim.ok) return;
+
+    const dispatchId = "6c1f5e2a-3333-4a0f-b3d5-11aa22bb33cc";
+    assert.equal(recordDispatchAttempt(handle, {
+      dispatchId,
+      taskId: "T-001",
+      executorKind: "test",
+      attempt: 1,
+      contextHash: "hash",
+      status: "claimed"
+    }, "test").ok, true);
+    assert.equal(recordRunReceipt(handle, {
+      schemaVersion: 1,
+      dispatchId,
+      attempt: 1,
+      outcome: "completed",
+      startedAt: "2026-09-08T12:00:00.000Z",
+      endedAt: "2026-09-08T12:05:00.000Z",
+      changedFiles: [],
+      usageEvents: [],
+      evidence: [],
+      failure: null
+    }, "test", dispatchId).ok, true);
+
+    const before = getTask(handle.db, "T-001");
+    assert.equal(before?.planningState, "review");
+    assert.equal(before?.executionState, "completed");
+
+    moveTask(handle, { taskId: "T-001", to: "done", actor: "reviewer" });
+
+    const after = getTask(handle.db, "T-001");
+    assert.equal(after?.planningState, "done");
+    assert.equal(after?.executionState, "completed", "closing the review loop must not erase the completed execution (R11: no completed -> unclaimed reset)");
+  } finally {
+    handle.close();
+    cleanupDir(dir);
   }
 });
