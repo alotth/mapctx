@@ -72,7 +72,18 @@ export function openDatabaseReadOnly(dbPath: string, options: OpenDatabaseOption
   if (!fs.existsSync(dbPath)) {
     throw new Error(`Cannot open read-only: database not found at ${dbPath}`);
   }
-  const db = new DatabaseSync(dbPath, { readOnly: true });
+  let db: DatabaseSync;
+  try {
+    db = new DatabaseSync(dbPath, { readOnly: true });
+  } catch (error) {
+    // T-075 P3#8: SQLite cannot open a WAL database read-only when the -shm
+    // is missing or the WAL needs recovery -- precisely the crash conditions
+    // a diagnostic open most wants to surface. Name the condition and the
+    // remedy instead of leaking a bare driver error.
+    throw new Error(
+      `Cannot open the store read-only: the database likely needs recovery (crash-dirty WAL or missing -shm). Run "mapctx store repair" first. Driver error: ${String(error)}`
+    );
+  }
   db.exec(`PRAGMA busy_timeout = ${options.busyTimeoutMs ?? 5000}`);
   return db;
 }

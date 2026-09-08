@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import * as fs from "fs"
 import { listTasks } from "./projections"
+import { repairStore } from "./repair"
 import { validateStoreRegime } from "./validate"
 import { resolveProjectStoreDir } from "./config"
 import { StoreHandle } from "./store-handle"
@@ -151,5 +152,59 @@ test("R14 P2#2: maintenance-needed is a distinct validate status with a repair r
     else process.env.MAPCTX_HOME = previousHome;
     cleanupDir(dir);
     cleanupDir(home);
+  }
+});
+
+// T-075 P3#8: a hard-crash store (live WAL, no -shm) must never surface a
+// bare driver error through a read-only open. On node's node:sqlite the
+// read-only open recovers the WAL contents transparently (assert the data
+// survives); on stacks where readonly recovery is refused, the open must
+// fail with the named repair remedy instead. Either branch is fail-explicit.
+test("R14 P3#8: hard-crash leftovers are readable-with-recovery or named repair-needed", () => {
+  const dir = mkTmpDir("mapctx-store-readonly-real-crash-");
+  try {
+    // A child process opens the store, appends an event, and exits WITHOUT
+    // closing/checkpointing -- the WAL/shm pair is left live on disk.
+    const script = `
+      const { StoreHandle } = require(${JSON.stringify(require.resolve("./store-handle"))});
+      const handle = StoreHandle.open(${JSON.stringify(dir)});
+      handle.appendEvent({
+        eventType: "task.upserted",
+        actor: "test",
+        payload: { task: { taskId: "T-099", positionKey: 99, title: "crashed in flight", planningState: "backlog", executionState: "unclaimed", tags: [], domains: [], externalLinks: [], assignees: [] } }
+      });
+      // Hard exit: no close, no checkpoint, no wal cleanup.
+      process.exit(0);
+    `;
+    require("child_process").execFileSync(process.execPath, ["-e", script], { stdio: "ignore" });
+    assert.ok(fs.existsSync(`${StoreHandle.dbPathFor(dir)}-wal`), "the crashed process must leave its WAL behind");
+
+    const shm = `${StoreHandle.dbPathFor(dir)}-shm`;
+    if (fs.existsSync(shm)) fs.rmSync(shm, { force: true });
+
+    let opened = true;
+    try {
+      const readOnly = StoreHandle.openReadOnly(dir);
+      try {
+        assert.ok(listTasks(readOnly.db).length >= 1, "the recovered WAL contents are visible to a read");
+      } finally {
+        readOnly.close();
+      }
+    } catch (error) {
+      opened = false;
+      assert.match(String(error), /store repair/, "a refused open must name the recovery remedy");
+    }
+    void opened;
+
+    // Repair always heals: the journaled event survives the crash.
+    assert.equal(repairStore(dir).status, "ok");
+    const afterRepair = StoreHandle.openReadOnly(dir);
+    try {
+      assert.ok(listTasks(afterRepair.db).some(task => task.taskId === "T-099"), "the crashed event is recovered from the journal");
+    } finally {
+      afterRepair.close();
+    }
+  } finally {
+    cleanupDir(dir);
   }
 });

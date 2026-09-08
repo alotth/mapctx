@@ -82,3 +82,34 @@ test('R13: the guard only triggers on store authority; markdown authority stays 
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+// T-075 P3#6: a legacy config kept OUTSIDE the repo whose tasksFile points
+// absolutely into a store-authority repository must still be refused -- the
+// authority check follows the target board, not just the invocation point.
+test('R13 P3#6: out-of-repo config with absolute tasksFile into a store-authority repo is refused', () => {
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mapctx-r13-target-repo-'));
+  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mapctx-r13-config-home-'));
+  const previousCwd = process.cwd();
+  try {
+    fs.writeFileSync(
+      path.join(repoDir, 'mapctx.toml'),
+      'schemaVersion = 1\nprojectId = "44444444-4444-4444-8444-444444444444"\nplansAuthority = "store"\n',
+      'utf8'
+    );
+    fs.writeFileSync(path.join(repoDir, 'TASKS.md'), '# board\n', 'utf8');
+    const outsideConfig = path.join(configDir, 'mapcs.config.json');
+    fs.writeFileSync(outsideConfig, JSON.stringify({ ...LEGACY_CONFIG, tasksFile: path.join(repoDir, 'TASKS.md') }, null, 2), 'utf8');
+
+    process.chdir(configDir);
+    assert.throws(
+      () => pullCommand({ configPath: outsideConfig }),
+      /plansAuthority=store/,
+      'an out-of-repo config must not bypass the guard via its absolute tasksFile'
+    );
+    assert.equal(fs.readFileSync(path.join(repoDir, 'TASKS.md'), 'utf8'), '# board\n', 'no write happened before the refusal');
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+    fs.rmSync(configDir, { recursive: true, force: true });
+  }
+});

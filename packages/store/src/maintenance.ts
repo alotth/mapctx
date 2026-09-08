@@ -31,16 +31,31 @@ function processAlive(pid: number): boolean {
   }
 }
 
-export function readMaintenanceLock(storeDir: string): { pid: number; takenAt: string } | null {
+export function readMaintenanceLock(storeDir: string): { pid: number; takenAt: string; stale: boolean } | null {
   const lockPath = maintenanceLockPath(storeDir);
   if (!fs.existsSync(lockPath)) return null;
   try {
     const parsed = JSON.parse(fs.readFileSync(lockPath, "utf8")) as { pid?: unknown; takenAt?: unknown };
     if (typeof parsed.pid !== "number") return null;
-    return { pid: parsed.pid, takenAt: typeof parsed.takenAt === "string" ? parsed.takenAt : "" };
+    const takenAt = typeof parsed.takenAt === "string" ? parsed.takenAt : "";
+    // R12 review P3#4: kill(pid, 0) cannot detect PID reuse -- a recycled
+    // PID of an unrelated process would brick every open/write behind a
+    // "live" lock with no auto-recovery. An explicit age cap bounds that:
+    // a repair must never run longer than MAINTENANCE_LOCK_STALE_MS, so a
+    // lock older than that is stale by policy regardless of PID state.
+    const takenMs = Date.parse(takenAt);
+    const stale = Number.isNaN(takenMs) || Date.now() - takenMs > MAINTENANCE_LOCK_STALE_MS;
+    return { pid: parsed.pid, takenAt, stale };
   } catch {
     return null;
   }
+}
+
+/** A repair must never take this long; an older lock is stale by policy. */
+export const MAINTENANCE_LOCK_STALE_MS = 60 * 60 * 1000;
+
+function lockBlocks(lock: { pid: number; stale: boolean }): boolean {
+  return processAlive(lock.pid) && !lock.stale;
 }
 
 /**
@@ -50,36 +65,41 @@ export function readMaintenanceLock(storeDir: string): { pid: number; takenAt: s
  */
 export function assertNotUnderMaintenance(storeDir: string): void {
   const lock = readMaintenanceLock(storeDir);
-  if (lock && processAlive(lock.pid)) {
+  if (lock && lockBlocks(lock)) {
     throw new Error(`Store is under maintenance (repair) by pid ${lock.pid}: ${maintenanceLockPath(storeDir)}; refused to interleave an open/write.`);
   }
 }
 
 /**
  * Acquires the store-wide maintenance lock or throws. Steals a stale lock
- * left by a dead process; refuses a lock held by a live process.
+ * (dead holder PID or lock older than the age cap); refuses a lock held by
+ * a live process. Acquisition loops the exclusive-create attempt instead of
+ * overwriting on EEXIST -- a plain overwrite raced a third process past its
+ * own read and could silently replace a live holder's lock.
  */
 export function acquireMaintenanceLock(storeDir: string): { release: () => void } {
   const lockPath = maintenanceLockPath(storeDir);
-  const existing = readMaintenanceLock(storeDir);
-  if (existing && processAlive(existing.pid)) {
-    throw new Error(`Cannot start repair: store is already under maintenance by pid ${existing.pid}.`);
-  }
   const payload = JSON.stringify({ pid: process.pid, takenAt: new Date().toISOString() });
   fs.mkdirSync(storeDir, { recursive: true });
-  try {
-    fs.writeFileSync(lockPath, payload, { flag: "wx" });
-  } catch (error) {
-    if ((error as { code?: string }).code === "EEXIST") {
-      // The lock appeared after our check; re-read and refuse on a live holder.
-      const raced = readMaintenanceLock(storeDir);
-      if (raced && processAlive(raced.pid)) {
-        throw new Error(`Cannot start repair: store is already under maintenance by pid ${raced.pid}.`);
-      }
-      fs.writeFileSync(lockPath, payload);
-    } else {
-      throw error;
+  let acquired = false;
+  for (let attempt = 0; attempt < 5 && !acquired; attempt++) {
+    const existing = readMaintenanceLock(storeDir);
+    if (existing && lockBlocks(existing)) {
+      throw new Error(`Cannot start repair: store is already under maintenance by pid ${existing.pid}.`);
     }
+    if (existing) {
+      fs.rmSync(lockPath, { force: true });
+    }
+    try {
+      fs.writeFileSync(lockPath, payload, { flag: "wx" });
+      acquired = true;
+    } catch (error) {
+      if ((error as { code?: string }).code !== "EEXIST") throw error;
+      // Lost the create race; loop back and re-check the (new) holder.
+    }
+  }
+  if (!acquired) {
+    throw new Error(`Cannot start repair: ${lockPath} acquisition raced repeatedly; refusing to overwrite.`);
   }
   return {
     release: () => {

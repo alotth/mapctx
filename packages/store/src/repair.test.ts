@@ -3,7 +3,7 @@ import test from "node:test"
 import * as fs from "fs"
 import * as path from "path"
 import { listTasks } from "./projections"
-import { acquireMaintenanceLock, readMaintenanceLock } from "./maintenance"
+import { acquireMaintenanceLock, MAINTENANCE_LOCK_STALE_MS, readMaintenanceLock } from "./maintenance"
 import { repairStore } from "./repair"
 import { StoreHandle, storeDbIntegrityOk } from "./store-handle"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
@@ -219,6 +219,42 @@ test("R12 P2#1: repair removes a stale -wal/-shm so the replacement is never pai
     const reopened = StoreHandle.open(dir);
     try {
       assert.equal(listTasks(reopened.db).length, 5, "the replacement DB carries the replayed journal");
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    cleanupDir(dir);
+  }
+});
+
+// T-075 P3#4: the age cap bounds PID-reuse bricking. A lock whose holder is
+// alive but whose takenAt predates the age cap is stale by policy and must
+// be stealable -- no permanent brick behind kill(pid,0) false positives.
+test("R12 P3#4: an aged lock is stale even with a live PID, and open/write recover", () => {
+  const dir = mkTmpDir("mapctx-store-repair-aged-lock-");
+  try {
+    const handle = StoreHandle.open(dir);
+    seedFiveTasks(handle);
+
+    // Our own live PID, but a takenAt older than the age cap.
+    fs.writeFileSync(
+      path.join(dir, "maintenance.lock"),
+      JSON.stringify({ pid: process.pid, takenAt: new Date(Date.now() - MAINTENANCE_LOCK_STALE_MS * 2).toISOString() }),
+      "utf8"
+    );
+
+    // The lock itself says a live process holds it, but it is stale.
+    const lock = acquireMaintenanceLock(dir);
+    try {
+      assert.throws(() => repairStore(dir), /under maintenance/, "the fresh lock still refuses a concurrent repair");
+    } finally {
+      lock.release();
+    }
+    handle.close();
+
+    const reopened = StoreHandle.open(dir);
+    try {
+      assert.equal(listTasks(reopened.db).length, 5, "the aged lock was stolen, not a permanent brick");
     } finally {
       reopened.close();
     }

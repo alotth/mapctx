@@ -1623,7 +1623,7 @@
 ### [T-075] Post-T-073 review hardening: maintenance-lock staleness, guard scope, crash-dirty read-only opens
 
   - id: T-075
-  - status: backlog
+  - status: doing
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1636,7 +1636,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-09-08
   - detail: ./tasks/T-075.md
 
 ## Notes

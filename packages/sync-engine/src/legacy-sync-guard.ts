@@ -1,4 +1,5 @@
 import { resolveMapctxToml } from '@mapctx/store'
+import * as fs from 'fs'
 import * as path from 'path'
 
 /**
@@ -9,14 +10,33 @@ import * as path from 'path'
  * push can publish stale/drifted Markdown instead of store state. A preserved
  * or recreated legacy config must not resurrect that path silently.
  *
- * Fail closed for post-cutover mutation paths. Reads (status, dry-runs that
- * write nothing) stay allowed.
+ * Fail closed for post-cutover mutation paths, including --dry-run variants
+ * of push/pull (fail-closed is cheaper than enumerating which dry-runs are
+ * safe). Reads that write nothing (status) stay allowed.
+ *
+ * T-075 P3#6: the authority check must follow the TARGET board, not just the
+ * invocation point -- a legacy config kept outside the repo (a user config
+ * dir) whose tasksFile points absolutely into a store-authority repository
+ * is otherwise invisible to cwd-based resolution.
  */
 export type LegacySyncMutation = 'pull' | 'push' | 'bootstrap' | 'reconcile';
 
 export function assertLegacySyncWriterAllowed(operation: LegacySyncMutation, configPath?: string): void {
   const roots = new Set<string>([process.cwd()]);
-  if (configPath) roots.add(path.dirname(path.resolve(process.cwd(), configPath)));
+  if (configPath) {
+    const resolvedConfig = path.resolve(process.cwd(), configPath);
+    roots.add(path.dirname(resolvedConfig));
+    if (fs.existsSync(resolvedConfig)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(resolvedConfig, 'utf8')) as { tasksFile?: string };
+        if (parsed.tasksFile) {
+          roots.add(path.dirname(path.resolve(path.dirname(resolvedConfig), parsed.tasksFile)));
+        }
+      } catch {
+        /* malformed config: loadConfig's own error will surface later */
+      }
+    }
+  }
   for (const root of roots) {
     const toml = resolveMapctxToml(root);
     if (toml && toml.config.plansAuthority === 'store') {
