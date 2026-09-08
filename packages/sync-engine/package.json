@@ -1,6 +1,6 @@
 {
   "name": "@mapctx/sync-engine",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sync TASKS.md with GitHub Issues and Projects v2",
   "type": "commonjs",
   "main": "./dist/index.js",
@@ -71,7 +71,10 @@
     "@mapctx/protocol",
     "@mapctx/store",
     "@mapctx/planner",
-    "@mapctx/forecast"
+    "@mapctx/forecast",
+    "smol-toml",
+    "zod",
+    "zod-to-json-schema"
   ],
   "devDependencies": {
     "@types/node": "^24.5.2",

@@ -15,6 +15,12 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(scriptDir, "..")
 const syncEngineDir = path.join(rootDir, "packages", "sync-engine")
 const bundledNames = ["core", "protocol", "store", "planner", "forecast"]
+// Runtime deps of the bundled packages (and of sync-engine itself). npm
+// global installs do NOT reify the declared dependencies of a tarball that
+// already ships a node_modules tree ("added 1 package", empty placeholder
+// dirs) -- so the union of runtime deps must be vendored too, or the
+// published binary fails on `Cannot find module 'smol-toml'`.
+const vendoredRuntime = ["smol-toml", "zod", "zod-to-json-schema"]
 
 function run(command, args) {
   const result = spawnSync(command, args, {
@@ -73,4 +79,28 @@ for (const name of bundledNames) {
   }, null, 2)}\n`)
   fs.copyFileSync(path.join(rootDir, "LICENSE"), path.join(bundledDir, "LICENSE"))
   console.error(`Bundled @mapctx/${name} into ${bundledDir}`)
+}
+
+// Vendor the runtime dependencies: resolve each from the sync-engine node
+// graph and copy the real installed package (not a symlink) into the bundle.
+for (const name of vendoredRuntime) {
+  const bundledDir = path.join(syncEngineDir, "node_modules", name)
+  fs.rmSync(bundledDir, { recursive: true, force: true })
+  const resolved = spawnSync("node", ["-e", `process.stdout.write(require.resolve('${name}'))`], {
+    cwd: syncEngineDir,
+    encoding: "utf8",
+  })
+  if (resolved.status !== 0 || !fs.existsSync(resolved.stdout.trim())) {
+    throw new Error(`Cannot vendor runtime dep ${name}: not resolvable from sync-engine node_modules`)
+  }
+  // Walk up from the resolved entry file to the directory holding its
+  // package.json (some packages export no './package.json' subpath).
+  let packageDir = path.dirname(resolved.stdout.trim())
+  while (!fs.existsSync(path.join(packageDir, "package.json"))) {
+    const parent = path.dirname(packageDir)
+    if (parent === packageDir) throw new Error(`Cannot vendor runtime dep ${name}: no package.json above ${resolved.stdout.trim()}`)
+    packageDir = parent
+  }
+  fs.cpSync(packageDir, bundledDir, { recursive: true })
+  console.error(`Vendored ${name} into ${bundledDir}`)
 }
