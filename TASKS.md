@@ -1227,7 +1227,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 8/9
+  - subIssueProgress: 9/9
   - priority: high
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
@@ -1623,7 +1623,7 @@
 ### [T-075] Post-T-073 review hardening: maintenance-lock staleness, guard scope, crash-dirty read-only opens
 
   - id: T-075
-  - status: review
+  - status: done
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1634,7 +1634,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-08
   - externalId: null
   - updated: 2026-09-08
   - detail: ./tasks/T-075.md
