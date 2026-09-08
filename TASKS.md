@@ -1227,7 +1227,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 5/7
+  - subIssueProgress: 5/8
   - priority: high
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
@@ -1566,7 +1566,7 @@
 ### [T-072] Fix PR1 P1 findings: journal atomicity, recovery locks, create races, export cycles, cutover prose, currency
 
   - id: T-072
-  - status: backlog
+  - status: doing
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1579,7 +1579,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-09-08
   - detail: ./tasks/T-072.md
 
 ### [T-073] Fix PR1 P2 findings: money safety, drift bypass, blocked receipts, read-only opens, repair locking, legacy sync authority
@@ -1600,6 +1600,25 @@
   - externalId: null
   - updated: null
   - detail: ./tasks/T-073.md
+
+### [T-074] Publish @mapctx packages to npm with the vNext (sync-engine bump, bundled deps, mapcs deprecation ships)
+
+  - id: T-074
+  - status: backlog
+  - type: chore
+  - parent: E-010
+  - subIssueProgress: null
+  - priority: null
+  - workload: null
+  - tags: []
+  - domains: [RELEASE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/T-074.md
 
 ## Notes
 
