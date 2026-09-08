@@ -56,12 +56,14 @@ export function recordDispatchAttempt(
       return { ok: false, reason: "duplicate-attempt" };
     }
     const desiredExecution = status === "claimed" ? "claimed" : "running";
-    if (task.executionState === "failed") {
-      // New-attempt admission: dispatching attempt 2 re-opens a failed
-      // execution through the machine's one legal edge (failed ->
-      // unclaimed), journaled so replay reproduces the reset. Without this
-      // the failed state blocks every legal route to claimed/running and a
-      // retryable failure could never be retried through the API.
+    if (task.executionState === "failed" || task.executionState === "blocked") {
+      // New-attempt admission: dispatching a new attempt re-opens a terminal-
+      // for-the-attempt execution through the machine's one legal edge
+      // (failed -> unclaimed, or blocked -> unclaimed), journaled so replay
+      // reproduces the reset. Without this the terminal state blocks every
+      // legal route to claimed/running and an honestly-blocked run could
+      // never be retried through the normal claim -> dispatch -> receipt
+      // flow (R9 review P2#3).
       append({
         eventType: "task.patched",
         actor: input.actor ?? "store",

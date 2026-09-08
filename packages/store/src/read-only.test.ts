@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import * as fs from "fs"
 import { listTasks } from "./projections"
+import { validateStoreRegime } from "./validate"
+import { resolveProjectStoreDir } from "./config"
 import { StoreHandle } from "./store-handle"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
 
@@ -106,5 +108,48 @@ test("R14: pending journal entry surfaces as an explicit maintenance condition",
     void nodeId;
   } finally {
     cleanupDir(dir);
+  }
+});
+
+// R14 review P2#2: a store with pending maintenance must validate into its
+// own status with the correct remedy, not masquerade as "not-materialized"
+// (whose remedy, store init, is a no-op on a materialized store).
+test("R14 P2#2: maintenance-needed is a distinct validate status with a repair remedy", () => {
+  const previousHome = process.env.MAPCTX_HOME;
+  const home = mkTmpDir("mapctx-store-readonly-home-");
+  const dir = mkTmpDir("mapctx-store-readonly-maintenance-");
+  const projectId = "33333333-3333-4333-8333-333333333333";
+  try {
+    process.env.MAPCTX_HOME = home;
+    fs.writeFileSync(
+      `${dir}/mapctx.toml`,
+      `schemaVersion = 1\nprojectId = "${projectId}"\nplansAuthority = "store"\n`,
+      "utf8"
+    );
+    const storeDir = resolveProjectStoreDir(projectId);
+    const handle = StoreHandle.open(storeDir);
+    seedTwoTasks(handle);
+    handle.close();
+
+    const journalDir = `${storeDir}/events`;
+    const nodeId = fs.readdirSync(journalDir)[0];
+    const sequences = fs.readdirSync(`${journalDir}/${nodeId}`).map(f => Number(f.replace(/\.json$/, ""))).sort((a, b) => a - b);
+    const last = sequences[sequences.length - 1];
+    fs.copyFileSync(`${journalDir}/${nodeId}/${last}.json`, `${journalDir}/${nodeId}/${last + 1}.json`);
+
+    const status = validateStoreRegime(dir, dir);
+    assert.equal(status.status, "maintenance-needed");
+    if (status.status === "maintenance-needed") {
+      assert.match(status.maintenanceNeeded, /journal/);
+    }
+
+    // After the manufactured lag is removed, the store is healthy again.
+    fs.rmSync(`${journalDir}/${nodeId}/${last + 1}.json`, { force: true });
+    assert.equal(validateStoreRegime(dir, dir).status, "store-authority");
+  } finally {
+    if (previousHome === undefined) delete process.env.MAPCTX_HOME;
+    else process.env.MAPCTX_HOME = previousHome;
+    cleanupDir(dir);
+    cleanupDir(home);
   }
 });

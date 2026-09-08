@@ -1227,7 +1227,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 6/8
+  - subIssueProgress: 6/9
   - priority: high
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
@@ -1585,7 +1585,7 @@
 ### [T-073] Fix PR1 P2 findings: money safety, drift bypass, blocked receipts, read-only opens, repair locking, legacy sync authority
 
   - id: T-073
-  - status: doing
+  - status: review
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1619,6 +1619,25 @@
   - externalId: null
   - updated: 2026-09-08
   - detail: ./tasks/T-074.md
+
+### [T-075] Post-T-073 review hardening: maintenance-lock staleness, guard scope, crash-dirty read-only opens
+
+  - id: T-075
+  - status: backlog
+  - type: task
+  - parent: E-010
+  - subIssueProgress: null
+  - priority: null
+  - workload: null
+  - tags: []
+  - domains: [STORE, SYNC]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/T-075.md
 
 ## Notes
 

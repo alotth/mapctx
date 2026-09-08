@@ -139,13 +139,37 @@ function repairStoreUnderLock(storeDir: string): RepairResult {
     tempDb.close();
   }
 
+  // R12 review P2#1: before the swap, quiesce the working database. A
+  // crash-dirty -wal paired with the surviving -shm would be recovered
+  // against the replacement main DB on the next open, checkpointing frames
+  // from the replaced generation into it -- silent corruption of exactly the
+  // artifact repair restores. Checkpoint TRUNCATE first (data lands in the
+  // main file, so the store stays serviceable if this process dies here),
+  // then remove the WAL set while the maintenance lock still excludes
+  // writers. The replacement is wal-less after its FULL checkpoint, so once
+  // the rename lands there is no stale WAL to recover.
+  if (!dbWasCorrupt) {
+    try {
+      const current = openDatabase(dbPath);
+      try {
+        current.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      } finally {
+        current.close();
+      }
+    } catch {
+      /* the main DB may be unreadable; the rename below still replaces it */
+    }
+  }
+  for (const suffix of ["-wal", "-shm"]) {
+    fs.rmSync(`${dbPath}${suffix}`, { force: true });
+  }
+
   // R12: replace without first deleting the working database. rename over an
   // existing file is atomic on the same filesystem, and the temp DB is built
   // inside the store directory precisely for that guarantee (the old code
   // unlinked the target before renaming, so an interruption after the unlink
-  // left the prior serviceable database gone). The temp DB was checkpointed
-  // and closed, so the old -wal/-shm files belong to the replaced inode and
-  // are removed; a suffix rename happens only when the replacement has one.
+  // left the prior serviceable database gone). The WAL set was quiesced
+  // above, so the swap cannot pair the new main file with stale WAL frames.
   for (const suffix of ["", "-wal", "-shm"]) {
     const target = `${dbPath}${suffix}`;
     const source = `${tempDbPath}${suffix}`;

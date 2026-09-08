@@ -111,6 +111,14 @@ export function recordBudgetSet(
       "Dated money budgets are not supported: cost events carry no occurrence timestamp, so period consumption cannot be attributed. Re-set the budget without start/end dates."
     );
   }
+  // R15 review P3#5: isoDateSchema is shape-only, so a calendar-invalid date
+  // ("2026-02-30") parses to NaN downstream and silently zeroes the period
+  // rollup. Refuse at the write path instead.
+  for (const [field, value] of [["periodStart", budget.periodStart], ["periodEnd", budget.periodEnd]] as const) {
+    if (value !== null && Number.isNaN(Date.parse(value))) {
+      throw new Error(`budget ${field} "${value}" is not a parseable calendar date; refusing a period that would silently attribute nothing`);
+    }
+  }
   return store.runInWriteTransaction(append => {
     if (budget.ownerKind === "epic" && !getTask(store.db, budget.ownerId)) {
       return { ok: false, reason: "unknown-owner" };
@@ -272,6 +280,9 @@ export function rollupTimeConsumed(
   }
   const periodStartMs = period ? Date.parse(period.start) : null;
   const periodEndMs = period ? Date.parse(period.end) : null;
+  if (period && (Number.isNaN(periodStartMs as number) || Number.isNaN(periodEndMs as number))) {
+    throw new Error(`budget period is not parseable (${period.start}..${period.end}); refusing to silently attribute nothing`);
+  }
   const placeholders = dispatches.map(() => "?").join(", ");
   const receipts = listRunReceipts(db).filter(receipt =>
     dispatches.includes(receipt.dispatchId) &&
@@ -340,7 +351,11 @@ export type BudgetStatus = {
   consumed: BudgetConsumed;
   remainingMinor: number | null;
   remainingMs: number | null;
-  /** Basis points, floor(consumed/planned*10000); null when no budget or planned 0. */
+  /** Basis points, floor(consumed/planned*10000); null when no budget or planned 0.
+   *  R7 moved the arithmetic to BigInt division, which truncates toward zero:
+   *  for over-budget (negative spent) non-divisible values this can differ
+   *  from the old Math.floor by exactly 1bp (e.g. -1/3 planned: -3333 vs
+   *  -3334). Documented truncation -- not a rounding bug. */
   spentBp: number | null;
   periodStart: string | null;
   periodEnd: string | null;

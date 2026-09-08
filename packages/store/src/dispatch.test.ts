@@ -338,6 +338,20 @@ test("R9: blocked receipt keeps dispatch/execution blocked and planning exportab
     const exported = buildExport(handle.db, { tasksRoot: root });
     assert.ok(exported.tasksMd.content.includes("- status: doing"), "board round-trips the exportable state (doing = in-progress)");
     assert.ok(!exported.tasksMd.content.includes("- status: blocked"));
+
+    // R9 review P2#3: the default retry path must not wedge. A new attempt
+    // (same dispatch, attempt 2) journals the blocked -> unclaimed reset and
+    // enters claimed, exactly like a failed run.
+    const retry = recordDispatchAttempt(handle, {
+      dispatchId: DISPATCH_ID,
+      taskId: "T-001",
+      executorKind: "test",
+      attempt: 2,
+      contextHash: "hash",
+      status: "claimed"
+    }, "test");
+    assert.equal(retry.ok, true, `blocked run must be retryable through default admission: ${JSON.stringify(retry)}`);
+    assert.equal(getTask(handle.db, "T-001")?.executionState, "claimed", "retry admission re-opens the blocked execution");
   } finally {
     handle.close();
     cleanupDir(root);

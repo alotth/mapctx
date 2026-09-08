@@ -15,7 +15,10 @@ export const EXECUTION_TRANSITIONS: Record<ExecutionState, readonly ExecutionSta
   unclaimed: ["claimed", "cancelled"],
   claimed: ["running", "unclaimed", "cancelled"],
   running: ["blocked", "completed", "failed", "cancelled"],
-  blocked: ["running", "cancelled", "failed"],
+  // "unclaimed" is the retry-admission edge: a blocked run is terminal for
+  // the ATTEMPT, not for the task -- the same mirror as failed -> unclaimed.
+  // New-attempt admission journals the reset so replay reproduces it.
+  blocked: ["running", "unclaimed", "cancelled", "failed"],
   completed: [],
   failed: ["unclaimed"],
   cancelled: []

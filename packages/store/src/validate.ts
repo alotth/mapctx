@@ -19,7 +19,8 @@ export type StoreSemanticReport = {
 export type StoreValidateResult =
   | { status: "no-project"; }
   | { status: "markdown-authority"; projectId: string }
-  | { status: "not-materialized"; projectId: string; storeDir: string; maintenanceNeeded?: string }
+  | { status: "not-materialized"; projectId: string; storeDir: string }
+  | { status: "maintenance-needed"; projectId: string; storeDir: string; maintenanceNeeded: string }
   | { status: "store-authority"; projectId: string; drift: DriftReport; semantic: StoreSemanticReport };
 
 /** Validate fields whose authority exists only in the event-backed store. */
@@ -79,7 +80,9 @@ export function validateStoreRegime(cwd: string, tasksRoot: string): StoreValida
   try {
     const maintenance = handle.maintenanceNeeded();
     if (maintenance) {
-      return { status: "not-materialized", projectId: resolved.config.projectId, storeDir, maintenanceNeeded: maintenance };
+      // R14 review P2#2: maintenance-needed is its own status, not a
+      // "not-materialized" alias -- the remedy is repair, not store init.
+      return { status: "maintenance-needed", projectId: resolved.config.projectId, storeDir, maintenanceNeeded: maintenance };
     }
     const drift = checkDrift(handle.db, tasksRoot);
     const semantic = validateStoreSemantics(handle);

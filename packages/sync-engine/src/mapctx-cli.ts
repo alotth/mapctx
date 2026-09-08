@@ -494,12 +494,17 @@ export function mapctxValidateCliCommand(options: MapctxOptions): void {
       }
     } else if (storeResult.status === 'not-materialized') {
       console.log(`Store not materialized at ${storeResult.storeDir}. Run \`mapctx store init\`.`);
+    } else if (storeResult.status === 'maintenance-needed') {
+      // R14 review P2#2: name the condition and prescribe the remedy that
+      // actually heals it -- "store init" is a no-op on a materialized store.
+      console.log(`Store needs maintenance: ${storeResult.maintenanceNeeded}`);
+      console.log(`Run \`mapctx store repair\` to materialize pending events, then validate again.`);
     }
   }
 
   const driftFailed = storeResult.status === 'store-authority' && storeResult.drift.hasDrift;
   const semanticFailed = storeResult.status === 'store-authority' && storeResult.semantic.errors > 0;
-  const notMaterialized = storeResult.status === 'not-materialized';
+  const notMaterialized = storeResult.status === 'not-materialized' || storeResult.status === 'maintenance-needed';
   if (!structuralOk || driftFailed || semanticFailed || notMaterialized) {
     throw new Error('mapctx validate failed.');
   }

@@ -192,3 +192,37 @@ test("R12: a stale maintenance lock left by a dead process is stolen, not a perm
     cleanupDir(dir);
   }
 });
+
+// R12 review P2#1: a stale crash-dirty WAL must not survive the swap next to
+// the replacement main DB -- SQLite would recover its frames against the
+// replaced generation on the next open. Repair quiesces and removes the WAL
+// set under the maintenance lock before the rename.
+test("R12 P2#1: repair removes a stale -wal/-shm so the replacement is never paired with old frames", () => {
+  const dir = mkTmpDir("mapctx-store-repair-stale-wal-");
+  try {
+    const handle = StoreHandle.open(dir);
+    seedFiveTasks(handle);
+    handle.close();
+
+    // Simulate a crash-dirty WAL: garbage -wal/-shm files beside a healthy
+    // main DB (exactly what a kill mid-write leaves behind).
+    fs.writeFileSync(`${StoreHandle.dbPathFor(dir)}-wal`, "STALE WAL FRAMES");
+    fs.writeFileSync(`${StoreHandle.dbPathFor(dir)}-shm`, "STALE SHM");
+
+    const result = repairStore(dir);
+    assert.equal(result.status, "ok");
+
+    assert.equal(fs.existsSync(`${StoreHandle.dbPathFor(dir)}-wal`), false, "no stale WAL may survive the repair");
+    assert.equal(fs.existsSync(`${StoreHandle.dbPathFor(dir)}-shm`), false, "no stale SHM may survive the repair");
+    assert.equal(storeDbIntegrityOk(dir), true);
+
+    const reopened = StoreHandle.open(dir);
+    try {
+      assert.equal(listTasks(reopened.db).length, 5, "the replacement DB carries the replayed journal");
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    cleanupDir(dir);
+  }
+});
