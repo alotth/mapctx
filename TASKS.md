@@ -1224,7 +1224,7 @@
 ### [E-010] Harness-neutral execution with Traycer first
 
   - id: E-010
-  - status: backlog
+  - status: done
   - type: epic
   - parent: null
   - subIssueProgress: 9/9
@@ -1235,9 +1235,9 @@
   - dependsOn: [E-009]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-08
   - externalId: null
-  - updated: 2026-08-26
+  - updated: 2026-09-08
   - detail: ./tasks/E-010.md
 
 ### [T-052] Implement DispatchEnvelope, RunEvent, and RunReceipt contracts
