@@ -1227,7 +1227,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 5/8
+  - subIssueProgress: 6/8
   - priority: high
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
@@ -1566,7 +1566,7 @@
 ### [T-072] Fix PR1 P1 findings: journal atomicity, recovery locks, create races, export cycles, cutover prose, currency
 
   - id: T-072
-  - status: doing
+  - status: done
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1577,7 +1577,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-08
   - externalId: null
   - updated: 2026-09-08
   - detail: ./tasks/T-072.md
