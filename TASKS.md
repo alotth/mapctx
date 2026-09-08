@@ -1227,7 +1227,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 7/9
+  - subIssueProgress: 8/9
   - priority: high
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
@@ -1604,7 +1604,7 @@
 ### [T-074] Publish @mapctx packages to npm with the vNext (sync-engine bump, bundled deps, mapcs deprecation ships)
 
   - id: T-074
-  - status: doing
+  - status: done
   - type: chore
   - parent: E-010
   - subIssueProgress: null
@@ -1615,7 +1615,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-09-08
   - externalId: null
   - updated: 2026-09-08
   - detail: ./tasks/T-074.md
