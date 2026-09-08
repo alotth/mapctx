@@ -334,39 +334,39 @@ export function createTask(store: StoreHandle, options: CreateTaskOptions): Crea
     };
   }
 
-  const tasks = listAllTasks(store);
-  const prefix = type === "epic" ? "E" : "T";
-  let taskId = options.id;
-  if (taskId) {
-    if (!TASK_ID_PATTERN.test(taskId) || (taskId.startsWith("E-") && type !== "epic") || (taskId.startsWith("T-") && type === "epic")) {
-      return { ok: false, reason: "invalid-id", message: `id "${taskId}" must match ${prefix}-### for type ${type}` };
-    }
-    if (tasks.some(t => t.taskId === taskId)) {
-      return { ok: false, reason: "duplicate-id", taskId };
-    }
-  } else {
-    const next = tasks
-      .map(t => t.taskId)
-      .filter(id => id.startsWith(`${prefix}-`))
-      .map(id => Number(id.slice(prefix.length + 1)))
-      .filter(n => Number.isFinite(n));
-    taskId = `${prefix}-${String((next.length > 0 ? Math.max(...next) : 0) + 1).padStart(3, "0")}`;
-    while (tasks.some(t => t.taskId === taskId)) {
-      const n: number = Number(taskId.slice(prefix.length + 1));
-      taskId = `${prefix}-${String(n + 1).padStart(3, "0")}`;
-    }
-  }
-
-  if (options.parent && !getTask(store.db, options.parent)) {
-    return { ok: false, reason: "unknown-parent", message: `parent not found: ${options.parent}` };
-  }
-  for (const target of [...(options.dependsOn ?? []), ...(options.blocking ?? [])]) {
-    if (!getTask(store.db, target)) {
-      return { ok: false, reason: "unknown-dependency", message: `dependency target not found: ${target}` };
-    }
-  }
-
   return store.runInWriteTransaction(append => {
+    const tasks = listAllTasks(store);
+    const prefix = type === "epic" ? "E" : "T";
+    let taskId = options.id;
+    if (taskId) {
+      if (!TASK_ID_PATTERN.test(taskId) || (taskId.startsWith("E-") && type !== "epic") || (taskId.startsWith("T-") && type === "epic")) {
+        return { ok: false, reason: "invalid-id", message: `id "${taskId}" must match ${prefix}-### for type ${type}` };
+      }
+      if (tasks.some(t => t.taskId === taskId)) {
+        return { ok: false, reason: "duplicate-id", taskId };
+      }
+    } else {
+      const next = tasks
+        .map(t => t.taskId)
+        .filter(id => id.startsWith(`${prefix}-`))
+        .map(id => Number(id.slice(prefix.length + 1)))
+        .filter(n => Number.isFinite(n));
+      taskId = `${prefix}-${String((next.length > 0 ? Math.max(...next) : 0) + 1).padStart(3, "0")}`;
+      while (tasks.some(t => t.taskId === taskId)) {
+        const n: number = Number(taskId.slice(prefix.length + 1));
+        taskId = `${prefix}-${String(n + 1).padStart(3, "0")}`;
+      }
+    }
+
+    if (options.parent && !getTask(store.db, options.parent)) {
+      return { ok: false, reason: "unknown-parent", message: `parent not found: ${options.parent}` };
+    }
+    for (const target of [...(options.dependsOn ?? []), ...(options.blocking ?? [])]) {
+      if (!getTask(store.db, target)) {
+        return { ok: false, reason: "unknown-dependency", message: `dependency target not found: ${target}` };
+      }
+    }
+
     const positionKey = tasks.length > 0 ? Math.max(...tasks.map(t => t.positionKey)) + 1 : 0;
     const detailPath = `./tasks/${taskId}.md`;
     const record: TaskRecord = {
@@ -416,6 +416,7 @@ export function createTask(store: StoreHandle, options: CreateTaskOptions): Crea
       occurredAt: now().toISOString(),
       payload: {
         task: record,
+        createOnly: true,
         detail,
         outgoingEdges
       }

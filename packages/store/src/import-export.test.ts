@@ -65,6 +65,52 @@ test("planImport fails closed on duplicate ids, missing dependencies, and missin
   }
 });
 
+test("planImport fails closed on canonical-looking symlinked detail paths, in-repo or outside-repo", () => {
+  const { repoDir, restoreEnv } = setupGoldenRepo();
+  try {
+    const outside = path.join(path.dirname(repoDir), "mapctx-symlink-target.md");
+    fs.writeFileSync(outside, "# OUTSIDE TARGET\n", "utf8");
+    try {
+      const tasksPath = path.join(repoDir, "TASKS.md");
+      const canonicalDetail = path.join(repoDir, "tasks", "T-101.md");
+
+      // A canonical-looking detail symlink pointing at an unstaged in-repo
+      // file: the lexical canonical check passes, but the cutover write
+      // would follow the symlink and overwrite the target.
+      fs.mkdirSync(path.join(repoDir, "specs"), { recursive: true });
+      fs.writeFileSync(path.join(repoDir, "specs", "T-101.md"), "# REAL TARGET\n", "utf8");
+      fs.rmSync(canonicalDetail);
+      fs.symlinkSync(path.join(repoDir, "specs", "T-101.md"), canonicalDetail);
+      let plan = planImport(tasksPath);
+      assert.ok(plan.issues.some(i => i.code === "symlinked-detail-path" && i.taskId === "T-101"));
+      assert.ok(plan.errors > 0);
+      assert.equal(fs.readFileSync(path.join(repoDir, "specs", "T-101.md"), "utf8"), "# REAL TARGET\n");
+      assert.throws(() => importCommit({ cwd: repoDir, actor: "test" }), /Import validation failed/);
+      assert.equal(fs.existsSync(path.join(repoDir, "mapctx.toml")), false, "refused cutover must not create the toml");
+      assert.equal(fs.readFileSync(path.join(repoDir, "specs", "T-101.md"), "utf8"), "# REAL TARGET\n");
+
+      // Same symlink pointing outside the repository entirely.
+      fs.rmSync(canonicalDetail);
+      fs.symlinkSync(outside, canonicalDetail);
+      plan = planImport(tasksPath);
+      assert.ok(plan.issues.some(i => i.code === "symlinked-detail-path" && i.taskId === "T-101"));
+      assert.equal(fs.readFileSync(outside, "utf8"), "# OUTSIDE TARGET\n");
+
+      // A symlinked tasks/ directory component is equally refused.
+      fs.rmSync(canonicalDetail);
+      fs.renameSync(path.join(repoDir, "tasks"), path.join(repoDir, "tasks-real"));
+      fs.symlinkSync(path.join(repoDir, "tasks-real"), path.join(repoDir, "tasks"));
+      plan = planImport(tasksPath);
+      assert.ok(plan.issues.some(i => i.code === "symlinked-detail-path"));
+    } finally {
+      fs.rmSync(outside, { force: true });
+    }
+  } finally {
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
 test("importCommit: cutover writes mapctx.toml with plansAuthority=store, deletes mapcs.config.json, and one export round-trips byte-identically", () => {
   const { repoDir, restoreEnv } = setupGoldenRepo();
   try {
@@ -275,3 +321,31 @@ test("cutover fails closed on prerequisites-dependson-mismatch: dry-run names it
     cleanupDir(repoDir);
   }
 });
+
+for (const occupied of [false, true]) {
+  test(`R5 noncanonical prose path refuses cutover before writes (destination occupied=${occupied})`, () => {
+    const { repoDir, mapctxHome, restoreEnv } = setupGoldenRepo();
+    try {
+      const boardPath = path.join(repoDir, "TASKS.md");
+      const canonical = path.join(repoDir, "tasks/T-101.md");
+      const prose = fs.readFileSync(canonical, "utf8");
+      fs.mkdirSync(path.join(repoDir, "specs"));
+      fs.writeFileSync(path.join(repoDir, "specs/T-101.md"), prose);
+      if (occupied) fs.writeFileSync(canonical, prose.replace("description: |", "description: |\n      UNRELATED PROSE"));
+      else fs.unlinkSync(canonical);
+      const board = fs.readFileSync(boardPath, "utf8").replace("./tasks/T-101.md", "./specs/T-101.md");
+      fs.writeFileSync(boardPath, board);
+      const { execFileSync } = require("node:child_process");
+      execFileSync("git", ["add", "-A"], { cwd: repoDir });
+      execFileSync("git", ["commit", "-qm", "noncanonical source"], { cwd: repoDir });
+      const plan = planImport(boardPath);
+      assert.ok(plan.issues.some(i => i.code === "noncanonical-detail-path" && i.severity === "error"));
+      assert.throws(() => importCommit({ cwd: repoDir, actor: "test" }));
+      assert.equal(fs.readFileSync(boardPath, "utf8"), board);
+      assert.equal(fs.readFileSync(path.join(repoDir, "specs/T-101.md"), "utf8"), prose);
+      assert.equal(fs.existsSync(path.join(repoDir, "mapctx.toml")), false);
+      assert.equal(fs.existsSync(canonical), occupied);
+      if (occupied) assert.ok(fs.readFileSync(canonical, "utf8").includes("UNRELATED PROSE"));
+    } finally { restoreEnv(); cleanupDir(repoDir); cleanupDir(mapctxHome); }
+  });
+}

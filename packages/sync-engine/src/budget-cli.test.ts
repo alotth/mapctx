@@ -190,3 +190,21 @@ test('budget commands fail closed outside store authority', () => {
     fs.rmSync(markdownRepo, { recursive: true, force: true });
   }
 });
+
+test('R6 plan periods refuse non-USD fees and currency/account mismatches without recording', () => {
+  const { repoDir, cleanup } = seedStoreAuthorityRepo();
+  const previousCwd = process.cwd();
+  process.chdir(repoDir);
+  try {
+    for (const accountCurrency of ['USD', 'BRL']) {
+      const added = captureJson(() => accountAddCommand(accountCurrency, { json: true, currency: accountCurrency } as never)) as { account: { accountId: string } };
+      for (const currency of accountCurrency === 'USD' ? ['BRL'] : [undefined, 'BRL', 'USD']) {
+        assert.throws(() => planPeriodRecordCommand({
+          account: added.account.accountId, currency, amount: '200', start: '2026-09-01', end: '2026-09-30', json: true
+        } as never), /currency must match|USD only/);
+      }
+    }
+    const listed = captureJson(() => accountListCommand({ json: true } as never)) as { accounts: Array<{ planPeriods: number }> };
+    assert.deepEqual(listed.accounts.map(a => a.planPeriods), [0, 0]);
+  } finally { process.chdir(previousCwd); cleanup(); }
+});

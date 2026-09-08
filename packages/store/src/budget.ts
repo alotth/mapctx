@@ -138,9 +138,12 @@ export function budgetScopeTaskIds(db: DatabaseSync, ownerKind: BudgetOwnerKind,
   }
   const scope: string[] = [];
   const queue = [ownerId];
+  const visited = new Set([ownerId]);
   while (queue.length > 0) {
     const current = queue.shift() as string;
     for (const childId of childrenByParent.get(current) ?? []) {
+      if (visited.has(childId)) throw new Error(`Parent cycle detected in budget scope: ${childId}`);
+      visited.add(childId);
       scope.push(childId);
       queue.push(childId);
     }

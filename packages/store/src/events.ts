@@ -61,6 +61,7 @@ export type ProjectMetadataPayload = ProjectMetadata;
 
 export type TaskUpsertedPayload = {
   task: TaskRecord;
+  createOnly?: boolean;
   detail?: TaskDetailRecord;
   outgoingEdges?: DependencyRecord[];
   externalRefs?: ExternalRefRecord[];
@@ -140,6 +141,7 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
     }
     case "task.upserted": {
       const payload = entry.payload as unknown as TaskUpsertedPayload;
+      if (payload.createOnly && getTask(db, payload.task.taskId)) throw new Error(`Task already exists: ${payload.task.taskId}`);
       upsertTask(db, payload.task, revision);
       if (payload.detail) upsertTaskDetail(db, payload.detail);
       if (payload.outgoingEdges) replaceOutgoingDependencies(db, payload.task.taskId, payload.outgoingEdges);
@@ -172,7 +174,19 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
         eventNode: entry.nodeId,
         eventSequence: entry.sequence
       });
-      patchTask(db, payload.taskId, { executionState: "claimed" }, revision);
+      // A new claim is new-attempt admission: a failed execution is terminal
+      // for the attempt, not for the task. Re-open it through the machine's
+      // one legal edge (failed -> unclaimed) before claiming, so retry works
+      // through the normal claim -> dispatch -> receipt flow. Applied here in
+      // the shared projection applier, so replay reproduces it identically.
+      const execution = getTask(db, payload.taskId)?.executionState;
+      if (execution === "failed") {
+        assertTransition("execution", execution, "unclaimed");
+        patchTask(db, payload.taskId, { executionState: "unclaimed" }, revision);
+      }
+      if (["unclaimed", "claimed"].includes(getTask(db, payload.taskId)?.executionState ?? "")) {
+        patchTask(db, payload.taskId, { executionState: "claimed" }, revision);
+      }
       return;
     }
     case "task.claim-renewed": {
@@ -183,13 +197,17 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
     case "task.claim-released": {
       const payload = entry.payload as unknown as TaskClaimReleasedPayload;
       updateClaimState(db, payload.claimId, "released");
-      patchTask(db, payload.taskId, { executionState: "unclaimed" }, revision);
+      if (getTask(db, payload.taskId)?.executionState === "claimed") {
+        patchTask(db, payload.taskId, { executionState: "unclaimed" }, revision);
+      }
       return;
     }
     case "task.claim-expired": {
       const payload = entry.payload as unknown as TaskClaimExpiredPayload;
       updateClaimState(db, payload.claimId, "expired");
-      patchTask(db, payload.taskId, { executionState: "unclaimed" }, revision);
+      if (getTask(db, payload.taskId)?.executionState === "claimed") {
+        patchTask(db, payload.taskId, { executionState: "unclaimed" }, revision);
+      }
       return;
     }
     case "checkpoint.exported": {
@@ -206,9 +224,10 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
     case "dispatch.attempted": {
       const payload = entry.payload as unknown as DispatchAttemptedPayload;
       const dispatch = payload.dispatch ?? payload as unknown as DispatchAttemptedPayload["dispatch"];
-      insertDispatchAttempt(db, dispatch);
       const task = getTask(db, dispatch.taskId);
       if (!task) throw new Error(`Cannot dispatch unknown task: ${dispatch.taskId}`);
+      if (["done", "cancelled"].includes(task.planningState)) throw new Error(`Cannot dispatch terminal task: ${dispatch.taskId}`);
+      insertDispatchAttempt(db, dispatch);
       const desiredExecution = dispatch.status === "claimed" ? "claimed" : "running";
       if (task.executionState !== desiredExecution) {
         assertTransition("execution", task.executionState, desiredExecution);

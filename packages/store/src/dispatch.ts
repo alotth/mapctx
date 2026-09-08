@@ -51,11 +51,23 @@ export function recordDispatchAttempt(
   return store.runInWriteTransaction(append => {
     const task = getTask(store.db, input.taskId);
     if (!task) throw new Error(`Cannot dispatch unknown task: ${input.taskId}`);
+    if (["done", "cancelled"].includes(task.planningState)) throw new Error(`Cannot dispatch terminal task: ${input.taskId}`);
     if (listDispatchAttempts(store.db, input.dispatchId).some(a => a.attempt === input.attempt)) {
       return { ok: false, reason: "duplicate-attempt" };
     }
     const desiredExecution = status === "claimed" ? "claimed" : "running";
-    if (task.executionState !== desiredExecution) {
+    if (task.executionState === "failed") {
+      // New-attempt admission: dispatching attempt 2 re-opens a failed
+      // execution through the machine's one legal edge (failed ->
+      // unclaimed), journaled so replay reproduces the reset. Without this
+      // the failed state blocks every legal route to claimed/running and a
+      // retryable failure could never be retried through the API.
+      append({
+        eventType: "task.patched",
+        actor: input.actor ?? "store",
+        payload: { taskId: input.taskId, patch: { executionState: "unclaimed" }, source: "retry-admission" }
+      });
+    } else if (task.executionState !== desiredExecution) {
       assertTransition("execution", task.executionState, desiredExecution);
     }
     // T-071: the store freezes the planned workload at hand-off. Server-side
