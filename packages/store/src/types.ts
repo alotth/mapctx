@@ -133,3 +133,19 @@ export type WorkloadDeltaRow = {
   startedAt: string
   endedAt: string
 }
+
+export type TaskSearchHit = {
+  taskId: string
+  title: string
+  planningState: string
+  completedOn: string | null
+  tags: string[]
+  domains: string[]
+  summary: string | null
+}
+
+export type TaskSearchFilter = {
+  query: string
+  status?: string
+  limit?: number
+}

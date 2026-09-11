@@ -109,6 +109,7 @@ mapctx task claim <task-id>              # lease a task (returns claimId + lease
 mapctx task move <task-id> --status doing
 mapctx task update <task-id> --set priority=high
 mapctx task create --title "..." --summary "..."
+mapctx task search --query "..."   # duplicate-check: case/accent-insensitive over title, tags, domains, summary
 mapctx task context <task-id> --budget 2000
 mapctx dispatch create <task-id>         # feed dispatchId/attempt into dispatch receipt
 mapctx dispatch receipt <dispatch-id> --receipt path

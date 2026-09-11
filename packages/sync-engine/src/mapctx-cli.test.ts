@@ -5,7 +5,7 @@ import * as path from 'path';
 import test from 'node:test';
 import { planExecution } from '@mapctx/planner';
 import { parseTasksFile } from '@mapctx/core';
-import { mapctxPlanCommand } from './mapctx-cli';
+import { mapctxPlanCommand, taskSearchCommand } from './mapctx-cli';
 
 function makeTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'mapctx-cli-'));
@@ -148,4 +148,56 @@ test('real board (this repo TASKS.md): every non-terminal, non-container task is
     if (containers.has(task.id) || terminal.has(task.status)) continue;
     assert.ok(accountedFor.has(task.id), `expected ${task.id} (status: ${task.status}) to appear in a wave or blockedReasons`);
   }
+});
+
+test('task search markdown fallback matches accent-folded and returns compact hits', () => {
+  const tempDir = makeTempDir();
+  writeTasks(tempDir, [
+    { id: 'T-001', title: 'Divêrgência Ção reconciliação', status: 'done' },
+    { id: 'T-002', title: 'unrelated', status: 'backlog', dependsOn: ['T-001'] }
+  ]);
+
+  const previousCwd = process.cwd();
+  process.chdir(tempDir);
+  let result: { query?: string; matches?: Array<{ taskId: string; title: string; planningState: string; completedOn: string | null; tags: string[]; domains: string[]; summary: string | null }> };
+  try {
+    result = captureJson(() => taskSearchCommand({ query: 'divergencia cao', json: true } as never)) as typeof result;
+  } finally {
+    process.chdir(previousCwd);
+  }
+
+  assert.equal(result.query, 'divergencia cao');
+  assert.deepEqual(result.matches, [
+    {
+      taskId: 'T-001',
+      title: '[T-001] Divêrgência Ção reconciliação',
+      planningState: 'done',
+      completedOn: null,
+      tags: [],
+      domains: [],
+      summary: null
+    }
+  ]);
+});
+
+test('task search markdown fallback filters by status and limit', () => {
+  const tempDir = makeTempDir();
+  writeTasks(tempDir, [
+    { id: 'T-001', title: 'channel runtime', status: 'done' },
+    { id: 'T-002', title: 'channel handoff', status: 'backlog' }
+  ]);
+
+  const previousCwd = process.cwd();
+  process.chdir(tempDir);
+  let filtered: { matches?: Array<{ taskId: string }> };
+  let limited: { matches?: Array<{ taskId: string }> };
+  try {
+    filtered = captureJson(() => taskSearchCommand({ query: 'channel', status: 'backlog', json: true } as never)) as typeof filtered;
+    limited = captureJson(() => taskSearchCommand({ query: 'channel', limit: 1, json: true } as never)) as typeof limited;
+  } finally {
+    process.chdir(previousCwd);
+  }
+
+  assert.deepEqual(filtered.matches!.map(hit => hit.taskId), ['T-002']);
+  assert.deepEqual(limited.matches!.map(hit => hit.taskId), ['T-001']);
 });

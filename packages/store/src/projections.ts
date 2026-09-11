@@ -20,6 +20,8 @@ import type {
   ResourceClaimState,
   TaskDetailRecord,
   TaskRecord,
+  TaskSearchFilter,
+  TaskSearchHit,
   WorkDomain,
   WorkloadDeltaRow,
   DispatchAttemptRecord
@@ -159,6 +161,50 @@ export function getTask(db: DatabaseSync, taskId: string): TaskRecord | undefine
 export function listTasks(db: DatabaseSync): TaskRecord[] {
   const rows = db.prepare("SELECT * FROM task_projection ORDER BY position_key ASC, task_id ASC").all() as Record<string, unknown>[];
   return rows.map(rowToTask);
+}
+
+export function foldSearchText(value: string): string {
+  return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
+
+export function filterTaskSearchHits(hits: TaskSearchHit[], options: TaskSearchFilter): TaskSearchHit[] {
+  const terms = foldSearchText(options.query).split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return [];
+  const limit = options.limit !== undefined && options.limit > 0 ? Math.floor(options.limit) : 20;
+  const ranked: { hit: TaskSearchHit; rank: number }[] = [];
+  for (const hit of hits) {
+    if (options.status && hit.planningState !== options.status) continue;
+    const foldedTitle = foldSearchText(hit.title);
+    const haystack = [
+      foldedTitle,
+      foldSearchText(hit.tags.join(" ")),
+      foldSearchText(hit.domains.join(" ")),
+      foldSearchText(hit.summary ?? "")
+    ].join("\n");
+    if (!terms.every(term => haystack.includes(term))) continue;
+    ranked.push({ hit, rank: terms.every(term => foldedTitle.includes(term)) ? 0 : 1 });
+  }
+  ranked.sort((a, b) => a.rank - b.rank);
+  return ranked.slice(0, limit).map(entry => entry.hit);
+}
+
+export function searchTasks(db: DatabaseSync, options: TaskSearchFilter): TaskSearchHit[] {
+  const rows = db.prepare(`
+    SELECT t.task_id, t.title, t.planning_state, t.completed_on, t.tags_json, t.domains_json, d.summary
+    FROM task_projection t
+    LEFT JOIN task_detail_projection d ON d.task_id = t.task_id
+    ORDER BY t.position_key ASC, t.task_id ASC
+  `).all() as Record<string, unknown>[];
+  const hits: TaskSearchHit[] = rows.map(row => ({
+    taskId: row.task_id as string,
+    title: row.title as string,
+    planningState: row.planning_state as string,
+    completedOn: (row.completed_on as string | null) ?? null,
+    tags: JSON.parse(row.tags_json as string),
+    domains: JSON.parse(row.domains_json as string),
+    summary: (row.summary as string | null) ?? null
+  }));
+  return filterTaskSearchHits(hits, options);
 }
 
 function rowToTask(row: Record<string, unknown>): TaskRecord {

@@ -35,6 +35,8 @@ import {
   queryTaskFromMarkdown,
   queryTaskContext,
   queryTaskContextFromMarkdown,
+  searchTasks,
+  filterTaskSearchHits,
   toPlanningState,
   updateTask,
   listDependencies,
@@ -46,6 +48,8 @@ import { getValidationReport, validateCommand } from './board-tools';
 import { loadConfigOptionalForBoard } from './config';
 import { accountAddCommand, accountBindCommand, accountListCommand, budgetHistoryCommand, budgetSetCommand, budgetStatusCommand, planPeriodRecordCommand } from './budget-cli';
 import { buildGanttDataset } from './gantt';
+import type { Workload } from '@mapctx/forecast';
+import { pushStoreCommand } from './push-store';
 import { SyncOptions } from './types';
 import { parseWorkspaceServerArgs, startWorkspaceServer } from './workspace-server';
 
@@ -88,6 +92,8 @@ type MapctxOptions = SyncOptions & {
   minutes?: number;
   note?: string;
   account?: string;
+  query?: string;
+  limit?: number;
   planName?: string;
   seats?: number;
   end?: string;
@@ -115,8 +121,16 @@ function printHelp(): void {
   console.log('  mapctx validate [--json]');
   console.log('  mapctx task show <task-id> [--json]');
   console.log('  mapctx task context <task-id> --budget <n> [--json]');
+  console.log('  mapctx task search --query "<text>" [--status <planning-state>] [--limit n] [--json]');
+  console.log('    Duplicate-check helper: case/accent-insensitive AND match over title, tags, domains and');
+  console.log('    summary from the task projection (title/tags/domains from TASKS.md pre-cutover). Title');
+  console.log('    matches rank first; blank queries return no matches.');
   console.log('  mapctx plan [--json]');
   console.log('  mapctx gantt [--json]');
+  console.log('  mapctx push [--dry-run] [--json] [--actor name]');
+  console.log('    Store-backed GitHub projection (ADR 0003): reads task projections from the SQLite store');
+  console.log('    (never TASKS.md), refuses to run on board drift, reconciles issues/status/dates in the');
+  console.log('    GitHub repo+project bound in mapctx.toml [github]. Requires the gh CLI authenticated.');
   console.log('  mapctx task claim <task-id> [--json] [--actor name] [--holder json]');
   console.log('  mapctx task renew <task-id> --claim id --token token [--json] [--actor name]');
   console.log('  mapctx task release <task-id> --claim id --token token [--json] [--actor name]');
@@ -227,6 +241,12 @@ function parseArgs(argv: string[]): {
       options.minutes = value;
     }
     else if (a === '--note') options.note = args[++i];
+    else if (a === '--query') options.query = args[++i];
+    else if (a === '--limit') {
+      const value = Number(args[++i]);
+      if (!Number.isInteger(value) || value < 1) throw new Error('--limit must be a positive integer');
+      options.limit = value;
+    }
     else if (a === '--account') options.account = args[++i];
     else if (a === '--plan-name') options.planName = args[++i];
     else if (a === '--seats') {
@@ -570,6 +590,39 @@ export function taskContextCommand(taskId: string, options: MapctxOptions): void
   }
 }
 
+export function taskSearchCommand(options: MapctxOptions): void {
+  if (!options.query || !options.query.trim()) throw new Error('task search requires --query "<text>"');
+  const cwd = process.cwd();
+  const toml = resolveMapctxToml(cwd);
+  if (!toml || toml.config.plansAuthority !== 'store') {
+    const tasksFilePath = resolveTasksFilePath(cwd, options);
+    const board = parseTasksFile(tasksFilePath);
+    const hits = board.tasks.map(task => ({
+      taskId: task.id,
+      title: task.title,
+      planningState: task.status,
+      completedOn: task.completed,
+      tags: task.tags ?? [],
+      domains: task.domains ?? task.touch ?? [],
+      summary: null
+    }));
+    print({
+      query: options.query,
+      matches: filterTaskSearchHits(hits, { query: options.query, status: options.status, limit: options.limit })
+    }, options.json);
+    return;
+  }
+  const { handle } = openStoreOrFail(cwd, { mode: 'read' });
+  try {
+    print({
+      query: options.query,
+      matches: searchTasks(handle.db, { query: options.query, status: options.status, limit: options.limit })
+    }, options.json);
+  } finally {
+    handle.close();
+  }
+}
+
 export function mapctxPlanCommand(options: MapctxOptions): void {
   const planner = require('@mapctx/planner') as { planExecution: (input: unknown) => unknown };
   const toml = resolveMapctxToml(process.cwd());
@@ -651,6 +704,7 @@ export function mapctxGanttCommand(options: MapctxOptions): void {
         start: task.start ?? null,
         due: task.due ?? null,
         domains: task.domains ?? task.touch ?? [],
+        workload: task.workload as string | null,
         // No cutover means no store, so there are no receipts to read yet.
         receipts: []
       })),
@@ -675,6 +729,7 @@ export function mapctxGanttCommand(options: MapctxOptions): void {
         start: task.startDate ?? null,
         due: task.dueDate ?? null,
         domains: task.domains,
+        workload: task.workload as string | null,
         estimateSnapshot: listEstimateSnapshots(handle.db, task.taskId).slice(-1)[0] ?? null,
         receipts: listReceiptsForTask(handle.db, task.taskId)
       })),
@@ -1121,10 +1176,16 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === 'push') {
+    pushStoreCommand(options);
+    return;
+  }
+
   if (command === 'task') {
     if (subcommand === 'create') { taskCreateCommand(options); return; }
+    if (subcommand === 'search') { taskSearchCommand(options); return; }
     const taskId = positional[1];
-    if (!taskId) throw new Error('Usage: mapctx task <create|show|context|claim|renew|release|move|update> [...]');
+    if (!taskId) throw new Error('Usage: mapctx task <create|search|show|context|claim|renew|release|move|update> [...]');
     if (subcommand === 'show') { taskShowCommand(taskId, options); return; }
     if (subcommand === 'context') { taskContextCommand(taskId, options); return; }
     if (subcommand === 'claim') { taskClaimCommand(taskId, options); return; }
@@ -1132,7 +1193,7 @@ async function main(): Promise<void> {
     if (subcommand === 'release') { taskReleaseCommand(taskId, options); return; }
     if (subcommand === 'move') { taskMoveCommand(taskId, options); return; }
     if (subcommand === 'update') { taskUpdateCommand(taskId, options); return; }
-    throw new Error('Usage: mapctx task <create|show|context|claim|renew|release|move|update> <task-id> [...]');
+    throw new Error('Usage: mapctx task <create|search|show|context|claim|renew|release|move|update> <task-id> [...]');
   }
 
   if (command === 'dispatch') {
