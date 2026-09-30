@@ -13,6 +13,16 @@ export type TaskDetailFile = {
   description: string
 }
 
+export type AcceptanceChecklistItem = {
+  text: string
+  completed: boolean
+}
+
+export type AcceptanceChecklist = {
+  found: boolean
+  items: AcceptanceChecklistItem[]
+}
+
 const TOP_LEVEL_FIELD_RE = /^  - ([A-Za-z][A-Za-z0-9]*):\s*(.*)$/
 const DESCRIPTION_INDENT = "      "
 
@@ -150,4 +160,47 @@ export function generateTaskDetailFile(detail: TaskDetailFile): string {
 
 export function readTaskDetailFile(filePath: string): TaskDetailFile {
   return parseTaskDetailFile(fs.readFileSync(filePath, "utf8"))
+}
+
+/**
+ * Read the acceptance checklist from the Git-authored description. Nested
+ * headings are valid inside `## Acceptance`; a sibling `##` heading ends it.
+ * Plain bullets are intentionally treated as incomplete: completion must be
+ * explicit via `[x]`, never inferred from prose or an Outcome paragraph.
+ */
+export function parseAcceptanceChecklist(content: string): AcceptanceChecklist {
+  const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")
+  let sectionLevel: number | null = null
+  let fenced = false
+  const items: AcceptanceChecklistItem[] = []
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith("```")) {
+      fenced = !fenced
+      continue
+    }
+    if (fenced) continue
+
+    const heading = line.match(/^\s*(#{1,6})\s+(.+?)\s*$/)
+    if (heading) {
+      const level = heading[1].length
+      const title = heading[2].trim().toLowerCase()
+      if (sectionLevel !== null && level <= sectionLevel) break
+      if (sectionLevel === null && title === "acceptance") {
+        sectionLevel = level
+      }
+      continue
+    }
+    if (sectionLevel === null) continue
+
+    const bullet = line.match(/^\s*[-*+]\s+(?:(\[([ xX])\])\s+)?(.+?)\s*$/)
+    if (!bullet) continue
+    items.push({
+      text: bullet[3].trim(),
+      completed: bullet[1] !== undefined && bullet[2].toLowerCase() === "x"
+    })
+  }
+
+  return { found: sectionLevel !== null, items }
 }

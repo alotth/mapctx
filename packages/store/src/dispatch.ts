@@ -51,19 +51,19 @@ export function recordDispatchAttempt(
   return store.runInWriteTransaction(append => {
     const task = getTask(store.db, input.taskId);
     if (!task) throw new Error(`Cannot dispatch unknown task: ${input.taskId}`);
-    if (["done", "cancelled"].includes(task.planningState)) throw new Error(`Cannot dispatch terminal task: ${input.taskId}`);
+    if (["done", "cancelled", "archived"].includes(task.planningState)) throw new Error(`Cannot dispatch terminal task: ${input.taskId}`);
     if (listDispatchAttempts(store.db, input.dispatchId).some(a => a.attempt === input.attempt)) {
       return { ok: false, reason: "duplicate-attempt" };
     }
     const desiredExecution = status === "claimed" ? "claimed" : "running";
-    if (task.executionState === "failed" || task.executionState === "blocked") {
+    if (task.executionState === "failed" || task.executionState === "blocked" || task.executionState === "completed") {
       // New-attempt admission: dispatching a new attempt re-opens a terminal-
-      // for-the-attempt execution through the machine's one legal edge
-      // (failed -> unclaimed, or blocked -> unclaimed), journaled so replay
-      // reproduces the reset. Without this the terminal state blocks every
-      // legal route to claimed/running and an honestly-blocked run could
-      // never be retried through the normal claim -> dispatch -> receipt
-      // flow (R9 review P2#3).
+      // for-the-attempt execution through a journaled reset to unclaimed
+      // (failed, blocked, or completed -> unclaimed). The old attempt remains
+      // immutable and its receipt remains queryable; only the new dispatch
+      // attempt may advance from the reset state. Without this the terminal
+      // state blocks every legal route to claimed/running and a completed run
+      // could never be retried after review.
       append({
         eventType: "task.patched",
         actor: input.actor ?? "store",

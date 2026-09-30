@@ -226,7 +226,7 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
       const dispatch = payload.dispatch ?? payload as unknown as DispatchAttemptedPayload["dispatch"];
       const task = getTask(db, dispatch.taskId);
       if (!task) throw new Error(`Cannot dispatch unknown task: ${dispatch.taskId}`);
-      if (["done", "cancelled"].includes(task.planningState)) throw new Error(`Cannot dispatch terminal task: ${dispatch.taskId}`);
+      if (["done", "cancelled", "archived"].includes(task.planningState)) throw new Error(`Cannot dispatch terminal task: ${dispatch.taskId}`);
       insertDispatchAttempt(db, dispatch);
       const desiredExecution = dispatch.status === "claimed" ? "claimed" : "running";
       if (task.executionState !== desiredExecution) {

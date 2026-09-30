@@ -89,6 +89,29 @@ test("reconcile discard reverts the manual edit; reconcile accept writes it into
   }
 });
 
+test("reconcile accept refuses a manual move to done when acceptance is incomplete", () => {
+  const { repoDir, restoreEnv } = setupGoldenRepo();
+  try {
+    const result = importCommit({ cwd: repoDir, actor: "test" });
+    const tasksMdPath = path.join(repoDir, "TASKS.md");
+    const detailPath = path.join(repoDir, "tasks", "T-101.md");
+    fs.writeFileSync(detailPath, fs.readFileSync(detailPath, "utf8").replace("[x] Golden task acceptance is complete.", "[ ] Golden task acceptance is complete."), "utf8");
+    editTaskStatus(tasksMdPath, "T-101", "backlog", "done");
+
+    const handle = StoreHandle.open(result.storeDir);
+    assert.throws(
+      () => reconcileAccept(handle, repoDir, "T-101", "reconciler-actor"),
+      /acceptance checklist is incomplete|remain unchecked/
+    );
+    assert.equal(handle.listEvents().filter(event => event.eventType === "task.patched").length, 0);
+    assert.equal((handle.db.prepare("SELECT planning_state FROM task_projection WHERE task_id = 'T-101'").get() as { planning_state: string }).planning_state, "backlog");
+    handle.close();
+  } finally {
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
 test("validateStoreRegime fails closed as not-materialized when plansAuthority=store but no local mapctx.db exists", () => {
   const { repoDir, restoreEnv } = setupGoldenRepo();
   try {

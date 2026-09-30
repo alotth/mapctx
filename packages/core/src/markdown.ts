@@ -53,7 +53,8 @@ const LEGACY_SECTIONS: Record<string, LocalStatus> = {
   doing: "doing",
   review: "review",
   done: "done",
-  paused: "paused"
+  paused: "paused",
+  archived: "archived"
 }
 
 function parseArray(value: string): string[] {

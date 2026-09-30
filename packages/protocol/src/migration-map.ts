@@ -273,12 +273,14 @@ export const MIGRATION_MAP: readonly MigrationRule[] = [
 ] as const;
 
 export const STATUS_TO_PLANNING: Record<string, string> = {
-  backlog: "backlog",
-  "ready-for-do": "ready",
-  doing: "in-progress",
-  review: "review",
-  done: "done",
-  paused: "paused"
+   backlog: "backlog",
+   "ready-for-do": "ready",
+   doing: "in-progress",
+   review: "review",
+   done: "done",
+   paused: "paused",
+   cancelled: "cancelled",
+   archived: "archived"
 };
 
 export const REQUIRED_TASKS_MD_FIELDS = [

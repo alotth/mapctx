@@ -106,6 +106,9 @@ export const GOLDEN_DETAIL_T101 = `# T-101
   - summary: Empty optional fields everywhere.
   - description: |
       Single line description, no headings, no checklists.
+
+      ## Acceptance
+      - [x] Golden task acceptance is complete.
 `;
 
 export const GOLDEN_DETAIL_T102 = `# T-102

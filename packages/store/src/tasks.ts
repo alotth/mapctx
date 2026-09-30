@@ -1,4 +1,7 @@
 import * as crypto from "crypto"
+import * as fs from "fs"
+import * as path from "path"
+import { parseAcceptanceChecklist } from "@mapctx/core"
 import { STATUS_TO_PLANNING, transitionPlanning } from "@mapctx/protocol"
 import { getActiveClaimForTask, getTask, getTaskDetail } from "./projections"
 import type { StoreHandle } from "./store-handle"
@@ -11,20 +14,22 @@ import type { DependencyRecord, TaskDetailRecord, TaskRecord } from "./types"
  * check would fail closed on every subsequent validate. Rejected here,
  * fail-early, until the board vocabulary grows.
  */
-const EXPORTABLE_PLANNING_STATES = new Set(["backlog", "ready", "in-progress", "review", "done", "paused"]);
+const EXPORTABLE_PLANNING_STATES = new Set(["backlog", "ready", "in-progress", "review", "done", "paused", "cancelled", "archived"]);
 
 export type MoveTaskOptions = {
   taskId: string;
   to: string;
   actor: string;
   now?: () => Date;
+  /** Repository root containing Git-authored task detail files. */
+  tasksRoot?: string;
 };
 
 export type MoveTaskResult =
   | { ok: true; from: string; to: string; releasedClaimId?: string }
   | {
       ok: false;
-      reason: "unknown-task" | "illegal-transition" | "unknown-state" | "state-not-exportable";
+      reason: "unknown-task" | "illegal-transition" | "unknown-state" | "state-not-exportable" | "acceptance-incomplete";
       from?: string;
       to: string;
       message?: string;
@@ -65,8 +70,13 @@ export function moveTask(store: StoreHandle, options: MoveTaskOptions): MoveTask
       };
     }
 
+    if (options.to === "done") {
+      const acceptance = acceptanceGate(task, options.tasksRoot);
+      if (!acceptance.ok) return acceptance;
+    }
+
     let releasedClaimId: string | undefined;
-    if (options.to === "done" || options.to === "cancelled") {
+    if (options.to === "done" || options.to === "cancelled" || options.to === "archived") {
       const active = getActiveClaimForTask(store.db, options.taskId);
       if (active) {
         append({
@@ -97,6 +107,120 @@ export function moveTask(store: StoreHandle, options: MoveTaskOptions): MoveTask
 
     return { ok: true, from: task.planningState, to: options.to, releasedClaimId };
   });
+}
+
+export type ReopenTaskOptions = {
+  taskId: string;
+  to: string;
+  actor: string;
+  now?: () => Date;
+};
+
+export type ReopenTaskResult =
+  | { ok: true; from: "done" | "cancelled" | "archived"; to: "review" }
+  | {
+      ok: false;
+      reason: "unknown-task" | "not-done" | "unsupported-target";
+      from?: string;
+      to: string;
+      message?: string;
+    };
+
+/**
+ * Reopens a completed, cancelled, or archived task through an explicit, auditable
+ * exception to the terminal planning-state machine. Reopening only returns a
+ * task to review; any completion date is cleared because the task is no longer
+ * complete.
+ */
+export function reopenTask(store: StoreHandle, options: ReopenTaskOptions): ReopenTaskResult {
+  const now = options.now ?? (() => new Date());
+
+  return store.runInWriteTransaction(append => {
+    const task = getTask(store.db, options.taskId);
+    if (!task) return { ok: false, reason: "unknown-task", to: options.to };
+    if (options.to !== "review") {
+      return {
+        ok: false,
+        reason: "unsupported-target",
+        from: task.planningState,
+        to: options.to,
+        message: `task reopen only supports target status "review".`
+      };
+    }
+    if (task.planningState !== "done" && task.planningState !== "cancelled" && task.planningState !== "archived") {
+      return {
+        ok: false,
+        reason: "not-done",
+        from: task.planningState,
+        to: options.to,
+        message: `task ${options.taskId} is "${task.planningState}"; only done, cancelled or archived tasks can be reopened.`
+      };
+    }
+
+    const nowDate = now();
+    append({
+      eventType: "task.patched",
+      actor: options.actor,
+      occurredAt: nowDate.toISOString(),
+      payload: {
+        taskId: options.taskId,
+        patch: {
+          planningState: "review",
+          completedOn: null,
+          updatedOn: nowDate.toISOString().slice(0, 10)
+        },
+        source: "task-reopen"
+      }
+    });
+
+    return { ok: true, from: task.planningState, to: "review" };
+  });
+}
+
+export type AcceptanceCheckResult =
+  | { ok: true }
+  | { ok: false; reason: "acceptance-incomplete"; message: string };
+
+export function checkTaskAcceptance(task: TaskRecord, tasksRoot?: string): AcceptanceCheckResult {
+  if (!tasksRoot || !task.detailPath) {
+    return {
+      ok: false,
+      reason: "acceptance-incomplete",
+      message: `task ${task.taskId} cannot move to done: acceptance checklist is unavailable. Add ## Acceptance with every criterion marked [x].`
+    };
+  }
+
+  const detailPath = path.resolve(tasksRoot, task.detailPath);
+  let content: string;
+  try {
+    content = fs.readFileSync(detailPath, "utf8");
+  } catch {
+    return {
+      ok: false,
+      reason: "acceptance-incomplete",
+      message: `task ${task.taskId} cannot move to done: detail file ${task.detailPath} is unreadable. Add ## Acceptance with every criterion marked [x].`
+    };
+  }
+
+  const checklist = parseAcceptanceChecklist(content);
+  const incomplete = checklist.items.filter(item => !item.completed).length;
+  if (!checklist.found || checklist.items.length === 0 || incomplete > 0) {
+    const detail = !checklist.found || checklist.items.length === 0
+      ? "acceptance checklist is missing"
+      : `${incomplete} acceptance criterion/criteria remain unchecked`;
+    return {
+      ok: false,
+      reason: "acceptance-incomplete",
+      message: `task ${task.taskId} cannot move to done: ${detail}. Mark every item in ## Acceptance as [x].`
+    };
+  }
+  return { ok: true };
+}
+
+function acceptanceGate(task: TaskRecord, tasksRoot?: string): { ok: true } | Extract<MoveTaskResult, { ok: false }> {
+  const result = checkTaskAcceptance(task, tasksRoot);
+  if (result.ok) return result;
+  return { ...result, from: task.planningState, to: "done" };
 }
 
 /**

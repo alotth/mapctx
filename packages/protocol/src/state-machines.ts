@@ -1,23 +1,24 @@
 import { DispatchStatus, ExecutionState, PlanningState } from "./entities";
 
 export const PLANNING_TRANSITIONS: Record<PlanningState, readonly PlanningState[]> = {
-  backlog: ["ready", "blocked", "paused", "cancelled"],
-  ready: ["in-progress", "blocked", "paused", "backlog", "cancelled"],
-  blocked: ["ready", "paused", "cancelled"],
-  "in-progress": ["review", "blocked", "paused", "done", "cancelled"],
-  review: ["in-progress", "done", "blocked", "paused"],
-  paused: ["backlog", "ready", "blocked", "cancelled"],
+  backlog: ["ready", "blocked", "paused", "cancelled", "archived"],
+  ready: ["in-progress", "blocked", "paused", "backlog", "cancelled", "archived"],
+  blocked: ["ready", "paused", "cancelled", "archived"],
+  "in-progress": ["review", "blocked", "paused", "done", "cancelled", "archived"],
+  review: ["in-progress", "done", "blocked", "paused", "cancelled", "archived"],
+  paused: ["backlog", "ready", "blocked", "cancelled", "archived"],
   done: [],
-  cancelled: []
+  cancelled: [],
+  archived: []
 };
 
 export const EXECUTION_TRANSITIONS: Record<ExecutionState, readonly ExecutionState[]> = {
   unclaimed: ["claimed", "cancelled"],
   claimed: ["running", "unclaimed", "cancelled"],
   running: ["blocked", "completed", "failed", "cancelled"],
-  // "unclaimed" is the retry-admission edge: a blocked run is terminal for
-  // the ATTEMPT, not for the task -- the same mirror as failed -> unclaimed.
-  // New-attempt admission journals the reset so replay reproduces it.
+   // "unclaimed" is the retry-admission edge: a blocked run is terminal for
+   // the ATTEMPT, not for the task -- the same mirror as failed -> unclaimed.
+   // New-attempt admission journals the reset so replay reproduces it.
   blocked: ["running", "unclaimed", "cancelled", "failed"],
   completed: [],
   failed: ["unclaimed"],

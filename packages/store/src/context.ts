@@ -84,7 +84,7 @@ function ancestorsFor(task: TaskRecord, byId: Map<string, TaskRecord>): TaskReco
 }
 
 function dependencyTasks(taskId: string, dependencies: DependencyRecord[], byId: Map<string, TaskRecord>): TaskRecord[] {
-  const terminal = new Set(["done", "cancelled"])
+  const terminal = new Set(["done", "cancelled", "archived"])
   return dependencies
     .filter(edge => edge.fromTaskId === taskId && edge.kind === "depends-on")
     .map(edge => byId.get(edge.toTaskId))

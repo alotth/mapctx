@@ -1,4 +1,4 @@
-export type TaskStatus = "backlog" | "doing" | "review" | "done" | "paused" | "unknown"
+export type TaskStatus = "backlog" | "doing" | "review" | "done" | "paused" | "archived" | "unknown"
 
 export { parseTaskDetailMarkdown, generateTaskDetailMarkdown, type TaskDetail, type TaskStep } from "./detail"
 
@@ -18,12 +18,15 @@ export {
   parseTaskDetailFile,
   generateTaskDetailFile,
   readTaskDetailFile,
-  type TaskDetailFile
+  parseAcceptanceChecklist,
+  type TaskDetailFile,
+  type AcceptanceChecklist,
+  type AcceptanceChecklistItem
 } from "./task-detail"
 
 export function normalizeStatus(value: string | undefined | null): TaskStatus {
   const status = String(value || "").trim().toLowerCase()
-  if (status === "backlog" || status === "doing" || status === "review" || status === "done" || status === "paused") {
+  if (status === "backlog" || status === "doing" || status === "review" || status === "done" || status === "paused" || status === "archived") {
     return status
   }
   return "unknown"

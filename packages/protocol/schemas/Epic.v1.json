@@ -24,7 +24,8 @@
             "review",
             "paused",
             "done",
-            "cancelled"
+            "cancelled",
+            "archived"
           ],
           "type": "string"
         },

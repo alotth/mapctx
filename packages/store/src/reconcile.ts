@@ -5,6 +5,7 @@ import { parseTasksFile, readTaskDetailFile } from "@mapctx/core"
 import { STATUS_TO_PLANNING } from "@mapctx/protocol"
 import { buildExport } from "./export"
 import { getTask, getTaskDetail, listOutgoingDependencies } from "./projections"
+import { checkTaskAcceptance } from "./tasks"
 import type { StoreHandle } from "./store-handle"
 import type { DependencyRecord, TaskDetailRecord, TaskRecord } from "./types"
 
@@ -119,6 +120,13 @@ export function reconcileDiscard(db: DatabaseSync, tasksRoot: string): void {
 export function reconcileAccept(store: StoreHandle, tasksRoot: string, taskId: string, actor: string): ReconcileDiff {
   const diff = diffTaskForReconcile(store.db, tasksRoot, taskId);
   if (!diff.hasDrift) return diff;
+
+  const planningChange = diff.taskFields.find(field => field.field === "planningState");
+  if (planningChange?.fileValue === "done") {
+    const task = getTask(store.db, taskId);
+    const acceptance = task ? checkTaskAcceptance(task, tasksRoot) : { ok: false as const, reason: "acceptance-incomplete" as const, message: `task ${taskId} cannot move to done: task projection is unavailable.` };
+    if (!acceptance.ok) throw new Error(acceptance.message);
+  }
 
   const patch: Partial<TaskRecord> = {};
   for (const field of diff.taskFields) {

@@ -1,9 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { parseAcceptanceChecklist } from "@mapctx/core"
 import * as fs from "fs"
 import * as path from "path"
 import { importCommit } from "./cutover"
-import { createTask, moveTask, updateTask } from "./tasks"
+import { createTask, moveTask, reopenTask, updateTask } from "./tasks"
 import { getTask, getTaskDetail, listDependencies, getActiveClaimForTask } from "./projections"
 import { claimTask, releaseClaim } from "./claims"
 import { StoreHandle } from "./store-handle"
@@ -16,6 +17,26 @@ function materialize() {
   return { repoDir, restoreEnv, handle, committed };
 }
 
+test("acceptance parser requires explicit checks and keeps nested acceptance headings in scope", () => {
+  const parsed = parseAcceptanceChecklist(`
+## Acceptance
+### Runtime
+- [x] First criterion.
+- plain criterion without checkbox.
+### Evidence
+\`\`\`md
+- [ ] Example inside code.
+\`\`\`
+## Steps
+- [ ] Outside acceptance.
+`)
+  assert.equal(parsed.found, true)
+  assert.deepEqual(parsed.items, [
+    { text: "First criterion.", completed: true },
+    { text: "plain criterion without checkbox.", completed: false }
+  ])
+})
+
 test("moveTask follows the planning state machine and stamps completedOn on done", () => {
   const { repoDir, restoreEnv, handle } = materialize();
   try {
@@ -27,7 +48,7 @@ test("moveTask follows the planning state machine and stamps completedOn on done
     assert.equal(result.ok, true);
     result = moveTask(handle, { taskId: "T-101", to: "review", actor: "test" });
     assert.equal(result.ok, true);
-    result = moveTask(handle, { taskId: "T-101", to: "done", actor: "test" });
+    result = moveTask(handle, { taskId: "T-101", to: "done", actor: "test", tasksRoot: repoDir });
     assert.equal(result.ok, true);
 
     const task = getTask(handle.db, "T-101");
@@ -71,6 +92,41 @@ test("moveTask refuses illegal transitions, unknown states, unexportable states,
   }
 });
 
+test("reopenTask moves done to review, clears completion, and records audit provenance", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const now = () => new Date("2026-09-16T12:34:56.000Z");
+    const result = reopenTask(handle, { taskId: "T-102", to: "review", actor: "reviewer", now });
+    assert.deepEqual(result, { ok: true, from: "done", to: "review" });
+
+    const task = getTask(handle.db, "T-102");
+    assert.equal(task!.planningState, "review");
+    assert.equal(task!.completedOn, null);
+    assert.equal(task!.updatedOn, "2026-09-16");
+
+    const events = handle.listEvents().filter(event => event.eventType === "task.patched");
+    const reopenEvent = events[events.length - 1];
+    assert.equal(reopenEvent!.actor, "reviewer");
+    assert.deepEqual((reopenEvent!.payload as { taskId: string; patch: Record<string, unknown>; source: string }), {
+      taskId: "T-102",
+      patch: { planningState: "review", completedOn: null, updatedOn: "2026-09-16" },
+      source: "task-reopen"
+    });
+
+    const notDone = reopenTask(handle, { taskId: "T-101", to: "review", actor: "reviewer", now });
+    assert.equal(notDone.ok, false);
+    if (!notDone.ok) assert.equal(notDone.reason, "not-done");
+
+    const wrongTarget = reopenTask(handle, { taskId: "T-102", to: "doing", actor: "reviewer", now });
+    assert.equal(wrongTarget.ok, false);
+    if (!wrongTarget.ok) assert.equal(wrongTarget.reason, "unsupported-target");
+  } finally {
+    handle.close();
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
 test("moveTask to done or cancelled releases an active claim", () => {
   const { repoDir, restoreEnv, handle } = materialize();
   try {
@@ -79,11 +135,44 @@ test("moveTask to done or cancelled releases an active claim", () => {
     assert.ok(claim.ok);
 
     moveTask(handle, { taskId: "T-101", to: "in-progress", actor: "test" });
-    const result = moveTask(handle, { taskId: "T-101", to: "done", actor: "test" });
+    const result = moveTask(handle, { taskId: "T-101", to: "done", actor: "test", tasksRoot: repoDir });
     assert.equal(result.ok, true);
     if (result.ok) assert.equal(result.releasedClaimId, claim.claim.claimId);
     assert.equal(getActiveClaimForTask(handle.db, "T-101"), undefined);
     assert.equal(getTask(handle.db, "T-101")!.executionState, "unclaimed");
+  } finally {
+    handle.close();
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
+test("moveTask to cancelled releases the claim, stamps no completedOn, exports, and reopens to review", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    moveTask(handle, { taskId: "T-101", to: "ready", actor: "test" });
+    const claim = claimTask(handle, { taskId: "T-101", actor: "worker" });
+    assert.ok(claim.ok);
+    moveTask(handle, { taskId: "T-101", to: "in-progress", actor: "test" });
+
+    const result = moveTask(handle, { taskId: "T-101", to: "cancelled", actor: "operator" });
+    assert.deepEqual(result, { ok: true, from: "in-progress", to: "cancelled", releasedClaimId: claim.claim!.claimId });
+    assert.equal(getTask(handle.db, "T-101")!.planningState, "cancelled");
+    assert.equal(getTask(handle.db, "T-101")!.completedOn, null, "cancelled does not stamp completedOn");
+    assert.equal(getActiveClaimForTask(handle.db, "T-101"), undefined);
+
+    const { buildExport } = require("./export") as typeof import("./export");
+    const exported = buildExport(handle.db, { tasksRoot: repoDir });
+    assert.ok(exported.tasksMd.content.includes("  - status: cancelled"), "canonical board represents cancelled");
+
+    // Terminal for normal moves, but reopenable like done/archived.
+    const terminalMove = moveTask(handle, { taskId: "T-101", to: "ready", actor: "test" });
+    assert.equal(terminalMove.ok, false);
+    if (!terminalMove.ok) assert.equal(terminalMove.reason, "illegal-transition");
+
+    const reopened = reopenTask(handle, { taskId: "T-101", to: "review", actor: "operator" });
+    assert.deepEqual(reopened, { ok: true, from: "cancelled", to: "review" });
+    assert.equal(getTask(handle.db, "T-101")!.planningState, "review");
   } finally {
     handle.close();
     restoreEnv();

@@ -20,7 +20,8 @@ export const planningStateSchema = z.enum([
   "review",
   "paused",
   "done",
-  "cancelled"
+  "cancelled",
+  "archived"
 ]);
 export type PlanningState = z.infer<typeof planningStateSchema>;
 

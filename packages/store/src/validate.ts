@@ -1,3 +1,6 @@
+import * as fs from "fs"
+import * as path from "path"
+import { parseAcceptanceChecklist } from "@mapctx/core"
 import { resolveMapctxToml, resolveProjectStoreDir, isStoreMaterialized } from "./config"
 import { checkDrift, type DriftReport } from "./drift"
 import { StoreHandle } from "./store-handle"
@@ -24,7 +27,7 @@ export type StoreValidateResult =
   | { status: "store-authority"; projectId: string; drift: DriftReport; semantic: StoreSemanticReport };
 
 /** Validate fields whose authority exists only in the event-backed store. */
-export function validateStoreSemantics(handle: StoreHandle): StoreSemanticReport {
+export function validateStoreSemantics(handle: StoreHandle, tasksRoot?: string): StoreSemanticReport {
   const issues: StoreSemanticIssue[] = []
   const tasks = listTasks(handle.db)
   const events = handle.listEvents()
@@ -39,6 +42,24 @@ export function validateStoreSemantics(handle: StoreHandle): StoreSemanticReport
     const eventDate = latestTaskEvent.get(task.taskId)
     if (task.updatedOn && eventDate && task.updatedOn > eventDate) {
       issues.push({ severity: "error", code: "updated-after-event-history", message: `updated ${task.updatedOn} is after latest task event ${eventDate}.`, taskId: task.taskId })
+    }
+
+    if (tasksRoot && task.planningState === "done") {
+      const detailPath = task.detailPath ? path.resolve(tasksRoot, task.detailPath) : null
+      let checklist: ReturnType<typeof parseAcceptanceChecklist> | null = null
+      if (detailPath) {
+        try {
+          checklist = parseAcceptanceChecklist(fs.readFileSync(detailPath, "utf8"))
+        } catch {
+          // Missing/unreadable detail is reported as an incomplete gate below.
+        }
+      }
+      const incomplete = checklist?.items.filter(item => !item.completed).length ?? 0
+      if (!checklist?.found || checklist.items.length === 0) {
+        issues.push({ severity: "error", code: "completion-acceptance-missing", message: "Task is done but has no explicit acceptance checklist marked with [x].", taskId: task.taskId })
+      } else if (incomplete > 0) {
+        issues.push({ severity: "error", code: "completion-acceptance-incomplete", message: `Task is done but ${incomplete} acceptance criterion/criteria remain unchecked.`, taskId: task.taskId })
+      }
     }
   }
   const counts = new Map<string, number>()
@@ -85,7 +106,7 @@ export function validateStoreRegime(cwd: string, tasksRoot: string): StoreValida
       return { status: "maintenance-needed", projectId: resolved.config.projectId, storeDir, maintenanceNeeded: maintenance };
     }
     const drift = checkDrift(handle.db, tasksRoot);
-    const semantic = validateStoreSemantics(handle);
+    const semantic = validateStoreSemantics(handle, tasksRoot);
     return { status: "store-authority", projectId: resolved.config.projectId, drift, semantic };
   } finally {
     handle.close();

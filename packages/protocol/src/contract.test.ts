@@ -83,6 +83,9 @@ test("identity scheme links MapCtx task, Traycer epic/artifact, and GitHub issue
 test("planning and execution are separate machines; illegal transitions fail", () => {
   assert.equal(canTransitionPlanning("backlog", "ready"), true);
   assert.equal(canTransitionPlanning("done", "backlog"), false);
+  assert.equal(canTransitionPlanning("review", "cancelled"), true, "rejected review work can be cancelled");
+  assert.equal(canTransitionPlanning("cancelled", "review"), false, "cancelled is terminal");
+  assert.equal(canTransitionPlanning("in-progress", "cancelled"), true);
   assert.equal(canTransitionExecution("unclaimed", "claimed"), true);
   assert.equal(canTransitionExecution("completed", "running"), false);
   assert.throws(() => assertTransition("planning", "done", "ready"), /Illegal planning transition/);

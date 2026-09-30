@@ -1,7 +1,7 @@
 (function attachKanbanCore(globalObject) {
   function normalizeStatus(value) {
     var status = String(value || "").trim().toLowerCase()
-    if (status === "backlog" || status === "doing" || status === "review" || status === "done" || status === "paused") {
+    if (status === "backlog" || status === "doing" || status === "review" || status === "done" || status === "paused" || status === "archived") {
       return status
     }
     return "unknown"
@@ -255,7 +255,7 @@
       tasks.push(task)
     }
 
-    var order = ["backlog", "doing", "review", "done", "paused", "unknown"]
+    var order = ["backlog", "doing", "review", "done", "paused", "archived", "unknown"]
     var grouped = new Map(order.map(function (status) { return [status, []] }))
     tasks.forEach(function (task) {
       var list = grouped.get(task.status)

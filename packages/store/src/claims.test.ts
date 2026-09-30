@@ -1,4 +1,6 @@
 import assert from "node:assert/strict"
+import * as fs from "fs"
+import * as path from "path"
 import test from "node:test"
 import { claimTask, releaseClaim, renewClaim } from "./claims"
 import { recordDispatchAttempt, recordRunReceipt } from "./dispatch"
@@ -8,6 +10,8 @@ import { StoreHandle } from "./store-handle"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
 
 function seedOneTask(handle: StoreHandle): void {
+  fs.mkdirSync(path.join(handle.storeDir, "tasks"), { recursive: true });
+  fs.writeFileSync(path.join(handle.storeDir, "tasks", "T-001.md"), "# T-001\n\n## Acceptance\n- [x] Test acceptance.\n", "utf8");
   handle.appendEvent({
     eventType: "project.initialized",
     actor: "test",
@@ -23,6 +27,7 @@ function seedOneTask(handle: StoreHandle): void {
         title: "x",
         planningState: "backlog",
         executionState: "unclaimed",
+        detailPath: "./tasks/T-001.md",
         tags: [],
         domains: [],
         externalLinks: [],
@@ -281,7 +286,7 @@ test("R11: a done task refuses both claim and fresh dispatch", () => {
       evidence: [],
       failure: null
     }, "test", dispatchId).ok, true);
-    const moved = moveTask(handle, { taskId: "T-001", to: "done", actor: "reviewer" });
+    const moved = moveTask(handle, { taskId: "T-001", to: "done", actor: "reviewer", tasksRoot: dir });
     assert.equal(moved.ok, true);
     void claim;
 
@@ -341,7 +346,7 @@ test("R11: completed execution is not reset when planning moves to done", () => 
     assert.equal(before?.planningState, "review");
     assert.equal(before?.executionState, "completed");
 
-    moveTask(handle, { taskId: "T-001", to: "done", actor: "reviewer" });
+    moveTask(handle, { taskId: "T-001", to: "done", actor: "reviewer", tasksRoot: dir });
 
     const after = getTask(handle.db, "T-001");
     assert.equal(after?.planningState, "done");

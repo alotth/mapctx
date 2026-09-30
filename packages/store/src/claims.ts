@@ -32,7 +32,7 @@ export function claimTask(store: StoreHandle, options: ClaimOptions): ClaimResul
     const task = getTask(store.db, options.taskId);
     if (!task) return { ok: false, reason: "unknown-task" };
 
-    if (task.planningState === "done" || task.planningState === "cancelled") {
+    if (task.planningState === "done" || task.planningState === "cancelled" || task.planningState === "archived") {
       return { ok: false, reason: "terminal-state" } as ClaimResult;
     }
 

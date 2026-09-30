@@ -103,7 +103,7 @@ export type PlanReport = {
   policy: PlannerPolicy;
 };
 
-const TERMINAL_STATUSES = new Set(["done", "cancelled"]);
+const TERMINAL_STATUSES = new Set(["done", "cancelled", "archived"]);
 
 function normalizedStatus(task: PlannerTask): string {
   const raw = task.planningState ?? task.status ?? "backlog";

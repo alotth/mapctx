@@ -1,4 +1,6 @@
 import assert from "node:assert/strict"
+import * as fs from "fs"
+import * as path from "path"
 import test from "node:test"
 import { getDispatchAttempt, getRunEvent, getRunReceipt, listDispatchAttempts, listRunEvents, listRunReceipts, listCostEvents, listEstimateSnapshots, listUsageEvents } from "./projections"
 import { recordCostEvent, recordDispatchAttempt, recordEstimateSnapshot, recordRunEvent, recordRunReceipt } from "./dispatch"
@@ -13,6 +15,8 @@ import { ENTITY_FIXTURES } from "@mapctx/protocol"
 const DISPATCH_ID = "9b2e4d71-6c18-4a0f-b3d5-11aa22bb33cc"
 
 function seedTask(handle: StoreHandle): void {
+  fs.mkdirSync(path.join(handle.storeDir, "tasks"), { recursive: true });
+  fs.writeFileSync(path.join(handle.storeDir, "tasks", "T-001.md"), "# T-001\n\n## Acceptance\n- [x] Test acceptance.\n", "utf8");
   handle.appendEvent({
     eventType: "project.initialized",
     actor: "test",
@@ -28,6 +32,7 @@ function seedTask(handle: StoreHandle): void {
         title: "x",
         planningState: "in-progress",
         executionState: "claimed",
+        detailPath: "./tasks/T-001.md",
         tags: [],
         domains: [],
         externalLinks: [],
@@ -271,6 +276,55 @@ test("dispatch admission alone re-opens a failed execution via the journaled ret
   }
 });
 
+test("completed execution admits a new attempt without erasing the prior receipt", () => {
+  const dir = mkTmpDir("mapctx-store-completed-retry-");
+  try {
+    const handle = StoreHandle.open(dir);
+    seedDispatch(handle);
+    assert.ok(recordRunReceipt(handle, receipt(), "test").ok);
+    assert.equal(getTask(handle.db, "T-001")?.planningState, "review");
+    assert.equal(getTask(handle.db, "T-001")?.executionState, "completed");
+
+    const retry = recordDispatchAttempt(handle, {
+      dispatchId: DISPATCH_ID,
+      taskId: "T-001",
+      executorKind: "test",
+      attempt: 2,
+      contextHash: "hash-2",
+      status: "claimed"
+    }, "test");
+    assert.equal(retry.ok, true, `completed execution must admit a retry: ${JSON.stringify(retry)}`);
+    assert.equal(getTask(handle.db, "T-001")?.executionState, "claimed");
+
+    const admission = handle.listEvents().filter(event => event.eventType === "task.patched" && event.payload.source === "retry-admission");
+    assert.equal(admission.length, 1);
+    assert.deepEqual(admission[0].payload.patch, { executionState: "unclaimed" });
+
+    const firstReceipt = receipt();
+    const secondReceipt = {
+      ...firstReceipt,
+      attempt: 2,
+      startedAt: "2026-08-16T20:54:10.000Z",
+      endedAt: "2026-08-16T20:55:10.000Z",
+      usageEvents: [{ ...firstReceipt.usageEvents[0], usageEventId: "0e5c2f61-8d47-4f3a-b2c9-6a1d33cc90e4" }]
+    };
+    assert.deepEqual(recordRunReceipt(handle, firstReceipt, "test"), { ok: false, reason: "stale-attempt" });
+    assert.equal(recordRunReceipt(handle, secondReceipt, "test").ok, true);
+    assert.equal(getTask(handle.db, "T-001")?.executionState, "completed");
+    assert.deepEqual(listRunReceipts(handle.db, undefined, "T-001"), [firstReceipt, secondReceipt]);
+    assert.deepEqual(listDispatchAttempts(handle.db, undefined, "T-001").map(dispatch => dispatch.attempt), [1, 2]);
+
+    handle.close();
+    assert.equal(repairStore(dir).status, "ok");
+    const replayed = StoreHandle.open(dir);
+    assert.equal(getTask(replayed.db, "T-001")?.executionState, "completed");
+    assert.deepEqual(listRunReceipts(replayed.db, undefined, "T-001"), [firstReceipt, secondReceipt]);
+    replayed.close();
+  } finally {
+    cleanupDir(dir);
+  }
+});
+
 test("receipt is immediately visible from another StoreHandle", () => {
   const dir = mkTmpDir("mapctx-store-dispatch-cross-worktree-");
   try {
@@ -310,7 +364,7 @@ for (const action of ["release", "expire", "reclaim"] as const) {
       const next = action === "reclaim" ? undefined : claimTask(handle, { taskId: "T-001", actor: "test", now: later });
       if (next) assert.ok(next.ok);
       assert.equal(getTask(handle.db, "T-001")?.executionState, "completed");
-      assert.ok(moveTask(handle, { taskId: "T-001", to: "done", actor: "test" }).ok);
+      assert.ok(moveTask(handle, { taskId: "T-001", to: "done", actor: "test", tasksRoot: dir }).ok);
       assert.equal(getTask(handle.db, "T-001")?.executionState, "completed");
       assert.deepEqual(claimTask(handle, { taskId: "T-001", actor: "test" }), { ok: false, reason: "terminal-state" });
       const count = handle.listEvents().length;
