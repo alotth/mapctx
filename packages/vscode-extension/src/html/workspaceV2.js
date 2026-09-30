@@ -22,17 +22,59 @@ let editingTargetId = null;
 let editingTargetType = null;
 let pendingExecutionTaskId = null;
 let pendingExecutionRunId = null;
+let openDetailTaskId = null;
 
 const ROADMAP_GROUP_MODES = ['wave', 'epic'];
 let roadmapGroupMode = normalizeRoadmapGroupMode(window.localStorage?.getItem('mapctx:roadmapGroupMode'));
+const ROADMAP_SCALES = ['day', 'week', 'month'];
+let roadmapScale = normalizeRoadmapScale(window.localStorage?.getItem('mapctx:roadmapScale'));
+const ROADMAP_SORTS = ['start', 'end', 'epic', 'wave', 'status', 'id'];
+let roadmapSort = normalizeRoadmapSort(window.localStorage?.getItem('mapctx:roadmapSort'));
 let roadmapAllCollapsed = window.localStorage?.getItem('mapctx:roadmapAllCollapsed') === 'true';
-const roadmapCollapsedGroups = new Set();
+const ROADMAP_COLLAPSED_GROUPS_KEY = 'mapctx:roadmapCollapsedGroups';
+let roadmapCollapsedGroups = loadRoadmapCollapsedGroups();
+
+function loadRoadmapCollapsedGroups() {
+  try {
+    const raw = window.localStorage?.getItem(ROADMAP_COLLAPSED_GROUPS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed);
+    }
+  } catch (error) {
+    // Corrupt or unavailable storage falls through to defaults.
+  }
+  return new Set(['wave:blocked']);
+}
+
+function saveRoadmapCollapsedGroups() {
+  try {
+    window.localStorage?.setItem(ROADMAP_COLLAPSED_GROUPS_KEY, JSON.stringify([...roadmapCollapsedGroups]));
+  } catch (error) {
+    // Private browsing or restricted webviews can make localStorage unavailable.
+  }
+}
 const executionFilters = {
   from: window.localStorage?.getItem('mapctx:executionFrom') || '',
   to: window.localStorage?.getItem('mapctx:executionTo') || ''
 };
 
-const DEFAULT_STATUS_ORDER = ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused'];
+const WORKSPACE_FILTER_DEFAULTS = {
+  query: '',
+  statuses: [],
+  type: '',
+  priority: '',
+  workload: '',
+  thread: '',
+  tag: ''
+};
+let workspaceFilters = { ...WORKSPACE_FILTER_DEFAULTS };
+let workspaceFilterScope = '';
+let workspaceFilterPanelOpen = false;
+
+const DEFAULT_STATUS_ORDER = ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused', 'cancelled', 'archived'];
+const KANBAN_COLUMN_LIMIT = 15;
+let kanbanExpandedColumns = new Set();
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const RANGE_PADDING_DAYS = 7;
 // Shortest duration a task-bar in the duration lane is still drawn as: real
@@ -64,6 +106,14 @@ function normalizeStatus(status) {
 
 function normalizeRoadmapGroupMode(value) {
   return ROADMAP_GROUP_MODES.includes(value) ? value : 'wave';
+}
+
+function normalizeRoadmapScale(value) {
+  return ROADMAP_SCALES.includes(value) ? value : 'month';
+}
+
+function normalizeRoadmapSort(value) {
+  return ROADMAP_SORTS.includes(value) ? value : 'start';
 }
 
 function normalizeView(value) {
@@ -103,6 +153,223 @@ function cssToken(value) {
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'unknown';
+}
+
+function workspaceFilterStorageKey(scope) {
+  return `mapctx:workspaceFilters:${scope || 'default'}`;
+}
+
+function normalizeWorkspaceFilterState(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  return {
+    query: String(source.query || ''),
+    statuses: Array.isArray(source.statuses)
+      ? [...new Set(source.statuses.map(normalizeStatus).filter(Boolean))]
+      : [],
+    type: String(source.type || ''),
+    priority: String(source.priority || ''),
+    workload: String(source.workload || ''),
+    thread: ['with-thread', 'without-thread'].includes(source.thread) ? source.thread : '',
+    tag: String(source.tag || '')
+  };
+}
+
+function readWorkspaceFilters(scope) {
+  try {
+    const stored = window.localStorage?.getItem(workspaceFilterStorageKey(scope));
+    return normalizeWorkspaceFilterState(stored ? JSON.parse(stored) : WORKSPACE_FILTER_DEFAULTS);
+  } catch {
+    return { ...WORKSPACE_FILTER_DEFAULTS };
+  }
+}
+
+function persistWorkspaceFilters() {
+  try {
+    window.localStorage?.setItem(workspaceFilterStorageKey(workspaceFilterScope), JSON.stringify(workspaceFilters));
+  } catch {
+    // Private browsing or restricted webviews can make localStorage unavailable.
+  }
+}
+
+function syncWorkspaceFilterScope() {
+  const nextScope = board.activeTargetId || board.activeProjectId || 'default';
+  if (nextScope === workspaceFilterScope) return;
+  workspaceFilterScope = nextScope;
+  kanbanExpandedColumns.clear();
+  workspaceFilters = readWorkspaceFilters(workspaceFilterScope);
+}
+
+function workspaceTaskSearchText(task) {
+  return [
+    task.id,
+    task.title,
+    task.status,
+    task.type,
+    task.parent,
+    task.milestone,
+    task.priority,
+    task.workload,
+    task.startDate,
+    task.dueDate,
+    task.completed,
+    task.updated,
+    task.tags?.join(' '),
+    task.assignees?.join(' ')
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function workspaceTaskMatchesFilters(task) {
+  const queryTokens = workspaceFilters.query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const searchText = workspaceTaskSearchText(task);
+  if (queryTokens.some(token => !searchText.includes(token))) return false;
+
+  const status = normalizeStatus(task.status);
+  // Terminal "will not proceed" work (archived, cancelled) stays available
+  // through its status chip, but does not crowd the default project view or
+  // other status selections.
+  const hiddenByDefault = status === 'archived' || status === 'cancelled';
+  if (hiddenByDefault && !workspaceFilters.statuses.includes(status)) return false;
+  if (workspaceFilters.statuses.length > 0 && !workspaceFilters.statuses.includes(status)) return false;
+  if (workspaceFilters.type && String(task.type || '').toLowerCase() !== workspaceFilters.type) return false;
+  if (workspaceFilters.priority && String(task.priority || '').toLowerCase() !== workspaceFilters.priority) return false;
+  if (workspaceFilters.workload && String(task.workload || '').toLowerCase() !== workspaceFilters.workload) return false;
+
+  if (workspaceFilters.thread === 'with-thread' && !task.thread?.exists) return false;
+  if (workspaceFilters.thread === 'without-thread' && task.thread?.exists) return false;
+
+  const tagQuery = workspaceFilters.tag.toLowerCase().trim();
+  if (tagQuery) {
+    // LIKE-style: each comma-separated token must appear in the task's id,
+    // title, or tags, so partial text like "76" still finds T-076.
+    const identityText = [task.id, task.title, ...(task.tags || [])]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    const tagTokens = tagQuery.split(',').map(token => token.trim()).filter(Boolean);
+    if (tagTokens.some(token => !identityText.includes(token))) return false;
+  }
+
+  return true;
+}
+
+function filteredWorkspaceTasks() {
+  return (board.tasks || []).filter(workspaceTaskMatchesFilters);
+}
+
+function workspaceFilterValueOptions(key) {
+  return [...new Set((board.tasks || [])
+    .map(task => String(task[key] || '').trim().toLowerCase())
+    .filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function workspaceFilterStatuses() {
+  // Full status vocabulary stays pinned in the filter row so terminal states
+  // (cancelled, archived) remain reachable even when no task currently has
+  // them; extra statuses present in data are appended after the defaults.
+  const present = new Set((board.tasks || []).map(task => normalizeStatus(task.status)).filter(Boolean));
+  const statuses = [...new Set([...DEFAULT_STATUS_ORDER, ...present])];
+  const order = [...DEFAULT_STATUS_ORDER, ...statuses];
+  return statuses.sort((a, b) => order.indexOf(a) - order.indexOf(b) || a.localeCompare(b));
+}
+
+function activeWorkspaceFilterCount() {
+  return [
+    workspaceFilters.query.trim(),
+    workspaceFilters.statuses.length > 0,
+    workspaceFilters.type,
+    workspaceFilters.priority,
+    workspaceFilters.workload,
+    workspaceFilters.thread,
+    workspaceFilters.tag.trim()
+  ].filter(Boolean).length;
+}
+
+function renderWorkspaceSelectOptions(id, values, emptyLabel) {
+  const select = document.getElementById(id);
+  if (!select) return;
+  const selected = select.value;
+  select.innerHTML = `<option value="">${emptyLabel}</option>${values
+    .map(value => `<option value="${escapeHtml(value)}">${escapeHtml(displayStatus(value))}</option>`)
+    .join('')}`;
+  select.value = values.includes(selected) ? selected : '';
+}
+
+function renderWorkspaceFilters() {
+  const statusRoot = document.getElementById('workspace-status-filters');
+  if (!statusRoot) return;
+
+  statusRoot.innerHTML = [
+    `<button class="filter-chip ${workspaceFilters.statuses.length === 0 ? 'active' : ''}" data-workspace-status="" type="button" aria-pressed="${workspaceFilters.statuses.length === 0 ? 'true' : 'false'}">All except archived/cancelled</button>`,
+    ...workspaceFilterStatuses().map(status => {
+      const active = workspaceFilters.statuses.includes(status);
+      return `<button class="filter-chip ${active ? 'active' : ''}" data-workspace-status="${escapeHtml(status)}" type="button" aria-pressed="${active ? 'true' : 'false'}">${escapeHtml(displayStatus(status))}</button>`;
+    })
+  ].join('');
+
+  renderWorkspaceSelectOptions('workspace-type-filter', workspaceFilterValueOptions('type'), 'All types');
+  renderWorkspaceSelectOptions('workspace-priority-filter', workspaceFilterValueOptions('priority'), 'All priorities');
+  renderWorkspaceSelectOptions('workspace-workload-filter', workspaceFilterValueOptions('workload'), 'All workloads');
+
+  const search = document.getElementById('workspace-search');
+  const tag = document.getElementById('workspace-tag-filter');
+  if (search) search.value = workspaceFilters.query;
+  if (tag) tag.value = workspaceFilters.tag;
+
+  updateWorkspaceFilterUI();
+}
+
+function updateWorkspaceFilterUI() {
+  const panel = document.getElementById('workspace-filter-panel');
+  const toggle = document.getElementById('workspace-filter-toggle');
+  const count = document.getElementById('workspace-filter-count');
+  const summary = document.getElementById('workspace-filter-summary');
+  const total = (board.tasks || []).length;
+  const visible = filteredWorkspaceTasks().length;
+  const activeCount = activeWorkspaceFilterCount();
+
+  if (panel) panel.hidden = !workspaceFilterPanelOpen;
+  if (toggle) toggle.setAttribute('aria-expanded', workspaceFilterPanelOpen ? 'true' : 'false');
+  if (count) {
+    count.hidden = activeCount === 0;
+    count.textContent = String(activeCount);
+  }
+  if (summary) summary.textContent = activeCount ? `${visible} of ${total} tasks` : `${total} tasks`;
+
+  const search = document.getElementById('workspace-search');
+  const tag = document.getElementById('workspace-tag-filter');
+  if (search && search.value !== workspaceFilters.query) search.value = workspaceFilters.query;
+  if (tag && tag.value !== workspaceFilters.tag) tag.value = workspaceFilters.tag;
+  for (const select of ['workspace-type-filter', 'workspace-priority-filter', 'workspace-workload-filter', 'workspace-thread-filter']) {
+    const element = document.getElementById(select);
+    const key = element?.dataset.workspaceFilter;
+    if (element && key && element.value !== workspaceFilters[key]) element.value = workspaceFilters[key];
+  }
+  document.querySelectorAll('[data-workspace-status]').forEach(button => {
+    const status = button.getAttribute('data-workspace-status') || '';
+    const active = status ? workspaceFilters.statuses.includes(status) : workspaceFilters.statuses.length === 0;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+function renderFilteredWorkspaceViews() {
+  updateWorkspaceFilterUI();
+  document.getElementById('board-meta').textContent = `${filteredWorkspaceTasks().length} of ${(board.tasks || []).length} tasks`;
+  renderKanban();
+  renderRoadmap();
+  renderExecution();
+}
+
+function setWorkspaceFilter(patch) {
+  workspaceFilters = normalizeWorkspaceFilterState({ ...workspaceFilters, ...patch });
+  persistWorkspaceFilters();
+  renderFilteredWorkspaceViews();
+}
+
+function clearWorkspaceFilters() {
+  workspaceFilters = { ...WORKSPACE_FILTER_DEFAULTS };
+  persistWorkspaceFilters();
+  renderFilteredWorkspaceViews();
 }
 
 function setView(view) {
@@ -227,29 +494,71 @@ function renderProjects() {
   }).join('');
 }
 
+function kanbanColumnKey(column) {
+  return String(column.id || column.title || 'column');
+}
+
+// Columns cap at KANBAN_COLUMN_LIMIT cards so long-lived boards stay readable.
+// The visible slice is the most recently updated tasks, rendered in their
+// original board order; "Show more" reveals the rest of the column.
+function kanbanVisibleColumnTasks(tasks, expanded) {
+  if (expanded || tasks.length <= KANBAN_COLUMN_LIMIT) {
+    return tasks;
+  }
+  const ranked = tasks
+    .map((task, index) => ({ task, index, updated: String(task.updated || '') }))
+    .sort((a, b) => {
+      if (a.updated !== b.updated) {
+        if (!a.updated) return 1;
+        if (!b.updated) return -1;
+        return a.updated < b.updated ? 1 : -1;
+      }
+      return a.index - b.index;
+    })
+    .slice(0, KANBAN_COLUMN_LIMIT)
+    .map(entry => entry.task);
+  const selected = new Set(ranked);
+  return tasks.filter(task => selected.has(task));
+}
+
 function renderKanban() {
   const root = document.getElementById('kanban-view');
-  const useStatusGrouping = board.mode === 'v2-status' || board.mode === 'mixed';
-  const effectiveColumns = useStatusGrouping ? groupColumnsFromStatus(board.tasks || []) : (board.columns || []);
+  const useStatusGrouping = board.mode === 'v2-status' || board.mode === 'mixed' || board.mode === 'store';
+  const visibleTasks = filteredWorkspaceTasks();
+  const visibleTaskIds = new Set(visibleTasks.map(task => task.id));
+  const effectiveColumns = useStatusGrouping
+    ? groupColumnsFromStatus(visibleTasks)
+    : (board.columns || []).map(column => ({
+      ...column,
+      tasks: (column.tasks || []).filter(task => visibleTaskIds.has(task.id))
+    })).filter(column => column.tasks.length > 0);
 
   if (!effectiveColumns || effectiveColumns.length === 0) {
-    root.innerHTML = '<p class="empty">No columns found.</p>';
+    root.innerHTML = '<p class="empty">No tasks match the selected filters.</p>';
     return;
   }
 
   const columnsHtml = effectiveColumns.map(col => {
-      const cards = col.tasks.map(task => {
+      const columnKey = kanbanColumnKey(col);
+      const expanded = kanbanExpandedColumns.has(columnKey);
+      const visibleColumnTasks = kanbanVisibleColumnTasks(col.tasks, expanded);
+      const hiddenCount = col.tasks.length - visibleColumnTasks.length;
+      const toggle = col.tasks.length > KANBAN_COLUMN_LIMIT
+        ? `<button class="col-toggle" data-kanban-toggle="${escapeHtml(columnKey)}" type="button" aria-expanded="${expanded ? 'true' : 'false'}">${expanded ? 'Show less' : `Show more (${hiddenCount})`}</button>`
+        : '';
+      const cards = visibleColumnTasks.map(task => {
         const tags = task.tags && task.tags.length > 0 ? task.tags.map(t => `<span class="pill">${escapeHtml(t)}</span>`).join('') : '';
         const typePill = task.type ? `<span class="pill">${escapeHtml(task.type)}</span>` : '';
         const thread = task.thread && task.thread.exists ? renderThreadBadges(task.thread) : '';
         const summary = task.thread && task.thread.summaryPreview
           ? `<div class="thread-summary">${escapeHtml(task.thread.summaryPreview)}</div>`
           : '';
-        const openDetail = task.detailPath
-          ? `<button class="open-link" data-open-detail="${escapeHtml(task.id)}" type="button">Details</button>`
-          : '';
       return `
-        <article class="card ${task.thread && task.thread.exists ? 'has-thread' : ''}">
+        <article
+          class="card ${task.thread && task.thread.exists ? 'has-thread' : ''}"
+          data-open-detail="${escapeHtml(task.id)}"
+          tabindex="0"
+          role="button">
           <div class="card-title">${renderTaskLabel(task)}</div>
           <div class="card-meta">
             ${task.priority ? `<span class="pill">${escapeHtml(task.priority)}</span>` : ''}
@@ -258,7 +567,6 @@ function renderKanban() {
             ${task.dueDate ? `<span class="pill">Due ${escapeHtml(task.dueDate)}</span>` : ''}
             ${tags}
             ${thread}
-            ${openDetail}
           </div>
           ${summary}
         </article>
@@ -272,11 +580,36 @@ function renderKanban() {
           <span class="count">${col.tasks.length}</span>
         </div>
         <div class="cards">${cards || '<p class="empty">No tasks</p>'}</div>
+        ${toggle}
       </section>
     `;
   }).join('');
 
   root.innerHTML = `<div class="kanban-grid">${columnsHtml}</div>`;
+}
+
+async function loadBoard() {
+  if (hasVsCodeApi) return;
+  try {
+    const response = await fetch('/api/board', { cache: 'no-store' });
+    if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
+    const next = await response.json();
+    board = {
+      title: next.title,
+      columns: next.columns || [],
+      tasks: next.tasks || [],
+      mode: next.mode || 'unknown',
+      workspaceTargets: next.workspaceTargets || next.projects || [],
+      projects: next.projects || [],
+      activeTargetId: next.activeTargetId || next.activeProjectId || null,
+      activeProjectId: next.activeProjectId || null
+    };
+    ganttDataset = null;
+    ganttDatasetError = null;
+    renderAll();
+  } catch (error) {
+    console.warn('Board refresh failed:', error instanceof Error ? error.message : error);
+  }
 }
 
 async function loadGanttDataset() {
@@ -303,7 +636,7 @@ async function loadGanttDataset() {
 
 function renderRoadmap() {
   const root = document.getElementById('roadmap-view');
-  const rawTasks = board.tasks || [];
+  const rawTasks = filteredWorkspaceTasks();
   if (!rawTasks.length) {
     root.innerHTML = '<p class="empty">No tasks found for this roadmap.</p>';
     return;
@@ -318,13 +651,12 @@ function renderRoadmap() {
   }
 
   const tasks = normalizeRoadmapTasks(rawTasks);
-  const calendarWindows = ganttDataset.calendarWindows || [];
   const groups = groupRoadmapTasks(tasks);
   syncRoadmapCollapsedGroups(groups);
   const summary = roadmapSummary(tasks, groups);
   const groupMetricLabel = roadmapGroupMode === 'epic' ? 'groups' : 'waves';
   const timelineLabel = roadmapGroupMode === 'epic' ? 'Epic / task' : 'Execution order';
-  const maxDurationMs = maxDurationAcrossDataset(ganttDataset);
+  const timeline = buildRoadmapTimeline(tasks);
 
   root.innerHTML = `
     <div class="roadmap-layout">
@@ -343,20 +675,14 @@ function renderRoadmap() {
         ${renderRoadmapControls()}
         <div class="roadmap-legend" aria-label="Roadmap legend">
           <span><i class="legend-dot planned"></i> planned (authored, epic/root level)</span>
-          <span><i class="legend-dot forecast"></i> forecast range (P50&ndash;P90)</span>
+          <span><i class="legend-chip"></i> forecast P50 / P90 (duration chip in task label)</span>
           <span><i class="legend-dot actual"></i> actual (measured)</span>
           <span><i class="legend-line"></i> today</span>
         </div>
       </section>
       ${renderForecastConfidenceBanner(ganttDataset)}
       <div class="roadmap-surface" tabindex="0" aria-label="Roadmap timeline">
-        ${renderCalendarChannel(calendarWindows)}
-        <div class="duration-lane-header">
-          <span>${escapeHtml(timelineLabel)}</span>
-          <span class="duration-lane-header-scale">Duration lane &mdash; shared log scale, floor &lt;1m</span>
-        </div>
-        ${renderDurationAxis(maxDurationMs)}
-        ${renderRoadmapGroups(groups, maxDurationMs)}
+        ${renderRoadmapTimeline(groups, timeline, timelineLabel)}
       </div>
     </div>
   `;
@@ -438,6 +764,27 @@ function renderRoadmapControls() {
 
   return `
     <div class="roadmap-controls" aria-label="Roadmap controls">
+      <label class="roadmap-sort-control">
+        <span>Sort rows</span>
+        <select data-roadmap-sort aria-label="Sort roadmap rows">
+          ${[
+            ['start', 'Start date'],
+            ['end', 'End date'],
+            ['epic', 'Epic'],
+            ['wave', 'Wave'],
+            ['status', 'Status'],
+            ['id', 'ID']
+          ].map(([value, label]) => `<option value="${value}" ${roadmapSort === value ? 'selected' : ''}>${label}</option>`).join('')}
+        </select>
+      </label>
+      <div class="roadmap-toggle roadmap-scale-toggle" role="group" aria-label="Timeline scale">
+        ${ROADMAP_SCALES.map((scale) => `
+          <button class="roadmap-control-button ${roadmapScale === scale ? 'active' : ''}"
+            data-roadmap-scale="${scale}" type="button" aria-pressed="${roadmapScale === scale ? 'true' : 'false'}">
+            ${scale[0].toUpperCase() + scale.slice(1)}
+          </button>
+        `).join('')}
+      </div>
       <div class="roadmap-toggle" role="group" aria-label="Group roadmap by">
         ${modeButtons}
       </div>
@@ -451,7 +798,7 @@ function renderRoadmapControls() {
 
 function renderExecution() {
   const root = document.getElementById('execution-view');
-  const tasks = board.tasks || [];
+  const tasks = filteredWorkspaceTasks();
   const withThreads = tasks.filter(task => task.thread && task.thread.exists);
   const executionItems = getExecutionItems(withThreads);
   const filteredItems = executionItems.filter(matchesExecutionItemDateFilter);
@@ -762,15 +1109,132 @@ function normalizeRoadmapTasks(list) {
       claimViolations: violations.filter((item) => item.taskAId === task.id || item.taskBId === task.id),
       progress: progressFromStatus(task.status)
     };
-  }).sort(compareRoadmapTasks);
+  });
 }
 
-function compareRoadmapTasks(a, b) {
-  const waveDelta = (a.wave ?? Number.MAX_SAFE_INTEGER) - (b.wave ?? Number.MAX_SAFE_INTEGER);
-  if (waveDelta) return waveDelta;
-  const statusDelta = statusOrderIndex(a.status) - statusOrderIndex(b.status);
-  if (statusDelta) return statusDelta;
-  return String(a.id || '').localeCompare(String(b.id || ''));
+function buildRoadmapTimeline(tasks) {
+  const spans = tasks.flatMap(task => roadmapTaskSpans(task));
+  const dates = spans.flatMap(span => [span.start, span.end]);
+  const today = todayDate();
+  let start = dates.length ? new Date(Math.min(...dates.map(date => date.getTime()))) : today;
+  let end = dates.length ? new Date(Math.max(...dates.map(date => date.getTime()))) : today;
+  if (today < start) start = today;
+  if (today > end) end = today;
+  const padding = roadmapScale === 'month' ? 14 : roadmapScale === 'week' ? 7 : 2;
+  start = addDays(start, -padding);
+  end = addDays(end, padding + 1);
+  return { start, end, spans, scale: roadmapScale };
+}
+
+function roadmapTaskSpans(task) {
+  const spans = [];
+  const plannedStart = parseDate(task.planned?.start);
+  const plannedEnd = parseDate(task.planned?.due);
+  if (plannedStart || plannedEnd) {
+    const start = plannedStart || plannedEnd;
+    const end = plannedEnd || plannedStart;
+    spans.push({ kind: 'planned', start, end });
+  }
+  const actualStart = parseExecutionTimestamp(task.actual?.startedAt);
+  const actualEnd = parseExecutionTimestamp(task.actual?.endedAt);
+  if (actualStart && actualEnd && actualEnd >= actualStart) {
+    spans.push({ kind: 'actual', start: actualStart, end: actualEnd });
+  }
+  return spans;
+}
+
+function renderRoadmapTimeline(groups, timeline, timelineLabel) {
+  const width = timelineWidthPx(timeline);
+  return `
+    <div class="roadmap-calendar" style="--timeline-width:${width}px">
+      <div class="timeline-header">
+        <div class="timeline-label">${escapeHtml(timelineLabel)}</div>
+        <div class="timeline-grid">${renderScaleTicks(timeline)}</div>
+      </div>
+      ${renderRoadmapGroups(groups, timeline)}
+    </div>
+  `;
+}
+
+function timelineWidthPx(timeline) {
+  const days = Math.max(1, dateDiffDays(timeline.start, timeline.end));
+  const perDay = timeline.scale === 'day' ? 48 : timeline.scale === 'week' ? 20 : 8;
+  return Math.max(760, days * perDay);
+}
+
+function roadmapSortDate(task, kind) {
+  const planned = kind === 'start' ? task.planned?.start : task.planned?.due;
+  const actual = kind === 'start' ? task.actual?.startedAt : task.actual?.endedAt;
+  const date = planned ? parseDate(planned) : parseExecutionTimestamp(actual);
+  return date ? date.getTime() : null;
+}
+
+function roadmapEpicKey(task, taskById) {
+  let cursor = task;
+  const seen = new Set();
+  while (cursor && !seen.has(cursor.id)) {
+    seen.add(cursor.id);
+    if (isEpicTask(cursor)) {
+      return `${taskDisplayTitle(cursor)}\u0000${cursor.id}`;
+    }
+    cursor = cursor.parent ? taskById.get(cursor.parent) : null;
+  }
+  return '\uffff';
+}
+
+function compareRoadmapValues(a, b) {
+  if (a === b) {
+    return 0;
+  }
+  if (a === null || a === undefined) {
+    return 1;
+  }
+  if (b === null || b === undefined) {
+    return -1;
+  }
+  if (typeof a === 'number' && typeof b === 'number') {
+    return a - b;
+  }
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function compareRoadmapTasksBySort(a, b, sort, taskById) {
+  let aValue;
+  let bValue;
+  if (sort === 'start' || sort === 'end') {
+    aValue = roadmapSortDate(a, sort);
+    bValue = roadmapSortDate(b, sort);
+  } else if (sort === 'epic') {
+    aValue = roadmapEpicKey(a, taskById);
+    bValue = roadmapEpicKey(b, taskById);
+  } else if (sort === 'wave') {
+    aValue = a.wave ?? null;
+    bValue = b.wave ?? null;
+  } else if (sort === 'status') {
+    aValue = statusOrderIndex(a.status);
+    bValue = statusOrderIndex(b.status);
+  } else {
+    aValue = String(a.id || '');
+    bValue = String(b.id || '');
+  }
+
+  const primary = compareRoadmapValues(aValue, bValue);
+  if (primary) {
+    return primary;
+  }
+  const parent = compareRoadmapValues(String(a.parent || ''), String(b.parent || ''));
+  if (parent) {
+    return parent;
+  }
+  return compareRoadmapValues(String(a.id || ''), String(b.id || ''));
+}
+
+function sortRoadmapTasks(tasks, allTasks = tasks) {
+  const taskById = new Map(allTasks.map(task => [task.id, task]));
+  return tasks
+    .map((task, index) => ({ task, index }))
+    .sort((a, b) => compareRoadmapTasksBySort(a.task, b.task, roadmapSort, taskById) || a.index - b.index)
+    .map(({ task }) => task);
 }
 
 function statusOrderIndex(status) {
@@ -828,6 +1292,12 @@ function getWidth(start, end, range) {
   return ((end.getTime() - start.getTime() + ONE_DAY_MS) / span) * 100;
 }
 
+function getExactWidth(start, end, range) {
+  const span = range.end.getTime() - range.start.getTime();
+  if (span <= 0) return 0;
+  return (Math.max(0, end.getTime() - start.getTime()) / span) * 100;
+}
+
 function renderTicks(range) {
   const days = dateDiffDays(range.start, range.end);
   const secondaryTicks = days <= 70 ? buildDayTicks(range) : days <= 180 ? buildWeekTicks(range) : [];
@@ -842,6 +1312,27 @@ function renderTicks(range) {
     `).join('')}
     ${renderTodayLine(range, true)}
   `;
+}
+
+function renderScaleTicks(timeline) {
+  const ticks = buildScaleTicks(timeline, timeline.scale);
+  return `
+    ${renderScaleGridLines(timeline)}
+    ${ticks.map((tick) => `<div class="timeline-grid-label timeline-grid-label-${timeline.scale}" style="left:${tick.left}%">${escapeHtml(tick.label)}</div>`).join('')}
+    ${renderTodayLine(timeline, true)}
+  `;
+}
+
+function buildScaleTicks(range, scale) {
+  if (scale === 'day') return buildDayTicks(range);
+  if (scale === 'week') return buildWeekTicks(range);
+  return buildMonthTicks(range);
+}
+
+function renderScaleGridLines(range) {
+  return buildScaleTicks(range, range.scale).map((tick) => `
+    <div class="timeline-grid-line" style="left:${tick.left}%"></div>
+  `).join('');
 }
 
 function buildMonthTicks(range) {
@@ -920,10 +1411,10 @@ function getIsoWeek(date) {
   return Math.ceil((((temp.getTime() - yearStart.getTime()) / ONE_DAY_MS) + 1) / 7);
 }
 
-function renderRoadmapGroups(groups, maxDurationMs) {
+function renderRoadmapGroups(groups, timeline) {
   return groups.map((group) => {
     const collapsed = roadmapCollapsedGroups.has(group.id);
-    const rows = collapsed ? '' : group.rows.map((entry, index) => renderRoadmapRow(entry, maxDurationMs, index)).join('');
+    const rows = collapsed ? '' : group.rows.map((entry, index) => renderRoadmapRow(entry, timeline, index)).join('');
     return `
       <section class="milestone-group ${collapsed ? 'collapsed' : 'expanded'}">
         <div class="milestone-header">
@@ -958,7 +1449,6 @@ function groupRoadmapTasks(tasks) {
 function groupRoadmapTasksByWave(tasks) {
   const grouped = new Map();
   for (const task of tasks) {
-    if (!isDurationLaneTask(task)) continue;
     const wave = task.wave ?? 'blocked';
     grouped.set(wave, [...(grouped.get(wave) || []), task]);
   }
@@ -966,7 +1456,7 @@ function groupRoadmapTasksByWave(tasks) {
   return Array.from(grouped.entries())
     .sort(([a], [b]) => a === 'blocked' ? 1 : b === 'blocked' ? -1 : Number(a) - Number(b))
     .map(([wave, items]) => {
-      const sortedItems = [...items].sort(compareRoadmapTasks);
+      const sortedItems = sortRoadmapTasks(items, tasks);
       const progress = aggregateCompletionProgress(sortedItems);
       const blockedCount = sortedItems.filter(task => task.blockedReasons.length).length;
       const collisionCount = sortedItems.reduce((sum, task) => sum + task.collisions.length, 0);
@@ -996,13 +1486,12 @@ function groupRoadmapTasksByEpic(tasks) {
   };
   const grouped = new Map();
   for (const task of tasks) {
-    if (!isDurationLaneTask(task)) continue;
     const epic = epicFor(task);
     const id = epic ? epic.id : 'ungrouped';
     grouped.set(id, { epic, tasks: [...(grouped.get(id)?.tasks || []), task] });
   }
   return [...grouped.entries()].map(([id, value]) => {
-    const sorted = value.tasks.sort(compareRoadmapTasks);
+    const sorted = sortRoadmapTasks(value.tasks, tasks);
     const blockedCount = sorted.filter(task => task.blockedReasons.length).length;
     const collisionCount = sorted.reduce((sum, task) => sum + task.collisions.length, 0);
     return {
@@ -1015,16 +1504,12 @@ function groupRoadmapTasksByEpic(tasks) {
   }).sort((a, b) => a.title.localeCompare(b.title));
 }
 
-function isDurationLaneTask(task) {
-  return Boolean(task.forecast || task.actual || task.blockedReasons.length || task.collisions.length || task.claimViolations.length);
-}
-
 function isEpicTask(task) {
   const type = String(task.type || '').trim().toLowerCase();
   return type === 'epic' || /^E-\d+/i.test(String(task.id || ''));
 }
 
-function renderRoadmapRow(entry, maxDurationMs, index) {
+function renderRoadmapRow(entry, timeline, index) {
   const task = entry.task;
   const status = normalizeStatus(task.status) || 'unknown';
   const statusClass = cssToken(status);
@@ -1036,9 +1521,10 @@ function renderRoadmapRow(entry, maxDurationMs, index) {
   const violations = task.claimViolations.map(item => `${item.kind}: ${item.path}`).join(' · ');
   const statusMeta = [displayStatus(task.status), task.wave ? `Wave ${task.wave}` : 'Not scheduled', blocked, collision, violations].filter(Boolean);
   const warningClass = task.blockedReasons.length || task.claimViolations.length ? 'has-warning' : '';
+  const unscheduledClass = roadmapTaskSpans(task).length ? '' : 'task-row-unscheduled';
 
   return `
-    <div class="task-row gantt-task-row ${index % 2 ? 'task-row-alt' : ''} status-${statusClass} ${warningClass}" style="--indent:${Number(entry.depth || 0) * 18}px">
+    <div class="task-row gantt-task-row ${index % 2 ? 'task-row-alt' : ''} status-${statusClass} ${warningClass} ${unscheduledClass}" style="--indent:${Number(entry.depth || 0) * 18}px">
       <div class="task-label">
         <span class="task-indent" aria-hidden="true"></span>
         <span class="task-state-mark status-${statusClass}" aria-hidden="true"></span>
@@ -1046,10 +1532,63 @@ function renderRoadmapRow(entry, maxDurationMs, index) {
           <span><span class="task-id">[${escapeHtml(task.id)}]</span> ${escapeHtml(taskDisplayTitle(task))}</span>
           <span class="task-status">${escapeHtml(statusMeta.join(' / '))}</span>
         </button>
+        <span class="task-signals">${renderTaskSignalChips(task)}</span>
       </div>
-      ${renderDurationCell(task, maxDurationMs)}
+      ${renderCalendarTaskCell(task, timeline)}
     </div>
   `;
+}
+
+function renderTaskSignalChips(task) {
+  const forecastChip = task.forecast
+    ? `<span class="signal-badge forecast-chip" title="${escapeHtml(`${task.forecast.confidence} confidence · ${task.forecast.durationCoverage}`)}">P50 ${escapeHtml(formatDurationMs(task.forecast.durationP50Ms))} / P90 ${escapeHtml(formatDurationMs(task.forecast.durationP90Ms))}</span>`
+    : '';
+  return `${forecastChip} ${renderProvenanceBadge(task.forecast)} ${renderVarianceBadge(task)}`;
+}
+
+function renderCalendarTaskCell(task, timeline) {
+  const spans = roadmapTaskSpans(task);
+  if (!spans.length) {
+    const aria = task.forecast
+      ? `${task.id} ${taskDisplayTitle(task)}. Unscheduled. forecast P50 ${formatDurationMs(task.forecast.durationP50Ms)} / P90 ${formatDurationMs(task.forecast.durationP90Ms)} (no scheduled position)`
+      : `${task.id} ${taskDisplayTitle(task)}. Unscheduled`;
+    return `<div class="calendar-task-cell" aria-label="${escapeHtml(aria)}"><span class="unscheduled-label">Unscheduled</span></div>`;
+  }
+  const planned = spans.find(span => span.kind === 'planned');
+  const actual = spans.find(span => span.kind === 'actual');
+  let plannedTooltip = '';
+  if (planned) {
+    plannedTooltip = `Planned ${formatShortDate(planned.start)} – ${formatShortDate(planned.end)}`;
+    if (task.forecast) {
+      const p50Ms = Number(task.forecast.durationP50Ms);
+      plannedTooltip += `; forecast P50 ${formatDurationMs(task.forecast.durationP50Ms)} ending ${new Date(planned.start.getTime() + Math.max(0, Number.isFinite(p50Ms) ? p50Ms : 0)).toISOString()}`;
+    }
+  }
+  return `
+    <div class="calendar-task-cell" aria-label="${escapeHtml(calendarAriaLabel(task, spans, task.forecast))}">
+      ${renderScaleGridLines(timeline)}
+      ${renderTodayLine(timeline)}
+      ${planned ? renderCalendarSpanBar(planned, timeline, 'planned', 'Planned', true, plannedTooltip) : ''}
+      ${actual ? renderCalendarSpanBar(actual, timeline, 'actual', 'Actual') : ''}
+    </div>
+  `;
+}
+
+function renderCalendarSpanBar(span, timeline, kind, label, inclusive = false, tooltip = '') {
+  const left = Math.max(0, getPosition(span.start, timeline));
+  const width = Math.max((inclusive ? getWidth : getExactWidth)(span.start, span.end, timeline), 0.8);
+  const text = kind === 'actual'
+    ? `${label} ${span.start.toISOString()} -> ${span.end.toISOString()}`
+    : `${label} ${formatShortDate(span.start)} – ${formatShortDate(span.end)}`;
+  return `<div class="calendar-span-bar ${kind}" style="left:${left}%;width:${width}%" title="${escapeHtml(tooltip || text)}"><span>${escapeHtml(label)}</span></div>`;
+}
+
+function calendarAriaLabel(task, spans, forecast) {
+  const parts = [`${task.id} ${taskDisplayTitle(task)}`, ...spans.map(span => `${span.kind} ${formatShortDate(span.start)} to ${formatShortDate(span.end)}`)];
+  if (forecast) {
+    parts.push(`forecast P50 ${formatDurationMs(forecast.durationP50Ms)} / P90 ${formatDurationMs(forecast.durationP90Ms)}`);
+  }
+  return parts.join('. ');
 }
 
 function renderDurationCell(task, maxDurationMs) {
@@ -1196,6 +1735,25 @@ function setRoadmapGroupMode(mode) {
   roadmapGroupMode = normalized;
   window.localStorage?.setItem('mapctx:roadmapGroupMode', roadmapGroupMode);
   roadmapCollapsedGroups.clear();
+  saveRoadmapCollapsedGroups();
+  renderRoadmap();
+}
+
+function setRoadmapScale(scale) {
+  const normalized = normalizeRoadmapScale(scale);
+  if (roadmapScale === normalized) return;
+  roadmapScale = normalized;
+  window.localStorage?.setItem('mapctx:roadmapScale', roadmapScale);
+  renderRoadmap();
+}
+
+function setRoadmapSort(sort) {
+  const normalized = normalizeRoadmapSort(sort);
+  if (roadmapSort === normalized) {
+    return;
+  }
+  roadmapSort = normalized;
+  window.localStorage?.setItem('mapctx:roadmapSort', roadmapSort);
   renderRoadmap();
 }
 
@@ -1208,6 +1766,7 @@ function toggleRoadmapGroup(id) {
   } else {
     roadmapCollapsedGroups.add(id);
   }
+  saveRoadmapCollapsedGroups();
   renderRoadmap();
 }
 
@@ -1220,6 +1779,7 @@ function setAllRoadmapGroupsCollapsed(collapsed) {
   } else {
     roadmapCollapsedGroups.clear();
   }
+  saveRoadmapCollapsedGroups();
   renderRoadmap();
 }
 
@@ -1233,13 +1793,15 @@ function syncRoadmapCollapsedGroups(groups) {
 }
 
 function renderAll() {
+  syncWorkspaceFilterScope();
   document.getElementById('board-title').textContent = board.title || 'Workspace V2';
   const modeEl = document.getElementById('board-mode');
   modeEl.className = `mode-badge mode-${board.mode}`;
   modeEl.textContent = `Model: ${board.mode}`;
-  document.getElementById('board-meta').textContent = `${board.tasks.length || 0} tasks`;
+  document.getElementById('board-meta').textContent = `${filteredWorkspaceTasks().length} of ${(board.tasks || []).length} tasks`;
   renderTargetHeader();
   renderProjects();
+  renderWorkspaceFilters();
   renderKanban();
   renderRoadmap();
   renderExecution();
@@ -1321,9 +1883,11 @@ function renderTargetHeader() {
 }
 
 function closeDetailModal() {
-  const modal = document.getElementById('detail-modal');
-  modal.classList.remove('open');
-  modal.setAttribute('aria-hidden', 'true');
+  const panel = document.getElementById('detail-modal');
+  panel.classList.remove('open');
+  panel.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('detail-open');
+  openDetailTaskId = null;
 }
 
 function closeProjectModal() {
@@ -1470,9 +2034,17 @@ async function openTaskDetail(taskId, selectedRunId = '') {
     return;
   }
 
-  const modal = document.getElementById('detail-modal');
-  modal.classList.add('open');
-  modal.setAttribute('aria-hidden', 'false');
+  const panel = document.getElementById('detail-modal');
+  // Clicking the open task again collapses the side panel.
+  if (openDetailTaskId === taskId && panel.classList.contains('open') && !selectedRunId) {
+    closeDetailModal();
+    return;
+  }
+
+  openDetailTaskId = taskId;
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('detail-open');
   document.getElementById('detail-modal-title').textContent = renderPlainTaskLabel(task);
   setModalContent(renderIssueShell(task, '<p class="modal-empty">Loading detail file...</p>', selectedRunId));
 
@@ -1522,18 +2094,15 @@ function renderIssueShell(task, bodyHtml, selectedRunId = '') {
         <h3>${escapeHtml(title)}</h3>
         <div class="issue-pill-row">${pills || '<span class="issue-pill muted">No labels</span>'}</div>
       </section>
-      <div class="issue-grid">
-        <main class="issue-main">${bodyHtml}</main>
-        ${renderIssueSidebar(task)}
-      </div>
+      ${renderIssueProperties(task)}
+      <main class="issue-main">${bodyHtml}</main>
       ${renderIssueExecutionContext(task, selectedRunId)}
     </div>
   `;
 }
 
-function renderIssueSidebar(task) {
+function renderIssueProperties(task) {
   const rows = [
-    ['Status', displayStatus(task.status)],
     ['Owner', renderOwner(task), true],
     ['Type', task.type],
     ['Priority', task.priority],
@@ -1550,7 +2119,7 @@ function renderIssueSidebar(task) {
   ]
     .filter(([, value]) => value && value !== 'null')
     .map(([label, value, html]) => `
-      <div class="issue-field">
+      <div class="issue-prop">
         <span>${escapeHtml(label)}</span>
         <strong>${html ? value : escapeHtml(String(value))}</strong>
       </div>
@@ -1558,12 +2127,10 @@ function renderIssueSidebar(task) {
     .join('');
 
   return `
-    <aside class="issue-sidebar">
-      <section class="issue-side-section">
-        <h4>Properties</h4>
-        ${rows || '<p class="modal-empty">No properties yet.</p>'}
-      </section>
-    </aside>
+    <section class="issue-props">
+      <h4>Properties</h4>
+      <div class="issue-prop-grid">${rows || '<p class="modal-empty">No properties yet.</p>'}</div>
+    </section>
   `;
 }
 
@@ -2040,6 +2607,41 @@ window.addEventListener('click', (event) => {
   if (!(target instanceof HTMLElement)) {
     return;
   }
+  const filterToggle = target.closest('#workspace-filter-toggle');
+  if (filterToggle) {
+    workspaceFilterPanelOpen = !workspaceFilterPanelOpen;
+    updateWorkspaceFilterUI();
+    return;
+  }
+  const filterClear = target.closest('#workspace-filter-clear');
+  if (filterClear) {
+    clearWorkspaceFilters();
+    return;
+  }
+  const statusFilter = target.closest('[data-workspace-status]');
+  if (statusFilter) {
+    const status = statusFilter.getAttribute('data-workspace-status') || '';
+    if (!status) {
+      setWorkspaceFilter({ statuses: [] });
+      return;
+    }
+    const statuses = workspaceFilters.statuses.includes(status)
+      ? workspaceFilters.statuses.filter(value => value !== status)
+      : [...workspaceFilters.statuses, status];
+    setWorkspaceFilter({ statuses });
+    return;
+  }
+  const kanbanToggle = target.closest('[data-kanban-toggle]');
+  if (kanbanToggle) {
+    const columnKey = kanbanToggle.getAttribute('data-kanban-toggle') || '';
+    if (kanbanExpandedColumns.has(columnKey)) {
+      kanbanExpandedColumns.delete(columnKey);
+    } else {
+      kanbanExpandedColumns.add(columnKey);
+    }
+    renderKanban();
+    return;
+  }
   if (target.closest('#rail-toggle')) {
     setRailExpanded(!railExpanded);
     return;
@@ -2094,6 +2696,11 @@ window.addEventListener('click', (event) => {
   const roadmapModeTrigger = target.closest('[data-roadmap-group-mode]');
   if (roadmapModeTrigger) {
     setRoadmapGroupMode(roadmapModeTrigger.getAttribute('data-roadmap-group-mode'));
+    return;
+  }
+  const roadmapScaleTrigger = target.closest('[data-roadmap-scale]');
+  if (roadmapScaleTrigger) {
+    setRoadmapScale(roadmapScaleTrigger.getAttribute('data-roadmap-scale'));
     return;
   }
   const roadmapCollapseTrigger = target.closest('[data-roadmap-collapse-all]');
@@ -2163,11 +2770,27 @@ document.getElementById('tab-roadmap').addEventListener('click', () => setView('
 document.getElementById('tab-execution').addEventListener('click', () => setView('execution'));
 document.getElementById('project-form')?.addEventListener('submit', submitProjectForm);
 
+document.addEventListener('input', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.id === 'workspace-search') {
+    setWorkspaceFilter({ query: target.value });
+  } else if (target.id === 'workspace-tag-filter') {
+    setWorkspaceFilter({ tag: target.value });
+  }
+});
+
 document.addEventListener('change', (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLInputElement)) {
+  if (target instanceof HTMLSelectElement && target.hasAttribute('data-roadmap-sort')) {
+    setRoadmapSort(target.value);
     return;
   }
+  if (target instanceof HTMLSelectElement && target.dataset.workspaceFilter) {
+    setWorkspaceFilter({ [target.dataset.workspaceFilter]: target.value });
+    return;
+  }
+  if (!(target instanceof HTMLInputElement)) return;
   const key = target.getAttribute('data-execution-date-filter');
   if (key) {
     setExecutionDateFilter(key, target.value);
@@ -2223,6 +2846,7 @@ applyRailState();
 if (window.MAPCTX_BOOTSTRAP) {
   board = window.MAPCTX_BOOTSTRAP;
   renderAll();
+  loadBoard();
 }
 
 setView(activeView);

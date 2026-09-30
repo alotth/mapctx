@@ -3,7 +3,10 @@ import {
   durationCoverageFromAssumptions,
   durationMeasuresFromReceipt,
   isPriorFallbackEstimate,
-  type DurationCoverage
+  WORKLOAD_PRIORS,
+  type DurationCoverage,
+  type ForecastSample,
+  type Workload
 } from '@mapctx/forecast';
 import { planExecution, type PlannerTask } from '@mapctx/planner';
 import {
@@ -15,6 +18,13 @@ import {
 } from '@mapctx/protocol';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+const KNOWN_WORKLOADS = new Set<string>(Object.keys(WORKLOAD_PRIORS));
+
+/** Board data may carry values outside the forecast prior set (e.g. "Medium"); treat those as undeclared. */
+function normalizedWorkload(workload: string | null | undefined): Workload | undefined {
+  return workload != null && KNOWN_WORKLOADS.has(workload) ? (workload as Workload) : undefined;
+}
 
 /**
  * One task as seen by the Gantt dataset builder. Deliberately narrower than the
@@ -32,6 +42,7 @@ export type GanttTaskInput = {
   due?: string | null;
   dependsOn?: readonly string[];
   domains?: readonly string[];
+  workload?: string | null;
   /** Latest immutable estimate, when one has already been recorded by the store. */
   estimateSnapshot?: EstimateSnapshot | null;
   /** All receipts recorded for this task, in whatever order the store returns. Empty pre-cutover. */
@@ -104,9 +115,9 @@ export type GanttTaskEntry = {
   planned: GanttPlanned | null;
   blockedReasons: GanttBlockedReason[];
   collisions: GanttCollision[];
-  /** null for containers (epics/parents) and terminal (done/cancelled) tasks -- neither is a dispatch unit. */
+  /** null for containers (epics/parents); terminal tasks receive retrospective baselines. */
   forecast: GanttForecast | null;
-  /** null unless at least one receipt exists for this task (never true pre-cutover). */
+  /** null unless at least one receipt exists for this task. */
   actual: GanttActual | null;
 };
 
@@ -143,7 +154,7 @@ export type GanttDataset = {
   };
 };
 
-const TERMINAL_STATUSES = new Set(['done', 'cancelled']);
+const TERMINAL_STATUSES = new Set(['done', 'cancelled', 'archived']);
 
 function normalizedTaskStatus(status: string): string {
   return STATUS_TO_PLANNING[status] ?? (status === 'in_progress' ? 'in-progress' : status);
@@ -269,16 +280,25 @@ export function buildGanttDataset(input: {
 
   let forecastCount = 0;
   let priorFallbackCount = 0;
+  const pooledSamples: ForecastSample[] = input.tasks.flatMap(task => task.receipts.map(receipt => ({
+    duration: durationMeasuresFromReceipt(receipt.startedAt, receipt.endedAt),
+    workload: normalizedWorkload(task.workload)
+  })));
 
   const taskEntries: GanttTaskEntry[] = input.tasks.map(task => {
     const isContainer = containerIds.has(task.id);
     const isTerminal = TERMINAL_STATUSES.has(normalizedTaskStatus(task.status));
 
     let forecast: GanttForecast | null = null;
-    if (!isContainer && !isTerminal) {
-      const snapshot = task.estimateSnapshot ?? buildEstimateSnapshot(task.id, task.receipts.map(receipt => ({
-        duration: durationMeasuresFromReceipt(receipt.startedAt, receipt.endedAt)
-      })));
+    if (!isContainer) {
+      const ownSamples = task.receipts.map(receipt => ({
+        duration: durationMeasuresFromReceipt(receipt.startedAt, receipt.endedAt),
+        workload: normalizedWorkload(task.workload)
+      }));
+      const samples = ownSamples.length > 0 ? ownSamples : pooledSamples;
+      const snapshot = task.estimateSnapshot ?? buildEstimateSnapshot(task.id, samples, {
+        workload: normalizedWorkload(task.workload)
+      });
       const isPrior = isPriorFallbackEstimate(snapshot);
       forecastCount += 1;
       if (isPrior) priorFallbackCount += 1;

@@ -1,9 +1,17 @@
 #!/usr/bin/env node
+import * as childProcess from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ensureWorkspaceRegistry } from '@mapctx/core/workspace';
+import {
+  ensureWorkspaceRegistry,
+  readWorkspaceRegistry,
+  resolveWorkspaceTargetTasksFile,
+  targetId,
+  writeWorkspaceRegistry,
+  type WorkspaceRegistry
+} from '@mapctx/core/workspace';
 import { generateTaskDetailFile, parseTaskDetailFile, parseTasksFile } from '@mapctx/core';
 import {
   buildExport,
@@ -27,6 +35,7 @@ import {
   listReceiptsForDispatch,
   listReceiptsForTask,
   renewClaim,
+  reopenTask,
   resolveMapctxToml,
   resolveProjectStoreDir,
   repairStore,
@@ -37,6 +46,7 @@ import {
   queryTaskContextFromMarkdown,
   searchTasks,
   filterTaskSearchHits,
+  getSingleProject,
   toPlanningState,
   updateTask,
   listDependencies,
@@ -51,6 +61,7 @@ import { buildGanttDataset } from './gantt';
 import type { Workload } from '@mapctx/forecast';
 import { pushStoreCommand } from './push-store';
 import { SyncOptions } from './types';
+import { detectWorkspaceModel, deriveSubIssueProgress, toWorkspaceTaskView, toWorkspaceTaskViewFromStoreRecord } from './board-view';
 import { parseWorkspaceServerArgs, startWorkspaceServer } from './workspace-server';
 
 type MapctxOptions = SyncOptions & {
@@ -105,6 +116,8 @@ function printHelp(): void {
   console.log('mapctx CLI');
   console.log('');
   console.log('Commands:');
+  console.log('  mapctx (no command)');
+  console.log('    Opens the workspace UI (same as: mapctx workspace). Focuses the running UI if it is already up.');
   console.log('  mapctx workspace [path] [--add path] [--org id] [--org-name name] [--org-path path] [--target target-id] [--port n] [--no-open]');
   console.log('  mapctx workspace:add <path> [--org id] [--org-name name] [--org-path path]');
   console.log('  mapctx store init [--json]');
@@ -127,6 +140,9 @@ function printHelp(): void {
   console.log('    matches rank first; blank queries return no matches.');
   console.log('  mapctx plan [--json]');
   console.log('  mapctx gantt [--json]');
+  console.log('  mapctx board [--json]');
+  console.log('    Kanban board dataset (title/mode/tasks) for the workspace UI: TASKS.md');
+  console.log('    pre-cutover, SQLite store under store authority (T-094).');
   console.log('  mapctx push [--dry-run] [--json] [--actor name]');
   console.log('    Store-backed GitHub projection (ADR 0003): reads task projections from the SQLite store');
   console.log('    (never TASKS.md), refuses to run on board drift, reconciles issues/status/dates in the');
@@ -141,9 +157,14 @@ function printHelp(): void {
   console.log('    Auto-assigns the next free id for the type prefix (E for epic, T otherwise). The');
   console.log('    description prose goes into the new detail file and stays Git-authored.');
   console.log('  mapctx task move <task-id> --status <planning-state> [--json] [--actor name]');
-  console.log('    Legal transition under store authority (backlog|ready-for-do|doing|review|done|paused,');
-  console.log('    or canonical backlog|ready|in-progress|review|done|paused). done stamps completedOn and');
-  console.log('    releases any active claim. Store-authority only: Markdown stays the editor pre-cutover.');
+  console.log('    Legal transition under store authority (backlog|ready-for-do|doing|review|done|paused|cancelled|archived,');
+  console.log('    or canonical backlog|ready|in-progress|review|done|paused|cancelled|archived). done stamps completedOn and');
+  console.log('    releases any active claim; done also requires every `## Acceptance` checklist item to be [x].');
+  console.log('    cancelled and archived release any active claim but do not stamp completedOn. cancelled means the');
+  console.log('    work was aborted; archived means it will not proceed.');
+  console.log('    Store-authority only: Markdown stays the editor pre-cutover.');
+  console.log('  mapctx task reopen <task-id> --status review [--json] [--actor name]');
+  console.log('    Reopens a done, cancelled, or archived task for review, clears completedOn, records an audit event, and regenerates snapshots.');
   console.log('  mapctx task update <task-id> [--set key=value ...] [--depends-on a,b] [--blocking x,y] [--json] [--actor name]');
   console.log('    Whitelisted fields only (title,type,parentTaskId,priority,workload,tags,domains,startDate,dueDate,');
   console.log('    externalId,specMode,assignees,iteration,milestone; detail.* for role,impact,estimatedEffort,');
@@ -189,7 +210,7 @@ function parseArgs(argv: string[]): {
   help: boolean;
 } {
   const args = [...argv];
-  const command = args.shift() || 'help';
+  const command = args.length > 0 ? args.shift()! : '';
   const options: MapctxOptions = {};
   const positional: string[] = [];
   let help = false;
@@ -743,6 +764,47 @@ export function mapctxGanttCommand(options: MapctxOptions): void {
   }
 }
 
+/**
+ * Emits the kanban board dataset (title/mode/tasks) as JSON, mirroring
+ * `gantt`: pre-cutover it parses TASKS.md; under store authority it reads the
+ * SQLite store through the same field mapping as the checkpoint export, so
+ * the board view can never disagree with the regenerated snapshot. The
+ * workspace server forwards this dataset for both the page bootstrap and
+ * /api/board (T-094).
+ */
+export function mapctxBoardCommand(options: MapctxOptions): void {
+  const cwd = process.cwd();
+  const toml = resolveMapctxToml(cwd);
+  if (!toml || toml.config.plansAuthority !== 'store') {
+    const tasksFilePath = resolveTasksFilePath(cwd, options);
+    const board = parseTasksFile(tasksFilePath);
+    print({
+      title: board.title,
+      mode: detectWorkspaceModel(fs.readFileSync(tasksFilePath, 'utf8')),
+      tasks: board.tasks.map(toWorkspaceTaskView)
+    }, options.json);
+    return;
+  }
+
+  const { handle } = openStoreOrFail(cwd, { mode: 'read' });
+  try {
+    const tasks = listTasks(handle.db);
+    const edges = listDependencies(handle.db);
+    const project = getSingleProject(handle.db);
+    print({
+      title: project?.boardTitle ?? 'MapCtx Workspace',
+      mode: 'store',
+      tasks: tasks.map(task => toWorkspaceTaskViewFromStoreRecord(
+        task,
+        edges.filter(edge => edge.fromTaskId === task.taskId && edge.kind === 'depends-on').map(edge => edge.toTaskId),
+        deriveSubIssueProgress(task.taskId, tasks)
+      ))
+    }, options.json);
+  } finally {
+    handle.close();
+  }
+}
+
 function taskRenewCommand(taskId: string, options: MapctxOptions): void {
   if (!options.claimId || !options.leaseToken) throw new Error('task renew requires --claim <id> --token <token>');
   const cwd = process.cwd();
@@ -861,10 +923,34 @@ export function taskMoveCommand(taskId: string, options: MapctxOptions): void {
   const cwd = process.cwd();
   const { handle, tasksRoot } = requireStoreAuthority(cwd);
   try {
-    const result = moveTask(handle, { taskId, to: toPlanningState(options.status), actor: defaultActor(options.actor) });
+    const result = moveTask(handle, { taskId, to: toPlanningState(options.status), actor: defaultActor(options.actor), tasksRoot });
     if (!result.ok) {
       print(result, options.json);
       throw new Error(`Move refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
+    }
+    const regenerated = regenerateCanonicalFiles(handle, tasksRoot);
+    print({ ...result, regenerated }, options.json);
+  } finally {
+    handle.close();
+  }
+}
+
+export function taskReopenCommand(taskId: string, options: MapctxOptions): void {
+  if (!options.status) throw new Error('task reopen requires --status review');
+  const target = toPlanningState(options.status);
+  if (target !== 'review') throw new Error('task reopen only supports --status review');
+
+  const cwd = process.cwd();
+  const { handle, tasksRoot } = requireStoreAuthority(cwd);
+  try {
+    const result = reopenTask(handle, {
+      taskId,
+      to: target,
+      actor: defaultActor(options.actor)
+    });
+    if (!result.ok) {
+      print(result, options.json);
+      throw new Error(`Reopen refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
     }
     const regenerated = regenerateCanonicalFiles(handle, tasksRoot);
     print({ ...result, regenerated }, options.json);
@@ -1111,17 +1197,95 @@ async function syncStatusCommand(options: MapctxOptions): Promise<void> {
   }
 }
 
+const WORKSPACE_UI_BOOTSTRAP_MARKER = 'MAPCTX_BOOTSTRAP';
+
+/**
+ * Launch policy for the workspace UI (shared by bare `mapctx` and
+ * `mapctx workspace`): heal a stale registry active target first, then either
+ * focus the already-running UI or start a fresh server and open the browser.
+ */
+async function launchWorkspaceUi(argv: string[]): Promise<void> {
+  const wsOptions = parseWorkspaceServerArgs(argv);
+  const open = wsOptions.open ?? true;
+  healStaleActiveWorkspaceTarget(wsOptions);
+
+  const port = wsOptions.port || Number(process.env.PORT || '4173');
+  const host = wsOptions.host || '127.0.0.1';
+  const url = `http://${host}:${port}/`;
+
+  if (await isWorkspaceUiRunning(url)) {
+    console.log(`MapCtx workspace already running: ${url}`);
+    if (open) openWorkspaceUrl(url);
+    return;
+  }
+
+  await startWorkspaceServer({ ...wsOptions, open });
+}
+
+/**
+ * The global registry keeps one active target; when its TASKS.md disappears
+ * (moved/deleted project, temp checkout), every workspace page request fails.
+ * Repoint the active target at the first project whose TASKS.md still exists.
+ */
+function healStaleActiveWorkspaceTarget(options: { cwd?: string; registryPath?: string }): void {
+  const registryOptions = options.registryPath
+    ? { registryPath: path.resolve(options.cwd || process.cwd(), options.registryPath) }
+    : {};
+  const registry = readWorkspaceRegistry(registryOptions);
+  if (activeWorkspaceTargetTasksFile(registry)) return;
+
+  const fallback = registry.projects.find(project => fs.existsSync(resolveWorkspaceTargetTasksFile(project)));
+  if (!fallback) return;
+
+  writeWorkspaceRegistry({ ...registry, activeTargetId: targetId('project', fallback.id) }, registryOptions);
+  console.log(`Active workspace target no longer has a TASKS.md; falling back to: ${fallback.name} (${fallback.path})`);
+}
+
+function activeWorkspaceTargetTasksFile(registry: WorkspaceRegistry): string | undefined {
+  if (!registry.activeTargetId) return undefined;
+  const [type, ...rest] = registry.activeTargetId.split(':');
+  const id = rest.join(':');
+  const target = type === 'organization'
+    ? registry.organizations.find(organization => organization.id === id)
+    : registry.projects.find(project => project.id === id);
+  if (!target?.path) return undefined;
+  const tasksFile = resolveWorkspaceTargetTasksFile(target);
+  return fs.existsSync(tasksFile) ? tasksFile : undefined;
+}
+
+async function isWorkspaceUiRunning(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(1500) });
+    if (!response.ok) return false;
+    const body = await response.text();
+    return body.includes(WORKSPACE_UI_BOOTSTRAP_MARKER);
+  } catch {
+    return false;
+  }
+}
+
+function openWorkspaceUrl(url: string): void {
+  const platform = process.platform;
+  const command = platform === 'darwin' ? 'open' : platform === 'win32' ? 'cmd' : 'xdg-open';
+  const args = platform === 'win32' ? ['/c', 'start', '', url] : [url];
+  childProcess.spawn(command, args, { detached: true, stdio: 'ignore' }).unref();
+}
+
 async function main(): Promise<void> {
   const { command, subcommand, options, positional, help } = parseArgs(process.argv.slice(2));
 
-  if (!command || command === 'help' || command === '--help' || command === '-h' || help) {
+  if (!command) {
+    await launchWorkspaceUi([]);
+    return;
+  }
+
+  if (command === 'help' || command === '--help' || command === '-h' || help) {
     printHelp();
     return;
   }
 
   if (command === 'workspace') {
-    const wsOptions = parseWorkspaceServerArgs(process.argv.slice(3));
-    await startWorkspaceServer({ ...wsOptions, open: wsOptions.open ?? true });
+    await launchWorkspaceUi(process.argv.slice(3));
     return;
   }
 
@@ -1176,6 +1340,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === 'board') {
+    mapctxBoardCommand(options);
+    return;
+  }
+
   if (command === 'push') {
     pushStoreCommand(options);
     return;
@@ -1185,15 +1354,16 @@ async function main(): Promise<void> {
     if (subcommand === 'create') { taskCreateCommand(options); return; }
     if (subcommand === 'search') { taskSearchCommand(options); return; }
     const taskId = positional[1];
-    if (!taskId) throw new Error('Usage: mapctx task <create|search|show|context|claim|renew|release|move|update> [...]');
+    if (!taskId) throw new Error('Usage: mapctx task <create|search|show|context|claim|renew|release|move|reopen|update> [...]');
     if (subcommand === 'show') { taskShowCommand(taskId, options); return; }
     if (subcommand === 'context') { taskContextCommand(taskId, options); return; }
     if (subcommand === 'claim') { taskClaimCommand(taskId, options); return; }
     if (subcommand === 'renew') { taskRenewCommand(taskId, options); return; }
     if (subcommand === 'release') { taskReleaseCommand(taskId, options); return; }
     if (subcommand === 'move') { taskMoveCommand(taskId, options); return; }
+    if (subcommand === 'reopen') { taskReopenCommand(taskId, options); return; }
     if (subcommand === 'update') { taskUpdateCommand(taskId, options); return; }
-    throw new Error('Usage: mapctx task <create|search|show|context|claim|renew|release|move|update> <task-id> [...]');
+    throw new Error('Usage: mapctx task <create|search|show|context|claim|renew|release|move|reopen|update> <task-id> [...]');
   }
 
   if (command === 'dispatch') {
@@ -1237,8 +1407,10 @@ async function main(): Promise<void> {
   printHelp();
 }
 
-main().catch(error => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`Error: ${message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(error => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Error: ${message}`);
+    process.exit(1);
+  });
+}

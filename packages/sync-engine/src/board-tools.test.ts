@@ -21,7 +21,9 @@ function writeConfig(tempDir: string, config: Partial<SyncConfig> = {}): string 
       doing: 'Doing',
       review: 'Review',
       done: 'Done',
-      paused: 'Paused'
+      paused: 'Paused',
+      cancelled: 'Cancelled',
+      archived: 'Archived'
     },
     ...config
   };

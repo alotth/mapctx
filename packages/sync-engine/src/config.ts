@@ -19,7 +19,9 @@ const DEFAULT_STATUS_MAP: Record<string, string> = {
   doing: 'Doing',
   review: 'Review',
   done: 'Done',
-  paused: 'Paused'
+  paused: 'Paused',
+  cancelled: 'Cancelled',
+  archived: 'Archived'
 };
 
 function inferRepoFromGitRemote(cwd: string): { owner: string; repo: string } | null {

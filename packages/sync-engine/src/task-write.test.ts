@@ -89,6 +89,9 @@ const DETAIL_T201 = `# T-201
   - summary: Task for CLI write tests.
   - description: |
       Single line.
+
+      ## Acceptance
+      - [ ] CLI completion gate test.
 `;
 
 const LEGACY_CONFIG = {
@@ -162,6 +165,35 @@ test('task move: legal transition regenerates the canonical board and keeps vali
     const before = readTasksMd();
     assert.throws(() => taskMoveCommand('T-201', { status: 'done', json: true } as never), /illegal-transition/);
     assert.equal(readTasksMd(), before, 'a refused move must not touch the board');
+  } finally {
+    restore();
+  }
+});
+
+test('task move and reopen: completion gate then done-to-review reopen', () => {
+  const { restore } = setupCutoverRepo();
+  try {
+    execFileSync('node', [require.resolve('./mapctx-cli.js'), 'import', '--commit'], { stdio: 'ignore' });
+    taskMoveCommand('T-201', { status: 'ready-for-do', json: true } as never);
+    taskMoveCommand('T-201', { status: 'doing', json: true } as never);
+    taskMoveCommand('T-201', { status: 'review', json: true } as never);
+
+    assert.throws(
+      () => taskMoveCommand('T-201', { status: 'done', json: true } as never),
+      /acceptance-incomplete.*remain unchecked/
+    );
+    assert.match(readTasksMd(), /- status: review/);
+
+    const detailPath = path.join('tasks', 'T-201.md');
+    fs.writeFileSync(detailPath, fs.readFileSync(detailPath, 'utf8').replace('- [ ] CLI completion gate test.', '- [x] CLI completion gate test.'), 'utf8');
+    taskMoveCommand('T-201', { status: 'done', json: true } as never);
+    assert.match(readTasksMd(), /- status: done/);
+
+    execFileSync('node', [require.resolve('./mapctx-cli.js'), 'task', 'reopen', 'T-201', '--status', 'review', '--json', '--actor', 'reviewer'], { encoding: 'utf8' });
+    const reopenedBlock = readTasksMd().slice(readTasksMd().indexOf('### [T-201]'));
+    assert.match(reopenedBlock, /- status: review/);
+    assert.match(reopenedBlock, /- completed: null/);
+    mapctxValidateCliCommand({ json: true } as never);
   } finally {
     restore();
   }
@@ -312,6 +344,19 @@ test('R10: dispatch receipt regenerates the canonical board (review status, zero
     const onDisk = readTasksMd();
     const t201Block = onDisk.slice(onDisk.indexOf('### [T-201]'));
     assert.ok(t201Block.includes('- status: review'), 'completed receipt must move the board to review');
+
+    // A reviewed task with a completed execution can now admit a second
+    // attempt on the same dispatch without discarding attempt 1.
+    captured = '';
+    process.stdout.write = ((chunk: unknown) => { captured += String(chunk); return true; }) as typeof process.stdout.write;
+    try {
+      dispatchCreateCommand('T-201', { dispatchId, executor: 'test', json: true } as never);
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+    const retry = JSON.parse(captured) as { dispatchId: string; attempt: number };
+    assert.equal(retry.dispatchId, dispatchId);
+    assert.equal(retry.attempt, 2, 'reviewed completed execution must admit attempt 2');
 
     // The board was regenerated in the same operation: no drift, validate green.
     mapctxValidateCliCommand({ json: true } as never);

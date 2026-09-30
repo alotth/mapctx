@@ -1,9 +1,12 @@
-// FROZEN: workspace-server.ts is read-only, except for one named exception.
+// FROZEN: workspace-server.ts is read-only, except for two named exceptions.
 // See T-055 Decisions Taken: the planned/forecast/actual Gantt needs a host,
 // which is the one thing this freeze (T-059, ADR 0003) was kept alive for. The
-// /api/gantt route below is that single passthrough -- it forwards the exact
-// dataset buildGanttDataset() (shared with `mapctx gantt`) computes and adds no
-// duration/wave/collision logic of its own. All other routes remain frozen:
+// /api/gantt route below is that passthrough -- it forwards the exact dataset
+// buildGanttDataset() (shared with `mapctx gantt`) computes and adds no
+// duration/wave/collision logic of its own. T-094 added the second one: the
+// kanban board bootstrap and /api/board forward the exact dataset
+// `mapctx board --json` computes (store-backed under plansAuthority=store),
+// keeping store access inside the CLI. All other routes remain frozen:
 // no new features beyond keeping the build green until the external-adoption
 // gate.
 // See: workspace-server is the only host serving workspaceV2.html (used by planned Gantt).
@@ -29,10 +32,7 @@ import {
   type WorkspaceRegistry,
   type WorkspaceTargetType
 } from '@mapctx/core/workspace';
-import { parseTasksFile } from './markdown';
-import { Task, TaskBoard } from './types';
-
-type WorkspaceModel = 'legacy-sections' | 'v2-status' | 'mixed' | 'unknown';
+import type { WorkspaceModel, WorkspaceTaskSummary, WorkspaceTaskView, WorkspaceThreadRunView } from './board-view';
 
 type WorkspaceServerOptions = {
   cwd?: string;
@@ -46,61 +46,6 @@ type WorkspaceServerOptions = {
   projectPath?: string;
   targetId?: string;
   registryPath?: string;
-};
-
-type WorkspaceTaskView = {
-  id: string;
-  title: string;
-  status: string;
-  type?: string;
-  parent?: string;
-  subIssueProgress?: string;
-  milestone?: string;
-  startDate?: string;
-  dueDate?: string;
-  completed?: string;
-  updated?: string;
-  priority?: string;
-  workload?: string;
-  tags?: string[];
-  assignees?: string[];
-  detailPath?: string;
-  dependsOn?: string[];
-  thread: {
-    exists: boolean;
-    summaryMarkdown?: string;
-    threadMarkdown?: string;
-    summaryPreview?: string;
-    status?: string;
-    lastRuntime?: string;
-    lastAgentProfile?: string;
-    lastModel?: string;
-    lastRunId?: string;
-    latestRunStatus?: string;
-    latestRunResult?: string;
-    latestRunStartedAt?: string;
-    latestRunEndedAt?: string;
-    runCount: number;
-    costUsd?: number;
-    runs: WorkspaceThreadRunView[];
-  };
-};
-
-type WorkspaceThreadRunView = {
-  runId: string;
-  runtime?: string;
-  agentProfile?: string;
-  model?: string;
-  status: string;
-  startedAt: string;
-  endedAt?: string;
-  costUsd?: number;
-  result?: string;
-  tokenUsage?: {
-    input?: number;
-    output?: number;
-    total?: number;
-  };
 };
 
 type WorkspaceTargetView = {
@@ -368,6 +313,20 @@ async function handleRequest(
     return;
   }
 
+  // T-094 exception: kanban refresh endpoint. Same transport-only contract as
+  // /api/gantt -- forwards the board dataset `mapctx board --json` computes.
+  if (url.pathname === '/api/board') {
+    if (!activeWorkspace) {
+      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('No active workspace target');
+      return;
+    }
+
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache' });
+    response.end(JSON.stringify(buildModel(activeWorkspace, context.registryPath)));
+    return;
+  }
+
   const relativePath = url.pathname === '/' ? 'workspaceV2.html' : url.pathname.slice(1);
   const filePath = path.resolve(context.htmlRoot, relativePath);
 
@@ -410,17 +369,18 @@ function buildModel(activeWorkspace: ActiveWorkspace | undefined, registryPath?:
     };
   }
 
-  const markdownText = fs.readFileSync(activeWorkspace.tasksFilePath, 'utf8');
-  const board = parseTasksFile(activeWorkspace.tasksFilePath);
-  const mode = detectWorkspaceModel(markdownText);
-  const tasks = buildTasks(board, activeWorkspace.projectRoot);
+  const board = readBoardFromCli(activeWorkspace);
+  const tasks: WorkspaceTaskView[] = board.tasks.map(task => ({
+    ...task,
+    thread: readTaskThread(activeWorkspace.projectRoot, task.id)
+  }));
   const columns = buildColumns(tasks);
   const workspaceTargets = buildWorkspaceTargets(activeWorkspace.registry, tasks, activeWorkspace.tasksFilePath);
 
   return {
     title: board.title,
     columns,
-    mode,
+    mode: board.mode,
     tasks,
     workspaceTargets,
     projects: workspaceTargets,
@@ -458,27 +418,30 @@ function readGanttDatasetFromCli(activeWorkspace: ActiveWorkspace): unknown {
   return JSON.parse(result.stdout);
 }
 
-function buildTasks(board: TaskBoard, projectRoot: string): WorkspaceTaskView[] {
-  return board.tasks.map(task => ({
-    id: task.id,
-    title: task.title,
-    status: task.status,
-    type: task.type,
-    parent: task.parent,
-    subIssueProgress: task.subIssueProgress,
-    milestone: task.milestone,
-    startDate: task.start,
-    dueDate: task.due,
-    completed: task.completed || undefined,
-    updated: task.updated,
-    priority: task.priority,
-    workload: task.workload,
-    tags: task.tags,
-    assignees: task.assignees,
-    detailPath: task.detail,
-    dependsOn: task.dependsOn,
-    thread: readTaskThread(projectRoot, task.id)
-  }));
+/**
+ * The T-094 exception companion: invokes the canonical CLI board command and
+ * forwards its tasks unchanged (thread enrichment is the only thing added
+ * back here, from the same file-based thread store as before).
+ */
+function readBoardFromCli(activeWorkspace: ActiveWorkspace): { title: string; mode: WorkspaceModel; tasks: WorkspaceTaskSummary[] } {
+  const cliPath = path.join(__dirname, 'mapctx-cli.js');
+  const result = childProcess.spawnSync(process.execPath, [
+    cliPath,
+    'board',
+    '--json',
+    '--tasks-file',
+    activeWorkspace.tasksFilePath
+  ], {
+    cwd: activeWorkspace.projectRoot,
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024
+  });
+
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error((result.stderr || result.stdout || 'mapctx board failed').trim());
+  }
+  return JSON.parse(result.stdout);
 }
 
 function buildColumns(tasks: WorkspaceTaskView[]): Array<{ id: string; title: string; tasks: WorkspaceTaskView[] }> {
@@ -667,17 +630,6 @@ function toWorkspaceThreadRun(run: ThreadRunRecord): WorkspaceThreadRunView {
     result: run.result || undefined,
     tokenUsage: Object.keys(tokenUsage).length ? tokenUsage : undefined
   };
-}
-
-function detectWorkspaceModel(markdownText: string): WorkspaceModel {
-  const hasSingleTasksSection = /^##\s+Tasks\s*$/im.test(markdownText);
-  const hasStatusProperty = /^\s{2}-\s+status:\s*[^\s].*$/im.test(markdownText);
-  const hasLegacySections = /^##\s+(Backlog|Doing|Review|Done|Paused)\s*$/im.test(markdownText);
-
-  if (hasSingleTasksSection && hasStatusProperty && hasLegacySections) return 'mixed';
-  if (hasSingleTasksSection && hasStatusProperty) return 'v2-status';
-  if (hasLegacySections) return 'legacy-sections';
-  return 'unknown';
 }
 
 function summaryPreview(summary: string | null): string | undefined {

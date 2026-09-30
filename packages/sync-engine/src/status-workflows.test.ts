@@ -29,7 +29,9 @@ function writeConfig(tempDir: string, config: Partial<SyncConfig>): string {
       doing: 'Doing',
       review: 'Review',
       done: 'Done',
-      paused: 'Paused'
+      paused: 'Paused',
+      cancelled: 'Cancelled',
+      archived: 'Archived'
     },
     ...config
   };
@@ -62,7 +64,7 @@ test('default config keeps legacy status behavior', () => {
   const tempDir = makeTempDir();
   const configPath = writeConfig(tempDir, {});
   const { config } = loadConfig({ configPath });
-  assert.deepEqual(config.allowedStatuses, ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused']);
+  assert.deepEqual(config.allowedStatuses, ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused', 'cancelled', 'archived']);
   assert.deepEqual(config.completionStatuses, ['done']);
 });
 
@@ -85,7 +87,7 @@ test('init command creates a starter config when none exists', () => {
   assert.equal(created.owner, 'local');
   assert.equal(created.repo, path.basename(tempDir));
   assert.equal(created.tasksFile, './planning/TASKS.md');
-  assert.deepEqual(created.allowedStatuses, ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused']);
+  assert.deepEqual(created.allowedStatuses, ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused', 'cancelled', 'archived']);
   assert.deepEqual(created.completionStatuses, ['done']);
   assert.equal(created.bootstrap?.requireConfirmFlag, true);
 });

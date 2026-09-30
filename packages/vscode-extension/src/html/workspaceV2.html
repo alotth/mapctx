@@ -33,6 +33,59 @@
                 </div>
             </header>
 
+            <section id="workspace-filters" class="workspace-filters" aria-label="Task filters">
+                <div class="workspace-filter-toolbar">
+                    <label class="workspace-search-field">
+                        <span class="sr-only">Search tasks</span>
+                        <span class="workspace-search-icon" aria-hidden="true">⌕</span>
+                        <input id="workspace-search" type="search" autocomplete="off" placeholder="Search tasks, tags, IDs...">
+                    </label>
+                    <button id="workspace-filter-toggle" class="filter-button" type="button" aria-expanded="false" aria-controls="workspace-filter-panel">
+                        Filters <span id="workspace-filter-count" class="filter-count" hidden>0</span>
+                    </button>
+                    <button id="workspace-filter-clear" class="filter-clear-button" type="button">Clear</button>
+                    <span id="workspace-filter-summary" class="workspace-filter-summary" role="status" aria-live="polite"></span>
+                </div>
+                <div id="workspace-filter-panel" class="workspace-filter-panel" hidden>
+                    <div class="workspace-filter-section">
+                        <div class="workspace-filter-label">Status</div>
+                        <div id="workspace-status-filters" class="filter-chip-list" role="group" aria-label="Filter by status"></div>
+                    </div>
+                    <div class="workspace-filter-fields">
+                        <label class="workspace-filter-field">
+                            <span>Type</span>
+                            <select id="workspace-type-filter" data-workspace-filter="type">
+                                <option value="">All types</option>
+                            </select>
+                        </label>
+                        <label class="workspace-filter-field">
+                            <span>Priority</span>
+                            <select id="workspace-priority-filter" data-workspace-filter="priority">
+                                <option value="">All priorities</option>
+                            </select>
+                        </label>
+                        <label class="workspace-filter-field">
+                            <span>Workload</span>
+                            <select id="workspace-workload-filter" data-workspace-filter="workload">
+                                <option value="">All workloads</option>
+                            </select>
+                        </label>
+                        <label class="workspace-filter-field">
+                            <span>Execution context</span>
+                            <select id="workspace-thread-filter" data-workspace-filter="thread">
+                                <option value="">All tasks</option>
+                                <option value="with-thread">With context</option>
+                                <option value="without-thread">Without context</option>
+                            </select>
+                        </label>
+                        <label class="workspace-filter-field workspace-filter-field-wide">
+                            <span>Tag, ID or title</span>
+                            <input id="workspace-tag-filter" data-workspace-filter="tag" type="search" autocomplete="off" placeholder="e.g. frontend, billing, 076">
+                        </label>
+                    </div>
+                </div>
+            </section>
+
             <main>
                 <section id="kanban-view" class="view active"></section>
                 <section id="roadmap-view" class="view"></section>
@@ -41,16 +94,15 @@
         </div>
     </div>
 
-    <div id="detail-modal" class="modal" aria-hidden="true">
-        <div class="modal-backdrop" data-close-modal="detail"></div>
-        <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
+    <aside id="detail-modal" class="detail-panel" aria-hidden="true">
+        <section class="detail-panel-inner" role="dialog" aria-labelledby="detail-modal-title">
             <header class="modal-head">
                 <h2 id="detail-modal-title">Task detail</h2>
                 <button class="modal-close" data-close-modal="detail" type="button">Close</button>
             </header>
-            <div id="detail-modal-content" class="modal-content"></div>
+            <div id="detail-modal-content" class="detail-panel-content"></div>
         </section>
-    </div>
+    </aside>
 
     <div id="project-modal" class="modal" aria-hidden="true">
         <div class="modal-backdrop" data-close-modal="project"></div>

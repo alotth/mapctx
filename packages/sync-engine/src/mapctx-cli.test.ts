@@ -141,7 +141,7 @@ test('real board (this repo TASKS.md): every non-terminal, non-container task is
   const containers = new Set(
     board.tasks.filter(task => task.type === 'epic' || board.tasks.some(other => (other.parent ?? null) === task.id)).map(task => task.id)
   );
-  const terminal = new Set(['done', 'cancelled']);
+  const terminal = new Set(['done', 'cancelled', 'archived']);
   const accountedFor = new Set([...Object.keys(report.waveByTaskId), ...report.blockedReasons.map(reason => reason.taskId)]);
 
   for (const task of board.tasks) {

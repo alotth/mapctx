@@ -114,3 +114,24 @@ test('Gantt prefers durable snapshot duration coverage over legacy assumption te
   });
   assert.equal(dataset.tasks[0].forecast?.durationCoverage, 'substituted');
 });
+
+test('pools workload receipts for active forecasts and gives terminal work a retrospective baseline', () => {
+  const dataset = buildGanttDataset({
+    mode: 'store',
+    tasks: [
+      { id: 'T-090', title: 'Measured done', status: 'done', workload: 'Hard', receipts: [receipt] },
+      { id: 'T-091', title: 'Next hard task', status: 'ready', workload: 'Hard', receipts: [] },
+      { id: 'T-092', title: 'Off-scale workload', status: 'ready', workload: 'Medium', receipts: [] }
+    ],
+    dependencyEdges: []
+  });
+
+  const done = dataset.tasks.find(task => task.id === 'T-090');
+  const next = dataset.tasks.find(task => task.id === 'T-091');
+  assert.equal(dataset.allForecastsArePriorFallback, false);
+  assert.equal(done?.forecast?.method, 'historical-baseline');
+  assert.equal(next?.forecast?.method, 'historical-baseline');
+  assert.ok(dataset.tasks.find(task => task.id === 'T-092')?.forecast, 'unknown workload value falls back to default prior instead of throwing');
+  assert.equal(done?.actual?.actualVsP50Ratio, 1);
+  assert.equal(done?.actual?.actualVsP90Ratio, 1);
+});

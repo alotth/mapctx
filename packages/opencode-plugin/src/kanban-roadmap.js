@@ -8,7 +8,7 @@ const groupBy = { status: true, milestone: false }
 const expanded = new Set()
 const detailCache = new Map()
 
-const STATUS_ORDER = ["backlog", "doing", "review", "done", "paused", "unknown"]
+const STATUS_ORDER = ["backlog", "doing", "review", "done", "paused", "archived", "unknown"]
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 const RANGE_PADDING_DAYS = 7
 const DEFAULT_DURATION_DAYS = 7
@@ -57,7 +57,7 @@ function normalizeStatus(value) {
     return window.KanbanCore.normalizeStatus(value)
   }
   const status = String(value || "").trim().toLowerCase()
-  if (["backlog", "doing", "review", "done", "paused"].includes(status)) return status
+  if (["backlog", "doing", "review", "done", "paused", "archived"].includes(status)) return status
   return "unknown"
 }
 
@@ -341,6 +341,7 @@ function progressFromStatus(status) {
   if (status === "review") return 0.85
   if (status === "doing") return 0.55
   if (status === "paused") return 0.35
+  if (status === "archived") return 0
   if (status === "backlog") return 0.15
   return 0.25
 }

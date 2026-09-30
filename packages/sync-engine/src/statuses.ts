@@ -1,6 +1,6 @@
 import { SyncConfig, Task } from './types';
 
-export const DEFAULT_ALLOWED_STATUSES = ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused'];
+export const DEFAULT_ALLOWED_STATUSES = ['backlog', 'ready-for-do', 'doing', 'review', 'done', 'paused', 'cancelled', 'archived'];
 export const DEFAULT_COMPLETION_STATUSES = ['done'];
 
 export function normalizeStatus(value: string | null | undefined): string {
