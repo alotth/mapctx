@@ -1037,7 +1037,7 @@
   - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 8/8
+  - subIssueProgress: 7/8
   - priority: high
   - workload: Hard
   - tags: [vnext, architecture, planning]
@@ -1072,7 +1072,7 @@
 ### [T-049] Implement external project store and compatibility migration
 
   - id: T-049
-  - status: done
+  - status: review
   - type: feature
   - parent: E-009
   - subIssueProgress: null
@@ -1083,9 +1083,9 @@
   - dependsOn: [T-048]
   - start: null
   - due: null
-  - completed: 2026-08-16
+  - completed: null
   - externalId: null
-  - updated: 2026-08-16
+  - updated: 2026-09-23
   - detail: ./tasks/T-049.md
 
 ### [T-050] Add bounded context queries and semantic validation
@@ -1205,7 +1205,7 @@
 ### [T-065] Make the duration prior workload-aware and unit-honest
 
   - id: T-065
-  - status: done
+  - status: review
   - type: feature
   - parent: E-011
   - subIssueProgress: null
@@ -1216,9 +1216,9 @@
   - dependsOn: [T-054, T-056, T-064]
   - start: null
   - due: null
-  - completed: 2026-09-05
+  - completed: null
   - externalId: null
-  - updated: 2026-09-05
+  - updated: 2026-09-23
   - detail: ./tasks/T-065.md
 
 ### [E-010] Harness-neutral execution with Traycer first
@@ -1227,7 +1227,7 @@
   - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 9/9
+  - subIssueProgress: 4/9
   - priority: high
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
@@ -1284,7 +1284,7 @@
   - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 6/6
+  - subIssueProgress: 4/9
   - priority: high
   - workload: Hard
   - tags: [vnext, forecast, cost, gantt]
@@ -1360,7 +1360,7 @@
   - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 5/5
+  - subIssueProgress: 1/5
   - priority: medium
   - workload: Hard
   - tags: [vnext, migration, cli, skills, github]
@@ -1376,7 +1376,7 @@
 ### [T-057] Unify CLI, consolidate skills, and define GitHub source modes
 
   - id: T-057
-  - status: done
+  - status: review
   - type: feature
   - parent: E-012
   - subIssueProgress: null
@@ -1387,15 +1387,15 @@
   - dependsOn: [T-050, T-052, T-056, T-065]
   - start: null
   - due: null
-  - completed: 2026-09-05
+  - completed: null
   - externalId: null
-  - updated: 2026-09-05
+  - updated: 2026-09-23
   - detail: ./tasks/T-057.md
 
 ### [T-058] Prove walking-skeleton dispatch through Traycer before waves and forecast
 
   - id: T-058
-  - status: done
+  - status: review
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1406,9 +1406,9 @@
   - dependsOn: [T-048, T-049, T-052]
   - start: null
   - due: null
-  - completed: 2026-08-16
+  - completed: null
   - externalId: null
-  - updated: 2026-08-16
+  - updated: 2026-09-23
   - detail: ./tasks/T-058.md
 
 ### [T-060] Persist dispatch and receipt state in the external store
@@ -1471,7 +1471,7 @@
 ### [T-067] Update README and docs for store authority and the CLI write path
 
   - id: T-067
-  - status: done
+  - status: review
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1482,15 +1482,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: 2026-09-05
+  - completed: null
   - externalId: null
-  - updated: 2026-09-05
+  - updated: 2026-09-23
   - detail: ./tasks/T-067.md
 
 ### [T-068] Update mapctx-tasks and mapctx-traycer skills for the CLI write path
 
   - id: T-068
-  - status: done
+  - status: review
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1501,15 +1501,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: 2026-09-05
+  - completed: null
   - externalId: null
-  - updated: 2026-09-05
+  - updated: 2026-09-23
   - detail: ./tasks/T-068.md
 
 ### [T-069] Align docs site and thread-substrate.md with post-cutover framing
 
   - id: T-069
-  - status: done
+  - status: review
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1520,15 +1520,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: 2026-09-05
+  - completed: null
   - externalId: null
-  - updated: 2026-09-05
+  - updated: 2026-09-23
   - detail: ./tasks/T-069.md
 
 ### [T-070] Budget and value ledger: planned budget consumed by actuals, with learning forecast and value estimates
 
   - id: T-070
-  - status: done
+  - status: review
   - type: feature
   - parent: E-011
   - subIssueProgress: null
@@ -1539,15 +1539,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: 2026-09-06
+  - completed: null
   - externalId: null
-  - updated: 2026-09-06
+  - updated: 2026-09-23
   - detail: ./tasks/T-070.md
 
 ### [T-071] Workload re-attribution: record planned vs discovered difficulty, pool by discovered, measure estimation error
 
   - id: T-071
-  - status: done
+  - status: review
   - type: feature
   - parent: E-011
   - subIssueProgress: null
@@ -1558,15 +1558,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: 2026-09-06
+  - completed: null
   - externalId: null
-  - updated: 2026-09-06
+  - updated: 2026-09-23
   - detail: ./tasks/T-071.md
 
 ### [T-072] Fix PR1 P1 findings: journal atomicity, recovery locks, create races, export cycles, cutover prose, currency
 
   - id: T-072
-  - status: done
+  - status: review
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1577,15 +1577,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: 2026-09-08
+  - completed: null
   - externalId: null
-  - updated: 2026-09-08
+  - updated: 2026-09-23
   - detail: ./tasks/T-072.md
 
 ### [T-073] Fix PR1 P2 findings: money safety, drift bypass, blocked receipts, read-only opens, repair locking, legacy sync authority
 
   - id: T-073
-  - status: done
+  - status: review
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1596,15 +1596,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: 2026-09-08
+  - completed: null
   - externalId: null
-  - updated: 2026-09-08
+  - updated: 2026-09-23
   - detail: ./tasks/T-073.md
 
 ### [T-074] Publish @mapctx packages to npm with the vNext (sync-engine bump, bundled deps, mapcs deprecation ships)
 
   - id: T-074
-  - status: done
+  - status: review
   - type: chore
   - parent: E-010
   - subIssueProgress: null
@@ -1615,15 +1615,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: 2026-09-08
+  - completed: null
   - externalId: null
-  - updated: 2026-09-08
+  - updated: 2026-09-23
   - detail: ./tasks/T-074.md
 
 ### [T-075] Post-T-073 review hardening: maintenance-lock staleness, guard scope, crash-dirty read-only opens
 
   - id: T-075
-  - status: done
+  - status: review
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1634,10 +1634,428 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: 2026-09-08
+  - completed: null
+  - externalId: null
+  - updated: 2026-09-23
+  - detail: ./tasks/T-075.md
+
+### [E-013] GitHub push store-backed
+
+  - id: E-013
+  - status: backlog
+  - type: epic
+  - parent: null
+  - subIssueProgress: 0/2
+  - priority: null
+  - workload: null
+  - tags: []
+  - domains: [SYNC, GITHUB]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
   - externalId: null
   - updated: 2026-09-08
-  - detail: ./tasks/T-075.md
+  - detail: ./tasks/E-013.md
+
+### [T-076] mapctx push reads store projections (fail-closed)
+
+  - id: T-076
+  - status: doing
+  - type: feature
+  - parent: E-013
+  - subIssueProgress: null
+  - priority: null
+  - workload: null
+  - tags: []
+  - domains: [SYNC, GITHUB]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-09-08
+  - detail: ./tasks/T-076.md
+
+### [T-077] executorModel wiring in CLI/adapter
+
+  - id: T-077
+  - status: backlog
+  - type: feature
+  - parent: E-013
+  - subIssueProgress: null
+  - priority: null
+  - workload: null
+  - tags: []
+  - domains: [SYNC]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-09-08
+  - detail: ./tasks/T-077.md
+
+### [T-078] Long-range roadmap timeline with day/week/month scales
+
+  - id: T-078
+  - status: review
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: high
+  - workload: Medium
+  - tags: [roadmap, timeline, gantt]
+  - domains: [WEBVIEW, EXTENSION]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-09-23
+  - detail: ./tasks/T-078.md
+
+### [T-079] Calibrated forecast range and honest baselines in Roadmap
+
+  - id: T-079
+  - status: done
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: high
+  - workload: null
+  - tags: [forecast, roadmap, gantt]
+  - domains: []
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-09-09
+  - externalId: null
+  - updated: 2026-09-09
+  - detail: ./tasks/T-079.md
+
+### [T-080] Compact Workspace V2 views: dense roadmap rows and kanban cards
+
+  - id: T-080
+  - status: done
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: medium
+  - workload: null
+  - tags: [ui, density, roadmap]
+  - domains: []
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-09-09
+  - externalId: null
+  - updated: 2026-09-09
+  - detail: ./tasks/T-080.md
+
+### [T-081] Roadmap: forecast as duration text, bars only for planned and actual
+
+  - id: T-081
+  - status: done
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: high
+  - workload: null
+  - tags: [ui, roadmap, forecast]
+  - domains: []
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-09-09
+  - externalId: null
+  - updated: 2026-09-09
+  - detail: ./tasks/T-081.md
+
+### [T-082] Roadmap: modal above sticky header; Not scheduled group collapsed by default
+
+  - id: T-082
+  - status: done
+  - type: bug
+  - parent: null
+  - subIssueProgress: null
+  - priority: high
+  - workload: null
+  - tags: [ui, roadmap, z-index]
+  - domains: []
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-09-09
+  - externalId: null
+  - updated: 2026-09-09
+  - detail: ./tasks/T-082.md
+
+### [T-083] CLI: task search para checagem anti-duplicata
+
+  - id: T-083
+  - status: review
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: null
+  - workload: null
+  - tags: [cli, search, store]
+  - domains: [CLI]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-09-23
+  - detail: ./tasks/T-083.md
+
+### [T-084] Add financial cost and budget view to Workspace V2
+
+  - id: T-084
+  - status: backlog
+  - type: feature
+  - parent: E-011
+  - subIssueProgress: null
+  - priority: high
+  - workload: Normal
+  - tags: [ui, cost, budget, workspace]
+  - domains: [WEBVIEW, EXTENSION, FORECAST]
+  - dependsOn: [T-070]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/T-084.md
+
+### [T-085] Add visual sorting controls to Gantt roadmap
+
+  - id: T-085
+  - status: done
+  - type: feature
+  - parent: E-011
+  - subIssueProgress: null
+  - priority: high
+  - workload: Normal
+  - tags: [ui, roadmap, gantt, sorting]
+  - domains: [WEBVIEW, EXTENSION]
+  - dependsOn: [T-078, T-079]
+  - start: null
+  - due: null
+  - completed: 2026-09-12
+  - externalId: null
+  - updated: 2026-09-12
+  - detail: ./tasks/T-085.md
+
+### [T-086] Document Traycer orchestrator routing for multi-task and context-isolated execution
+
+  - id: T-086
+  - status: done
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: [traycer, orchestration, subagents, context]
+  - domains: [SKILLS, ADAPTER]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-09-12
+  - externalId: null
+  - updated: 2026-09-12
+  - detail: ./tasks/T-086.md
+
+### [T-087] Require completed acceptance before done
+
+  - id: T-087
+  - status: done
+  - type: bug
+  - parent: null
+  - subIssueProgress: null
+  - priority: high
+  - workload: null
+  - tags: []
+  - domains: [STORE, CLI, TEST]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-09-15
+  - externalId: null
+  - updated: 2026-09-23
+  - detail: ./tasks/T-087.md
+
+### [T-088] Agent task discovery and receipt artifact policy
+
+  - id: T-088
+  - status: done
+  - type: chore
+  - parent: null
+  - subIssueProgress: null
+  - priority: null
+  - workload: null
+  - tags: [agents, workflow, receipts]
+  - domains: [SKILLS, DOCS]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-09-16
+  - externalId: null
+  - updated: 2026-09-16
+  - detail: ./tasks/T-088.md
+
+### [T-089] Admit retry after completed execution
+
+  - id: T-089
+  - status: done
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: null
+  - workload: null
+  - tags: []
+  - domains: [STORE, PROTOCOL, CLI, TEST]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-09-23
+  - externalId: null
+  - updated: 2026-09-23
+  - detail: ./tasks/T-089.md
+
+### Add archived as terminal planning status
+
+  - id: T-090
+  - status: review
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: medium
+  - workload: Medium
+  - tags: [planning, status]
+  - domains: [PROTOCOL, STORE, CLI, PARSER, WEBVIEW, EXTENSION, DOCS, SKILLS]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-09-27
+  - detail: ./tasks/T-090.md
+
+### [T-091] Add cancelled planning status end-to-end
+
+  - id: T-091
+  - status: done
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: medium
+  - workload: Normal
+  - tags: [statuses, board, cli]
+  - domains: []
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-09-27
+  - externalId: null
+  - updated: 2026-09-27
+  - detail: ./tasks/T-091.md
+
+### [T-092] cancelled status verification stub
+
+  - id: T-092
+  - status: archived
+  - type: chore
+  - parent: null
+  - subIssueProgress: null
+  - priority: null
+  - workload: null
+  - tags: []
+  - domains: []
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-09-27
+  - detail: ./tasks/T-092.md
+
+### [T-093] Broaden Workspace V2 tag filter to LIKE over id, title and tags
+
+  - id: T-093
+  - status: done
+  - type: task
+  - parent: null
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: [workspace, ui, search]
+  - domains: [WEBVIEW]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-09-28
+  - externalId: null
+  - updated: 2026-09-28
+  - detail: ./tasks/T-093.md
+
+### [T-094] Migrate workspaceV2 kanban to store-backed data via CLI
+
+  - id: T-094
+  - status: review
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: null
+  - workload: null
+  - tags: [ui, store-authority, kanban]
+  - domains: [WEBVIEW, SYNC, CLI]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-09-28
+  - detail: ./tasks/T-094.md
+
+### [T-095] Bare mapctx launches workspace UI and heals stale active target
+
+  - id: T-095
+  - status: review
+  - type: task
+  - parent: null
+  - subIssueProgress: null
+  - priority: null
+  - workload: null
+  - tags: [cli, workspace, ui]
+  - domains: []
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-09-28
+  - detail: ./tasks/T-095.md
+
+### [T-096] Ingest usage from harness session stores into receipts
+
+  - id: T-096
+  - status: ready-for-do
+  - type: feature
+  - parent: E-011
+  - subIssueProgress: null
+  - priority: null
+  - workload: null
+  - tags: []
+  - domains: []
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-09-30
+  - detail: ./tasks/T-096.md
 
 ## Notes
 
