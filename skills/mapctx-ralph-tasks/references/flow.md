@@ -74,7 +74,7 @@ Use this sequence for `/mapctx-ralph-tasks`.
 ## 8) Validate and Report
 
 - Validate target task block still has canonical fields.
-- Validate status is part of workflow (`backlog|ready-for-do|doing|review|done|paused` unless project defines custom model).
+- Validate status is part of workflow (`backlog|ready-for-do|doing|review|done|paused|archived` unless project defines custom model).
 - Return concise report:
   - ID and title
   - command executed

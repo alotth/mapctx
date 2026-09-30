@@ -31,10 +31,10 @@ npm run test:sync-engine
 This repository is post-cutover (`plansAuthority: store`): `TASKS.md` and the
 structured field blocks of `tasks/<ID>.md` are generated, read-only output.
 
-- Edit tasks through the `mapctx` CLI (`task create/move/update`,
+- Edit tasks through the `mapctx` CLI (`task create/move/reopen/update`,
   `dispatch create/receipt`); never hand-edit `TASKS.md` or the structured blocks of `tasks/*.md`.
 - `mapctx validate` reports drift from manual edits as an error; resolve it with `mapctx reconcile <task-id>` (accept or discard per field), never a silent merge.
-- Default flow: `backlog -> ready-for-do -> doing -> review -> done` (+ `paused`).
+- Default flow: `backlog -> ready-for-do -> doing -> review -> done`, with `paused` for temporary stops and `archived` for work that will not proceed. Archived is terminal and is not completion.
 - The `description:` prose block in `tasks/<ID>.md` stays Git-authored: keep unresolved questions under `Open Decisions for Execution`, final dated answers under `Decisions Taken`, and concrete landing spots under `Implementation Notes`.
 - Keep project-wide context in `docs/PROJECT.md`, sequencing in `docs/ROADMAP.md`, and durable decisions in `docs/adr/`.
 

@@ -32,12 +32,14 @@ The system centers on a deterministic local task model and uses lightweight docs
 | `tasks/<ID>.plan.md` | optional execution plan for heavier work | No |
 | `.mapctx/threads/<ID>/summary.md` | portable conversation resume context for a task | No |
 | `.mapctx/threads/<ID>/thread.md` | append-only human-readable task conversation history | No |
+| `docs/<relevant-area>/` | promoted, self-contained durable artifacts and decisions | No |
 
 Rule of thumb:
 
 - If the information changes task status or execution readiness, record it through the `mapctx` CLI; never hand-edit the generated board files.
 - If the information explains project-wide direction or durable architecture choices, keep it in `docs/`.
 - If the information helps a runtime resume a conversation or run, keep it in `.mapctx/threads/<ID>/` and link it from the task detail file.
+- If Traycer produces a durable artifact worth retaining, copy its complete content and required assets into the relevant `docs/` area and link it from the task. Keep raw `RunReceipt` JSON temporary and out of Git.
 
 ## Rigor Model
 
@@ -57,13 +59,15 @@ Additional routing cues:
 
 ## Default Workflow
 
-1. Capture or refine work with `mapctx task create` / `mapctx task update`; board files regenerate.
-2. Keep task details product-first: user context, expected outcome, acceptance, then technical notes.
-3. Run `mapctx validate` before major execution or sync.
-4. Run `mapctx plan` when dependency order or waves matter.
-5. Execute directly by default.
-6. Escalate to subagents only when the task is complex enough to justify the extra context and review cost.
-7. Sync with GitHub only through `mapcs` or the sync skill.
+1. Inspect the plan and search related tasks before starting.
+2. Reuse a task that covers the request; create a focused task automatically when clear requested scope is uncovered.
+3. Capture or refine work with `mapctx task create` / `mapctx task update`; board files regenerate.
+4. Keep task details product-first: user context, expected outcome, acceptance, then technical notes.
+5. Run `mapctx validate` before major execution or sync.
+6. Run `mapctx plan` when dependency order or waves matter.
+7. Execute directly by default.
+8. Escalate to subagents only when the task is complex enough to justify the extra context and review cost.
+9. Sync with GitHub only through `mapcs` or the sync skill.
 
 ## Selective Adoptions
 

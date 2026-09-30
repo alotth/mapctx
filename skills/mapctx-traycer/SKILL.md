@@ -7,6 +7,35 @@ description: Attach MapCtx planning to Traycer tickets, dispatch planned waves, 
 
 MapCtx owns planning. Traycer executes. Ticket Markdown is projection, never source of truth.
 
+## Hard gate (precondition)
+
+No real work starts without a task. Before any code/file change, deliverable, or new scope planning, inspect the current plan and search related tasks (`mapctx plan --json`, `mapctx task search --query "..." --json`). Claim an existing T-### when it clearly covers the requested scope. When the requested scope is clear but uncovered, create a focused task automatically with summary, acceptance, and affected paths; the operator's explicit work request is approval to record that work. Ask only for material ambiguity, conflicting product intent, or destructive scope. Never execute unclaimed work. Conversation, read-only analysis, and quick diagnostics need no ticket. A Traycer ticket mirrors the T-###; it never substitutes the claim. Every child-agent brief embeds the T-### and the claim-before-work order.
+
+## Execution routing
+
+Use the current session as an orchestrator when the active planner wave contains
+more than one executable leaf task. The orchestrator coordinates claims,
+dispatches, child-agent assignment, wave ordering, failures, and receipts; it
+does not implement those tasks itself.
+
+Create one child agent per executable task. Every child brief must include the
+MapCtx task ID, bounded task context, worktree, claim-before-work order, and
+receipt requirements. A child claims and dispatches its own task before editing.
+
+For a single task, reuse the current session only when its context is relevant
+and it has sufficient context headroom. Start a fresh child agent when the
+session already contains another task or project, context is near exhaustion,
+the runtime reports compaction risk, or isolated execution is required. Pass a
+bounded MapCtx handoff, never the full transcript.
+
+Use planner waves and resource claims as the routing authority. Do not run
+dependent or serialized tasks in parallel, and do not dispatch container epics
+as executor work.
+
+This is a routing policy, not live agent automation. Traycer owns agent/session
+lifecycle and worktrees; MapCtx remains authoritative for task state, claims,
+dispatches, and receipts.
+
 ## MapCtx-first flow
 
 1. Read plan and task context from MapCtx:
@@ -30,8 +59,12 @@ MapCtx owns planning. Traycer executes. Ticket Markdown is projection, never sou
 
 6. Claiming starts work: `task claim` carries the planning state to doing automatically (backlog goes through ready, one legal hop per event; paused/blocked/review stay put — unpausing is a human decision). No manual `task move --status doing` is needed before work.
 
+   Correction after premature completion/archive: `done` and `archived` are terminal for normal planning moves, but existing work can be returned to review with `mapctx task reopen <task-id> --status review --actor traycer`. This clears `completedOn`, records an auditable `task-reopen` event, and regenerates snapshots. Do not hand-edit `TASKS.md`, use `reconcile` for intended workflow changes, or create a replacement task merely to undo a terminal state.
+
+   Reopen changes planning state only; it does not rewrite the completed execution attempt. When planning is non-terminal (`review`/`doing`) and `executionState` is `completed`, admit a new attempt with `mapctx dispatch create <task-id> --dispatch-id <dispatch-id>` (or a fresh dispatch). This journals `completed -> unclaimed` for the new attempt, preserves the prior receipt, and keeps late receipts stale. `done`/`cancelled`/`archived` planning states still refuse dispatch.
+
    Execute the ticket in the assigned worktree. The work is bounded by the claim's lease; renew or release it through `mapctx task renew`/`mapctx task release` with the saved `claimId`/`leaseToken`. Adapter does not spawn agents.
-7. Save normalized `RunReceipt` JSON and submit it through the CLI against the dispatch created in step 5:
+7. Save normalized `RunReceipt` JSON outside the committed tree and submit it through the CLI against the dispatch created in step 5:
 
    ```sh
    mapctx dispatch receipt <dispatch-id> --receipt <receipt.json> --actor traycer --json
@@ -39,6 +72,13 @@ MapCtx owns planning. Traycer executes. Ticket Markdown is projection, never sou
    ```
 
    Duplicate, stale, unknown, or mismatched receipts must remain rejected. Do not bypass CLI or open SQLite from skill code.
+   Never commit the `RunReceipt` JSON or a pointer-only artifact. When Traycer
+   produces a durable artifact worth retaining, copy its complete content and
+   required assets into the repository's relevant `docs/` location, then link
+   that copied artifact from the matching task. The repo must remain usable
+   without Traycer access.
+   Before closing `review` as `done`, mark every criterion under `## Acceptance` as `[x]`; `mapctx task move ... --status done`
+   rejects missing, unchecked, or prose-only acceptance criteria.
 
 ### Difficulty discovered mid-flight
 

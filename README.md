@@ -58,10 +58,12 @@ overrides harness workflow policy or owns agent execution.
 
 The board schema is unchanged: single `## Tasks` list (no status-column
 sections), canonical field order, and status flow
-`backlog -> ready-for-do -> doing -> review -> done` (+ `paused`). What changed
+`backlog -> ready-for-do -> doing -> review -> done`, with `paused` for temporary
+stops and `archived` for work that will not proceed. Archived work stays in the
+board history but does not count as completed. What changed
 after cutover is who writes it:
 
-- editable surfaces: the `mapctx` CLI (`task create/move/update`,
+- editable surfaces: the `mapctx` CLI (`task create/move/reopen/update`,
   `dispatch create/receipt`), the cutover flow (`mapctx import
   --dry-run/--commit`), and recovery (`mapctx store init/repair`)
 - `TASKS.md` and the structured blocks of `tasks/<ID>.md` are regenerated
@@ -107,6 +109,7 @@ Store-backed task operations:
 ```bash
 mapctx task claim <task-id>              # lease a task (returns claimId + leaseToken)
 mapctx task move <task-id> --status doing
+mapctx task reopen <task-id> --status review # reopen done/archived task; clears completedOn
 mapctx task update <task-id> --set priority=high
 mapctx task create --title "..." --summary "..."
 mapctx task search --query "..."   # duplicate-check: case/accent-insensitive over title, tags, domains, summary

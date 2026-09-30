@@ -8,6 +8,7 @@ Default statuses are (only when project does not define custom statuses):
 - `review`
 - `done`
 - `paused`
+- `archived`
 
 Recommended default transition path:
 
@@ -17,6 +18,7 @@ Recommended default transition path:
 - `review -> done`
 - `doing -> paused`
 - `paused -> doing`
+- any nonterminal state -> `archived` (terminal; work will not proceed)
 
 Projects may add extra statuses (for example `design`) or fully replace default statuses.
 
@@ -33,6 +35,7 @@ Projects may add extra statuses (for example `design`) or fully replace default 
 ## Completion State Policy
 
 - Default completion state: `done`.
+- `archived` is terminal but is not a completion state; do not set `completed` for it.
 - For custom workflows, support custom completion state names (for example `shipped`, `released`, `completed`).
 - Keep one primary completion state unless user explicitly requires multiple completion states.
 

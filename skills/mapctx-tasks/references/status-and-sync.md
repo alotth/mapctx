@@ -12,6 +12,7 @@ Default lifecycle (used only when project does not define a custom workflow):
 - `review -> done`: approved/completed
 - `doing -> paused`: temporary stop
 - `paused -> doing`: resume
+- any nonterminal planning state -> `archived`: work will not proceed; terminal and not completed
 
 Custom statuses are allowed when project workflow requires them (for example `design`).
 Custom workflows may extend defaults or replace them entirely.

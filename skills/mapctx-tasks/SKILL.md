@@ -24,7 +24,7 @@ Before any edit, detect which regime the project is in. Read `plansAuthority` fr
 - `store` regime: `TASKS.md` and the structured field block of every `tasks/<ID>.md` (`role`, `impact`, `estimatedEffort`, `prerequisites`, `blocking`, `filesAffected`, `testsRequired`, `summary`, and the `TASKS.md` field list) are generated, read-only output. Never hand-edit them.
   - Translate the same request into `mapctx` CLI calls instead, and let the CLI regenerate the snapshot. Do not write the Markdown yourself, even to "match" what the CLI will produce:
     - Register a new task/epic: `mapctx task create --title "<title>" [--type ...] [--parent id] ...`. The CLI auto-assigns the next free id for the type prefix (E for epic, T otherwise); `--description`/`--description-file` prose lands in the new detail file and stays Git-authored.
-    - Change workflow state: `mapctx task move <task-id> --status <planning-state>`. `done` stamps `completedOn` and releases any active claim.
+    - Change workflow state: `mapctx task move <task-id> --status <planning-state>`. `done` stamps `completedOn` and releases any active claim; `archived` is terminal but does not mean completed. Reopen a `done` or `archived` task explicitly with `mapctx task reopen <task-id> --status review`; this clears `completedOn` and records auditable provenance.
     - `task claim` starts work: it carries the planning state to doing automatically (backlog hops through ready; paused/blocked/review stay put until a human moves them). Terminal tasks refuse to be claimed.
     - Edit fields: `mapctx task update <task-id> --set key=value ...` (whitelisted fields only, including `detail.*` for `role`, `impact`, `estimatedEffort`, `filesAffected`, `testsRequired`, `summary`), and `mapctx task update <task-id> --depends-on a,b` / `--blocking x,y` for dependency edges (these replace both the edges and the detail `prerequisites`/`blocking` so the two surfaces never diverge).
     - Direct edits to `TASKS.md` or the structured detail blocks are drift, not edits.
@@ -64,7 +64,7 @@ Before any edit, detect which regime the project is in. Read `plansAuthority` fr
    - When creating/updating tasks, keep `domains` explicit (`[]` when unknown) and prefer existing domain keys.
    - For legacy tasks using `touch`, migrate to `domains` on write.
    - For optional fields, add only when needed by project workflow or sync setup.
-   - Treat statuses as project-defined workflow states. If none are specified, use default `backlog|ready-for-do|doing|review|done|paused`.
+   - Treat statuses as project-defined workflow states. If none are specified, use default `backlog|ready-for-do|doing|review|done|paused|archived`.
    - Allow full rename/replacement of defaults when user defines a custom status model.
 
 5. Enforce contract.

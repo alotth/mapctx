@@ -667,7 +667,7 @@
             </div>
 
             <div class="alert alert-success">
-                <strong>Methodology:</strong> The external project store is the live authority (<code>plansAuthority: store</code>, ADR 0003/0004). <code>TASKS.md</code> and the structured field blocks of <code>tasks/&lt;ID&gt;.md</code> are generated, read-only snapshots. Editable surfaces are the <code>mapctx</code> CLI: <code>task create/move/update</code>, <code>dispatch create/receipt</code>, <code>import --dry-run/--commit</code>, <code>store init/repair</code>, and <code>reconcile</code>.
+                <strong>Methodology:</strong> The external project store is the live authority (<code>plansAuthority: store</code>, ADR 0003/0004). <code>TASKS.md</code> and the structured field blocks of <code>tasks/&lt;ID&gt;.md</code> are generated, read-only snapshots. Editable surfaces are the <code>mapctx</code> CLI: <code>task create/move/reopen/update</code>, <code>dispatch create/receipt</code>, <code>import --dry-run/--commit</code>, <code>store init/repair</code>, and <code>reconcile</code>.
             </div>
             
             <h3>Rules Documentation</h3>
@@ -710,7 +710,7 @@
                 <li>Single list under <code>## Tasks</code> with status in <code>status:</code>.</li>
                 <li>Keep canonical key order and deterministic formatting.</li>
                 <li>Use <code>tasks/&lt;ID&gt;.md</code> for detailed context.</li>
-                <li>Default flow is <code>backlog -&gt; ready-for-do -&gt; doing -&gt; review -&gt; done</code> (+ paused).</li>
+                <li>Default flow is <code>backlog -&gt; ready-for-do -&gt; doing -&gt; review -&gt; done</code>, with paused for temporary stops and archived for work that will not proceed.</li>
                 <li>Scale rigor with <code>specMode</code> and <code>workload</code> instead of making every task heavy.</li>
             </ul>
 
@@ -722,7 +722,7 @@
             </ul>
 
             <h4>Operational Commands</h4>
-            <pre><code class="code-block-title">mapctx CLI (editable surfaces)</code><code>mapctx task create | task move | task update
+            <pre><code class="code-block-title">mapctx CLI (editable surfaces)</code><code>mapctx task create | task move | task reopen | task update
 mapctx dispatch create | dispatch receipt
 mapctx import --dry-run | import --commit
 mapctx store init | store repair

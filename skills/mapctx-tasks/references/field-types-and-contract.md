@@ -27,7 +27,7 @@ Optional extension keys (append after required keys, in this order when used):
 - `id` (`string`, required): unique ID using `T-XXX` or `E-XXX`.
   - Use `E-XXX` when `type: epic`.
   - Use `T-XXX` for all other types (`feature`, `task`, `bug`, `chore`, or `null`).
-- `status` (`string`, required): default set is `backlog | ready-for-do | doing | review | done | paused`; custom project statuses are allowed when explicitly defined.
+- `status` (`string`, required): default set is `backlog | ready-for-do | doing | review | done | paused | archived`; custom project statuses are allowed when explicitly defined.
 - `type` (`enum | null`, required key): `epic | feature | task | bug | chore | null`.
 - `parent` (`string | null`, required key): parent task ID, or `null`.
   - Use parent task ID for subtasks.
