@@ -2589,7 +2589,7 @@
   - updated: 2026-10-05
   - detail: ./tasks/T-121.md
 
-### [T-122] Release 0.3.0: CLI/web consolidation and historical integration archive
+### Release 0.3.1: CLI/web consolidation and historical integration archive
 
   - id: T-122
   - status: review

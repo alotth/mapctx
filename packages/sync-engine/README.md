@@ -1,9 +1,9 @@
-# @mapctx/sync-engine 0.3.0
+# @mapctx/sync-engine 0.3.1
 
 Store-backed MapCtx CLI and standalone Kanban/roadmap workspace. Node 22.13+ required (24 recommended).
 
 ```sh
-npm install -g @mapctx/sync-engine@0.3.0
+npm install -g @mapctx/sync-engine@0.3.1
 mapctx workspace /path/to/project
 mapctx validate
 mapctx plan --json

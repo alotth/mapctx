@@ -1,6 +1,6 @@
 {
   "name": "@mapctx/sync-engine",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Store-backed planning, delivery history, GitHub sync and standalone Kanban/roadmap workspace",
   "type": "commonjs",
   "main": "./dist/index.js",

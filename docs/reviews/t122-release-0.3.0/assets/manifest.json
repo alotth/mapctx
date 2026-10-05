@@ -22,5 +22,21 @@
   "build.log": {
     "sha256": "8f28ab38eb129c07dd5fcb909ee826e45c21305357115ccdabd7e99a477bf4f7",
     "bytes": 970
+  },
+  "ci-retry.log": {
+    "sha256": "d8278ab3aceabe4471979c192f32e868850cdcd8138b9d49c50efa297e003b92",
+    "bytes": 25
+  },
+  "tests-retry.log": {
+    "sha256": "43cb2b11ec3e6bc626f6558f0b02c1cc81a52530126350678f06cdcc4bc0137d",
+    "bytes": 66830
+  },
+  "ci-failure.log": {
+    "sha256": "775947d72a7b5328cabb8265962b3c3f0471cc936a5887c90db539fa3959d38c",
+    "bytes": 11321
+  },
+  "pack-smoke-retry.log": {
+    "sha256": "5d549f14b19a96fc36aeb5d2113a0ab779f738a8cdc86267a7e8f0090f0d3e2f",
+    "bytes": 10957
   }
 }

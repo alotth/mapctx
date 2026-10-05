@@ -1,6 +1,6 @@
 # CLI / web release
 
-Public npm package: `@mapctx/sync-engine`. Version 0.3.0 bundles core, protocol, store, planner, forecast and standalone workspace assets. Node 22.13+ required (24 recommended).
+Public npm package: `@mapctx/sync-engine`. Version 0.3.1 bundles core, protocol, store, planner, forecast and standalone workspace assets. Node 22.13+ required (24 recommended).
 
 ## Verification
 
@@ -15,7 +15,7 @@ Smoke verifies a clean tarball installation, canonical store/Acceptance/checkpoi
 
 ## Publish
 
-Commit reviewed changes, then push `main` and `sync-v0.3.0`. `.github/workflows/release-sync-engine.yml` checks tag/version agreement, runs tests and packaged-install smoke before `npm publish --provenance --access public`. Manual workflow dispatch also verifies package/version; already published versions cannot be overwritten.
+Commit reviewed changes, then push `main` and `sync-v0.3.1`. `.github/workflows/release-sync-engine.yml` checks tag/version agreement, runs tests and packaged-install smoke before `npm publish --provenance --access public`. Manual workflow dispatch also verifies package/version; already published versions cannot be overwritten.
 
 The workflow retains the existing repository `NPM_TOKEN` publishing path and provenance permissions. npm Trusted Publishing/OIDC is an alternative only after configuring that publisher on npm; it is not assumed configured by this release. Missing credentials fail the workflow. Private library packages are bundled, not separately published.
 

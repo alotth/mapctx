@@ -1,13 +1,13 @@
 # MapCtx — planning and delivery intelligence
 
-MapCtx turns task intent into dependency/resource-aware plans, records execution receipts, and compares planned effort with delivery history. CLI and standalone browser workspace are the active interfaces in **0.3.0**.
+MapCtx turns task intent into dependency/resource-aware plans, records execution receipts, and compares planned effort with delivery history. CLI and standalone browser workspace are the active interfaces in **0.3.1**.
 
 ## Install and open
 
 Requires Node.js **22.13+** (Node 24 recommended for built-in SQLite).
 
 ```sh
-npm install -g @mapctx/sync-engine@0.3.0
+npm install -g @mapctx/sync-engine@0.3.1
 mapctx --help
 mapctx workspace /path/to/project
 ```

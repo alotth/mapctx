@@ -1,0 +1,74 @@
+publish	Build and test maintained packages	﻿2026-10-05T18:13:18.8604098Z ##[group]Run npm test
+publish	Build and test maintained packages	2026-10-05T18:13:18.8604398Z ^[[36;1mnpm test^[[0m
+publish	Build and test maintained packages	2026-10-05T18:13:18.8670194Z shell: /usr/bin/bash -e {0}
+publish	Build and test maintained packages	2026-10-05T18:13:18.8670468Z env:
+publish	Build and test maintained packages	2026-10-05T18:13:18.8670738Z   NPM_CONFIG_USERCONFIG: /home/runner/work/_temp/.npmrc
+publish	Build and test maintained packages	2026-10-05T18:13:18.8671097Z   NODE_AUTH_TOKEN: XXXXX-XXXXX-XXXXX-XXXXX
+publish	Build and test maintained packages	2026-10-05T18:13:18.8671384Z ##[endgroup]
+publish	Build and test maintained packages	2026-10-05T18:13:18.9820736Z 
+publish	Build and test maintained packages	2026-10-05T18:13:18.9821258Z > test
+publish	Build and test maintained packages	2026-10-05T18:13:18.9821883Z > npm run build && npm run test --workspaces --if-present
+publish	Build and test maintained packages	2026-10-05T18:13:18.9822181Z 
+publish	Build and test maintained packages	2026-10-05T18:13:19.0779587Z 
+publish	Build and test maintained packages	2026-10-05T18:13:19.0779927Z > build
+publish	Build and test maintained packages	2026-10-05T18:13:19.0780491Z > npm run build:sync-engine && npm run build --workspace @mapctx/adapter-traycer
+publish	Build and test maintained packages	2026-10-05T18:13:19.0780876Z 
+publish	Build and test maintained packages	2026-10-05T18:13:19.1771490Z 
+publish	Build and test maintained packages	2026-10-05T18:13:19.1772201Z > build:sync-engine
+publish	Build and test maintained packages	2026-10-05T18:13:19.1773950Z > npm run build --workspace @mapctx/protocol && npm run build --workspace @mapctx/core && npm run build --workspace @mapctx/store && npm run build --workspace @mapctx/planner && npm run build --workspace @mapctx/forecast && npm run build --workspace @mapctx/sync-engine
+publish	Build and test maintained packages	2026-10-05T18:13:19.3006942Z 
+publish	Build and test maintained packages	2026-10-05T18:13:19.3007016Z 
+publish	Build and test maintained packages	2026-10-05T18:13:19.3007648Z > @mapctx/protocol@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:13:19.3008339Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:13:19.3008644Z 
+publish	Build and test maintained packages	2026-10-05T18:13:21.4882640Z 
+publish	Build and test maintained packages	2026-10-05T18:13:21.4883259Z > @mapctx/core@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:13:21.4883728Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:13:21.4883927Z 
+publish	Build and test maintained packages	2026-10-05T18:13:22.8031602Z 
+publish	Build and test maintained packages	2026-10-05T18:13:22.8032557Z > @mapctx/store@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:13:22.8033675Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:13:22.8034222Z 
+publish	Build and test maintained packages	2026-10-05T18:13:25.4131640Z 
+publish	Build and test maintained packages	2026-10-05T18:13:25.4132520Z > @mapctx/planner@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:13:25.4133173Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:13:25.4133460Z 
+publish	Build and test maintained packages	2026-10-05T18:13:26.6516154Z 
+publish	Build and test maintained packages	2026-10-05T18:13:26.6516878Z > @mapctx/forecast@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:13:26.6517329Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:13:26.6517517Z 
+publish	Build and test maintained packages	2026-10-05T18:13:28.2846655Z 
+publish	Build and test maintained packages	2026-10-05T18:13:28.2847404Z > @mapctx/sync-engine@0.3.0 build
+publish	Build and test maintained packages	2026-10-05T18:13:28.2848872Z > rm -rf node_modules/@mapctx/core && tsc -p tsconfig.json && chmod +x dist/cli.js dist/mapctx-cli.js && rm -rf dist/workspace-ui && mkdir -p dist/workspace-ui && cp src/workspace-ui/workspaceV2.* dist/workspace-ui/
+publish	Build and test maintained packages	2026-10-05T18:13:28.2850042Z 
+publish	Build and test maintained packages	2026-10-05T18:13:31.0041437Z 
+publish	Build and test maintained packages	2026-10-05T18:13:31.0042292Z > @mapctx/adapter-traycer@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:13:31.0042774Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:13:31.0042987Z 
+publish	Build and test maintained packages	2026-10-05T18:13:31.7252306Z ##[error]src/dispatch-skeleton.ts(11,28): error TS2307: Cannot find module 'node:crypto' or its corresponding type declarations.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7263928Z ##[error]src/dispatch-skeleton.ts(12,42): error TS2307: Cannot find module 'node:fs' or its corresponding type declarations.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7266691Z ##[error]src/dispatch-skeleton.ts(13,22): error TS2307: Cannot find module 'node:path' or its corresponding type declarations.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7270091Z ##[error]src/dispatch-skeleton.ts(25,20): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7273500Z ##[error]src/dispatch-skeleton.ts(28,3): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7276784Z ##[error]src/dispatch-skeleton.ts(30,17): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7279529Z ##[error]src/dispatch-skeleton.ts(30,41): error TS2304: Cannot find name '__dirname'.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7282813Z ##[error]src/dispatch-skeleton.ts(87,3): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7286448Z ##[error]src/dispatch-skeleton.ts(115,3): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7298253Z ##[error]src/dispatch-skeleton.ts(125,51): error TS2345: Argument of type '{ schemaVersion: number; evidence: { kind: "review" | "other" | "spec" | "ticket" | "story" | "adr"; ownerKind: "epic" | "task" | "dispatch" | "project"; ownerId: string; uri: string; artifactId: string; version: string | null; contentHash: string | null; promotedPath: string | null; }[]; ... 10 more ...; historyTie...' is not assignable to parameter of type 'Pick<{ schemaVersion: number; evidence: { kind: "review" | "other" | "spec" | "ticket" | "story" | "adr"; ownerKind: "epic" | "task" | "dispatch" | "project"; ownerId: string; uri: string; artifactId: string; version: string | null; contentHash: string | null; promotedPath: string | null; }[]; ... 10 more ...; histo...'.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7305689Z   Type 'undefined' is not assignable to type 'Pick<{ schemaVersion: number; evidence: { kind: "review" | "other" | "spec" | "ticket" | "story" | "adr"; ownerKind: "epic" | "task" | "dispatch" | "project"; ownerId: string; uri: string; artifactId: string; version: string | null; contentHash: string | null; promotedPath: string | null; }[]; ... 10 more ...; histo...'.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7309659Z ##[error]src/dispatch-skeleton.ts(129,3): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7312335Z ##[error]src/dispatch-skeleton.ts(135,42): error TS18048: 'receiptResult.data' is possibly 'undefined'.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7322773Z ##[error]src/dispatch-skeleton.ts(137,52): error TS2345: Argument of type '{ schemaVersion: number; evidence: { kind: "review" | "other" | "spec" | "ticket" | "story" | "adr"; ownerKind: "epic" | "task" | "dispatch" | "project"; ownerId: string; uri: string; artifactId: string; version: string | null; contentHash: string | null; promotedPath: string | null; }[]; ... 10 more ...; historyTie...' is not assignable to parameter of type 'Pick<{ schemaVersion: number; evidence: { kind: "review" | "other" | "spec" | "ticket" | "story" | "adr"; ownerKind: "epic" | "task" | "dispatch" | "project"; ownerId: string; uri: string; artifactId: string; version: string | null; contentHash: string | null; promotedPath: string | null; }[]; ... 10 more ...; histo...'.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7330335Z   Type 'undefined' is not assignable to type 'Pick<{ schemaVersion: number; evidence: { kind: "review" | "other" | "spec" | "ticket" | "story" | "adr"; ownerKind: "epic" | "task" | "dispatch" | "project"; ownerId: string; uri: string; artifactId: string; version: string | null; contentHash: string | null; promotedPath: string | null; }[]; ... 10 more ...; histo...'.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7334333Z ##[error]src/dispatch-skeleton.ts(141,3): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7337425Z ##[error]src/index.test.ts(1,20): error TS2307: Cannot find module 'node:assert/strict' or its corresponding type declarations.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7340313Z ##[error]src/index.test.ts(2,18): error TS2307: Cannot find module 'node:test' or its corresponding type declarations.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7342937Z ##[error]src/index.ts(1,40): error TS2307: Cannot find module 'node:crypto' or its corresponding type declarations.
+publish	Build and test maintained packages	2026-10-05T18:13:31.7423273Z npm error Lifecycle script `build` failed with error:
+publish	Build and test maintained packages	2026-10-05T18:13:31.7424209Z npm error code 2
+publish	Build and test maintained packages	2026-10-05T18:13:31.7425704Z npm error path /home/runner/work/mapctx/mapctx/packages/adapter-traycer
+publish	Build and test maintained packages	2026-10-05T18:13:31.7426771Z npm error workspace @mapctx/adapter-traycer@0.1.0
+publish	Build and test maintained packages	2026-10-05T18:13:31.7427889Z npm error location /home/runner/work/mapctx/mapctx/packages/adapter-traycer
+publish	Build and test maintained packages	2026-10-05T18:13:31.7429311Z npm error command failed
+publish	Build and test maintained packages	2026-10-05T18:13:31.7431613Z npm error command sh -c tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:13:31.7638790Z ##[error]Process completed with exit code 2.
