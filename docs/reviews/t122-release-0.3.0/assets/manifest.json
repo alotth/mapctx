@@ -1,42 +1,50 @@
 {
-  "node22-smoke.log": {
-    "sha256": "ed976b5075f561b4cc8d9c6b31bb3211a84366b438041df0f9cf57775b68bfbb",
-    "bytes": 11202
-  },
-  "pack-smoke.log": {
-    "sha256": "a42b13e6e6a0fb3cedf778d99f6b9f1d25237e3ad26a7b9498ef9acce05671f6",
-    "bytes": 10957
-  },
-  "tests.log": {
-    "sha256": "f8bcbbe281236c2d1067a376d6d7f9755d9947319b58adc420a2e06bc4debc82",
-    "bytes": 66721
-  },
-  "clean-build.log": {
-    "sha256": "73b9dd533a15d39d60cca3228c84dac490601fe6d7b7e1b28b6fd6485c88bab8",
-    "bytes": 5640
-  },
-  "ci.log": {
-    "sha256": "330ad7b97d6b835fc6b0281e4b13e10663752666649ce49c87f05c565ae7bb11",
-    "bytes": 28
-  },
   "build.log": {
     "sha256": "8f28ab38eb129c07dd5fcb909ee826e45c21305357115ccdabd7e99a477bf4f7",
     "bytes": 970
-  },
-  "ci-retry.log": {
-    "sha256": "d8278ab3aceabe4471979c192f32e868850cdcd8138b9d49c50efa297e003b92",
-    "bytes": 25
-  },
-  "tests-retry.log": {
-    "sha256": "43cb2b11ec3e6bc626f6558f0b02c1cc81a52530126350678f06cdcc4bc0137d",
-    "bytes": 66830
   },
   "ci-failure.log": {
     "sha256": "775947d72a7b5328cabb8265962b3c3f0471cc936a5887c90db539fa3959d38c",
     "bytes": 11321
   },
+  "ci-fixture-failure.log": {
+    "sha256": "0a849dc872d4dc234cd420cac479e76de7ef0c8799a2da902e061ddb2480efdf",
+    "bytes": 180917
+  },
+  "ci-retry.log": {
+    "sha256": "d8278ab3aceabe4471979c192f32e868850cdcd8138b9d49c50efa297e003b92",
+    "bytes": 25
+  },
+  "ci.log": {
+    "sha256": "330ad7b97d6b835fc6b0281e4b13e10663752666649ce49c87f05c565ae7bb11",
+    "bytes": 28
+  },
+  "clean-build.log": {
+    "sha256": "73b9dd533a15d39d60cca3228c84dac490601fe6d7b7e1b28b6fd6485c88bab8",
+    "bytes": 5640
+  },
+  "fixture-env.log": {
+    "sha256": "d8cece67892a4735f1b11ab5523b18fdb02bdb49dd7eda089e70efc230c5a7f7",
+    "bytes": 864
+  },
+  "node22-smoke.log": {
+    "sha256": "ed976b5075f561b4cc8d9c6b31bb3211a84366b438041df0f9cf57775b68bfbb",
+    "bytes": 11202
+  },
   "pack-smoke-retry.log": {
     "sha256": "5d549f14b19a96fc36aeb5d2113a0ab779f738a8cdc86267a7e8f0090f0d3e2f",
     "bytes": 10957
+  },
+  "pack-smoke.log": {
+    "sha256": "a42b13e6e6a0fb3cedf778d99f6b9f1d25237e3ad26a7b9498ef9acce05671f6",
+    "bytes": 10957
+  },
+  "tests-retry.log": {
+    "sha256": "d974736b8ee99acaf29625d91a6771d99baadd2afa6d0799d2dde123b61c108e",
+    "bytes": 66716
+  },
+  "tests.log": {
+    "sha256": "f8bcbbe281236c2d1067a376d6d7f9755d9947319b58adc420a2e06bc4debc82",
+    "bytes": 66721
   }
 }

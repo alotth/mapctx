@@ -1034,7 +1034,7 @@ bootstrap --from github completed. Created 1, updated 1.
   "claim": {
     "claimId": "4290e9a6-5dfb-4c95-9d1e-b350c5ec4fc6",
     "taskId": "T-201",
-    "leaseToken": "be60c85e9f47dd6a840521c63c19a6f4b57ff9d0490f9b08",
+    "leaseToken": "[redacted]",
     "state": "active",
     "claimedAt": "2026-10-05T18:17:33.419Z",
     "expiresAt": "2026-10-05T18:47:33.419Z",
@@ -1052,7 +1052,7 @@ bootstrap --from github completed. Created 1, updated 1.
   "claim": {
     "claimId": "e0bfc4f9-6ffc-4d55-b5b0-b8040690aeca",
     "taskId": "T-201",
-    "leaseToken": "27327c9142d7f1c4aded307971e9fed565eda0ea44736749",
+    "leaseToken": "[redacted]",
     "state": "active",
     "claimedAt": "2026-10-05T18:17:34.387Z",
     "expiresAt": "2026-10-05T18:47:34.387Z",
@@ -1190,7 +1190,7 @@ bootstrap --from github completed. Created 1, updated 1.
   "activeClaim": {
     "claimId": "562c8e91-f31e-4dd3-9465-97e3132ece94",
     "taskId": "T-201",
-    "leaseToken": "f03fb33fa335d13be834825cf88149520fbdb8292fd8272a",
+    "leaseToken": "[redacted]",
     "state": "active",
     "claimedAt": "2026-10-05T18:17:35.147Z",
     "expiresAt": "2026-10-05T18:47:35.147Z",

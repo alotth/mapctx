@@ -1,0 +1,14 @@
+Error: history commit refused -- approval set does not match the current scoped scan (nothing written):
+  - T-202 opencode:oc-pin: session source changed since the approved dry-run (approval pin 8814d7d8 != scan fa4f9fc2) -- re-review required
+correct: receipt 55555555-5555-4555-8555-555555555555/1 marked invalid for E-005 (correction 446bb52e-e58c-4270-819d-2ce896bb786b); original remains queryable
+✔ review5: CLI --include-inferred reaches the emitted approval template (end-to-end parser, not helper) (838.659667ms)
+✔ review5b: opencode source pin covers session content; stale approvals refuse with zero writes (2155.196416ms)
+✔ review5c: CLI corrects an epic-owned receipt on a TERMINAL epic without lifecycle mutation (604.405625ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3687.137084

@@ -1,0 +1,1462 @@
+publish	Build and test maintained packages	﻿2026-10-05T18:20:07.8587616Z ##[group]Run npm test
+publish	Build and test maintained packages	2026-10-05T18:20:07.8588198Z ^[[36;1mnpm test^[[0m
+publish	Build and test maintained packages	2026-10-05T18:20:07.8656668Z shell: /usr/bin/bash -e {0}
+publish	Build and test maintained packages	2026-10-05T18:20:07.8657091Z env:
+publish	Build and test maintained packages	2026-10-05T18:20:07.8657563Z   NPM_CONFIG_USERCONFIG: /home/runner/work/_temp/.npmrc
+publish	Build and test maintained packages	2026-10-05T18:20:07.8658027Z   NODE_AUTH_TOKEN: XXXXX-XXXXX-XXXXX-XXXXX
+publish	Build and test maintained packages	2026-10-05T18:20:07.8658395Z ##[endgroup]
+publish	Build and test maintained packages	2026-10-05T18:20:07.9927637Z 
+publish	Build and test maintained packages	2026-10-05T18:20:07.9928355Z > test
+publish	Build and test maintained packages	2026-10-05T18:20:07.9929121Z > npm run build && npm run test --workspaces --if-present
+publish	Build and test maintained packages	2026-10-05T18:20:07.9929545Z 
+publish	Build and test maintained packages	2026-10-05T18:20:08.0949283Z 
+publish	Build and test maintained packages	2026-10-05T18:20:08.0950142Z > build
+publish	Build and test maintained packages	2026-10-05T18:20:08.0951199Z > npm run build:sync-engine && npm run build --workspace @mapctx/adapter-traycer
+publish	Build and test maintained packages	2026-10-05T18:20:08.0951914Z 
+publish	Build and test maintained packages	2026-10-05T18:20:08.2015685Z 
+publish	Build and test maintained packages	2026-10-05T18:20:08.2017020Z > build:sync-engine
+publish	Build and test maintained packages	2026-10-05T18:20:08.2019668Z > npm run build --workspace @mapctx/protocol && npm run build --workspace @mapctx/core && npm run build --workspace @mapctx/store && npm run build --workspace @mapctx/planner && npm run build --workspace @mapctx/forecast && npm run build --workspace @mapctx/sync-engine
+publish	Build and test maintained packages	2026-10-05T18:20:08.2021687Z 
+publish	Build and test maintained packages	2026-10-05T18:20:08.3317691Z 
+publish	Build and test maintained packages	2026-10-05T18:20:08.3318667Z > @mapctx/protocol@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:20:08.3319408Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:20:08.3319732Z 
+publish	Build and test maintained packages	2026-10-05T18:20:10.5135360Z 
+publish	Build and test maintained packages	2026-10-05T18:20:10.5136784Z > @mapctx/core@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:20:10.5137630Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:20:10.5137942Z 
+publish	Build and test maintained packages	2026-10-05T18:20:11.8067572Z 
+publish	Build and test maintained packages	2026-10-05T18:20:11.8068324Z > @mapctx/store@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:20:11.8068992Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:20:11.8069279Z 
+publish	Build and test maintained packages	2026-10-05T18:20:14.5137935Z 
+publish	Build and test maintained packages	2026-10-05T18:20:15.7988717Z > @mapctx/planner@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:20:15.7989660Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:20:15.7990111Z 
+publish	Build and test maintained packages	2026-10-05T18:20:15.7990143Z 
+publish	Build and test maintained packages	2026-10-05T18:20:17.4507366Z > @mapctx/forecast@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:20:17.4508054Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:20:17.4508378Z 
+publish	Build and test maintained packages	2026-10-05T18:20:17.4508393Z 
+publish	Build and test maintained packages	2026-10-05T18:20:17.4508730Z > @mapctx/sync-engine@0.3.1 build
+publish	Build and test maintained packages	2026-10-05T18:20:17.4511085Z > rm -rf node_modules/@mapctx/core && tsc -p tsconfig.json && chmod +x dist/cli.js dist/mapctx-cli.js && rm -rf dist/workspace-ui && mkdir -p dist/workspace-ui && cp src/workspace-ui/workspaceV2.* dist/workspace-ui/
+publish	Build and test maintained packages	2026-10-05T18:20:17.4513114Z 
+publish	Build and test maintained packages	2026-10-05T18:20:20.1631451Z 
+publish	Build and test maintained packages	2026-10-05T18:20:20.1632891Z > @mapctx/adapter-traycer@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:20:20.1633713Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:20:20.1634035Z 
+publish	Build and test maintained packages	2026-10-05T18:20:21.3238154Z 
+publish	Build and test maintained packages	2026-10-05T18:20:21.3238935Z > @mapctx/adapter-traycer@0.1.0 test
+publish	Build and test maintained packages	2026-10-05T18:20:21.3239823Z > npm run build && node --test dist/**/*.test.js
+publish	Build and test maintained packages	2026-10-05T18:20:21.3240323Z 
+publish	Build and test maintained packages	2026-10-05T18:20:21.4531292Z 
+publish	Build and test maintained packages	2026-10-05T18:20:21.4532080Z > @mapctx/adapter-traycer@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:20:21.4533378Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:20:21.4533810Z 
+publish	Build and test maintained packages	2026-10-05T18:20:22.6660505Z ✔ maps a canonical task to a schema-valid DispatchEnvelope (4.05143ms)
+publish	Build and test maintained packages	2026-10-05T18:20:22.6675609Z ✔ renders only closed Traycer frontmatter and links MapCtx as authority (0.519265ms)
+publish	Build and test maintained packages	2026-10-05T18:20:22.6677139Z ✔ imports Traycer-first tickets as explicitly unplanned (0.595397ms)
+publish	Build and test maintained packages	2026-10-05T18:20:22.6678348Z ✔ promotes artifacts only with explicit approval (0.447432ms)
+publish	Build and test maintained packages	2026-10-05T18:20:22.6679697Z ✔ maps a synthetic multi-task plan without owning planner scheduling (1.068776ms)
+publish	Build and test maintained packages	2026-10-05T18:20:22.6787049Z ℹ tests 5
+publish	Build and test maintained packages	2026-10-05T18:20:22.6787851Z ℹ suites 0
+publish	Build and test maintained packages	2026-10-05T18:20:22.6788536Z ℹ pass 5
+publish	Build and test maintained packages	2026-10-05T18:20:22.6789184Z ℹ fail 0
+publish	Build and test maintained packages	2026-10-05T18:20:22.6789858Z ℹ cancelled 0
+publish	Build and test maintained packages	2026-10-05T18:20:22.6790413Z ℹ skipped 0
+publish	Build and test maintained packages	2026-10-05T18:20:22.6790904Z ℹ todo 0
+publish	Build and test maintained packages	2026-10-05T18:20:22.6791681Z ℹ duration_ms 121.0887
+publish	Build and test maintained packages	2026-10-05T18:20:22.6864696Z 
+publish	Build and test maintained packages	2026-10-05T18:20:22.6865236Z > @mapctx/forecast@0.1.0 test
+publish	Build and test maintained packages	2026-10-05T18:20:22.6866079Z > npm run build && node --test dist/**/*.test.js
+publish	Build and test maintained packages	2026-10-05T18:20:22.6866483Z 
+publish	Build and test maintained packages	2026-10-05T18:20:22.8199688Z 
+publish	Build and test maintained packages	2026-10-05T18:20:22.8200672Z > @mapctx/forecast@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:20:22.8202161Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:20:22.8203098Z 
+publish	Build and test maintained packages	2026-10-05T18:20:24.8304900Z ✔ Claude prompt/end ownership, tool results, overnight parking, privacy (326.559421ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8318377Z ✔ overlapping sessions union once with agent ownership priority (1.403118ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8320196Z ✔ human-only evidence measures human wait but cannot calibrate agent time (1.499086ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8322004Z ✔ session spans retain idle gap; task duration unions disjoint and overlapping sessions (1.18335ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8332052Z ✔ reversed or invalid other-session activity never corroborates parked time (1.907946ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8335162Z ✔ old, empty, malformed, and out-of-bounds evidence never claims measurement (2.229544ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8464251Z ✔ active time excludes idle gaps and task duration unions sessions (1.903749ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8465717Z ✔ shadow cost is priced independently from cash billing and allocation (0.684542ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8467238Z ✔ estimate fallback declares low confidence and uses active time prior (3.334949ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8468533Z ✔ receipt-only durations report substituted coverage, never measured (1.364997ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8469701Z ✔ only strictly interior run events establish measured coverage (0.526739ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8470964Z ✔ boundary-only and out-of-range run events remain wall-clock substitution (0.355251ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8472428Z ✔ interior timestamps yield measured coverage and exclude the idle gap (0.279099ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8474155Z ✔ idle threshold is exclusive: a gap exactly at the threshold is idle (0.40854ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8475275Z ✔ no usable timestamps report coverage none (0.267688ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8476439Z ✔ estimate built on substituted samples says so in assumptions (1.296951ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8477722Z ✔ one substituted sample downgrades an otherwise measured estimate (0.803934ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8478987Z ✔ estimate provenance records interval classification policy (0.70982ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8480444Z ✔ durationCoverageFromAssumptions reads the coverage back out of a real snapshot (1.181055ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8482121Z ✔ durationCoverageFromAssumptions defaults to none for missing or malformed assumptions (0.15066ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8486528Z ✔ isPriorFallbackEstimate flags estimates with no historical samples (1.128728ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8487868Z ✔ prior-derived estimates vary by declared workload (0.480974ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8489203Z ✔ a prior-derived estimate names the prior it used and stays low confidence (0.305407ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8490788Z ✔ expert-guess transitions to historical-baseline once real actuals exist (2.093772ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8491697Z ✔ historical baselines prefer same-workload samples and say so when ungrouped (0.566734ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8493208Z ✔ workloadBaselines answers per-workload questions and excludes untagged samples (9.161468ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8494948Z ✔ pools key on the DISCOVERED workload: re-attributed actuals leave the planned pool (0.568326ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8496826Z ✔ snapshot carries the task-level re-attribution note when planned differs from discovered (0.302602ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8498721Z ✔ estimation error aggregates per planned workload, deterministic and untagged-blind (1.274529ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8500354Z ✔ model tier is a derived lens over raw ids; unknown stays unclassified (0.639108ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8501640Z ✔ duration display picks its unit from magnitude (1.015147ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8503242Z ✔ no fixed unit: hours never render as days, days never render as minutes (0.286793ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8504454Z ✔ invalid durations render as no data (0.163524ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8506316Z ✔ parseEstimatedEffortMs parses agent-active free text into milliseconds (0.416204ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8507950Z ✔ parseEstimatedEffortMs documents the agent-active day and week convention (0.381228ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8509772Z ✔ parseEstimatedEffortMs returns null for junk instead of fabricating a duration (1.153894ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8511760Z ✔ codex: toolcall links, file-edit links, bare mention stays weak (188.65868ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8513563Z ✔ opencode rows: bash toolcall links; db opened read-only by caller (1.228393ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8515114Z ✔ claude: signal scan reuses T-100 interval extractor, never reimplements it (1.412014ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8516769Z ✔ multi-task session splits: primary measured, secondary inferred, ambiguous listed (1.250394ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8518213Z ✔ reversed and degenerate spans rejected, never fabricated (1.595205ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8519243Z ✔ receipt build validates, scans are idempotent, privacy holds (2.847713ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8519903Z ✔ inferred and declared tiers never enter calibration (1.146119ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8520521Z ✔ generic filesAffected entries never link (specificity floor) (0.259452ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8521179Z ✔ git commits link inferred; multi-task commits go to manual review (0.458072ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8521864Z ✔ T-116 scope: identical task IDs in another repository never link (0.562946ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8522528Z ✔ T-116 scope: linked worktrees of the same repository stay in scope (0.622497ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8524199Z ✔ T-116 scope: unverifiable cwd is listed, never linked or measured (0.29615ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8525066Z ✔ T-116: without a scope the report keeps the unscoped behavior (0.622808ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8526101Z ✔ review2 finding1: foreign per-command workdir overrides never link, even in a MapCtx session (0.449936ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8526970Z ✔ review2 finding1: all-foreign commands leave the session unlinked and unmeasured (0.278487ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8528100Z ✔ review2 finding1: any foreign command degrades measured time even when in-scope signals link (0.412116ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8528934Z ✔ review2 finding1: in-scope worktree workdir override still links and measures (0.613561ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8529914Z ✔ review2 finding1: codex exec JS-source input carries workdir/cd provenance (a617 shape) (0.379345ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8570443Z ✔ the duration prior varies by declared workload (1.052076ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8571474Z ✔ the Easy prior is anchored to this repository's measured wave1 actuals (0.162352ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8573129Z ✔ prior derivation is written down in the assumptions, not buried (0.324183ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8573868Z ✔ P90 retains the 2x P50 spread across all workloads (0.162311ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8574587Z ✔ priorForWorkload falls back to the default workload and rejects typos (0.45192ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.8575576Z ✔ DEFAULT_PRIOR is the default-workload prior, kept as a back-compat alias (0.18294ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.9662339Z ✔ store forecast measures active time from persisted events across idle gap (158.628991ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.9667942Z ✔ store forecast labels receipt-only duration as substituted (32.32016ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.9672880Z ✔ store bridge pools by discovered workload and reports estimation error per planned (35.250045ms)
+publish	Build and test maintained packages	2026-10-05T18:20:24.9770536Z ℹ tests 63
+publish	Build and test maintained packages	2026-10-05T18:20:24.9771370Z ℹ suites 0
+publish	Build and test maintained packages	2026-10-05T18:20:24.9772094Z ℹ pass 63
+publish	Build and test maintained packages	2026-10-05T18:20:24.9773056Z ℹ fail 0
+publish	Build and test maintained packages	2026-10-05T18:20:24.9773796Z ℹ cancelled 0
+publish	Build and test maintained packages	2026-10-05T18:20:24.9774355Z ℹ skipped 0
+publish	Build and test maintained packages	2026-10-05T18:20:24.9774934Z ℹ todo 0
+publish	Build and test maintained packages	2026-10-05T18:20:24.9775561Z ℹ duration_ms 581.490126
+publish	Build and test maintained packages	2026-10-05T18:20:24.9840992Z 
+publish	Build and test maintained packages	2026-10-05T18:20:24.9841306Z > @mapctx/planner@0.1.0 test
+publish	Build and test maintained packages	2026-10-05T18:20:24.9842018Z > npm run build && node --test dist/**/*.test.js
+publish	Build and test maintained packages	2026-10-05T18:20:24.9842315Z 
+publish	Build and test maintained packages	2026-10-05T18:20:25.1144910Z 
+publish	Build and test maintained packages	2026-10-05T18:20:25.1146471Z > @mapctx/planner@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:20:25.1147653Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:20:25.1147988Z 
+publish	Build and test maintained packages	2026-10-05T18:20:26.4123235Z ✔ DAG waves serialize colliding writes and expose per-claim explanation (10.756805ms)
+publish	Build and test maintained packages	2026-10-05T18:20:26.4125150Z ✔ same board gives byte-identical output regardless of task input order (1.358305ms)
+publish	Build and test maintained packages	2026-10-05T18:20:26.4138466Z ✔ paused/review/doing statuses and container epics are excluded; leaf work is recommended (0.584316ms)
+publish	Build and test maintained packages	2026-10-05T18:20:26.4141332Z ✔ dependency on paused work and workflow gates have named blocking reasons (0.418428ms)
+publish	Build and test maintained packages	2026-10-05T18:20:26.4143148Z ✔ depends-on edge: from waits on to (0.330404ms)
+publish	Build and test maintained packages	2026-10-05T18:20:26.4144439Z ✔ blocks edge: to waits on from (0.265314ms)
+publish	Build and test maintained packages	2026-10-05T18:20:26.4146212Z ✔ ready task depending on a completed task schedules and is not dropped (regression for T-063) (0.24768ms)
+publish	Build and test maintained packages	2026-10-05T18:20:26.4148201Z ✔ tasks stuck in a dependency cycle are named in blockedReasons, not silently dropped (0.241869ms)
+publish	Build and test maintained packages	2026-10-05T18:20:26.4150491Z ✔ completeness invariant: every non-terminal, non-container task appears in a wave or in blockedReasons (0.55965ms)
+publish	Build and test maintained packages	2026-10-05T18:20:26.4152456Z ✔ executor capacity limits each wave without changing collision explanation (0.367383ms)
+publish	Build and test maintained packages	2026-10-05T18:20:26.4237380Z ✔ collision emitted only after successful terminal receipts and uncovered overlap (10.566181ms)
+publish	Build and test maintained packages	2026-10-05T18:20:26.4238301Z ✔ overbroad uses serialized explanation and actual receipts (0.483418ms)
+publish	Build and test maintained packages	2026-10-05T18:20:26.4240893Z ℹ tests 12
+publish	Build and test maintained packages	2026-10-05T18:20:26.4241276Z ℹ suites 0
+publish	Build and test maintained packages	2026-10-05T18:20:26.4241725Z ℹ pass 12
+publish	Build and test maintained packages	2026-10-05T18:20:26.4242079Z ℹ fail 0
+publish	Build and test maintained packages	2026-10-05T18:20:26.4242317Z ℹ cancelled 0
+publish	Build and test maintained packages	2026-10-05T18:20:26.4242807Z ℹ skipped 0
+publish	Build and test maintained packages	2026-10-05T18:20:26.4243054Z ℹ todo 0
+publish	Build and test maintained packages	2026-10-05T18:20:26.4243319Z ℹ duration_ms 118.299278
+publish	Build and test maintained packages	2026-10-05T18:20:26.4302808Z 
+publish	Build and test maintained packages	2026-10-05T18:20:26.4303202Z > @mapctx/protocol@0.1.0 test
+publish	Build and test maintained packages	2026-10-05T18:20:26.4303751Z > npm run build && node --test dist/**/*.test.js
+publish	Build and test maintained packages	2026-10-05T18:20:26.4304070Z 
+publish	Build and test maintained packages	2026-10-05T18:20:26.5595106Z 
+publish	Build and test maintained packages	2026-10-05T18:20:26.5596281Z > @mapctx/protocol@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:20:26.5597238Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:20:26.5597688Z 
+publish	Build and test maintained packages	2026-10-05T18:20:28.6034903Z ✔ dispatch attempt state machine: legal transitions and terminal states have none (2.897146ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6050036Z ✔ evaluateRunReceipt accepts the receipt for the current (latest) attempt (0.549521ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6076618Z ✔ evaluateRunReceipt rejects a late receipt from an obsolete attempt (0.317931ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6093244Z ✔ evaluateRunReceipt rejects a duplicate receipt for an already-accepted attempt (0.322179ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6095473Z ✔ evaluateRunReceipt rejects receipts for an unknown attempt or the wrong dispatch (0.300539ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6097604Z ✔ recordAttempt is idempotent per attempt number and keeps history sorted (0.326998ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6100050Z ✔ RunReceipt requires failure detail exactly when outcome is failed (4.542885ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6365854Z ✔ every entity and envelope has a schema and a versioned golden fixture (2.688467ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6368895Z ✔ golden fixtures parse and stay byte-stable (6.932814ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6372228Z ✔ schemaVersion is required on dispatch/run envelopes and incompatible versions are rejected (1.359577ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6377235Z ✔ identity scheme links MapCtx task, Traycer epic/artifact, and GitHub issue (0.68354ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6379765Z ✔ planning and execution are separate machines; illegal transitions fail (0.867022ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6418198Z ✔ event log identity is (nodeId, sequence) and forbids autoincrement fields (0.405574ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6422053Z ✔ UsageEvent carries source and coverage (0.361502ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6432403Z ✔ CostEvent has three measures and PlanPeriod is open|closed (0.393482ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6434394Z ✔ PlanPeriod is account-scoped but pre-004 rows (accountId absent) stay valid (0.488077ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6435992Z ✔ Budget is unit-agnostic (money|time) and refuses mixed units (2.895566ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6438088Z ✔ Account carries a currency and Money rejects floats and bad codes (0.616486ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6441290Z ✔ duration measures and estimate snapshots are explicit data (0.300539ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6445219Z ✔ workflow gates model approved and skipped-with-reason (0.3444ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6454110Z ✔ migration map covers every current TASKS.md and detail field (1.492204ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6537344Z ✔ money serializes round-trip through canonical JSON (3.349526ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6538946Z ✔ the decision example renders 200.000000 USD (0.24719ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6539924Z ✔ parseMoneyAmount round-trips with formatMoney (1.328389ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6541080Z ✔ parseMoneyAmount rejects precision loss, junk, and bad currency (1.200902ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6542310Z ✔ minorUnitsToDecimalString is exact at every decimals width (0.269631ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6544657Z ✔ cents and micros convert exactly into minor units, and refuse lossy grids (0.524876ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6546076Z ✔ R7: parseMoneyAmount rejects values outside the safe-integer range exactly (1.957742ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6547437Z ✔ R7: minorUnitsToDecimalString stays exact without float division (0.206825ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6548722Z ✔ R7: grid conversions refuse results beyond the safe-integer range (0.394613ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6549973Z ✔ R7: scaling and sums throw before a rounded/wrapped amount persists (1.132465ms)
+publish	Build and test maintained packages	2026-10-05T18:20:28.6550760Z ℹ tests 31
+publish	Build and test maintained packages	2026-10-05T18:20:28.6551128Z ℹ suites 0
+publish	Build and test maintained packages	2026-10-05T18:20:28.6551504Z ℹ pass 31
+publish	Build and test maintained packages	2026-10-05T18:20:28.6551864Z ℹ fail 0
+publish	Build and test maintained packages	2026-10-05T18:20:28.6552233Z ℹ cancelled 0
+publish	Build and test maintained packages	2026-10-05T18:20:28.6552796Z ℹ skipped 0
+publish	Build and test maintained packages	2026-10-05T18:20:28.6553214Z ℹ todo 0
+publish	Build and test maintained packages	2026-10-05T18:20:28.6553603Z ℹ duration_ms 138.812566
+publish	Build and test maintained packages	2026-10-05T18:20:28.6612461Z 
+publish	Build and test maintained packages	2026-10-05T18:20:28.6613031Z > @mapctx/store@0.1.0 test
+publish	Build and test maintained packages	2026-10-05T18:20:28.6613795Z > npm run build && node --test dist/**/*.test.js
+publish	Build and test maintained packages	2026-10-05T18:20:28.6614121Z 
+publish	Build and test maintained packages	2026-10-05T18:20:28.7911966Z 
+publish	Build and test maintained packages	2026-10-05T18:20:28.7912935Z > @mapctx/store@0.1.0 build
+publish	Build and test maintained packages	2026-10-05T18:20:28.7913841Z > tsc -p tsconfig.json
+publish	Build and test maintained packages	2026-10-05T18:20:28.7914164Z 
+publish	Build and test maintained packages	2026-10-05T18:20:31.8923758Z ✔ T-121 regression (ELA T-063): authored review note inside Acceptance survives export in place (50.60939ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8931133Z ✔ T-121 regression: authored plain-bullet evidence list inside Acceptance survives export (36.372122ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8933480Z ✔ T-121 regression: interleaved evidence note keeps its position between its criteria (42.162273ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8964160Z ✔ T-121: legacy plain bullet that is a canonical criterion renders exactly once as a checkbox (32.580429ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8982150Z ✔ T-121: export is idempotent and canonical state wins over the stale mirror (39.322474ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8984237Z ✔ T-121: nested headings and fenced examples inside Acceptance survive in place, idempotently (0.72639ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8985095Z ✔ T-121: an unclosed fence inside the section refuses before publication (0.785761ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8985838Z ✔ T-121: multiple real Acceptance sections refuse before publication (0.268709ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8986660Z ✔ T-121: duplicate legacy bullets consume the criterion once; the duplicate stays authored prose (0.707435ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8987607Z ✔ T-121: a stale checkbox bullet that matches no current criterion is dropped (store owns the section) (0.456949ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8988663Z ✔ T-121 (attempt-4 P1): criteria added after a trailing authored note refuse (association is uncertain) (0.441891ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8993966Z ✔ T-121: criteria added with no authored prose after the first criterion render in place, idempotently (0.327408ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8995683Z ✔ T-121: export refuses an in-section unclosed fence before any write (33.242492ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8997425Z ✔ T-121 F2: dropping a renamed/removed criterion strands adjacent evidence -> refuse before write (31.867574ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.8999106Z ✔ T-121 F3: checkbox-only reorder renders canonical order, idempotently (0.338309ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.9001086Z ✔ T-121 F3: reorder with interleaved authored note refuses before publication (0.21499ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.9003189Z ✔ T-121 F3: reorder with preface-only authored prose keeps the preface and renders canonical order (0.261325ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.9005211Z ✔ T-121 F3 (attempt-4 P1, reviewer repro 1): reorder with trailing evidence refuses before publication (0.222644ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.9007612Z ✔ T-121 F3 (attempt-4 P1, reviewer repro 2): added criterion with trailing evidence refuses before publication (0.202467ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.9009484Z ✔ T-121 F3: trailing fenced example with reordered criteria refuses before publication (0.205622ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.9011225Z ✔ T-121 F3: trailing nested heading with reordered criteria refuses before publication (0.158284ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.9034991Z ✔ T-121: owned criteria appended AFTER authored-only prose; no association is invented (0.163354ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.9037276Z ✔ T-121 F3: missing criterion with interleaved authored prose refuses (insertion would reassociate) (0.149237ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.9038757Z ✔ T-121 F4: matched nested bullet keeps its indentation and hierarchy (0.192688ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.9039620Z ✔ T-121 F4: reorder with indented (hierarchical) bullets refuses before publication (0.218676ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.9040491Z ✔ T-121 F1: unowned render preserves authored-only section and refuses stale checkboxes (0.469152ms)
+publish	Build and test maintained packages	2026-10-05T18:20:31.9041472Z ✔ T-121 F1: export with canonical EMPTY revision preserves authored prose and refuses stranded evidence (73.923437ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.3208256Z ✔ Acceptance import pins observed bytes and maps only explicit checkboxes (165.318489ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.3234900Z ✔ new Acceptance revision resets approvals, protects expected revision, and empty revision keeps counter (155.331346ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.3236598Z ✔ done gate uses canonical Acceptance and never reads local detail changes (160.195225ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.3238141Z ✔ library revise/approve/unapprove REQUIRE expectRevision and refuse without it (zero events) (138.356995ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.3251330Z ✔ raw acceptance.revised cannot carry approval metadata into a pending new revision (zero writes) (142.244034ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6726648Z ✔ attestation draft refuses nodes that are not DB-only (43.256383ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6754330Z ✔ attestation draft verifies payload hashes under both documented schemes and pins exact bytes (39.31897ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6756332Z ✔ attestation commit requires the exact reviewed token and is duplicate-safe (56.056249ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6757853Z ✔ malformed attestation files are a loud failure, never silently ignored (39.550016ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6759385Z ✔ verifyRowPayloadHash accepts canonical and compact-legacy schemes only (25.37427ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6761101Z ✔ repair refuses a DB-only node without an attestation and leaves the database untouched (40.439988ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6766641Z ✔ repair replays attested DB-only rows byte-exactly and treats the absent prefix as declared (103.078274ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6769259Z ✔ repair fails closed when an intact database drifts from, loses, or gains attested rows (63.3195ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6776756Z ✔ repair refuses unexpected journal data on an attested DB-only node (45.439044ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6804806Z ✔ repair restores attested rows from the attestation alone when the database is corrupt (62.846538ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6818682Z ✔ an unattested new DB-only node still fails repair closed after another node is attested (43.804776ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6820759Z ✔ approval publishes an independent witness and refuses to run without it (92.671343ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6822848Z ✔ partial attestation file damage still yields named gaps via the witness (57.852114ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6824936Z ✔ crash after witness publishes no file; witness survives; repair refuses; re-approval is idempotent (71.808543ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6844469Z ✔ divergent watermark refuses both draft and repair; repair demands the witness for attested nodes (40.427878ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6846755Z ✔ raw causation bytes survive replay across repeated repairs (all 11 columns) (89.184568ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6855135Z ✔ invalid drafts fail validation before any token, witness, or file exists (43.093825ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6856999Z ✔ re-confirmation restores a missing witness via the normal commands, conserving original approval metadata (95.187781ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.6859180Z ✔ re-confirmation refuses divergent content and divergent witness with zero writes (48.48769ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8125141Z ✔ accounts are event-sourced, resolvable by id or unique name, and duplicates are refused (73.029777ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8132445Z ✔ plan periods are account-scoped through the re-scoped projection (37.877257ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8134554Z ✔ projects declare which accounts they draw from (replace-all bindings) (49.752121ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8142016Z ✔ budget.set revisions keep history and latest-wins resolution is event-order correct (42.345763ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8152893Z ✔ budget scope for epics is transitive descendants; project scope is every task (40.865492ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8158284Z ✔ money rollup: cash plus allocated count, unpriced stays unattributed, coverage degrades honestly (73.084865ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8160207Z ✔ honest no-data states: no dispatches, empty usage/cost data, unattributed, cross-currency (44.437101ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8164111Z ✔ time rollup consumes receipt wall clock and reports its basis (50.260813ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8173285Z ✔ R15: dated money budgets are refused at budget.set (34.597734ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8194071Z ✔ R15: dated time budgets consume only the receipt/period intersection (82.824115ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8203679Z ✔ R16: negative costs net as credits with sign-independent coverage (56.794438ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8206365Z ✔ R7: money rollup refuses aggregates beyond safe-integer range (46.473406ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8208083Z ✔ rollup determinism: status JSON is byte-identical across reads and after full journal rebuild (100.382443ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.8210153Z ✔ epic detail export carries the generated budget projection, round-trip stable (41.196608ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.9294559Z ✔ claimTask: concurrent claims on the same task -- exactly one winner (50.265039ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.9308113Z ✔ renewClaim rejects a mismatched lease token and accepts the correct one (40.218715ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.9310168Z ✔ releaseClaim frees the task for a new claim; a dead lease auto-expires on the next attempt (59.355799ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.9312126Z ✔ claimTask: claiming starts work -- backlog reaches in-progress through the legal path (36.313023ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.9314509Z ✔ claimTask: ready claims jump straight to in-progress; done tasks refuse to be claimed (59.221356ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.9346546Z ✔ claimTask requires workload and estimated effort for executable tasks but exempts epics (63.028752ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.9348731Z ✔ R11: releasing a lease under a running dispatch preserves execution and its receipt (50.210513ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.9350478Z ✔ R11: a done task refuses both claim and fresh dispatch (65.834715ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.9352082Z ✔ R11: completed execution is not reset when planning moves to done (49.149774ms)
+publish	Build and test maintained packages	2026-10-05T18:20:32.9438187Z ✔ queryTask returns store task/detail and deterministic bounded context metadata (52.854322ms)
+publish	Build and test maintained packages	2026-10-05T18:20:33.6912969Z ✔ dispatch attempt and receipt persist losslessly and query by task (51.618984ms)
+publish	Build and test maintained packages	2026-10-05T18:20:33.6924342Z ✔ schema-valid run events persist append-only, round-trip, order, and deduplicate by sequence (48.84454ms)
+publish	Build and test maintained packages	2026-10-05T18:20:33.6926719Z ✔ usage, cost, and immutable estimate projections survive event replay (55.425496ms)
+publish	Build and test maintained packages	2026-10-05T18:20:33.6935560Z ✔ receipt write uses evaluateRunReceipt for duplicate, stale, unknown and mismatch (42.629521ms)
+publish	Build and test maintained packages	2026-10-05T18:20:33.6937707Z ✔ older attempt-1 receipt rejected as stale after expiry, legal reclaim, and attempt 2 (54.404299ms)
+publish	Build and test maintained packages	2026-10-05T18:20:33.6940276Z ✔ retryable failed receipt re-opens through legal admission: release, reclaim, attempt 2 succeeds (90.66316ms)
+publish	Build and test maintained packages	2026-10-05T18:20:33.6950526Z ✔ dispatch admission alone re-opens a failed execution via the journaled retry-admission patch (45.305445ms)
+publish	Build and test maintained packages	2026-10-05T18:20:33.6952472Z ✔ completed execution admits a new attempt without erasing the prior receipt (77.491871ms)
+publish	Build and test maintained packages	2026-10-05T18:20:33.6954580Z ✔ receipt is immediately visible from another StoreHandle (39.897786ms)
+publish	Build and test maintained packages	2026-10-05T18:20:33.6985926Z ✔ R11 release preserves running/completed execution and receipt admission (65.346908ms)
+publish	Build and test maintained packages	2026-10-05T18:20:33.7009437Z ✔ R11 expire preserves running/completed execution and receipt admission (62.789542ms)
+publish	Build and test maintained packages	2026-10-05T18:20:33.7052459Z ✔ R11 reclaim preserves running/completed execution and receipt admission (63.879805ms)
+publish	Build and test maintained packages	2026-10-05T18:20:33.7056164Z ✔ R9: blocked receipt keeps dispatch/execution blocked and planning exportable (47.055414ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1644725Z ✔ checkDrift/validateStoreRegime: clean right after cutover, flags a manual edit per task ID (169.034719ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1663454Z ✔ reconcile discard reverts the manual edit; reconcile accept writes it into the store with manual-reconcile provenance (157.034204ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1665524Z ✔ reconcile accept refuses a manual move to done when acceptance is incomplete (128.15079ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1674301Z ✔ reconcile detects source-only drift and supports discard and accept (147.879242ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1676258Z ✔ reconcile stamps edited legacy effort active and refuses invalid authored planning (153.048437ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1688658Z ✔ validateStoreRegime fails closed as not-materialized when plansAuthority=store but no local mapctx.db exists (129.64111ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1691145Z ✔ R8: swapping two whole task blocks is drift even though parsed fields match (131.470242ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1693241Z ✔ R8: parser-ignored prose inside a task block still reports drift (129.437354ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1834558Z ✔ N1: tilde fence content is opaque; only the real section is stripped; tail survives (3.685431ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1844339Z ✔ N1: four-backtick fence wraps triple-backtick lines; closes only on a >= run (0.497925ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1854931Z ✔ N1: inline triple-backtick span is prose, never a fence opener (0.314214ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1856342Z ✔ N1: closers need the same character, a >= run, and only whitespace after (0.364387ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1857946Z ✔ N1: indented (<=3 spaces) fences open and close; CRLF is normalized (0.47851ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1859435Z ✔ N1: unclosed fence in KEPT prose is flagged; unclosed fence inside the section is not (0.384145ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1861209Z ✔ N1: strip is idempotent and parse finds nothing acceptance-like after stripping fenced examples (0.470625ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1863864Z ✔ N1: parse/strip agreement over a deterministic mixed corpus vs an independent reference (54.021777ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1865483Z ✔ N1: the import parser never treats fenced examples as observed approvals (0.395054ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1866963Z ✔ history evidence records on a done task without any lifecycle mutation (83.212631ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1898788Z ✔ evidence registration is idempotent and refuses conflicting content (40.781976ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1900645Z ✔ correction invalidates evidence and receipts; originals stay queryable; replay is faithful (88.563184ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1902900Z ✔ epic-owned history-scan receipts are correctable: canonical E-* targets, originals preserved (70.446186ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1904386Z ✔ evidence validation rejects malformed records (32.078143ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1905770Z ✔ review2 finding2: malformed receipt targets are refused before journaling (63.133923ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.1909120Z ✔ review2 finding5: impossible dates, bad activeMs, non-enum signals, extra keys all refused (35.590317ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8907330Z ✔ planImport reports zero errors and preserves order/count on the golden fixture (38.018755ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8910437Z ✔ planImport fails closed on duplicate ids, missing dependencies, and missing detail files (36.395447ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8912986Z ✔ planImport fails closed on canonical-looking symlinked detail paths, in-repo or outside-repo (37.284733ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8918529Z ✔ importCommit: cutover writes mapctx.toml with plansAuthority=store, deletes mapcs.config.json, and one export round-trips byte-identically (129.414359ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8937231Z ✔ agent-active effort and waitReason survive import, projection, export, and re-import (149.716241ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8940723Z ✔ importCommit refuses to run twice against the same repo (mapctx.toml already exists) (132.353682ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8944145Z ✔ recoverStoreFromCheckpoint rebuilds a fresh store (new node/incarnation, same projectId) from the last git-committed TASKS.md (168.939344ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8946957Z ✔ importDryRun reports the project, board path, task count, and the markdown -> store transition it would perform (39.323994ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8951445Z ✔ importDryRun after cutover names the existing project and refuses a second import instead of reporting wouldCommit (140.500169ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8954320Z ✔ importDryRun reports uncommitted board changes as blockers rather than letting the cutover commit sweep them in (39.524289ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8960023Z ✔ planImport raises unrepresentable-field-value as an error when the parser drops an out-of-enum value (35.164023ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8962355Z ✔ cutover fails closed on prerequisites-dependson-mismatch: dry-run names it as a blocker and importCommit refuses (43.749126ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8964773Z ✔ R5 noncanonical prose path refuses cutover before writes (destination occupied=false) (55.484624ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.8965857Z ✔ R5 noncanonical prose path refuses cutover before writes (destination occupied=true) (48.383617ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.9102997Z ✔ R1 rejected callback and invalid projection never become replayable, even when append errors are caught (78.602219ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.9105806Z ✔ R1 process death during callback: replay accepts all or none of the batch (154.66791ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.9108243Z ✔ R1 process death during staging: replay accepts all or none of the batch (161.128904ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.9110448Z ✔ R1 process death during published: replay accepts all or none of the batch (151.407969ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.9113167Z ✔ R2 writer waiting before BEGIN sees A's published batch without overwrite or double replay (240.003769ms)
+publish	Build and test maintained packages	2026-10-05T18:20:34.9115240Z ✔ R2 writer waiting before BEGIN sees A's commit batch without overwrite or double replay (257.317771ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.1888374Z ✔ R3 concurrent automatic creation preserves identity and detail (284.331603ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.5374882Z ✔ R3 concurrent explicit creation preserves identity and detail (256.085778ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.5395984Z ✔ R4 self/ancestor cycles rejected across patch/upsert; corrupt historical rollup terminates (44.381881ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.5400206Z ✔ R1 caught SQLite commit failure removes the published batch before releasing the lock (35.520158ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.5402415Z ✔ R2 recovery refuses a noncontiguous pending journal without allocating across the gap (32.285381ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.8598248Z (node:3057) Warning: Journal committed; watermark update failed: Error: injected meta rename failure
+publish	Build and test maintained packages	2026-10-05T18:20:35.8600390Z (Use `node --trace-warnings ...` to show where the warning was created)
+publish	Build and test maintained packages	2026-10-05T18:20:35.8602912Z ✔ P1 watermark: concurrent out-of-order post-commit updates converge on the max and stay parseable (176.999314ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.8606043Z ✔ P1 watermark persistence failure: commit stays accepted, store records the stale marker, repair keeps loss detection, open self-heals (44.390979ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.8609071Z ✔ P1 parent-fsync failure after single-entry publication durably removes the entry before rejecting (39.041525ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.8612499Z ✔ P1 parent-fsync failure after batch publication durably removes the whole batch before rejecting (39.616574ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.8615257Z ✔ P1 cleanup fsync failure surfaces an explicit INDETERMINATE outcome instead of a safe-sounding rejection (33.752533ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.8734116Z ✔ openDatabase creates schema_migrations and applies migrations exactly once (22.65057ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.8736447Z ✔ existing v1 store upgrades without losing v1 data (84.675278ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.8738283Z ✔ existing v3 store upgrades to 004 without losing plan period data (105.055865ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.8740191Z ✔ existing v5 store upgrades to v6 with legacy effort provenance left nullable (101.039417ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.8741848Z ✔ openDatabase rejects a diverged migration checksum (20.590985ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.8745027Z ✔ StoreHandle.open materializes store-meta.json, mapctx.db, and integrity checks pass (24.485117ms)
+publish	Build and test maintained packages	2026-10-05T18:20:35.9893291Z ✔ property: store state -> export -> reimport is a fixed point on the Markdown-representable field set (1201.315057ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.0005348Z ✔ R14: openReadOnly reads data without migrations, reindex, or metadata writes (37.949285ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.0007006Z ✔ R14: pending journal entry surfaces as an explicit maintenance condition (35.423959ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.0008683Z ✔ R14 P2#2: maintenance-needed is a distinct validate status with a repair remedy (42.756538ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.0010492Z ✔ R14 P3#8: hard-crash leftovers are readable-with-recovery or named repair-needed (148.6432ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7218268Z ✔ store repair rebuilds mapctx.db from the independent journal when the SQLite file is corrupt (78.297162ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7220526Z ✔ store repair reports a named gap for a missing journal entry and leaves mapctx.db untouched (52.250665ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7230538Z ✔ store repair detects a fully-deleted trailing journal entry via the sequence watermark, not just directory listing (43.677856ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7239153Z ✔ store repair with an intact, non-corrupt store is a safe no-op reprojection (90.433069ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7241114Z ✔ R12: live maintenance lock refuses open and writes; repair refuses too (74.417115ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7243167Z ✔ R12: a stale maintenance lock left by a dead process is stolen, not a permanent brick (86.380444ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7245142Z ✔ R12 P2#1: repair removes a stale -wal/-shm so the replacement is never paired with old frames (77.078436ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7247017Z ✔ R12 P3#4: an aged lock is stale even with a live PID, and open/write recover (46.387514ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7249015Z ✔ T-118: repair replays a historical dispatch on a then-legal terminal task from a multi-node journal (42.086215ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7250693Z ✔ T-118: repeated repair replay is deterministic (53.981014ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7252956Z ✔ T-118: repair replay distinguishes imported historical dispatch from a forbidden NEW dispatch on a terminal task (41.40051ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7255384Z ✔ T-118 P1: repair fails closed with a named gap when an intact DB indexes a node absent from journal and watermarks (51.197215ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7257630Z ✔ T-118 P1: a corrupt database contributes no floor -- nodes are never derived from untrusted rows (68.696856ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7259746Z ✔ T-118 P2: raw appendEvent refuses a fresh dispatch.attempted onto a terminal task and journals nothing (37.522492ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7261936Z ✔ T-118 P2: runInWriteTransaction callback refuses a terminal dispatch and aborts the whole transaction (38.97009ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7264542Z ✔ T-118 P2: raw writer refuses an illegal execution transition without the retry-admission reset (28.580612ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7279530Z ✔ T-118 P2: raw writer refuses a completed receipt whose task is not in-progress or review (36.819603ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7281864Z ✔ T-118 P2: crash-window reindex still projects already-journaled history without re-adjudication (32.196519ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7284487Z ✔ T-118 P2a: blocked receipt on a terminal-planning task is refused by BOTH command and raw writer, journaling nothing (78.767911ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7287150Z ✔ T-118 P2a: a composed transaction rolls back fully when its raw blocked receipt is refused (38.579767ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7289304Z ✔ T-118 P2a: failed receipt parity -- in-progress/blocked tasks accept it via both command and raw writer (80.498354ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7291518Z ✔ T-118 P2a: completed receipt parity -- refusal reason is identical on both paths (76.370815ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7293943Z ✔ T-118 P2a: blocked receipt good path -- in-progress task accepts it via raw writer; planning stays exportable (R9) (38.322212ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7401424Z ✔ foldSearchText strips diacritics and lowercases (1.682316ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7414607Z ✔ searchTasks matches accent-folded titles and ranks title matches first (146.157632ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7434320Z ✔ searchTasks matches summary text only (135.252637ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7453744Z ✔ searchTasks ANDs terms across fields (118.476604ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7454977Z ✔ searchTasks filters by status and honors limit (125.635994ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7456319Z ✔ searchTasks returns no matches for blank queries (124.784594ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7457869Z ✔ start persists claim, planning hops and dispatch together; competing start loses (49.318888ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7459690Z ✔ dispatch failure rolls back claim, expiry and planning events, including durable journal (49.015698ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7461748Z ✔ start retry keeps completed receipt and rejects unknown or other-task dispatch before claiming (63.895381ms)
+publish	Build and test maintained packages	2026-10-05T18:20:36.7463884Z ✔ start rejects terminal, unknown and incomplete planning without events (39.459603ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.3982898Z ✔ waitReason validates and survives projection reads (148.338754ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.3984556Z ✔ T-102 predictedStart patches, validates, clears, and survives projection reads (133.807879ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.3986793Z ✔ createTask retains waitReason through event, projection, and export; rejects invalid input (149.070144ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.3990200Z ✔ acceptance parser requires explicit checks and keeps nested acceptance headings in scope (0.827879ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.3995496Z ✔ moveTask follows the planning state machine and stamps completedOn on done (156.950511ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.3999680Z ✔ moveTask refuses illegal transitions, unknown states, unexportable states, and unknown tasks (125.011546ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4001703Z ✔ reopenTask moves done to review, clears completion, and records audit provenance (126.968875ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4003800Z ✔ moveTask to done or cancelled releases an active claim (140.979924ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4007797Z ✔ moveTask to cancelled releases the claim, stamps no completedOn, exports, and reopens to review (123.124491ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4010352Z ✔ updateTask patches whitelisted fields and refuses unknown fields, no-changes, and unknown tasks (103.396649ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4012881Z ✔ updateTask --depends-on/--blocking replace edges and detail lists together (117.224914ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4017524Z ✔ createTask auto-assigns the next free id and lands at the end of the board (102.459279ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4019608Z ✔ createTask refuses duplicate ids, bad types, unknown parents, unknown deps, and unexportable states (103.598507ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4025764Z ✔ createTask and updateTask reject noncanonical workload and nonpositive or malformed effort (96.175092ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4027560Z ✔ updateTask accepts explicit null effort as a clear and removes active provenance (104.9294ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4029774Z ✔ regenerated export reflects moves and updates byte-for-byte (drift stays PASS) (102.930582ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4034025Z ✔ completed receipt on a task that was never claimed is rejected with the remedy; the retroactive attestation path is accepted (114.797274ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4140455Z ✔ store validate is identical across divergent or absent worktree mirrors and performs no writes (160.607205ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4143081Z ✔ store validate reports pending schema migration without applying it (134.945349ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4144357Z ✔ F1: null due/completed with a startDate is valid; order errors only when both dates exist (42.655436ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4145695Z ✔ F2: canonical validate restores domain/date/specMode/state/title/type and edge guarantees (42.696335ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4147808Z ✔ F2: domains without declared project work domains are an error (37.07505ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4150133Z ✔ T-092: done requires completedOn; terminal cancelled/archived may be null or keep legacy date; non-terminal date rejected (45.931161ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4152131Z ✔ N3: external-id-format and empty-work-domains warnings port DB-only at warning severity (72.555934ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4154100Z ✔ wave violation persists, queries, survives reopen, and is idempotent (78.341227ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4154913Z ✔ incomplete or failed wave emits nothing (52.577034ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4155565Z ✔ failed terminal receipt also suppresses the whole wave (63.132473ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4156384Z ✔ dispatch freezes the planned workload at hand-off; untagged stays null (56.539319ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4157333Z ✔ client-supplied workloadAtDispatch is ignored -- the store stamps the board's belief (36.348973ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4158229Z ✔ executorModel is captured as a raw fact when supplied, null otherwise (44.413571ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4159142Z ✔ receipt freezes the discovered workload; planned stamp survives re-classification (51.374528ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4159980Z ✔ untagged runs never gain a guessed workload on either stamp (33.960765ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4160724Z ✔ workload stamps survive projection rebuild from the event log (49.222809ms)
+publish	Build and test maintained packages	2026-10-05T18:20:38.4161218Z ℹ tests 219
+publish	Build and test maintained packages	2026-10-05T18:20:38.4161449Z ℹ suites 0
+publish	Build and test maintained packages	2026-10-05T18:20:38.4161678Z ℹ pass 219
+publish	Build and test maintained packages	2026-10-05T18:20:38.4161900Z ℹ fail 0
+publish	Build and test maintained packages	2026-10-05T18:20:38.4162128Z ℹ cancelled 0
+publish	Build and test maintained packages	2026-10-05T18:20:38.4162373Z ℹ skipped 0
+publish	Build and test maintained packages	2026-10-05T18:20:38.4162852Z ℹ todo 0
+publish	Build and test maintained packages	2026-10-05T18:20:38.4163137Z ℹ duration_ms 6997.935741
+publish	Build and test maintained packages	2026-10-05T18:20:38.4230301Z 
+publish	Build and test maintained packages	2026-10-05T18:20:38.4230764Z > @mapctx/sync-engine@0.3.1 test
+publish	Build and test maintained packages	2026-10-05T18:20:38.4231412Z > npm run build && node --test dist/**/*.test.js test/*.test.cjs
+publish	Build and test maintained packages	2026-10-05T18:20:38.4231789Z 
+publish	Build and test maintained packages	2026-10-05T18:20:38.5548298Z 
+publish	Build and test maintained packages	2026-10-05T18:20:38.5549148Z > @mapctx/sync-engine@0.3.1 build
+publish	Build and test maintained packages	2026-10-05T18:20:38.5551562Z > rm -rf node_modules/@mapctx/core && tsc -p tsconfig.json && chmod +x dist/cli.js dist/mapctx-cli.js && rm -rf dist/workspace-ui && mkdir -p dist/workspace-ui && cp src/workspace-ui/workspaceV2.* dist/workspace-ui/
+publish	Build and test maintained packages	2026-10-05T18:20:38.5553619Z 
+publish	Build and test maintained packages	2026-10-05T18:20:41.5294489Z Error: Repair aborted: 1 journal gap(s) found. mapctx.db was left untouched.
+publish	Build and test maintained packages	2026-10-05T18:20:41.8286060Z Error: Approval hash mismatch: reviewed token was 0000000000000000000000000000000000000000000000000000000000000000, current draft hashes to 980011ba84593b50cbad6579b7aedc90cf40870b689019240daef8537ed93974. Re-review the draft; the store changed since it was produced.
+publish	Build and test maintained packages	2026-10-05T18:20:42.6226195Z Error: Node 23224427-9da8-458b-ab90-18ebadbb8613 is already attested with different reviewed content (existing pin 980011ba84593b50cbad6579b7aedc90cf40870b689019240daef8537ed93974, redraft pins dc78380b25b268f4a1bf5af23a8e33385f8d5c16dc420782223f8f94299b1cde); refusing to alter an existing approval. Nothing was written.
+publish	Build and test maintained packages	2026-10-05T18:20:44.1393104Z ✔ store attest-orphan CLI: draft, approve, then repair replays the attested row (1279.615797ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1397055Z ✔ store attest-orphan CLI: blank/whitespace reason is refused before any draft, witness, or file (149.484539ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1398249Z ✔ store attest-orphan CLI end-to-end: approval, witness loss, named gap, re-confirmation, repair (1359.885203ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1523739Z {
+publish	Build and test maintained packages	2026-10-05T18:20:44.1524170Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:44.1524548Z   "from": "backlog",
+publish	Build and test maintained packages	2026-10-05T18:20:44.1524923Z   "to": "ready"
+publish	Build and test maintained packages	2026-10-05T18:20:44.1525140Z }
+publish	Build and test maintained packages	2026-10-05T18:20:44.1525328Z {
+publish	Build and test maintained packages	2026-10-05T18:20:44.1525788Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:44.1526014Z   "from": "ready",
+publish	Build and test maintained packages	2026-10-05T18:20:44.1526247Z   "to": "in-progress"
+publish	Build and test maintained packages	2026-10-05T18:20:44.1526477Z }
+publish	Build and test maintained packages	2026-10-05T18:20:44.1526907Z {
+publish	Build and test maintained packages	2026-10-05T18:20:44.1527333Z   "taskId": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:44.1527806Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:44.1528265Z   "applied": {
+publish	Build and test maintained packages	2026-10-05T18:20:44.1531345Z     "fields": [],
+publish	Build and test maintained packages	2026-10-05T18:20:44.1532087Z     "detailFields": [
+publish	Build and test maintained packages	2026-10-05T18:20:44.1532798Z       "prerequisites"
+publish	Build and test maintained packages	2026-10-05T18:20:44.1533292Z     ],
+publish	Build and test maintained packages	2026-10-05T18:20:44.1533727Z     "edges": true
+publish	Build and test maintained packages	2026-10-05T18:20:44.1534162Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:44.1534565Z }
+publish	Build and test maintained packages	2026-10-05T18:20:44.1535718Z ✔ mapctx board: store authority serves the SQLite projection through the export field mapping (780.514614ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1537143Z ✔ mapctx board: pre-cutover repos keep parsing TASKS.md with the v2-status model (170.390408ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1538769Z ✔ mapctx gantt: pre-cutover detail effort produces duration-only planned active time (177.107814ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1539841Z Tasks file: /tmp/mapctx-resolution-vXWwGd/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:44.1540397Z Total tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1540749Z Active tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1541104Z Waves: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1541435Z Wave 1: T-001
+publish	Build and test maintained packages	2026-10-05T18:20:44.1541826Z Recommended next: T-001
+publish	Build and test maintained packages	2026-10-05T18:20:44.1542414Z Tasks file: /tmp/mapctx-resolution-Nl4utp/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:44.1543173Z Total tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1543540Z Active tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1543879Z Waves: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1544207Z Wave 1: T-001
+publish	Build and test maintained packages	2026-10-05T18:20:44.1544618Z Recommended next: T-001
+publish	Build and test maintained packages	2026-10-05T18:20:44.1545288Z Tasks file: /tmp/mapctx-resolution-aksYTU/boards/WORK.md
+publish	Build and test maintained packages	2026-10-05T18:20:44.1545860Z Total tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1546203Z Active tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1546543Z Waves: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1546854Z Wave 1: T-001
+publish	Build and test maintained packages	2026-10-05T18:20:44.1547254Z Recommended next: T-001
+publish	Build and test maintained packages	2026-10-05T18:20:44.1547888Z Tasks file: /tmp/mapctx-resolution-3APRcH/nested/ALT.md
+publish	Build and test maintained packages	2026-10-05T18:20:44.1548471Z Total tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1548835Z Active tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1549180Z Waves: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1549394Z Wave 1: T-001
+publish	Build and test maintained packages	2026-10-05T18:20:44.1549615Z Recommended next: T-001
+publish	Build and test maintained packages	2026-10-05T18:20:44.1550237Z Tasks file: /tmp/mapctx-resolution-n50E0X/wt/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:44.1550570Z Total tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1550774Z Active tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1550984Z Waves: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1551169Z Wave 1: T-001
+publish	Build and test maintained packages	2026-10-05T18:20:44.1551389Z Recommended next: T-001
+publish	Build and test maintained packages	2026-10-05T18:20:44.1552437Z ✔ mapctx plan resolves TASKS.md by walking up from a nested subdirectory (7.699541ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1554040Z ✔ mapctx task show resolves from a nested subdirectory (2.026467ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1555219Z ✔ mapctx task context resolves from a nested subdirectory (3.495246ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1556711Z ✔ mapctx validate reports the resolved board path in --json from a nested subdirectory (3.777762ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1557920Z ✔ mapcs plan resolves TASKS.md by walking up from a nested subdirectory (3.434603ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1559410Z ✔ mapcs validate resolves TASKS.md by walking up from a nested subdirectory (2.263928ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1560937Z ✔ mapcs and mapctx agree on the resolved board path from the same nested subdirectory (2.801848ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1563060Z ✔ mapcs and mapctx honor a discovered root config and its configured tasksFile from a nested subdirectory (31.646093ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1564807Z ✔ explicit --tasks-file overrides discovery and is resolved relative to cwd (1.725747ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1566539Z ✔ resolution stops at the repository root and does not adopt a TASKS.md from an outer directory (26.684856ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1568278Z ✔ git worktree: mapcs and mapctx resolve the board from a nested subdirectory inside the worktree (55.968577ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1570124Z ✔ store-only mapctx reads work from nested cwd without requiring TASKS.md and preserve git detail sections (58.738713ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1571881Z ✔ mapctx validate --json emits one machine-readable error when board resolution fails (26.375443ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1573525Z Tasks file: /tmp/mapcs-board-tools-JzKx5b/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:44.1574171Z Validation: PASS
+publish	Build and test maintained packages	2026-10-05T18:20:44.1574543Z Tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1574870Z Errors: 0
+publish	Build and test maintained packages	2026-10-05T18:20:44.1575200Z Warnings: 0
+publish	Build and test maintained packages	2026-10-05T18:20:44.1575773Z Tasks file: /tmp/mapcs-board-tools-30Vpju/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:44.1576625Z Validation: PASS
+publish	Build and test maintained packages	2026-10-05T18:20:44.1577008Z Tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1577354Z Errors: 0
+publish	Build and test maintained packages	2026-10-05T18:20:44.1577694Z Warnings: 0
+publish	Build and test maintained packages	2026-10-05T18:20:44.1578642Z Tasks file: /tmp/mapcs-board-tools-s1xLxh/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:44.1579203Z Validation: FAIL
+publish	Build and test maintained packages	2026-10-05T18:20:44.1579566Z Tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1579906Z Errors: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1580235Z Warnings: 0
+publish	Build and test maintained packages	2026-10-05T18:20:44.1580998Z - [error] missing-detail-file T-001: Detail file not found: ./tasks/T-001.md
+publish	Build and test maintained packages	2026-10-05T18:20:44.1582001Z Tasks file: /tmp/mapcs-board-tools-Ae6aGH/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:44.1582865Z Total tasks: 4
+publish	Build and test maintained packages	2026-10-05T18:20:44.1583269Z Active tasks: 3
+publish	Build and test maintained packages	2026-10-05T18:20:44.1583629Z Waves: 2
+publish	Build and test maintained packages	2026-10-05T18:20:44.1583994Z Wave 1: T-002, T-004
+publish	Build and test maintained packages	2026-10-05T18:20:44.1584367Z Wave 2: T-003
+publish	Build and test maintained packages	2026-10-05T18:20:44.1584811Z Recommended next: T-002, T-004
+publish	Build and test maintained packages	2026-10-05T18:20:44.1585467Z Tasks file: /tmp/mapcs-board-tools-UV2z7S/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:44.1586040Z Total tasks: 3
+publish	Build and test maintained packages	2026-10-05T18:20:44.1586440Z Active tasks: 2
+publish	Build and test maintained packages	2026-10-05T18:20:44.1586808Z Waves: 2
+publish	Build and test maintained packages	2026-10-05T18:20:44.1587153Z Wave 1: T-002
+publish	Build and test maintained packages	2026-10-05T18:20:44.1587519Z Wave 2: T-003
+publish	Build and test maintained packages	2026-10-05T18:20:44.1587944Z Recommended next: T-002
+publish	Build and test maintained packages	2026-10-05T18:20:44.1588573Z Tasks file: /tmp/mapcs-board-tools-Tn6tgn/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:44.1589151Z Validation: FAIL
+publish	Build and test maintained packages	2026-10-05T18:20:44.1589533Z Tasks: 2
+publish	Build and test maintained packages	2026-10-05T18:20:44.1589893Z Errors: 1
+publish	Build and test maintained packages	2026-10-05T18:20:44.1590240Z Warnings: 0
+publish	Build and test maintained packages	2026-10-05T18:20:44.1590955Z - [error] dependency-cycle: Dependency cycle detected: T-001, T-002
+publish	Build and test maintained packages	2026-10-05T18:20:44.1592199Z ✔ validate command passes for canonical single-list board (8.441078ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1593934Z ✔ validate command works without config when TASKS.md exists in cwd (1.491362ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1595162Z ✔ validate command fails when detail file does not exist (1.387759ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1596321Z ✔ plan command returns dependency waves and recommendations (16.561843ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1597133Z ✔ plan command works without config when tasks file override is provided (1.518142ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1598403Z ✔ plan command fails when validation reports dependency cycle (0.951178ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1599829Z ✔ budget CLI end-to-end: account, plan period, budget set/status through the store (257.288437ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1606096Z ✔ budget commands fail closed outside store authority (0.775431ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1607607Z ✔ R6 plan periods refuse non-USD fees and currency/account mismatches without recording (52.661489ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1609364Z ✔ export strips only the real Acceptance section: fenced Git-authored prose survives byte-for-byte (56.7152ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1611213Z ✔ T-121 public export CLI refuses both trailing-evidence reassociation repros before publication (423.340008ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1613321Z ✔ finish refuses a task-end checkpoint when acceptance is revised in the gate-to-publication gap (55.756081ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1614875Z ✔ finish refuses a task-end checkpoint when the task is reopened in the gap (47.408112ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1616300Z ✔ finish retry with pending acceptance classifies at the move stage; manual export never requires done (45.486035ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1617593Z ✔ N1: tilde and four-backtick fenced prose survives checkpoints byte-for-byte; inline spans never grow the mirror (136.762106ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1619232Z ✔ N1: unterminated fence with canonical Acceptance refuses export BEFORE any write, consistently, with zero growth (46.984322ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1621424Z ✔ N1: unterminated fence prose without canonical revisioning exports untouched; validate --snapshots reports refusal honestly (39.045945ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1623816Z ✔ Gantt exposes measured agent, human, parked, and lead figures independently (40.882897ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1625491Z ✔ Gantt keeps recovered session dates exact and infers missing dates from dependencies and siblings (4.963215ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1627051Z ✔ synthetic schedule lays done work backwards from measured evidence by difficulty (4.741974ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1628931Z ✔ pre-cutover dataset is honest about prior forecasts, blockers, and absent active dates (1.571781ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1630794Z ✔ dataset carries calendar commitments, measured forecast provenance, actual variance, and claim violations (2.772584ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1632446Z ✔ Gantt prefers durable snapshot duration coverage over legacy assumption text (0.508515ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1634302Z ✔ pools workload receipts for active forecasts and gives terminal work a retrospective baseline (2.259158ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1635411Z ✔ Gantt renders duration-only planned effort from both agent-active and legacy sources (2.166186ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1636288Z ✔ Gantt uses dates for placement but valid effort for planned duration and variance (1.686264ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1637909Z ✔ aligned plans and receipt-less done tasks are excluded from accuracy and duration measurement (3.55072ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1639195Z ✔ T-102 history tier rides the latest receipt and inferred backfills never calibrate (2.653041ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1640685Z Note: github.sourceMode is "projection": local state is authoritative and GitHub is a one-way export. "pull" is an explicit one-off import from GitHub (ADR 0003/0004).
+publish	Build and test maintained packages	2026-10-05T18:20:44.1642348Z pull completed. Updated tasks file: /tmp/mapctx-roundtrip-create-ibKH7X/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:44.1643853Z ✔ getIssues paginates beyond the first 100 results (2.9699ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1645044Z ✔ getProjectIssueItems paginates via GraphQL cursor beyond 100 items (1.606576ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1646340Z ✔ scope failures surface the missing scope by name with the remedy (1.309715ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1647696Z ✔ a 403 with all scopes present stays a generic error, not a fake scope diagnosis (0.509808ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1649158Z ✔ github.sourceMode canonical fails closed and invalid values are rejected (1.759129ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1650855Z ✔ >100-item round trip: pull imports 150 fixture issues, push dry-run replays them without writes (36.720202ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.1652339Z ✔ >100-item round trip: unlinked tasks are reported as creates in dry-run, not written (20.580025ms)
+publish	Build and test maintained packages	2026-10-05T18:20:44.2255986Z correct: receipt 33333333-3333-4333-8333-333333333333/1 marked invalid for T-201 (correction ff20b772-fada-405d-8da5-e59bcacdd391); original remains queryable
+publish	Build and test maintained packages	2026-10-05T18:20:44.2264863Z correct: evidence 71c64629-2f2a-5c4d-d41e-234b3651359e marked invalid for T-202 (correction 65022cad-8bf8-4bda-82d2-17785bfae930); original remains queryable
+publish	Build and test maintained packages	2026-10-05T18:20:44.2267715Z correct: evidence 94660c15-807b-af25-d895-79bb0978f5e1 marked invalid for T-202 (correction 59a10b2a-84df-429a-bb3c-d95d334765ea); original remains queryable
+publish	Build and test maintained packages	2026-10-05T18:20:44.2271030Z correct: receipt 33333333-3333-4333-8333-333333333333/1 marked invalid for T-201 (correction 0bf3486c-472d-4f0a-b30b-0bc2032461cb); original remains queryable
+publish	Build and test maintained packages	2026-10-05T18:20:45.1542074Z correct: evidence 71c64629-2f2a-5c4d-d41e-234b3651359e marked invalid for T-202 (correction 7c6494b9-1804-4aec-9ea6-9cb564147613); original remains queryable
+publish	Build and test maintained packages	2026-10-05T18:20:45.9385283Z Author identity unknown
+publish	Build and test maintained packages	2026-10-05T18:20:45.9385622Z 
+publish	Build and test maintained packages	2026-10-05T18:20:45.9385820Z *** Please tell me who you are.
+publish	Build and test maintained packages	2026-10-05T18:20:45.9386043Z 
+publish	Build and test maintained packages	2026-10-05T18:20:45.9386138Z Run
+publish	Build and test maintained packages	2026-10-05T18:20:45.9386268Z 
+publish	Build and test maintained packages	2026-10-05T18:20:45.9386723Z   git config --global user.email "you@example.com"
+publish	Build and test maintained packages	2026-10-05T18:20:45.9387412Z   git config --global user.name "Your Name"
+publish	Build and test maintained packages	2026-10-05T18:20:45.9387909Z 
+publish	Build and test maintained packages	2026-10-05T18:20:45.9388176Z to set your account's default identity.
+publish	Build and test maintained packages	2026-10-05T18:20:45.9388900Z Omit --global to set the identity only in this repository.
+publish	Build and test maintained packages	2026-10-05T18:20:45.9389513Z 
+publish	Build and test maintained packages	2026-10-05T18:20:45.9390164Z fatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed
+publish	Build and test maintained packages	2026-10-05T18:20:45.9391108Z Error: Command failed: git commit -m mapctx: cutover to external store
+publish	Build and test maintained packages	2026-10-05T18:20:45.9391460Z 
+publish	Build and test maintained packages	2026-10-05T18:20:45.9391672Z projectId: a198595f-4712-469d-9390-6b222ec75806
+publish	Build and test maintained packages	2026-10-05T18:20:45.9393367Z plansAuthority: markdown -> store
+publish	Build and test maintained packages	2026-10-05T18:20:45.9393914Z Author identity unknown
+publish	Build and test maintained packages	2026-10-05T18:20:45.9394176Z 
+publish	Build and test maintained packages	2026-10-05T18:20:45.9394440Z *** Please tell me who you are.
+publish	Build and test maintained packages	2026-10-05T18:20:45.9394727Z 
+publish	Build and test maintained packages	2026-10-05T18:20:45.9394872Z Run
+publish	Build and test maintained packages	2026-10-05T18:20:45.9395057Z 
+publish	Build and test maintained packages	2026-10-05T18:20:45.9395347Z   git config --global user.email "you@example.com"
+publish	Build and test maintained packages	2026-10-05T18:20:45.9395954Z   git config --global user.name "Your Name"
+publish	Build and test maintained packages	2026-10-05T18:20:45.9396295Z 
+publish	Build and test maintained packages	2026-10-05T18:20:45.9396557Z to set your account's default identity.
+publish	Build and test maintained packages	2026-10-05T18:20:45.9397226Z Omit --global to set the identity only in this repository.
+publish	Build and test maintained packages	2026-10-05T18:20:45.9397809Z 
+publish	Build and test maintained packages	2026-10-05T18:20:45.9398592Z fatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed
+publish	Build and test maintained packages	2026-10-05T18:20:45.9399185Z 
+publish	Build and test maintained packages	2026-10-05T18:20:46.1932457Z Author identity unknown
+publish	Build and test maintained packages	2026-10-05T18:20:46.1933152Z 
+publish	Build and test maintained packages	2026-10-05T18:20:46.1933382Z *** Please tell me who you are.
+publish	Build and test maintained packages	2026-10-05T18:20:46.1941539Z 
+publish	Build and test maintained packages	2026-10-05T18:20:46.1941695Z Run
+publish	Build and test maintained packages	2026-10-05T18:20:46.1941866Z 
+publish	Build and test maintained packages	2026-10-05T18:20:46.1942173Z   git config --global user.email "you@example.com"
+publish	Build and test maintained packages	2026-10-05T18:20:46.1943088Z   git config --global user.name "Your Name"
+publish	Build and test maintained packages	2026-10-05T18:20:46.1943444Z 
+publish	Build and test maintained packages	2026-10-05T18:20:46.1943710Z to set your account's default identity.
+publish	Build and test maintained packages	2026-10-05T18:20:46.1944431Z Omit --global to set the identity only in this repository.
+publish	Build and test maintained packages	2026-10-05T18:20:46.1944989Z 
+publish	Build and test maintained packages	2026-10-05T18:20:46.1945935Z fatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed
+publish	Build and test maintained packages	2026-10-05T18:20:46.1947414Z Error: Command failed: git commit -m mapctx: cutover to external store
+publish	Build and test maintained packages	2026-10-05T18:20:46.1947960Z 
+publish	Build and test maintained packages	2026-10-05T18:20:46.1948303Z projectId: 9ba1cac6-b1ad-4ae5-ac2d-ee8b5a354cef
+publish	Build and test maintained packages	2026-10-05T18:20:46.1948967Z plansAuthority: markdown -> store
+publish	Build and test maintained packages	2026-10-05T18:20:46.1949469Z Author identity unknown
+publish	Build and test maintained packages	2026-10-05T18:20:46.1949730Z 
+publish	Build and test maintained packages	2026-10-05T18:20:46.1949958Z *** Please tell me who you are.
+publish	Build and test maintained packages	2026-10-05T18:20:46.1950259Z 
+publish	Build and test maintained packages	2026-10-05T18:20:46.1950385Z Run
+publish	Build and test maintained packages	2026-10-05T18:20:46.1950565Z 
+publish	Build and test maintained packages	2026-10-05T18:20:46.1950865Z   git config --global user.email "you@example.com"
+publish	Build and test maintained packages	2026-10-05T18:20:46.1951497Z   git config --global user.name "Your Name"
+publish	Build and test maintained packages	2026-10-05T18:20:46.1951824Z 
+publish	Build and test maintained packages	2026-10-05T18:20:46.1952073Z to set your account's default identity.
+publish	Build and test maintained packages	2026-10-05T18:20:46.1953035Z Omit --global to set the identity only in this repository.
+publish	Build and test maintained packages	2026-10-05T18:20:46.1953465Z 
+publish	Build and test maintained packages	2026-10-05T18:20:46.1954405Z fatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed
+publish	Build and test maintained packages	2026-10-05T18:20:46.1955292Z 
+publish	Build and test maintained packages	2026-10-05T18:20:46.3204650Z correct: receipt 55555555-5555-4555-8555-555555555555/1 marked invalid for E-005 (correction c493ba90-4bd1-40cd-b1d4-51483d018bf5); original remains queryable
+publish	Build and test maintained packages	2026-10-05T18:20:46.3443263Z ✔ scoped scan: foreign-project sessions never link; worktree + genuine do; stale cwd excluded (236.72091ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3451067Z ✔ commit requires an approval file (166.20177ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3452841Z ✔ approved evidence commit: done task history without lifecycle mutation, idempotent re-run (183.12824ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3455634Z ✔ correction: invalid receipt drops out of forecast + roadmap, original stays queryable (118.756586ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3466727Z ✔ corrected evidence re-approval re-activates and the date cache follows validity (200.826155ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3468739Z ✔ reconstruct tiers after corrections; repair replay reproduces evidence + corrections (220.724248ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3470320Z ✔ approval file validation rejects malformed input (2.171375ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3471872Z ✔ review2 finding3: one stale entry aborts the whole approval set with zero writes (171.966676ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3480784Z ✔ review2 finding3: mid-transaction conflict rolls back the full set (179.702233ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3482491Z ✔ review2 finding4: approval pinned to the reviewed source refuses grown/changed sessions (211.380464ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3485117Z ✔ review2 finding6: date cache aggregates all measured sessions per task and tags tiers (173.433197ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3487238Z ✔ review2 finding6: roadmap displays inferred evidence distinctly via historySpan tier (152.804603ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3489547Z ✔ review3 finding1: degraded mixed session is inferred evidence, never measured, and template excludes it by default (174.534488ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3492260Z ✔ review3 finding2: provenance path-cap truncation degrades to unverifiable, never fails open (168.745946ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3496038Z ✔ review4: inferred-only history stays activeMs null through cache and Gantt; mixed aggregate stays measured-only (181.436549ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3519378Z ✖ review5: CLI --include-inferred reaches the emitted approval template (end-to-end parser, not helper) (255.440748ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3525266Z ✖ review5b: opencode source pin covers session content; stale approvals refuse with zero writes (254.720488ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3527572Z ✔ review5c: CLI corrects an epic-owned receipt on a TERMINAL epic without lifecycle mutation (141.59744ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3661813Z ✔ R13: legacy sync mutation commands fail closed under store authority, before any write or API call (7.046707ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3664456Z ✔ R13: the guard only triggers on store authority; markdown authority stays a legacy-writer regime (0.889623ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3667109Z ✔ R13 P3#6: out-of-repo config with absolute tasksFile into a store-authority repo is refused (1.029704ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3669588Z ✔ R13 review P2: --tasks-file override into a store-authority repo is refused from anywhere (0.881208ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3672033Z ✔ mapcs alias still executes commands but prints a deprecation notice on stderr (137.513887ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3674131Z ✔ mapcs alias deprecation notice goes to stderr, never stdout (133.771036ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3675651Z ✔ mapctx plan --json and direct planExecution agree on the same board (CLI/library parity) (18.323018ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3677493Z ✔ real board (this repo TASKS.md): every non-terminal, non-container task is scheduled or named in blockedReasons (15.407153ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3679239Z ✔ task search markdown fallback matches accent-folded and returns compact hits (2.209336ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3682891Z ✔ task search markdown fallback filters by status and limit (3.573492ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3683609Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.3683824Z   "dryRun": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.3684062Z   "created": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.3684272Z     {
+publish	Build and test maintained packages	2026-10-05T18:20:46.3684473Z       "taskId": "T-003",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3684750Z       "title": "[T-003] third"
+publish	Build and test maintained packages	2026-10-05T18:20:46.3685017Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.3685200Z   ],
+publish	Build and test maintained packages	2026-10-05T18:20:46.3685390Z   "updated": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.3685584Z     {
+publish	Build and test maintained packages	2026-10-05T18:20:46.3685775Z       "taskId": "T-001",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3686018Z       "issueNumber": 7,
+publish	Build and test maintained packages	2026-10-05T18:20:46.3686241Z       "fields": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.3686442Z         "title",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3686638Z         "body",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3686854Z         "state",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3687063Z         "labels"
+publish	Build and test maintained packages	2026-10-05T18:20:46.3687259Z       ]
+publish	Build and test maintained packages	2026-10-05T18:20:46.3687441Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.3687621Z     {
+publish	Build and test maintained packages	2026-10-05T18:20:46.3687821Z       "taskId": "T-002",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3688056Z       "issueNumber": 8,
+publish	Build and test maintained packages	2026-10-05T18:20:46.3688278Z       "fields": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.3688477Z         "title",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3688673Z         "body",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3688879Z         "labels"
+publish	Build and test maintained packages	2026-10-05T18:20:46.3689068Z       ]
+publish	Build and test maintained packages	2026-10-05T18:20:46.3689255Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.3689447Z   ],
+publish	Build and test maintained packages	2026-10-05T18:20:46.3689634Z   "skipped": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.3690262Z   "conflicts": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.3690466Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.3690642Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.3690823Z   "dryRun": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.3691036Z   "created": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.3691234Z     {
+publish	Build and test maintained packages	2026-10-05T18:20:46.3691431Z       "taskId": "T-003",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3691698Z       "title": "[T-003] third"
+publish	Build and test maintained packages	2026-10-05T18:20:46.3692145Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.3692337Z   ],
+publish	Build and test maintained packages	2026-10-05T18:20:46.3692525Z   "updated": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.3693495Z     {
+publish	Build and test maintained packages	2026-10-05T18:20:46.3693821Z       "taskId": "T-001",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3694117Z       "issueNumber": 7,
+publish	Build and test maintained packages	2026-10-05T18:20:46.3694360Z       "fields": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.3694562Z         "title",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3694765Z         "body",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3694967Z         "state",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3695168Z         "labels"
+publish	Build and test maintained packages	2026-10-05T18:20:46.3695356Z       ]
+publish	Build and test maintained packages	2026-10-05T18:20:46.3695542Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.3695723Z     {
+publish	Build and test maintained packages	2026-10-05T18:20:46.3695913Z       "taskId": "T-002",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3696155Z       "issueNumber": 8,
+publish	Build and test maintained packages	2026-10-05T18:20:46.3696386Z       "fields": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.3696589Z         "title",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3696787Z         "body",
+publish	Build and test maintained packages	2026-10-05T18:20:46.3696981Z         "labels"
+publish	Build and test maintained packages	2026-10-05T18:20:46.3697179Z       ]
+publish	Build and test maintained packages	2026-10-05T18:20:46.3697356Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.3697539Z   ],
+publish	Build and test maintained packages	2026-10-05T18:20:46.3697726Z   "skipped": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.3697944Z   "conflicts": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.3698146Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.3698908Z ✔ planningStateToBoardStatus maps canonical states to board vocabulary and passes the rest through (1.927796ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3699750Z ✔ labelsFromTaskRecord builds type/priority/workload/tag labels (1.894291ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3700408Z ✔ planForTask: create / skip / update fields / conflicts (1.007673ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3701128Z ✔ buildStoreIssueBody embeds metadata and description, deterministic output (0.294718ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3701808Z ✔ pushStoreCommand dry-run plans without mutating (67.649937ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3702523Z ✔ pushStoreCommand end-to-end: skip/update/create with externalId writeback (70.303446ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3703666Z ✔ pushStoreCommand uses canonical store despite stale local snapshots (56.456512ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3704444Z ✔ pushStoreCommand refuses store-missing binding and non-store authority (1.335312ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3705045Z ✔ remoteIssueSnapshot normalizes labels (0.366792ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3705752Z ✔ pushStoreCommand renders Acceptance from canonical store, never the stale mirror (64.239286ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3706642Z ✔ pushStoreCommand publishes no Acceptance section when canonical revisioning is absent (45.850515ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3707614Z ✔ N4: mirror-absent checkout still publishes canonical criteria with an explicit prose-absence note (54.018502ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3708667Z ✔ N4: mirror-absent checkout without canonical revisioning publishes no Detail/Acceptance (documented absent) (36.659227ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3709735Z ✔ N1: push refuses before any remote write when prose has an unterminated fence and canonical revisioning exists (50.4955ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3710783Z ✔ T-121: push body carries Git-authored Acceptance prose next to the canonical criteria (mocked gh) (50.50566ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3711917Z ✔ T-121: push refuses an in-section unclosed fence before any remote write (mocked gh) (47.227304ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3713371Z ✔ T-121: push refuses both trailing-evidence reassociation repros before any mocked gh call (91.461321ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3714369Z ✔ T-121 F1: push with canonical EMPTY revision preserves authored-only Acceptance prose (mocked gh) (53.580004ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3715416Z ✔ T-121 F1: push with canonical EMPTY revision refuses stranded checkbox evidence before any remote write (mocked gh) (46.193126ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3716517Z ✔ T-121 F1: push with NO canonical revision preserves authored Acceptance prose and refuses stale checkboxes (mocked gh) (37.266809ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3717185Z Created /tmp/mapcs-R6RQ1V/mapcs.config.json
+publish	Build and test maintained packages	2026-10-05T18:20:46.3718175Z This config works for local board commands. Fill in GitHub owner/repo/project fields only before GitHub sync commands.
+publish	Build and test maintained packages	2026-10-05T18:20:46.3718775Z Tasks file: /tmp/mapcs-NRHvoy/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:46.3719051Z Local tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:46.3719253Z Linked tasks: 0
+publish	Build and test maintained packages	2026-10-05T18:20:46.3719497Z Unlinked tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:46.3719848Z Remote issues: 0
+publish	Build and test maintained packages	2026-10-05T18:20:46.3720085Z Missing remote for linked: 0
+publish	Build and test maintained packages	2026-10-05T18:20:46.3720349Z Remote-only issues: 0
+publish	Build and test maintained packages	2026-10-05T18:20:46.3720584Z Diverged statuses: 0
+publish	Build and test maintained packages	2026-10-05T18:20:46.3720888Z Tasks file: /tmp/mapcs-wXdgEj/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:46.3721162Z Local tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:46.3721361Z Linked tasks: 0
+publish	Build and test maintained packages	2026-10-05T18:20:46.3721572Z Unlinked tasks: 1
+publish	Build and test maintained packages	2026-10-05T18:20:46.3721781Z Remote issues: 0
+publish	Build and test maintained packages	2026-10-05T18:20:46.3722011Z Missing remote for linked: 0
+publish	Build and test maintained packages	2026-10-05T18:20:46.3722318Z Remote-only issues: 0
+publish	Build and test maintained packages	2026-10-05T18:20:46.3722775Z Diverged statuses: 0
+publish	Build and test maintained packages	2026-10-05T18:20:46.3723608Z Note: github.sourceMode is "projection": local state is authoritative and GitHub is a one-way export. "pull" is an explicit one-off import from GitHub (ADR 0003/0004).
+publish	Build and test maintained packages	2026-10-05T18:20:46.3724461Z pull completed. Updated tasks file: /tmp/mapcs-c4mJNs/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:46.3725408Z Note: github.sourceMode is "projection": local state is authoritative and GitHub is a one-way export. "pull" is an explicit one-off import from GitHub (ADR 0003/0004).
+publish	Build and test maintained packages	2026-10-05T18:20:46.3726444Z pull completed. Updated tasks file: /tmp/mapcs-lemjIR/TASKS.md
+publish	Build and test maintained packages	2026-10-05T18:20:46.3727050Z [dry-run] update issue #11 from task T-001
+publish	Build and test maintained packages	2026-10-05T18:20:46.3727511Z [dry-run] skip body update for T-001 (detail unchanged since last pull)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3727960Z [dry-run] ensure issue #11 is in project
+publish	Build and test maintained packages	2026-10-05T18:20:46.3728334Z [dry-run] set project status for issue #11 -> Design
+publish	Build and test maintained packages	2026-10-05T18:20:46.3728766Z [dry-run] push summary: create=0, update=1
+publish	Build and test maintained packages	2026-10-05T18:20:46.3729727Z Note: github.sourceMode is "projection": local state is authoritative and GitHub is a one-way export. "bootstrap --from github" is an explicit one-off import from GitHub (ADR 0003/0004).
+publish	Build and test maintained packages	2026-10-05T18:20:46.3730659Z bootstrap --from github completed. Created 1, updated 1.
+publish	Build and test maintained packages	2026-10-05T18:20:46.3731661Z Note: github.sourceMode is "projection": local state is authoritative and GitHub is a one-way export. "bootstrap --from github" is an explicit one-off import from GitHub (ADR 0003/0004).
+publish	Build and test maintained packages	2026-10-05T18:20:46.3732721Z bootstrap --from github completed. Created 1, updated 1.
+publish	Build and test maintained packages	2026-10-05T18:20:46.3733821Z Note: github.sourceMode is "projection": local state is authoritative and GitHub is a one-way export. "bootstrap --from github" is an explicit one-off import from GitHub (ADR 0003/0004).
+publish	Build and test maintained packages	2026-10-05T18:20:46.3734700Z bootstrap --from github completed. Created 1, updated 1.
+publish	Build and test maintained packages	2026-10-05T18:20:46.3735246Z ✔ default config keeps legacy status behavior (3.096405ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3735798Z ✔ init command creates a starter config when none exists (7.617726ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3736428Z ✔ init command refuses to overwrite existing config without force (1.187116ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3737020Z ✔ custom partial workflow accepts extra status (2.976693ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3737577Z ✔ custom full replacement works without default statuses (1.00082ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3738196Z ✔ custom completionStatuses drive completed semantics on pull (3.821002ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3738830Z ✔ fails when statusMap does not cover all allowedStatuses (0.660046ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3739478Z ✔ fails when completionStatuses has values outside allowedStatuses (0.645259ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3740519Z ✔ fails when idGeneration preferredPrefix is invalid (0.812871ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3741301Z ✔ roundtrip pull/push/bootstrap preserves custom statuses (4.747524ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3741971Z ✔ parseTasksFile accepts metadata bullets with flexible indentation (0.549572ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3742913Z ✔ parseTasksFile accepts deprecated touch and maps to domains (0.480353ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3743567Z ✔ writeBoard always serializes work domains and domains key (0.964192ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3744403Z ✔ bootstrap from github keeps existing id prefix for new tasks (1.671857ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3745096Z ✔ bootstrap from github honors configured idGeneration preferredPrefix (1.390685ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.3745682Z ✔ fails when TASKS.md contains invalid status (0.79064ms)
+publish	Build and test maintained packages	2026-10-05T18:20:46.4675036Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4675473Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4676069Z   "from": "backlog",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4676751Z   "to": "ready"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4677325Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4677904Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4678480Z   "store": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4679205Z     "status": "store-authority",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4680226Z     "projectId": "85195287-10aa-4c03-8f82-ba69d6dad6c3",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4681181Z     "canonical": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4681814Z       "totalTasks": 2,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4682464Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4683347Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4683906Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.4684303Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.4684647Z     "semantic": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4685010Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4685336Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4685672Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.4685975Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4686250Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4686522Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4686799Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4687078Z   "store": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4687449Z     "status": "store-authority",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4687978Z     "projectId": "85195287-10aa-4c03-8f82-ba69d6dad6c3",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4688468Z     "canonical": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4688794Z       "totalTasks": 2,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4689138Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4689457Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4689781Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.4690085Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.4690379Z     "semantic": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4690691Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4691004Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4691331Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.4691639Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4691921Z   },
+publish	Build and test maintained packages	2026-10-05T18:20:46.4692208Z   "snapshots": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4692895Z     "status": "failed",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4693335Z     "structural": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4693865Z       "tasksFilePath": "/tmp/mapctx-cli-write-BLjVRp/TASKS.md",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4694417Z       "totalTasks": 2,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4694777Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4695097Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4695361Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.4695590Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.4695806Z     "drift": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4696094Z       "status": "store-authority",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4696500Z       "projectId": "85195287-10aa-4c03-8f82-ba69d6dad6c3",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4696878Z       "drift": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4697123Z         "hasDrift": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4697396Z         "issues": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.4697631Z           {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4697887Z             "taskId": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4698285Z             "file": "/tmp/mapctx-cli-write-BLjVRp/TASKS.md",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4698708Z             "reason": "task field drift"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4699024Z           }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4699239Z         ]
+publish	Build and test maintained packages	2026-10-05T18:20:46.4699453Z       }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4699669Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4699883Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4700086Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4700294Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4700503Z   "ok": false,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4700777Z   "reason": "illegal-transition",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4701089Z   "from": "ready",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4701329Z   "to": "done",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4701719Z   "message": "ready -> done is not a legal planning transition."
+publish	Build and test maintained packages	2026-10-05T18:20:46.4702127Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4702329Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4702761Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4703218Z   "from": "backlog",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4703635Z   "to": "ready"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4703913Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4704124Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4704332Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4704564Z   "from": "ready",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4705212Z   "to": "in-progress"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4705446Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4705639Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4705826Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4706216Z   "from": "in-progress",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4706495Z   "to": "review"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4706702Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4706888Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4707203Z   "ok": false,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4707683Z   "reason": "acceptance-incomplete",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4708595Z   "message": "task T-201 cannot move to done: 1 acceptance criterion/criteria are pending approval in the store. Approve with `mapctx task acceptance approve T-201 --index <n>`.",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4709480Z   "from": "review",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4709814Z   "to": "done"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4710020Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4710198Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4710437Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4710727Z   "from": "review",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4710936Z   "to": "done"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4711134Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4711311Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4711498Z   "store": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4711746Z     "status": "store-authority",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4712098Z     "projectId": "6a2a2932-b397-406e-9c38-f99965d9cde3",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4712425Z     "canonical": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4712894Z       "totalTasks": 2,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4713130Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4713344Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4713760Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.4713980Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.4714181Z     "semantic": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4714414Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4715041Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4715492Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.4715859Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4716136Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4716398Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4716736Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4717091Z   "taskId": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4727388Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4727681Z   "applied": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4727905Z     "fields": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.4728119Z       "priority"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4728326Z     ],
+publish	Build and test maintained packages	2026-10-05T18:20:46.4728687Z     "detailFields": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.4728969Z       "estimatedEffort",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4729283Z       "estimatedEffortSource",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4729543Z       "prerequisites"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4729760Z     ],
+publish	Build and test maintained packages	2026-10-05T18:20:46.4729953Z     "edges": true
+publish	Build and test maintained packages	2026-10-05T18:20:46.4730152Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4730339Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4730511Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4730703Z   "taskId": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4730913Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4731115Z   "applied": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4731316Z     "fields": [],
+publish	Build and test maintained packages	2026-10-05T18:20:46.4731525Z     "detailFields": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.4731749Z       "waitReason"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4731946Z     ],
+publish	Build and test maintained packages	2026-10-05T18:20:46.4732132Z     "edges": false
+publish	Build and test maintained packages	2026-10-05T18:20:46.4732328Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4732507Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4733025Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4733210Z   "ok": false,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4733457Z   "reason": "invalid-wait-reason",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4733725Z   "to": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4734140Z   "message": "waitReason must be review|decision|parked|blocked-external or empty"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4734546Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4734718Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4734901Z   "taskId": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4735117Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4735322Z   "applied": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4735528Z     "fields": [],
+publish	Build and test maintained packages	2026-10-05T18:20:46.4735745Z     "detailFields": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.4735968Z       "waitReason"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4736170Z     ],
+publish	Build and test maintained packages	2026-10-05T18:20:46.4736355Z     "edges": false
+publish	Build and test maintained packages	2026-10-05T18:20:46.4736550Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4736721Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4736894Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4737079Z   "store": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4737316Z     "status": "store-authority",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4737663Z     "projectId": "b0f38b79-9922-49c3-8397-acd8032e327e",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4737984Z     "canonical": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4738204Z       "totalTasks": 2,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4738428Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4738640Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4739072Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.4739275Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.4739472Z     "semantic": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4739675Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4739877Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4740083Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.4740274Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4740455Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4740753Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4740922Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4741097Z   "ok": false,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4741319Z   "reason": "unknown-field",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4741560Z   "to": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4742506Z   "message": "task field \"planningState\" is not patchable; allowed: title, type, parentTaskId, priority, workload, tags, domains, startDate, dueDate, predictedStart, externalId, specMode, assignees, iteration, milestone"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4743723Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4743909Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4744095Z   "taskId": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4744319Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4744523Z   "applied": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4744738Z     "fields": [],
+publish	Build and test maintained packages	2026-10-05T18:20:46.4744954Z     "detailFields": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.4745188Z       "estimatedEffort",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4745438Z       "estimatedEffortSource"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4745677Z     ],
+publish	Build and test maintained packages	2026-10-05T18:20:46.4745871Z     "edges": false
+publish	Build and test maintained packages	2026-10-05T18:20:46.4746073Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4746247Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4746413Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4746600Z   "taskId": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4746818Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4747016Z   "applied": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4747217Z     "fields": [],
+publish	Build and test maintained packages	2026-10-05T18:20:46.4747426Z     "detailFields": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.4747651Z       "estimatedEffort",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4747899Z       "estimatedEffortSource"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4748140Z     ],
+publish	Build and test maintained packages	2026-10-05T18:20:46.4748322Z     "edges": false
+publish	Build and test maintained packages	2026-10-05T18:20:46.4748516Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4748693Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4748856Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4749035Z   "ok": false,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4749296Z   "reason": "missing-workload-or-estimate",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4750018Z   "message": "Executable task planning invalid: missing estimatedEffort. Fix: mapctx task update T-201 --set detail.estimatedEffort=1d"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4750621Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4750796Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4750974Z   "store": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4751208Z     "status": "store-authority",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4751551Z     "projectId": "39814f6f-a976-43d2-b42c-1a77589400d9",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4751867Z     "canonical": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4752089Z       "totalTasks": 2,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4752310Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4752513Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4753023Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.4753318Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.4753511Z     "semantic": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4753717Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4753924Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4754135Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.4754326Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4754504Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4754681Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4754865Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4755237Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4755459Z   "taskId": "T-202",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4755715Z   "detailPath": "./tasks/T-202.md",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4756077Z   "warnings": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.4756794Z     "Missing workload. Set it before claim: mapctx task update T-202 --set workload=Normal"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4757493Z   ]
+publish	Build and test maintained packages	2026-10-05T18:20:46.4757827Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4758024Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4758214Z   "store": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4758459Z     "status": "store-authority",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4758804Z     "projectId": "5b7cc763-f559-4e38-adeb-a16972620571",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4759255Z     "canonical": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4759613Z       "totalTasks": 3,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4759843Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4760056Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4760272Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.4760473Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.4760842Z     "semantic": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4761226Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4761592Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4762203Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.4762671Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4762915Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4763209Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4763395Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4763575Z   "ok": false,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4763795Z   "reason": "duplicate-id",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4764220Z   "taskId": "T-202"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4764428Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.4764797Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4765013Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4765222Z   "claim": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4765747Z     "claimId": "a0e96efe-d1d5-4ce4-ab72-ace8a101196f",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4766341Z     "taskId": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4767014Z     "leaseToken": "[redacted fixture token]"",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4767699Z     "state": "active",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4768191Z     "claimedAt": "2026-10-05T18:20:46.461Z",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4768797Z     "expiresAt": "2026-10-05T18:50:46.461Z",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4769330Z     "holder": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.4769555Z       "pid": 4483,
+publish	Build and test maintained packages	2026-10-05T18:20:46.4769790Z       "host": "runnervm8df0l"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4770025Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.4770312Z     "eventNode": "d2c4dc85-c516-400a-a6e0-4a3eb3cc5126",
+publish	Build and test maintained packages	2026-10-05T18:20:46.4770788Z     "eventSequence": 4
+publish	Build and test maintained packages	2026-10-05T18:20:46.4771006Z   },
+publish	Build and test maintained packages	2026-10-05T18:20:46.4771251Z   "planningTransitionsTo": "in-progress"
+publish	Build and test maintained packages	2026-10-05T18:20:46.4771524Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.6894731Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.6895046Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.6895303Z   "claim": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.6895644Z     "claimId": "c46f17f6-ac7e-4a65-9310-bc5472355b92",
+publish	Build and test maintained packages	2026-10-05T18:20:46.6896017Z     "taskId": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:46.6896427Z     "leaseToken": "[redacted fixture token]"",
+publish	Build and test maintained packages	2026-10-05T18:20:46.6896843Z     "state": "active",
+publish	Build and test maintained packages	2026-10-05T18:20:46.6897136Z     "claimedAt": "2026-10-05T18:20:46.684Z",
+publish	Build and test maintained packages	2026-10-05T18:20:46.6897680Z     "expiresAt": "2026-10-05T18:50:46.684Z",
+publish	Build and test maintained packages	2026-10-05T18:20:46.6898220Z     "holder": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.6898620Z       "pid": 4483,
+publish	Build and test maintained packages	2026-10-05T18:20:46.6899006Z       "host": "runnervm8df0l"
+publish	Build and test maintained packages	2026-10-05T18:20:46.6899563Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.6900106Z     "eventNode": "b5495206-0857-43b9-bcb7-8cbcf9565cb7",
+publish	Build and test maintained packages	2026-10-05T18:20:46.6900752Z     "eventSequence": 4
+publish	Build and test maintained packages	2026-10-05T18:20:46.6901148Z   },
+publish	Build and test maintained packages	2026-10-05T18:20:46.6901604Z   "planningTransitionsTo": "in-progress"
+publish	Build and test maintained packages	2026-10-05T18:20:46.6902133Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.7190213Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7190715Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7191095Z   "receipt": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7191348Z     "schemaVersion": 1,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7191729Z     "dispatchId": "dfb5f299-01e8-46d3-bf10-3d52dc8cc97e",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7192191Z     "attempt": 1,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7192430Z     "outcome": "completed",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7193082Z     "startedAt": "2026-09-08T12:00:00.000Z",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7193515Z     "endedAt": "2026-09-08T12:10:00.000Z",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7193816Z     "changedFiles": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.7194059Z       "tasks/T-201.md"
+publish	Build and test maintained packages	2026-10-05T18:20:46.7194372Z     ],
+publish	Build and test maintained packages	2026-10-05T18:20:46.7194585Z     "usageEvents": [],
+publish	Build and test maintained packages	2026-10-05T18:20:46.7194923Z     "evidence": [],
+publish	Build and test maintained packages	2026-10-05T18:20:46.7195152Z     "timeEvidence": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7195390Z       "schemaVersion": 1,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7195753Z       "source": "claude-jsonl",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7196016Z       "policy": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7196295Z         "idleThresholdMs": 600000,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7196616Z         "reviewThresholdMs": 900000,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7196941Z         "parkedThresholdMs": 7200000,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7197228Z         "timeZone": "UTC"
+publish	Build and test maintained packages	2026-10-05T18:20:46.7197471Z       },
+publish	Build and test maintained packages	2026-10-05T18:20:46.7197669Z       "intervals": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.7197885Z         {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7198149Z           "start": "2026-09-08T12:00:00.000Z",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7198714Z           "end": "2026-09-08T12:05:00.000Z",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7199262Z           "owner": "agent",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7199712Z           "kind": "active",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7200156Z           "sessionId": "s1"
+publish	Build and test maintained packages	2026-10-05T18:20:46.7200440Z         },
+publish	Build and test maintained packages	2026-10-05T18:20:46.7201050Z         {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7201483Z           "start": "2026-09-08T12:05:00.000Z",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7201975Z           "end": "2026-09-08T12:10:00.000Z",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7202403Z           "owner": "human",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7203100Z           "kind": "review",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7203596Z           "confidence": "inferred",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7204276Z           "sessionId": "s1"
+publish	Build and test maintained packages	2026-10-05T18:20:46.7204682Z         }
+publish	Build and test maintained packages	2026-10-05T18:20:46.7205005Z       ],
+publish	Build and test maintained packages	2026-10-05T18:20:46.7205367Z       "sessionSpans": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.7205746Z         {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7206140Z           "start": "2026-09-08T12:00:00.000Z",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7206721Z           "end": "2026-09-08T12:10:00.000Z",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7207228Z           "sessionId": "s1"
+publish	Build and test maintained packages	2026-10-05T18:20:46.7207664Z         }
+publish	Build and test maintained packages	2026-10-05T18:20:46.7207987Z       ]
+publish	Build and test maintained packages	2026-10-05T18:20:46.7208297Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.7208614Z     "failure": null
+publish	Build and test maintained packages	2026-10-05T18:20:46.7208982Z   },
+publish	Build and test maintained packages	2026-10-05T18:20:46.7209324Z   "dispatch": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7209942Z     "dispatchId": "dfb5f299-01e8-46d3-bf10-3d52dc8cc97e",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7210536Z     "taskId": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7210952Z     "executorKind": "test",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7211461Z     "attempt": 1,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7212237Z     "contextHash": "3fed7b318a06f4427357893bfc6d1c89e799a37a80dcfa5cea35ab59d7c63637",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7213330Z     "status": "completed",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7213832Z     "workloadAtDispatch": "Normal",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7214332Z     "executorModel": null
+publish	Build and test maintained packages	2026-10-05T18:20:46.7214744Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.7215069Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.7363165Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7363645Z   "store": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7364114Z     "status": "store-authority",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7364756Z     "projectId": "2a442c3d-d241-47e4-98a5-107665645ac4",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7365361Z     "canonical": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7365771Z       "totalTasks": 2,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7366177Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7366558Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7366978Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.7367344Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.7367694Z     "semantic": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7368068Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7368449Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7368855Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.7369222Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.7369579Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.7369936Z }
+publish	Build and test maintained packages	2026-10-05T18:20:46.7412673Z {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7413271Z   "store": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7422361Z     "status": "store-authority",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7423596Z     "projectId": "2a442c3d-d241-47e4-98a5-107665645ac4",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7424479Z     "canonical": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7425056Z       "totalTasks": 2,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7425632Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7426023Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7426362Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.7426674Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.7426972Z     "semantic": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7427300Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7427623Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7427982Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.7428311Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.7428588Z   },
+publish	Build and test maintained packages	2026-10-05T18:20:46.7428877Z   "snapshots": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7429329Z     "status": "failed",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7429704Z     "structural": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7430241Z       "tasksFilePath": "/tmp/mapctx-cli-write-TSRxoJ/TASKS.md",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7430821Z       "totalTasks": 2,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7431167Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7431490Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7431822Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:46.7432131Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:46.7432418Z     "drift": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7433239Z       "status": "store-authority",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7433869Z       "projectId": "2a442c3d-d241-47e4-98a5-107665645ac4",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7434409Z       "drift": {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7434746Z         "hasDrift": true,
+publish	Build and test maintained packages	2026-10-05T18:20:46.7435115Z         "issues": [
+publish	Build and test maintained packages	2026-10-05T18:20:46.7435437Z           {
+publish	Build and test maintained packages	2026-10-05T18:20:46.7435787Z             "taskId": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7436571Z             "file": "/tmp/mapctx-cli-write-TSRxoJ/TASKS.md",
+publish	Build and test maintained packages	2026-10-05T18:20:46.7437253Z             "reason": "task field drift"
+publish	Build and test maintained packages	2026-10-05T18:20:46.7437752Z           }
+publish	Build and test maintained packages	2026-10-05T18:20:46.7438045Z         ]
+publish	Build and test maintained packages	2026-10-05T18:20:46.7438427Z       }
+publish	Build and test maintained packages	2026-10-05T18:20:46.7438715Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:46.7439078Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:46.7439544Z }
+publish	Build and test maintained packages	2026-10-05T18:20:47.0721113Z {
+publish	Build and test maintained packages	2026-10-05T18:20:47.0721704Z   "ok": false,
+publish	Build and test maintained packages	2026-10-05T18:20:47.0722360Z   "reason": "active-claim-held",
+publish	Build and test maintained packages	2026-10-05T18:20:47.0723309Z   "activeClaim": {
+publish	Build and test maintained packages	2026-10-05T18:20:47.0724116Z     "claimId": "a297f75b-96ca-4246-87ee-fe9cadecb55e",
+publish	Build and test maintained packages	2026-10-05T18:20:47.0724940Z     "taskId": "T-201",
+publish	Build and test maintained packages	2026-10-05T18:20:47.0725812Z     "leaseToken": "[redacted fixture token]"",
+publish	Build and test maintained packages	2026-10-05T18:20:47.0726488Z     "state": "active",
+publish	Build and test maintained packages	2026-10-05T18:20:47.0726964Z     "claimedAt": "2026-10-05T18:20:47.051Z",
+publish	Build and test maintained packages	2026-10-05T18:20:47.0727549Z     "expiresAt": "2026-10-05T18:50:47.051Z",
+publish	Build and test maintained packages	2026-10-05T18:20:47.0728081Z     "holder": {
+publish	Build and test maintained packages	2026-10-05T18:20:47.0728465Z       "provider": "traycer"
+publish	Build and test maintained packages	2026-10-05T18:20:47.0728891Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:47.0729382Z     "eventNode": "d85103a0-860e-4beb-9244-85bb0859c87d",
+publish	Build and test maintained packages	2026-10-05T18:20:47.0729994Z     "eventSequence": 4
+publish	Build and test maintained packages	2026-10-05T18:20:47.0730467Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:47.0730846Z }
+publish	Build and test maintained packages	2026-10-05T18:20:48.1933035Z {
+publish	Build and test maintained packages	2026-10-05T18:20:48.1933537Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:48.1934005Z   "from": "backlog",
+publish	Build and test maintained packages	2026-10-05T18:20:48.1934381Z   "to": "ready"
+publish	Build and test maintained packages	2026-10-05T18:20:48.1934665Z }
+publish	Build and test maintained packages	2026-10-05T18:20:48.1980631Z {
+publish	Build and test maintained packages	2026-10-05T18:20:48.1981086Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:48.1981526Z   "from": "ready",
+publish	Build and test maintained packages	2026-10-05T18:20:48.1981970Z   "to": "in-progress"
+publish	Build and test maintained packages	2026-10-05T18:20:48.1982313Z }
+publish	Build and test maintained packages	2026-10-05T18:20:48.2025335Z {
+publish	Build and test maintained packages	2026-10-05T18:20:48.2025748Z   "ok": true,
+publish	Build and test maintained packages	2026-10-05T18:20:48.2026183Z   "from": "in-progress",
+publish	Build and test maintained packages	2026-10-05T18:20:48.2026573Z   "to": "review"
+publish	Build and test maintained packages	2026-10-05T18:20:48.2026832Z }
+publish	Build and test maintained packages	2026-10-05T18:20:48.5724476Z Error: Acceptance revision drifted: store holds 2, caller expected 1.
+publish	Build and test maintained packages	2026-10-05T18:20:48.8406139Z {
+publish	Build and test maintained packages	2026-10-05T18:20:48.8406721Z   "store": {
+publish	Build and test maintained packages	2026-10-05T18:20:48.8407363Z     "status": "store-authority",
+publish	Build and test maintained packages	2026-10-05T18:20:48.8408226Z     "projectId": "d2bd3d9a-022c-42bd-83fb-2fb1fd946f5e",
+publish	Build and test maintained packages	2026-10-05T18:20:48.8408914Z     "canonical": {
+publish	Build and test maintained packages	2026-10-05T18:20:48.8409260Z       "totalTasks": 2,
+publish	Build and test maintained packages	2026-10-05T18:20:48.8409588Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:48.8409924Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:48.8410233Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:48.8410512Z     },
+publish	Build and test maintained packages	2026-10-05T18:20:48.8410781Z     "semantic": {
+publish	Build and test maintained packages	2026-10-05T18:20:48.8411076Z       "errors": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:48.8411363Z       "warnings": 0,
+publish	Build and test maintained packages	2026-10-05T18:20:48.8411658Z       "issues": []
+publish	Build and test maintained packages	2026-10-05T18:20:48.8411930Z     }
+publish	Build and test maintained packages	2026-10-05T18:20:48.8412185Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:48.8412511Z }
+publish	Build and test maintained packages	2026-10-05T18:20:51.7055702Z ✔ task move: canonical store changes without regenerating local mirrors (306.297889ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7057645Z ✔ task move and reopen: completion gate then done-to-review reopen (697.851983ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7059962Z ✔ task update: whitelisted fields land in canonical store without snapshot writes (258.744875ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7062170Z ✔ task update CLI clears estimatedEffort=null and claim refuses the missing plan (244.52217ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7064822Z ✔ task create: auto id, create its Git-authored detail only, validate canonical store (234.69785ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7066848Z ✔ dispatch create: fresh dispatch then attempt+1 on the same dispatch id (251.309471ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7068865Z ✔ R10: dispatch receipt updates canonical store without regenerating the board (261.694665ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7070992Z ✔ task start CLI returns lease and dispatch without exporting, and rejects a second start (444.269843ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7073444Z ✔ public validate CLI gives same canonical result when second worktree has no snapshots (444.526811ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7075426Z ✔ finish publishes checkpoint last; partial publication keeps done and retry skips duplicate move (1211.735085ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7103075Z ✔ acceptance approve forwards --evidence pairs into show and the durable event; malformed/stale pairs mutate nothing (1246.843888ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7121399Z ✔ attempt6: approve without --evidence keeps null semantics; prototype-unsafe keys survive show and event (935.679412ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7125896Z ✔ attempt6: malformed/unsupported evidence refuses BEFORE the writable open -- schema-9 pending-journal store stays byte-identical (671.136727ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7255897Z ✔ visible roadmap row shows agent-active Planned duration without dates (15.547668ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7258016Z ✔ calendar dates place row while active effort remains displayed duration (24.205339ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7260139Z ✔ approximate date positions undated work with a visible approximation marker (5.068892ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7262278Z ✔ visible row keeps legacy provenance beside ratio and labels substituted actual (3.809861ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7264871Z ✔ visible row distinguishes aligned plan and receipt-less done work (5.364784ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7266695Z ✔ visible actual coverage follows measured value when present (3.34626ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7268303Z ✔ live row shows measured human and parked separately (3.523198ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7270002Z ✔ done work with measured history is positioned by tier, never unscheduled (3.422742ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7271217Z ✔ done work with inferred history is positioned and excluded from accuracy (3.522126ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7273660Z ✔ done work with dates but no receipt renders declared tier, never unscheduled (4.080013ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7276165Z ✔ done and cancelled work without evidence show no history; archived without dates stays unscheduled (7.878253ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7278297Z ✔ synthetic-schedule approximate renders a duration span, not a point (3.886854ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7280546Z ✔ unscheduled is for work not started; started work without dates has its own lane (10.534468ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7282890Z ✔ substituted actuals keep their label and never borrow the measured style (2.385123ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7284728Z ✔ predicted starts display distinctly from planned dates and never position (2.164964ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7286656Z ✔ predicted marker renders distinctly once the date falls inside the timeline (3.16947ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7288415Z ✔ history view scans chronologically and filters by epic and tier (11.261782ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7290234Z ✔ epic group period spans related work, extends to today while open, skips halted (3.577369ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7291859Z ✔ epic group of only done work ends at the last span (2.210468ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7293334Z ✔ epic period spanning years shows both years (2.509424ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7294585Z ✔ cancelled work counts as concluded in group progress (3.028048ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7296127Z ✔ history timeline bar keeps its tier: inferred is not labelled Actual/Measured (7.984841ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7297141Z ℹ tests 153
+publish	Build and test maintained packages	2026-10-05T18:20:51.7298045Z ℹ suites 0
+publish	Build and test maintained packages	2026-10-05T18:20:51.7298486Z ℹ pass 151
+publish	Build and test maintained packages	2026-10-05T18:20:51.7298923Z ℹ fail 2
+publish	Build and test maintained packages	2026-10-05T18:20:51.7299360Z ℹ cancelled 0
+publish	Build and test maintained packages	2026-10-05T18:20:51.7299788Z ℹ skipped 0
+publish	Build and test maintained packages	2026-10-05T18:20:51.7300174Z ℹ todo 0
+publish	Build and test maintained packages	2026-10-05T18:20:51.7300656Z ℹ duration_ms 10527.871946
+publish	Build and test maintained packages	2026-10-05T18:20:51.7313940Z 
+publish	Build and test maintained packages	2026-10-05T18:20:51.7314355Z ✖ failing tests:
+publish	Build and test maintained packages	2026-10-05T18:20:51.7314946Z 
+publish	Build and test maintained packages	2026-10-05T18:20:51.7315291Z test at dist/history-cli.test.js:907:25
+publish	Build and test maintained packages	2026-10-05T18:20:51.7316779Z ✖ review5: CLI --include-inferred reaches the emitted approval template (end-to-end parser, not helper) (255.440748ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7318404Z   Error: Command failed: node /home/runner/work/mapctx/mapctx/packages/sync-engine/dist/mapctx-cli.js import --commit
+publish	Build and test maintained packages	2026-10-05T18:20:51.7319430Z   Author identity unknown
+publish	Build and test maintained packages	2026-10-05T18:20:51.7319856Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7320276Z   *** Please tell me who you are.
+publish	Build and test maintained packages	2026-10-05T18:20:51.7320728Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7321038Z   Run
+publish	Build and test maintained packages	2026-10-05T18:20:51.7321369Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7321867Z     git config --global user.email "you@example.com"
+publish	Build and test maintained packages	2026-10-05T18:20:51.7322853Z     git config --global user.name "Your Name"
+publish	Build and test maintained packages	2026-10-05T18:20:51.7323429Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7323877Z   to set your account's default identity.
+publish	Build and test maintained packages	2026-10-05T18:20:51.7324617Z   Omit --global to set the identity only in this repository.
+publish	Build and test maintained packages	2026-10-05T18:20:51.7325232Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7326350Z   fatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed
+publish	Build and test maintained packages	2026-10-05T18:20:51.7327785Z   Error: Command failed: git commit -m mapctx: cutover to external store
+publish	Build and test maintained packages	2026-10-05T18:20:51.7328500Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7328984Z   projectId: a198595f-4712-469d-9390-6b222ec75806
+publish	Build and test maintained packages	2026-10-05T18:20:51.7329642Z   plansAuthority: markdown -> store
+publish	Build and test maintained packages	2026-10-05T18:20:51.7330166Z   Author identity unknown
+publish	Build and test maintained packages	2026-10-05T18:20:51.7330601Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7331005Z   *** Please tell me who you are.
+publish	Build and test maintained packages	2026-10-05T18:20:51.7331478Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7331811Z   Run
+publish	Build and test maintained packages	2026-10-05T18:20:51.7332155Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7332948Z     git config --global user.email "you@example.com"
+publish	Build and test maintained packages	2026-10-05T18:20:51.7333671Z     git config --global user.name "Your Name"
+publish	Build and test maintained packages	2026-10-05T18:20:51.7334209Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7334613Z   to set your account's default identity.
+publish	Build and test maintained packages	2026-10-05T18:20:51.7335222Z   Omit --global to set the identity only in this repository.
+publish	Build and test maintained packages	2026-10-05T18:20:51.7335770Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7336686Z   fatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed
+publish	Build and test maintained packages	2026-10-05T18:20:51.7337618Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7337923Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7338355Z       at genericNodeError (node:internal/errors:986:15)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7339056Z       at wrappedFn (node:internal/errors:540:14)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7339769Z       at checkExecSyncError (node:child_process:942:11)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7340448Z       at execFileSync (node:child_process:978:15)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7341513Z       at run (/home/runner/work/mapctx/mapctx/packages/sync-engine/dist/history-cli.test.js:930:76)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7343388Z       at TestContext.<anonymous> (/home/runner/work/mapctx/mapctx/packages/sync-engine/dist/history-cli.test.js:932:9)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7344543Z       at Test.runInAsyncScope (node:async_hooks:227:14)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7345315Z       at Test.run (node:internal/test_runner/test:1402:25)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7346205Z       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7347110Z       at Test.postRun (node:internal/test_runner/test:1542:19) {
+publish	Build and test maintained packages	2026-10-05T18:20:51.7347702Z     status: 1,
+publish	Build and test maintained packages	2026-10-05T18:20:51.7348076Z     signal: null,
+publish	Build and test maintained packages	2026-10-05T18:20:51.7355330Z     output: [ null, '', `Author identity unknown\n\n*** Please tell me who you are.\n\nRun\n\n  git config --global user.email "you@example.com"\n  git config --global user.name "Your Name"\n\nto set your account's default identity.\nOmit --global to set the identity only in this repository.\n\nfatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed\nError: Command failed: git commit -m mapctx: cutover to external store\n\nprojectId: a198595f-4712-469d-9390-6b222ec75806\nplansAuthority: markdown -> store\nAuthor identity unknown\n\n*** Please tell me who you are.\n\nRun\n\n  git config --global user.email "you@example.com"\n  git config --global user.name "Your Name"\n\nto set your account's default identity.\nOmit --global to set the identity only in this repository.\n\nfatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed\n\n` ],
+publish	Build and test maintained packages	2026-10-05T18:20:51.7362149Z     pid: 4843,
+publish	Build and test maintained packages	2026-10-05T18:20:51.7362755Z     stdout: '',
+publish	Build and test maintained packages	2026-10-05T18:20:51.7368521Z     stderr: `Author identity unknown\n\n*** Please tell me who you are.\n\nRun\n\n  git config --global user.email "you@example.com"\n  git config --global user.name "Your Name"\n\nto set your account's default identity.\nOmit --global to set the identity only in this repository.\n\nfatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed\nError: Command failed: git commit -m mapctx: cutover to external store\n\nprojectId: a198595f-4712-469d-9390-6b222ec75806\nplansAuthority: markdown -> store\nAuthor identity unknown\n\n*** Please tell me who you are.\n\nRun\n\n  git config --global user.email "you@example.com"\n  git config --global user.name "Your Name"\n\nto set your account's default identity.\nOmit --global to set the identity only in this repository.\n\nfatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed\n\n`
+publish	Build and test maintained packages	2026-10-05T18:20:51.7372200Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:51.7372313Z 
+publish	Build and test maintained packages	2026-10-05T18:20:51.7372498Z test at dist/history-cli.test.js:996:25
+publish	Build and test maintained packages	2026-10-05T18:20:51.7373661Z ✖ review5b: opencode source pin covers session content; stale approvals refuse with zero writes (254.720488ms)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7374606Z   Error: Command failed: node /home/runner/work/mapctx/mapctx/packages/sync-engine/dist/mapctx-cli.js import --commit
+publish	Build and test maintained packages	2026-10-05T18:20:51.7375216Z   Author identity unknown
+publish	Build and test maintained packages	2026-10-05T18:20:51.7375457Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7375684Z   *** Please tell me who you are.
+publish	Build and test maintained packages	2026-10-05T18:20:51.7375943Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7376151Z   Run
+publish	Build and test maintained packages	2026-10-05T18:20:51.7376343Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7376623Z     git config --global user.email "you@example.com"
+publish	Build and test maintained packages	2026-10-05T18:20:51.7377024Z     git config --global user.name "Your Name"
+publish	Build and test maintained packages	2026-10-05T18:20:51.7377318Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7377566Z   to set your account's default identity.
+publish	Build and test maintained packages	2026-10-05T18:20:51.7377977Z   Omit --global to set the identity only in this repository.
+publish	Build and test maintained packages	2026-10-05T18:20:51.7378319Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7378938Z   fatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed
+publish	Build and test maintained packages	2026-10-05T18:20:51.7379711Z   Error: Command failed: git commit -m mapctx: cutover to external store
+publish	Build and test maintained packages	2026-10-05T18:20:51.7380093Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7380358Z   projectId: 9ba1cac6-b1ad-4ae5-ac2d-ee8b5a354cef
+publish	Build and test maintained packages	2026-10-05T18:20:51.7380730Z   plansAuthority: markdown -> store
+publish	Build and test maintained packages	2026-10-05T18:20:51.7381014Z   Author identity unknown
+publish	Build and test maintained packages	2026-10-05T18:20:51.7381258Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7381481Z   *** Please tell me who you are.
+publish	Build and test maintained packages	2026-10-05T18:20:51.7381732Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7381909Z   Run
+publish	Build and test maintained packages	2026-10-05T18:20:51.7382092Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7382365Z     git config --global user.email "you@example.com"
+publish	Build and test maintained packages	2026-10-05T18:20:51.7383020Z     git config --global user.name "Your Name"
+publish	Build and test maintained packages	2026-10-05T18:20:51.7383331Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7383582Z   to set your account's default identity.
+publish	Build and test maintained packages	2026-10-05T18:20:51.7384000Z   Omit --global to set the identity only in this repository.
+publish	Build and test maintained packages	2026-10-05T18:20:51.7384365Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7384986Z   fatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed
+publish	Build and test maintained packages	2026-10-05T18:20:51.7385624Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7385813Z   
+publish	Build and test maintained packages	2026-10-05T18:20:51.7386107Z       at genericNodeError (node:internal/errors:986:15)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7386727Z       at wrappedFn (node:internal/errors:540:14)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7387152Z       at checkExecSyncError (node:child_process:942:11)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7387602Z       at execFileSync (node:child_process:978:15)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7388252Z       at run (/home/runner/work/mapctx/mapctx/packages/sync-engine/dist/history-cli.test.js:1017:76)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7389294Z       at TestContext.<anonymous> (/home/runner/work/mapctx/mapctx/packages/sync-engine/dist/history-cli.test.js:1032:9)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7390006Z       at Test.runInAsyncScope (node:async_hooks:227:14)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7390455Z       at Test.run (node:internal/test_runner/test:1402:25)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7391007Z       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+publish	Build and test maintained packages	2026-10-05T18:20:51.7391570Z       at Test.postRun (node:internal/test_runner/test:1542:19) {
+publish	Build and test maintained packages	2026-10-05T18:20:51.7391955Z     status: 1,
+publish	Build and test maintained packages	2026-10-05T18:20:51.7392181Z     signal: null,
+publish	Build and test maintained packages	2026-10-05T18:20:51.7397100Z     output: [ null, '', `Author identity unknown\n\n*** Please tell me who you are.\n\nRun\n\n  git config --global user.email "you@example.com"\n  git config --global user.name "Your Name"\n\nto set your account's default identity.\nOmit --global to set the identity only in this repository.\n\nfatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed\nError: Command failed: git commit -m mapctx: cutover to external store\n\nprojectId: 9ba1cac6-b1ad-4ae5-ac2d-ee8b5a354cef\nplansAuthority: markdown -> store\nAuthor identity unknown\n\n*** Please tell me who you are.\n\nRun\n\n  git config --global user.email "you@example.com"\n  git config --global user.name "Your Name"\n\nto set your account's default identity.\nOmit --global to set the identity only in this repository.\n\nfatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed\n\n` ],
+publish	Build and test maintained packages	2026-10-05T18:20:51.7401808Z     pid: 4904,
+publish	Build and test maintained packages	2026-10-05T18:20:51.7402049Z     stdout: '',
+publish	Build and test maintained packages	2026-10-05T18:20:51.7407312Z     stderr: `Author identity unknown\n\n*** Please tell me who you are.\n\nRun\n\n  git config --global user.email "you@example.com"\n  git config --global user.name "Your Name"\n\nto set your account's default identity.\nOmit --global to set the identity only in this repository.\n\nfatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed\nError: Command failed: git commit -m mapctx: cutover to external store\n\nprojectId: 9ba1cac6-b1ad-4ae5-ac2d-ee8b5a354cef\nplansAuthority: markdown -> store\nAuthor identity unknown\n\n*** Please tell me who you are.\n\nRun\n\n  git config --global user.email "you@example.com"\n  git config --global user.name "Your Name"\n\nto set your account's default identity.\nOmit --global to set the identity only in this repository.\n\nfatal: empty ident name (for <runner@runnervm8df0l.gjdbbupuwjlu1o3x5tnkqk5h4e.cx.internal.cloudapp.net>) not allowed\n\n`
+publish	Build and test maintained packages	2026-10-05T18:20:51.7411232Z   }
+publish	Build and test maintained packages	2026-10-05T18:20:51.7428741Z npm error Lifecycle script `test` failed with error:
+publish	Build and test maintained packages	2026-10-05T18:20:51.7430009Z npm error code 1
+publish	Build and test maintained packages	2026-10-05T18:20:51.7431487Z npm error path /home/runner/work/mapctx/mapctx/packages/sync-engine
+publish	Build and test maintained packages	2026-10-05T18:20:51.7433349Z npm error workspace @mapctx/sync-engine@0.3.1
+publish	Build and test maintained packages	2026-10-05T18:20:51.7437373Z npm error location /home/runner/work/mapctx/mapctx/packages/sync-engine
+publish	Build and test maintained packages	2026-10-05T18:20:51.7438363Z npm error command failed
+publish	Build and test maintained packages	2026-10-05T18:20:51.7441552Z npm error command sh -c npm run build && node --test dist/**/*.test.js test/*.test.cjs
+publish	Build and test maintained packages	2026-10-05T18:20:51.7608082Z ##[error]Process completed with exit code 1.
