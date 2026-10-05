@@ -27,9 +27,21 @@
     "sha256": "d8cece67892a4735f1b11ab5523b18fdb02bdb49dd7eda089e70efc230c5a7f7",
     "bytes": 864
   },
+  "github-release.json": {
+    "sha256": "317809f0bb2ae1ed6aa3af4f9c3a276f755afae3690c0c28d661c49e0de15fdd",
+    "bytes": 145
+  },
   "node22-smoke.log": {
     "sha256": "ed976b5075f561b4cc8d9c6b31bb3211a84366b438041df0f9cf57775b68bfbb",
     "bytes": 11202
+  },
+  "npm-publication.json": {
+    "sha256": "3c9087f143ff9344654dd3fcdab7aed99693de31e6b9a74b714da13629791869",
+    "bytes": 465
+  },
+  "npm-tags.json": {
+    "sha256": "dd10e8843c871a38fdef6c0bc7de487328ae40c786f9523557f72237ddbaff74",
+    "bytes": 24
   },
   "pack-smoke-retry.log": {
     "sha256": "5d549f14b19a96fc36aeb5d2113a0ab779f738a8cdc86267a7e8f0090f0d3e2f",
@@ -38,6 +50,18 @@
   "pack-smoke.log": {
     "sha256": "a42b13e6e6a0fb3cedf778d99f6b9f1d25237e3ad26a7b9498ef9acce05671f6",
     "bytes": 10957
+  },
+  "publication-ci.log": {
+    "sha256": "52c088a8459d498db740a7370f157595b772843f199e5d653e76eebf13bd2360",
+    "bytes": 228948
+  },
+  "publication-run.json": {
+    "sha256": "d12f8fd0ae205d034c7ba8f4e29c0a9ddd80a98b283b82b72ecdd4263b673cd6",
+    "bytes": 2312
+  },
+  "registry-smoke.log": {
+    "sha256": "1958dd581d36a602abe474138617abb148174f9950bfc2ebba1feb93ad0317e0",
+    "bytes": 10864
   },
   "tests-retry.log": {
     "sha256": "d974736b8ee99acaf29625d91a6771d99baadd2afa6d0799d2dde123b61c108e",

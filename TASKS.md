@@ -2592,7 +2592,7 @@
 ### Release 0.3.1: CLI/web consolidation and historical integration archive
 
   - id: T-122
-  - status: review
+  - status: done
   - type: chore
   - parent: null
   - subIssueProgress: null
@@ -2603,7 +2603,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-05
   - externalId: null
   - updated: 2026-10-05
   - detail: ./tasks/T-122.md

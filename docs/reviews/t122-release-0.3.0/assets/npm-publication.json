@@ -1,0 +1,12 @@
+{
+  "version": "0.3.1",
+  "dist.integrity": "sha512-wrHaKXj0rrya14RXvwR+8YPMlKdN+BqmMDfAVnA0ciaXuKFN4v8AI6NOKZJf7C3PVVFrL89UlDOuFCNdRfZwwg==",
+  "dist.shasum": "9eeec40b53c6b11ac02e2c73268179567b7f714e",
+  "gitHead": "0bdea8c1471cd52370fadaa27318e9173618ca18",
+  "dist.attestations": {
+    "url": "https://registry.npmjs.org/-/npm/v1/attestations/@mapctx%2fsync-engine@0.3.1",
+    "provenance": {
+      "predicateType": "https://slsa.dev/provenance/v1"
+    }
+  }
+}
