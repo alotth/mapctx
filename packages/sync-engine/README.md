@@ -1,26 +1,19 @@
-# @mapctx/sync-engine (alpha)
+# @mapctx/sync-engine 0.3.0
 
-Standalone npm package + CLI to sync local `TASKS.md` with GitHub Issues and GitHub Projects (v2).
+Store-backed MapCtx CLI and standalone Kanban/roadmap workspace. Node 22.13+ required (24 recommended).
 
-Status: alpha. APIs, config keys, and sync behavior may change before `1.0.0`.
-
-**Note on workspace-server.ts:** The local workspace-server is frozen as of [T-059](../../tasks/T-059.md). It receives build-green fixes only and is revisited at external-adoption gate. It remains the sole host for workspaceV2 (used by planned Gantt) and should not be removed.
-
-Detailed operational guide: `DOCUMENTATION.md`.
-
-## Install
-
-```bash
-npm install @mapctx/sync-engine
+```sh
+npm install -g @mapctx/sync-engine@0.3.0
+mapctx workspace /path/to/project
+mapctx validate
+mapctx plan --json
 ```
 
-Run with npx:
+Canonical execution: `task start` → `dispatch receipt` → current-revision Acceptance approvals → `task finish`. Validate reads the DB/config; explicit `--snapshots` checks mirrors. Routine mutations do not regenerate local files. See [root guide](../../README.md) and `mapctx --help` for store commands.
 
-```bash
-npx --yes --package @mapctx/sync-engine mapcs status
-```
+VS Code/OpenCode UI adapters are archived in `legacy/integrations-pre-0.3.0`. Workspace assets now live in `src/workspace-ui`; the browser host remains supported. OpenCode history ingestion and `mapcs` legacy sync compatibility remain available.
 
-Release/maintainer process: see `MAINTAINERS.md`.
+The sections below document **legacy Markdown/GitHub sync**, not store-authority task editing.
 
 ## Use as library
 

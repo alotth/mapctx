@@ -1,213 +1,69 @@
-# MapCtx - Multi-Agent Project Context
+# MapCtx — planning and delivery intelligence
 
-MapCtx is planning and delivery intelligence for work executed by coding agents
-across multiple harnesses.
+MapCtx turns task intent into dependency/resource-aware plans, records execution receipts, and compares planned effort with delivery history. CLI and standalone browser workspace are the active interfaces in **0.3.0**.
 
-Current release combines:
+## Install and open
 
-- an external project store as the live authority (`plansAuthority: store` in
-  `mapctx.toml`), shared across worktrees through the `mapctx` CLI
-- generated, read-only board snapshots: `TASKS.md` and the structured field
-  blocks of `tasks/<ID>.md`
-- visual workflows (VS Code extension; OpenCode plugin frozen)
-- GitHub Issues/Projects sync via `@mapctx/sync-engine`
+Requires Node.js **22.13+** (Node 24 recommended for built-in SQLite).
 
-vNext keeps rich task planning, resource-aware waves, Kanban, and Gantt, but
-moves live mutable state to an external project store. Traycer is first execution
-adapter; Git stores approved specs/ADRs rather than runtime state. See
-`docs/PROJECT.md`, `docs/ROADMAP.md`, ADR 0003, and ADR 0004.
+```sh
+npm install -g @mapctx/sync-engine@0.3.0
+mapctx --help
+mapctx workspace /path/to/project
+```
 
-Install extension: [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=alotth.mapctx)
+`mapctx` without arguments also opens the workspace. Kanban, roadmap, Gantt, history and budget views ship with the CLI; no editor extension is required.
 
-## Monorepo structure
+## Authority and daily flow
 
-- `packages/vscode-extension/`: VS Code/Cursor extension (`mapctx`)
-- `packages/opencode-plugin/`: OpenCode plugin assets and installer scripts
-- `packages/sync-engine/`: current `@mapctx/sync-engine`; vNext canonical CLI is
-  `mapctx`, with `mapcs` retained temporarily as deprecated compatibility alias
-- `packages/core/`: shared parsing/model utilities
-- `docs/`: project context, methodology, roadmap, ADRs, and release runbooks
-- `skills/`: reusable AI skill packs
-- `rules/`: shared lightweight rule presets for agents
+`mapctx.toml` declares `plansAuthority = "markdown" | "store"`. Under store authority, the external per-project store is canonical, shared across worktrees. `TASKS.md` and structured task fields are generated mirrors; task description prose remains Git-authored.
 
-Contributor guide: `CONTRIBUTING.md`
+```sh
+mapctx validate                    # canonical DB/config, read-only
+mapctx validate --snapshots        # explicit local mirror check
+mapctx plan --json
+mapctx task search --query "work" --json
+mapctx task start T-123 --json      # atomic claim + dispatch
+mapctx dispatch receipt <dispatch-id> --receipt /tmp/receipt.json --json
+mapctx task acceptance show T-123 --json
+mapctx task acceptance approve T-123 --index 0 --expect-revision 1 --evidence uri=proof://review --json
+mapctx task finish T-123 --json     # canonical done gate + final checkpoint
+```
 
-## Methodology and project docs
+Renew/release the returned lease through `task renew/release`; keep its token private. Approve each current Acceptance criterion explicitly. `task acceptance revise --from-file ... --expect-revision ...` creates a new pending revision. For existing projects, `mapctx acceptance import` previews a batch; `--commit` records observed checkboxes (`[x]` approved, `[ ]` pending), skips existing revisions and never infers approval from done.
 
-MapCtx is task-first and contract-first. Authority is binary and tracked in
-`mapctx.toml` (`plansAuthority: markdown | store`); Markdown and the store are
-never simultaneously writable. This repository is post-cutover
-(`plansAuthority: store`).
+Routine mutations do not regenerate mirrors. Use `task finish` or explicit `mapctx export --reason manual|wave-end|epic-end` at final boundaries. Wave/epic labels do not automate orchestration. Export preserves authored Acceptance notes; ambiguous reassociation or malformed fences refuse publication.
 
-- live operational source: the external project store, written only through the
-  `mapctx` CLI
-- `TASKS.md` and the structured field blocks of `tasks/<ID>.md`: generated,
-  read-only snapshots; hand edits surface as `mapctx validate` drift errors
-- `description:` prose blocks in `tasks/<ID>.md`: Git-authored regardless of
-  regime (durable intent, not live board state)
-- living repo context: `docs/PROJECT.md`
-- delivery sequencing: `docs/ROADMAP.md`
-- workflow and adoption policy: `docs/methodology.md`
-- durable decisions: `docs/adr/`
+## Adoption, recovery and GitHub
 
-Host rules remain authoritative. MapCtx records Product Review, System
-Architecture, Program Design, and Vertical Slice gates when required, but never
-overrides harness workflow policy or owns agent execution.
+```sh
+mapctx import --dry-run
+mapctx import --commit             # explicit Markdown → store cutover
+mapctx store init                  # recover from committed checkpoint
+mapctx store repair                # replay preserved journal; gaps refuse
+mapctx push --dry-run               # store-backed GitHub projection
+```
 
-## Task model and authority
+Back up `~/.mapctx/projects/<id>/` (DB, journals and metadata); Git checkpoints are not complete event-history backups. Recover historical nodes only through reviewed, hash-pinned attestations. `mapcs` remains deprecated compatibility for legacy Markdown/GitHub sync; removal is outside this release.
 
-The board schema is unchanged: single `## Tasks` list (no status-column
-sections), canonical field order, and status flow
-`backlog -> ready-for-do -> doing -> review -> done`, with `paused` for temporary
-stops and `archived` for work that will not proceed. Archived work stays in the
-board history but does not count as completed. What changed
-after cutover is who writes it:
+## Repository
 
-- editable surfaces: the `mapctx` CLI (`task create/move/reopen/update`,
-  `dispatch create/receipt`), the cutover flow (`mapctx import
-  --dry-run/--commit`), and recovery (`mapctx store init/repair`)
-- `TASKS.md` and the structured blocks of `tasks/<ID>.md` are regenerated
-  output; never hand-edit them
-- a good-faith manual edit is resolved with `mapctx reconcile <task-id>`
-  (accept or discard per field); silent merge is never an option
-- detail files keep Git-authored prose: `Open Decisions for Execution` for
-  questions, `Decisions Taken` for dated answers, `Implementation Notes` for
-  concrete file/doc references
+- `packages/sync-engine`: public CLI, GitHub projection, web host/assets/tests
+- `packages/core`, `protocol`, `store`, `planner`, `forecast`: shared private libraries bundled with CLI
+- `packages/adapter-traycer`: executor ticket/envelope adapter
+- `skills`, `rules`: agent workflows and policy
+- `docs`: methodology, ADRs, reviews and release runbooks
 
-Authoring and enforcement live in skills + sync tooling, not duplicated in long global rules.
+VS Code and OpenCode **editor/plugin integrations are retired from main**. Their current sources, tooling and release runbooks remain in [`legacy/integrations-pre-0.3.0`](https://github.com/alotth/mapctx/tree/legacy/integrations-pre-0.3.0), commit `c6c3efa`. No `OLD` folder. Existing Marketplace installs are not uninstalled by this change. OpenCode session-history ingestion remains supported; retiring its UI plugin does not retire the harness.
 
-## Quick start
+## Develop and release
 
-1) Install dependencies
-
-```bash
+```sh
 npm ci
-```
-
-2) Build key packages
-
-```bash
-npm run compile
-npm run build:sync-engine
-npm run build:opencode-plugin
-```
-
-3) Run tests
-
-```bash
+npm run build
 npm test
-npm run test:sync-engine
+npm run dev:workspace-v2 -- --no-open
+npm run pack:smoke --workspace @mapctx/sync-engine
 ```
 
-## CLI (`mapctx`)
-
-The canonical CLI is `mapctx`; `mapcs` remains a temporary deprecated alias for
-GitHub sync.
-
-Store-backed task operations:
-
-```bash
-mapctx task claim <task-id>              # lease a task (returns claimId + leaseToken)
-mapctx task move <task-id> --status doing
-mapctx task reopen <task-id> --status review # reopen done/archived task; clears completedOn
-mapctx task update <task-id> --set priority=high
-mapctx task create --title "..." --summary "..."
-mapctx task search --query "..."   # duplicate-check: case/accent-insensitive over title, tags, domains, summary
-mapctx task context <task-id> --budget 2000
-mapctx dispatch create <task-id>         # feed dispatchId/attempt into dispatch receipt
-mapctx dispatch receipt <dispatch-id> --receipt path
-```
-
-Board hygiene and planning:
-
-```bash
-mapctx validate   # drift check runs when plansAuthority: store
-mapctx plan
-```
-
-Cutover and recovery:
-
-```bash
-mapctx import --dry-run    # preview; refuses lossy imports (ADR 0004)
-mapctx import --commit     # writes store, regenerates TASKS.md, flips plansAuthority in one commit
-mapctx store init          # rehydrate from the last git-committed checkpoint
-mapctx store repair        # reproject mapctx.db from the append-only journal
-```
-
-GitHub sync still uses the `mapcs` command surface:
-
-```bash
-mapcs status
-mapcs pull
-mapcs push
-mapcs bootstrap --from <local|github>
-mapcs reconcile <task-id>
-```
-
-Local state: `mapctx.toml` at the repository root (project identity,
-`plansAuthority`, GitHub binding) and `~/.mapctx/projects/<id>/` (SQLite store
-plus event journal). Back up the store directory on your own cadence and commit
-generated checkpoints to git.
-
-Detailed docs:
-
-- `packages/sync-engine/README.md`
-- `packages/sync-engine/DOCUMENTATION.md`
-- `packages/sync-engine/CHEATSHEET.md`
-
-## AI workflow (skills-first)
-
-Available skills are listed in `skills/README.md`.
-
-Methodology reference:
-
-- `docs/methodology.md`
-- `docs/PROJECT.md`
-- `docs/ROADMAP.md`
-- `docs/adr/0001-methodology-and-source-of-truth.md`
-
-Key skills:
-
-- `mapctx-tasks`: pre-cutover Markdown board editing; post-cutover, use the `mapctx` CLI instead
-- `mapctx-plan-engine`: run `mapctx validate/plan` for board QA and wave planning
-- `mapctx-sync-engine`: operate pull/push/bootstrap/reconcile safely
-- `mapctx-ralph-tasks`: execute task loops via slash trigger
-- `mapctx-enrich-task`: enrich sparse task detail files before execution
-- `mapctx-correct-course`: capture and apply mid-stream scope changes safely
-
-The rule files in `rules/` are intentionally lightweight and are meant to route agents into the correct skills.
-
-Execution stance:
-
-- default to a single agent for `lite` and most `standard` work
-- use `mapctx validate` and `mapctx plan` before larger or dependency-heavy execution
-- reserve planner/reviewer/evaluator subagents for `strict`, `Hard`, or `Extreme` work when the extra isolation meaningfully improves confidence
-
-## OpenCode plugin
-
-Build and install from repo root:
-
-```bash
-npm run build:opencode-plugin
-npm run install:opencode-plugin
-```
-
-Installed paths:
-
-- `~/.config/opencode/plugins/kanban-roadmap/`
-- `~/.config/opencode/plugins/kanban-roadmap.js`
-
-## Releases
-
-Release tags by package:
-
-- `ext-vX.Y.Z` -> VS Code extension
-- `sync-vX.Y.Z` -> `@mapctx/sync-engine`
-- `plugin-vX.Y.Z` -> OpenCode plugin
-
-Release runbooks:
-
-- `docs/releases/tag-strategy.md`
-- `docs/releases/extension.md`
-- `docs/releases/engine.md`
-- `docs/releases/opencode-plugin.md`
+See [CONTRIBUTING](CONTRIBUTING.md), [project context](docs/PROJECT.md), [methodology](docs/methodology.md), [skills](skills/README.md) and [release runbook](docs/releases/engine.md). `sync-vX.Y.Z` is the active release tag.

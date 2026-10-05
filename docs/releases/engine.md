@@ -1,42 +1,28 @@
-# Sync Engine Release
+# CLI / web release
 
-Release target: npm package `@mapctx/sync-engine`.
+Public npm package: `@mapctx/sync-engine`. Version 0.3.0 bundles core, protocol, store, planner, forecast and standalone workspace assets. Node 22.13+ required (24 recommended).
 
-## Trigger
+## Verification
 
-- Git tag: `sync-vX.Y.Z`
-- Workflow: `.github/workflows/release-sync-engine.yml`
+```sh
+npm ci
+npm test
+npm run pack:check --workspace @mapctx/sync-engine
+npm run pack:smoke --workspace @mapctx/sync-engine
+```
 
-## Steps
+Smoke verifies a clean tarball installation, canonical store/Acceptance/checkpoint operations and served web assets, without relying on a repository checkout.
 
-1. Update `packages/sync-engine/package.json` version.
-2. Run local checks:
+## Publish
 
-   ```bash
-   npm ci
-   npm run build:sync-engine
-   npm run test --workspace @mapctx/sync-engine
-   npm run pack:check --workspace @mapctx/sync-engine
-   npm run pack:smoke --workspace @mapctx/sync-engine
-   ```
+Commit reviewed changes, then push `main` and `sync-v0.3.0`. `.github/workflows/release-sync-engine.yml` checks tag/version agreement, runs tests and packaged-install smoke before `npm publish --provenance --access public`. Manual workflow dispatch also verifies package/version; already published versions cannot be overwritten.
 
-3. Create and push tag:
+The workflow retains the existing repository `NPM_TOKEN` publishing path and provenance permissions. npm Trusted Publishing/OIDC is an alternative only after configuring that publisher on npm; it is not assumed configured by this release. Missing credentials fail the workflow. Private library packages are bundled, not separately published.
 
-   ```bash
-   git tag sync-v0.1.3
-   git push origin sync-v0.1.3
-   ```
+## Upgrade existing projects
 
-## npm Trusted Publisher
+Back up project store DB + journals + metadata before upgrade. Operational `validate` is read-only and reports required maintenance rather than silently migrating. Writable store operations apply additive migrations; preserve existing event history.
 
-Publishing uses npm Trusted Publishing/OIDC from GitHub Actions instead of an npm token.
+For Acceptance adoption, run `mapctx acceptance import` first, review the batch, then `--commit`. It registers observed checkboxes, skips existing revisions, does not close tasks and does not approve pending criteria. Final `mapctx export` publishes mirrors.
 
-Configure `@mapctx/sync-engine` on npm with:
-
-- publisher: GitHub Actions
-- organization/user: `alotth`
-- repository: `mapctx`
-- workflow filename: `release-sync-engine.yml`
-- allowed action: `npm publish`
-
-`@mapctx/core` remains a private workspace package and is bundled into the `@mapctx/sync-engine` tarball via `bundleDependencies`.
+Editor/plugin code is preserved at `legacy/integrations-pre-0.3.0` (`c6c3efa`); no OLD folder or editor-release workflow remains on main.

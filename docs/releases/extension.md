@@ -1,30 +1,5 @@
-# Extension Release
+# VS Code extension — historical distribution
 
-Release target: Visual Studio Marketplace + Open VSX.
+Retired from main in 0.3.0 by operator decision. Source, development tooling and original release runbook are preserved at [legacy/integrations-pre-0.3.0](https://github.com/alotth/mapctx/tree/legacy/integrations-pre-0.3.0) (`c6c3efa`).
 
-## Trigger
-
-- Git tag: `ext-vX.Y.Z`
-- Workflow: `.github/workflows/main.yml`
-
-## Steps
-
-1. Update extension version in `packages/vscode-extension/package.json`.
-2. Run local checks:
-
-   ```bash
-   npm ci
-   npm run package
-   ```
-
-3. Create and push tag:
-
-   ```bash
-   git tag ext-v2.0.5
-   git push origin ext-v2.0.5
-   ```
-
-## Required Secrets
-
-- `VS_MARKETPLACE_TOKEN`
-- `OPEN_VSX_TOKEN`
+No active publishing workflow remains for this integration. Previously published installs are not removed. Use `mapctx workspace` for the maintained web interface; see [CLI release](engine.md).

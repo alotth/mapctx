@@ -56,10 +56,11 @@ the full workflow with a recorded reason. MapCtx never infers approval silently.
 
 ## Current Focus
 
-- define vNext protocol and external store;
+- maintain canonical protocol and external store;
 - preserve resource-aware planning (`domains`, paths, dependency waves);
 - validate neutral dispatch and receipts with Traycer;
-- convert current UI into planning/forecast views over store queries;
+- ship standalone CLI/web planning and forecast views over store queries;
+- preserve retired VS Code/OpenCode integrations in the historical branch;
 - unify CLI under `mapctx` and deprecate `mapcs`;
 - consolidate skills around deterministic core capabilities.
 

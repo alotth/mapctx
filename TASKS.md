@@ -2589,6 +2589,25 @@
   - updated: 2026-10-05
   - detail: ./tasks/T-121.md
 
+### [T-122] Release 0.3.0: CLI/web consolidation and historical integration archive
+
+  - id: T-122
+  - status: review
+  - type: chore
+  - parent: null
+  - subIssueProgress: null
+  - priority: null
+  - workload: Hard
+  - tags: []
+  - domains: [CLI, SYNC, DOCS]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-05
+  - detail: ./tasks/T-122.md
+
 ## Notes
 
 - 2026-05-29 cleanup: `TASKS.md` is the local source of truth; GitHub/Project sync validation and uncertain future workflows are paused until explicitly resumed.

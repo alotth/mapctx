@@ -1,7 +1,7 @@
 {
   "name": "@mapctx/sync-engine",
-  "version": "0.2.0",
-  "description": "Sync TASKS.md with GitHub Issues and Projects v2",
+  "version": "0.3.0",
+  "description": "Store-backed planning, delivery history, GitHub sync and standalone Kanban/roadmap workspace",
   "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -22,8 +22,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "rm -rf node_modules/@mapctx/core && tsc -p tsconfig.json && chmod +x dist/cli.js dist/mapctx-cli.js && rm -rf dist/workspace-ui && mkdir -p dist/workspace-ui && cp ../vscode-extension/src/html/workspaceV2.* dist/workspace-ui/",
-    "test": "npm run build && node --test dist/**/*.test.js",
+    "build": "rm -rf node_modules/@mapctx/core && tsc -p tsconfig.json && chmod +x dist/cli.js dist/mapctx-cli.js && rm -rf dist/workspace-ui && mkdir -p dist/workspace-ui && cp src/workspace-ui/workspaceV2.* dist/workspace-ui/",
+    "test": "npm run build && node --test dist/**/*.test.js test/*.test.cjs",
     "clean": "rm -rf dist",
     "bundle:core": "node ../../scripts/prepare-sync-engine-bundled-core.mjs",
     "pack:check": "npm pack --dry-run",
@@ -43,7 +43,7 @@
   },
   "homepage": "https://github.com/alotth/mapctx/tree/main/packages/sync-engine#readme",
   "engines": {
-    "node": ">=18.18"
+    "node": ">=22.13.0"
   },
   "keywords": [
     "tasks",

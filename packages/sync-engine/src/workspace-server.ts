@@ -794,7 +794,7 @@ function appleScriptString(value: string): string {
 function findHtmlRoot(): string {
   let current = path.resolve(__dirname);
   while (true) {
-    const candidate = path.join(current, 'packages', 'vscode-extension', 'src', 'html');
+    const candidate = path.join(current, 'packages', 'sync-engine', 'src', 'workspace-ui');
     if (fs.existsSync(path.join(candidate, 'workspaceV2.html'))) return candidate;
 
     const packageCandidate = path.join(current, 'workspace-ui');

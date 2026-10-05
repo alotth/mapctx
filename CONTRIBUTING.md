@@ -15,7 +15,6 @@ Methodology references:
 
 ```bash
 npm ci
-npm run compile
 npm run build:sync-engine
 ```
 
@@ -23,7 +22,6 @@ Run tests before opening a PR:
 
 ```bash
 npm test
-npm run test:sync-engine
 ```
 
 ## Task model expectations
@@ -33,7 +31,7 @@ structured field blocks of `tasks/<ID>.md` are generated, read-only output.
 
 - Edit tasks through the `mapctx` CLI (`task create/move/reopen/update`,
   `dispatch create/receipt`); never hand-edit `TASKS.md` or the structured blocks of `tasks/*.md`.
-- `mapctx validate` reports drift from manual edits as an error; resolve it with `mapctx reconcile <task-id>` (accept or discard per field), never a silent merge.
+- `mapctx validate --snapshots` reports drift from manual edits as an error; resolve it with `mapctx reconcile <task-id>` (accept or discard per field), never a silent merge.
 - Default flow: `backlog -> ready-for-do -> doing -> review -> done`, with `paused` for temporary stops and `archived` for work that will not proceed. Archived is terminal and is not completion.
 - The `description:` prose block in `tasks/<ID>.md` stays Git-authored: keep unresolved questions under `Open Decisions for Execution`, final dated answers under `Decisions Taken`, and concrete landing spots under `Implementation Notes`.
 - Keep project-wide context in `docs/PROJECT.md`, sequencing in `docs/ROADMAP.md`, and durable decisions in `docs/adr/`.
@@ -70,15 +68,8 @@ mapcs push
 - Update `docs/methodology.md` or `docs/adr/` when changing repo-level workflow assumptions.
 - Avoid unrelated formatting churn.
 
-## Release tags
+## Release
 
-- `ext-vX.Y.Z` -> VS Code extension
-- `sync-vX.Y.Z` -> `@mapctx/sync-engine`
-- `plugin-vX.Y.Z` -> OpenCode plugin
+CLI/web is the active distribution. Use `sync-vX.Y.Z`; see [engine runbook](docs/releases/engine.md). Node 22.13+ required; Node 24 recommended. `npm test` covers protocol, store, planner, forecast, Traycer adapter, sync and browser roadmap tests.
 
-Runbooks:
-
-- `docs/releases/tag-strategy.md`
-- `docs/releases/extension.md`
-- `docs/releases/engine.md`
-- `docs/releases/opencode-plugin.md`
+VS Code/OpenCode adapter packages and their exclusive tools are preserved in `legacy/integrations-pre-0.3.0` (c6c3efa), not maintained on main. Keep historical migration/event compatibility and authored intent; do not classify them as disposable legacy code.

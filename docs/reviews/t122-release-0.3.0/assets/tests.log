@@ -1,0 +1,1279 @@
+
+> test
+> npm run build && npm run test --workspaces --if-present
+
+
+> build
+> npm run build:sync-engine && npm run build --workspace @mapctx/adapter-traycer
+
+
+> build:sync-engine
+> npm run build --workspace @mapctx/protocol && npm run build --workspace @mapctx/core && npm run build --workspace @mapctx/store && npm run build --workspace @mapctx/planner && npm run build --workspace @mapctx/forecast && npm run build --workspace @mapctx/sync-engine
+
+
+> @mapctx/protocol@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @mapctx/core@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @mapctx/store@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @mapctx/planner@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @mapctx/forecast@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @mapctx/sync-engine@0.3.0 build
+> rm -rf node_modules/@mapctx/core && tsc -p tsconfig.json && chmod +x dist/cli.js dist/mapctx-cli.js && rm -rf dist/workspace-ui && mkdir -p dist/workspace-ui && cp src/workspace-ui/workspaceV2.* dist/workspace-ui/
+
+
+> @mapctx/adapter-traycer@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @mapctx/adapter-traycer@0.1.0 test
+> npm run build && node --test dist/**/*.test.js
+
+
+> @mapctx/adapter-traycer@0.1.0 build
+> tsc -p tsconfig.json
+
+✔ maps a canonical task to a schema-valid DispatchEnvelope (2.995ms)
+✔ renders only closed Traycer frontmatter and links MapCtx as authority (0.248333ms)
+✔ imports Traycer-first tickets as explicitly unplanned (0.270916ms)
+✔ promotes artifacts only with explicit approval (0.203833ms)
+✔ maps a synthetic multi-task plan without owning planner scheduling (6.674584ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 76.606875
+
+> @mapctx/forecast@0.1.0 test
+> npm run build && node --test dist/**/*.test.js
+
+
+> @mapctx/forecast@0.1.0 build
+> tsc -p tsconfig.json
+
+✔ Claude prompt/end ownership, tool results, overnight parking, privacy (41.553917ms)
+✔ overlapping sessions union once with agent ownership priority (0.470792ms)
+✔ human-only evidence measures human wait but cannot calibrate agent time (0.577833ms)
+✔ session spans retain idle gap; task duration unions disjoint and overlapping sessions (0.362917ms)
+✔ reversed or invalid other-session activity never corroborates parked time (0.851834ms)
+✔ old, empty, malformed, and out-of-bounds evidence never claims measurement (0.784ms)
+✔ active time excludes idle gaps and task duration unions sessions (0.884583ms)
+✔ shadow cost is priced independently from cash billing and allocation (0.292291ms)
+✔ estimate fallback declares low confidence and uses active time prior (0.962375ms)
+✔ receipt-only durations report substituted coverage, never measured (0.368333ms)
+✔ only strictly interior run events establish measured coverage (0.106208ms)
+✔ boundary-only and out-of-range run events remain wall-clock substitution (0.076791ms)
+✔ interior timestamps yield measured coverage and exclude the idle gap (0.060917ms)
+✔ idle threshold is exclusive: a gap exactly at the threshold is idle (0.05075ms)
+✔ no usable timestamps report coverage none (0.054834ms)
+✔ estimate built on substituted samples says so in assumptions (0.382542ms)
+✔ one substituted sample downgrades an otherwise measured estimate (0.186333ms)
+✔ estimate provenance records interval classification policy (2.528334ms)
+✔ durationCoverageFromAssumptions reads the coverage back out of a real snapshot (0.292541ms)
+✔ durationCoverageFromAssumptions defaults to none for missing or malformed assumptions (0.037625ms)
+✔ isPriorFallbackEstimate flags estimates with no historical samples (0.12625ms)
+✔ prior-derived estimates vary by declared workload (0.131875ms)
+✔ a prior-derived estimate names the prior it used and stays low confidence (0.08775ms)
+✔ expert-guess transitions to historical-baseline once real actuals exist (1.561334ms)
+✔ historical baselines prefer same-workload samples and say so when ungrouped (0.348ms)
+✔ workloadBaselines answers per-workload questions and excludes untagged samples (6.265167ms)
+✔ pools key on the DISCOVERED workload: re-attributed actuals leave the planned pool (0.200083ms)
+✔ snapshot carries the task-level re-attribution note when planned differs from discovered (0.091542ms)
+✔ estimation error aggregates per planned workload, deterministic and untagged-blind (0.528958ms)
+✔ model tier is a derived lens over raw ids; unknown stays unclassified (0.347792ms)
+✔ duration display picks its unit from magnitude (0.393542ms)
+✔ no fixed unit: hours never render as days, days never render as minutes (0.071708ms)
+✔ invalid durations render as no data (0.04925ms)
+✔ parseEstimatedEffortMs parses agent-active free text into milliseconds (0.812625ms)
+✔ parseEstimatedEffortMs documents the agent-active day and week convention (0.404292ms)
+✔ parseEstimatedEffortMs returns null for junk instead of fabricating a duration (0.20725ms)
+✔ codex: toolcall links, file-edit links, bare mention stays weak (37.344625ms)
+✔ opencode rows: bash toolcall links; db opened read-only by caller (0.4445ms)
+✔ claude: signal scan reuses T-100 interval extractor, never reimplements it (0.54125ms)
+✔ multi-task session splits: primary measured, secondary inferred, ambiguous listed (0.306875ms)
+✔ reversed and degenerate spans rejected, never fabricated (0.534041ms)
+✔ receipt build validates, scans are idempotent, privacy holds (0.864541ms)
+✔ inferred and declared tiers never enter calibration (0.387334ms)
+✔ generic filesAffected entries never link (specificity floor) (0.088667ms)
+✔ git commits link inferred; multi-task commits go to manual review (0.106875ms)
+✔ T-116 scope: identical task IDs in another repository never link (0.162375ms)
+✔ T-116 scope: linked worktrees of the same repository stay in scope (0.202917ms)
+✔ T-116 scope: unverifiable cwd is listed, never linked or measured (0.092ms)
+✔ T-116: without a scope the report keeps the unscoped behavior (0.543083ms)
+✔ review2 finding1: foreign per-command workdir overrides never link, even in a MapCtx session (0.098583ms)
+✔ review2 finding1: all-foreign commands leave the session unlinked and unmeasured (0.069375ms)
+✔ review2 finding1: any foreign command degrades measured time even when in-scope signals link (0.124917ms)
+✔ review2 finding1: in-scope worktree workdir override still links and measures (0.23425ms)
+✔ review2 finding1: codex exec JS-source input carries workdir/cd provenance (a617 shape) (0.1125ms)
+✔ the duration prior varies by declared workload (0.415542ms)
+✔ the Easy prior is anchored to this repository's measured wave1 actuals (0.062917ms)
+✔ prior derivation is written down in the assumptions, not buried (0.113916ms)
+✔ P90 retains the 2x P50 spread across all workloads (0.050625ms)
+✔ priorForWorkload falls back to the default workload and rejects typos (0.122916ms)
+✔ DEFAULT_PRIOR is the default-workload prior, kept as a back-compat alias (0.042459ms)
+✔ store forecast measures active time from persisted events across idle gap (146.672792ms)
+✔ store forecast labels receipt-only duration as substituted (67.089375ms)
+✔ store bridge pools by discovered workload and reports estimation error per planned (88.325584ms)
+ℹ tests 63
+ℹ suites 0
+ℹ pass 63
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 400.646709
+
+> @mapctx/planner@0.1.0 test
+> npm run build && node --test dist/**/*.test.js
+
+
+> @mapctx/planner@0.1.0 build
+> tsc -p tsconfig.json
+
+✔ DAG waves serialize colliding writes and expose per-claim explanation (7.587917ms)
+✔ same board gives byte-identical output regardless of task input order (0.537791ms)
+✔ paused/review/doing statuses and container epics are excluded; leaf work is recommended (0.187583ms)
+✔ dependency on paused work and workflow gates have named blocking reasons (0.149459ms)
+✔ depends-on edge: from waits on to (0.098417ms)
+✔ blocks edge: to waits on from (0.075167ms)
+✔ ready task depending on a completed task schedules and is not dropped (regression for T-063) (0.076792ms)
+✔ tasks stuck in a dependency cycle are named in blockedReasons, not silently dropped (0.073458ms)
+✔ completeness invariant: every non-terminal, non-container task appears in a wave or in blockedReasons (0.129125ms)
+✔ executor capacity limits each wave without changing collision explanation (0.106625ms)
+✔ collision emitted only after successful terminal receipts and uncovered overlap (7.549084ms)
+✔ overbroad uses serialized explanation and actual receipts (0.195333ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 62.71425
+
+> @mapctx/protocol@0.1.0 test
+> npm run build && node --test dist/**/*.test.js
+
+
+> @mapctx/protocol@0.1.0 build
+> tsc -p tsconfig.json
+
+✔ dispatch attempt state machine: legal transitions and terminal states have none (0.814417ms)
+✔ evaluateRunReceipt accepts the receipt for the current (latest) attempt (0.155959ms)
+✔ evaluateRunReceipt rejects a late receipt from an obsolete attempt (0.077084ms)
+✔ evaluateRunReceipt rejects a duplicate receipt for an already-accepted attempt (0.061542ms)
+✔ evaluateRunReceipt rejects receipts for an unknown attempt or the wrong dispatch (0.067416ms)
+✔ recordAttempt is idempotent per attempt number and keeps history sorted (0.076125ms)
+✔ RunReceipt requires failure detail exactly when outcome is failed (1.23225ms)
+✔ every entity and envelope has a schema and a versioned golden fixture (0.600125ms)
+✔ golden fixtures parse and stay byte-stable (5.69825ms)
+✔ schemaVersion is required on dispatch/run envelopes and incompatible versions are rejected (0.504334ms)
+✔ identity scheme links MapCtx task, Traycer epic/artifact, and GitHub issue (0.130125ms)
+✔ planning and execution are separate machines; illegal transitions fail (0.223959ms)
+✔ event log identity is (nodeId, sequence) and forbids autoincrement fields (0.171917ms)
+✔ UsageEvent carries source and coverage (0.094792ms)
+✔ CostEvent has three measures and PlanPeriod is open|closed (0.088375ms)
+✔ PlanPeriod is account-scoped but pre-004 rows (accountId absent) stay valid (0.0965ms)
+✔ Budget is unit-agnostic (money|time) and refuses mixed units (0.553208ms)
+✔ Account carries a currency and Money rejects floats and bad codes (0.12675ms)
+✔ duration measures and estimate snapshots are explicit data (0.06775ms)
+✔ workflow gates model approved and skipped-with-reason (0.070458ms)
+✔ migration map covers every current TASKS.md and detail field (0.36675ms)
+✔ money serializes round-trip through canonical JSON (1.100917ms)
+✔ the decision example renders 200.000000 USD (0.094292ms)
+✔ parseMoneyAmount round-trips with formatMoney (0.384917ms)
+✔ parseMoneyAmount rejects precision loss, junk, and bad currency (0.312166ms)
+✔ minorUnitsToDecimalString is exact at every decimals width (0.061167ms)
+✔ cents and micros convert exactly into minor units, and refuse lossy grids (0.133291ms)
+✔ R7: parseMoneyAmount rejects values outside the safe-integer range exactly (0.629375ms)
+✔ R7: minorUnitsToDecimalString stays exact without float division (0.046084ms)
+✔ R7: grid conversions refuse results beyond the safe-integer range (0.079417ms)
+✔ R7: scaling and sums throw before a rounded/wrapped amount persists (0.130292ms)
+ℹ tests 31
+ℹ suites 0
+ℹ pass 31
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 54.776166
+
+> @mapctx/store@0.1.0 test
+> npm run build && node --test dist/**/*.test.js
+
+
+> @mapctx/store@0.1.0 build
+> tsc -p tsconfig.json
+
+✔ T-121 regression (ELA T-063): authored review note inside Acceptance survives export in place (212.048833ms)
+✔ T-121 regression: authored plain-bullet evidence list inside Acceptance survives export (170.565208ms)
+✔ T-121 regression: interleaved evidence note keeps its position between its criteria (263.768584ms)
+✔ T-121: legacy plain bullet that is a canonical criterion renders exactly once as a checkbox (288.429542ms)
+✔ T-121: export is idempotent and canonical state wins over the stale mirror (348.498416ms)
+✔ T-121: nested headings and fenced examples inside Acceptance survive in place, idempotently (0.462041ms)
+✔ T-121: an unclosed fence inside the section refuses before publication (0.271584ms)
+✔ T-121: multiple real Acceptance sections refuse before publication (0.08425ms)
+✔ T-121: duplicate legacy bullets consume the criterion once; the duplicate stays authored prose (0.175209ms)
+✔ T-121: a stale checkbox bullet that matches no current criterion is dropped (store owns the section) (0.098583ms)
+✔ T-121 (attempt-4 P1): criteria added after a trailing authored note refuse (association is uncertain) (0.074166ms)
+✔ T-121: criteria added with no authored prose after the first criterion render in place, idempotently (0.097875ms)
+✔ T-121: export refuses an in-section unclosed fence before any write (153.451708ms)
+✔ T-121 F2: dropping a renamed/removed criterion strands adjacent evidence -> refuse before write (267.022ms)
+✔ T-121 F3: checkbox-only reorder renders canonical order, idempotently (0.381125ms)
+✔ T-121 F3: reorder with interleaved authored note refuses before publication (0.1245ms)
+✔ T-121 F3: reorder with preface-only authored prose keeps the preface and renders canonical order (0.085958ms)
+✔ T-121 F3 (attempt-4 P1, reviewer repro 1): reorder with trailing evidence refuses before publication (0.068208ms)
+✔ T-121 F3 (attempt-4 P1, reviewer repro 2): added criterion with trailing evidence refuses before publication (0.054375ms)
+✔ T-121 F3: trailing fenced example with reordered criteria refuses before publication (0.064291ms)
+✔ T-121 F3: trailing nested heading with reordered criteria refuses before publication (0.056125ms)
+✔ T-121: owned criteria appended AFTER authored-only prose; no association is invented (0.074667ms)
+✔ T-121 F3: missing criterion with interleaved authored prose refuses (insertion would reassociate) (0.052583ms)
+✔ T-121 F4: matched nested bullet keeps its indentation and hierarchy (0.055208ms)
+✔ T-121 F4: reorder with indented (hierarchical) bullets refuses before publication (0.047708ms)
+✔ T-121 F1: unowned render preserves authored-only section and refuses stale checkboxes (0.209209ms)
+✔ T-121 F1: export with canonical EMPTY revision preserves authored prose and refuses stranded evidence (639.068ms)
+✔ Acceptance import pins observed bytes and maps only explicit checkboxes (1243.15075ms)
+✔ new Acceptance revision resets approvals, protects expected revision, and empty revision keeps counter (1223.659084ms)
+✔ done gate uses canonical Acceptance and never reads local detail changes (1519.15775ms)
+✔ library revise/approve/unapprove REQUIRE expectRevision and refuse without it (zero events) (1034.586208ms)
+✔ raw acceptance.revised cannot carry approval metadata into a pending new revision (zero writes) (1084.135625ms)
+✔ attestation draft refuses nodes that are not DB-only (228.48525ms)
+✔ attestation draft verifies payload hashes under both documented schemes and pins exact bytes (187.175125ms)
+✔ attestation commit requires the exact reviewed token and is duplicate-safe (348.218708ms)
+✔ malformed attestation files are a loud failure, never silently ignored (302.6645ms)
+✔ verifyRowPayloadHash accepts canonical and compact-legacy schemes only (265.665875ms)
+✔ repair refuses a DB-only node without an attestation and leaves the database untouched (152.228625ms)
+✔ repair replays attested DB-only rows byte-exactly and treats the absent prefix as declared (741.649042ms)
+✔ repair fails closed when an intact database drifts from, loses, or gains attested rows (517.144083ms)
+✔ repair refuses unexpected journal data on an attested DB-only node (372.491333ms)
+✔ repair restores attested rows from the attestation alone when the database is corrupt (404.527917ms)
+✔ an unattested new DB-only node still fails repair closed after another node is attested (571.900625ms)
+✔ approval publishes an independent witness and refuses to run without it (600.775708ms)
+✔ partial attestation file damage still yields named gaps via the witness (390.785458ms)
+✔ crash after witness publishes no file; witness survives; repair refuses; re-approval is idempotent (431.412959ms)
+✔ divergent watermark refuses both draft and repair; repair demands the witness for attested nodes (291.944541ms)
+✔ raw causation bytes survive replay across repeated repairs (all 11 columns) (330.150458ms)
+✔ invalid drafts fail validation before any token, witness, or file exists (189.402625ms)
+✔ re-confirmation restores a missing witness via the normal commands, conserving original approval metadata (482.83575ms)
+✔ re-confirmation refuses divergent content and divergent witness with zero writes (310.977541ms)
+✔ accounts are event-sourced, resolvable by id or unique name, and duplicates are refused (323.772125ms)
+✔ plan periods are account-scoped through the re-scoped projection (225.284875ms)
+✔ projects declare which accounts they draw from (replace-all bindings) (389.54875ms)
+✔ budget.set revisions keep history and latest-wins resolution is event-order correct (351.305ms)
+✔ budget scope for epics is transitive descendants; project scope is every task (268.067042ms)
+✔ money rollup: cash plus allocated count, unpriced stays unattributed, coverage degrades honestly (586.170917ms)
+✔ honest no-data states: no dispatches, empty usage/cost data, unattributed, cross-currency (438.306959ms)
+✔ time rollup consumes receipt wall clock and reports its basis (376.638834ms)
+✔ R15: dated money budgets are refused at budget.set (347.374125ms)
+✔ R15: dated time budgets consume only the receipt/period intersection (746.001375ms)
+✔ R16: negative costs net as credits with sign-independent coverage (411.698375ms)
+✔ R7: money rollup refuses aggregates beyond safe-integer range (373.936209ms)
+✔ rollup determinism: status JSON is byte-identical across reads and after full journal rebuild (622.63775ms)
+✔ epic detail export carries the generated budget projection, round-trip stable (260.425625ms)
+✔ claimTask: concurrent claims on the same task -- exactly one winner (276.389042ms)
+✔ renewClaim rejects a mismatched lease token and accepts the correct one (286.34675ms)
+✔ releaseClaim frees the task for a new claim; a dead lease auto-expires on the next attempt (457.848875ms)
+✔ claimTask: claiming starts work -- backlog reaches in-progress through the legal path (329.496042ms)
+✔ claimTask: ready claims jump straight to in-progress; done tasks refuse to be claimed (474.649917ms)
+✔ claimTask requires workload and estimated effort for executable tasks but exempts epics (631.172125ms)
+✔ R11: releasing a lease under a running dispatch preserves execution and its receipt (346.1185ms)
+✔ R11: a done task refuses both claim and fresh dispatch (548.830791ms)
+✔ R11: completed execution is not reset when planning moves to done (642.20025ms)
+✔ queryTask returns store task/detail and deterministic bounded context metadata (278.902417ms)
+✔ dispatch attempt and receipt persist losslessly and query by task (281.697ms)
+✔ schema-valid run events persist append-only, round-trip, order, and deduplicate by sequence (329.941209ms)
+✔ usage, cost, and immutable estimate projections survive event replay (377.729417ms)
+✔ receipt write uses evaluateRunReceipt for duplicate, stale, unknown and mismatch (348.014792ms)
+✔ older attempt-1 receipt rejected as stale after expiry, legal reclaim, and attempt 2 (461.167667ms)
+✔ retryable failed receipt re-opens through legal admission: release, reclaim, attempt 2 succeeds (732.820667ms)
+✔ dispatch admission alone re-opens a failed execution via the journaled retry-admission patch (301.327417ms)
+✔ completed execution admits a new attempt without erasing the prior receipt (578.2475ms)
+✔ receipt is immediately visible from another StoreHandle (435.38075ms)
+✔ R11 release preserves running/completed execution and receipt admission (562.620375ms)
+✔ R11 expire preserves running/completed execution and receipt admission (511.547875ms)
+✔ R11 reclaim preserves running/completed execution and receipt admission (525.170291ms)
+✔ R9: blocked receipt keeps dispatch/execution blocked and planning exportable (308.954041ms)
+✔ checkDrift/validateStoreRegime: clean right after cutover, flags a manual edit per task ID (1321.194375ms)
+✔ reconcile discard reverts the manual edit; reconcile accept writes it into the store with manual-reconcile provenance (1289.678084ms)
+✔ reconcile accept refuses a manual move to done when acceptance is incomplete (1346.279542ms)
+✔ reconcile detects source-only drift and supports discard and accept (1110.594041ms)
+✔ reconcile stamps edited legacy effort active and refuses invalid authored planning (1100.520416ms)
+✔ validateStoreRegime fails closed as not-materialized when plansAuthority=store but no local mapctx.db exists (949.81475ms)
+✔ R8: swapping two whole task blocks is drift even though parsed fields match (929.753792ms)
+✔ R8: parser-ignored prose inside a task block still reports drift (975.261375ms)
+✔ N1: tilde fence content is opaque; only the real section is stripped; tail survives (1.004292ms)
+✔ N1: four-backtick fence wraps triple-backtick lines; closes only on a >= run (0.12025ms)
+✔ N1: inline triple-backtick span is prose, never a fence opener (0.067042ms)
+✔ N1: closers need the same character, a >= run, and only whitespace after (0.173166ms)
+✔ N1: indented (<=3 spaces) fences open and close; CRLF is normalized (0.097708ms)
+✔ N1: unclosed fence in KEPT prose is flagged; unclosed fence inside the section is not (0.072042ms)
+✔ N1: strip is idempotent and parse finds nothing acceptance-like after stripping fenced examples (0.09275ms)
+✔ N1: parse/strip agreement over a deterministic mixed corpus vs an independent reference (15.82375ms)
+✔ N1: the import parser never treats fenced examples as observed approvals (0.181125ms)
+✔ history evidence records on a done task without any lifecycle mutation (593.739709ms)
+✔ evidence registration is idempotent and refuses conflicting content (314.852166ms)
+✔ correction invalidates evidence and receipts; originals stay queryable; replay is faithful (845.965417ms)
+✔ epic-owned history-scan receipts are correctable: canonical E-* targets, originals preserved (541.044792ms)
+✔ evidence validation rejects malformed records (255.791625ms)
+✔ review2 finding2: malformed receipt targets are refused before journaling (438.41925ms)
+✔ review2 finding5: impossible dates, bad activeMs, non-enum signals, extra keys all refused (258.033416ms)
+✔ planImport reports zero errors and preserves order/count on the golden fixture (337.112209ms)
+✔ planImport fails closed on duplicate ids, missing dependencies, and missing detail files (344.308041ms)
+✔ planImport fails closed on canonical-looking symlinked detail paths, in-repo or outside-repo (360.965708ms)
+✔ importCommit: cutover writes mapctx.toml with plansAuthority=store, deletes mapcs.config.json, and one export round-trips byte-identically (993.055583ms)
+✔ agent-active effort and waitReason survive import, projection, export, and re-import (992.20125ms)
+✔ importCommit refuses to run twice against the same repo (mapctx.toml already exists) (876.094708ms)
+✔ recoverStoreFromCheckpoint rebuilds a fresh store (new node/incarnation, same projectId) from the last git-committed TASKS.md (1169.5115ms)
+✔ importDryRun reports the project, board path, task count, and the markdown -> store transition it would perform (339.237792ms)
+✔ importDryRun after cutover names the existing project and refuses a second import instead of reporting wouldCommit (966.175791ms)
+✔ importDryRun reports uncommitted board changes as blockers rather than letting the cutover commit sweep them in (321.204125ms)
+✔ planImport raises unrepresentable-field-value as an error when the parser drops an out-of-enum value (285.079833ms)
+✔ cutover fails closed on prerequisites-dependson-mismatch: dry-run names it as a blocker and importCommit refuses (336.9855ms)
+✔ R5 noncanonical prose path refuses cutover before writes (destination occupied=false) (476.915375ms)
+✔ R5 noncanonical prose path refuses cutover before writes (destination occupied=true) (453.446708ms)
+✔ R1 rejected callback and invalid projection never become replayable, even when append errors are caught (270.397292ms)
+✔ R1 process death during callback: replay accepts all or none of the batch (265.62825ms)
+✔ R1 process death during staging: replay accepts all or none of the batch (369.199333ms)
+✔ R1 process death during published: replay accepts all or none of the batch (450.102ms)
+✔ R2 writer waiting before BEGIN sees A's published batch without overwrite or double replay (329.154916ms)
+✔ R2 writer waiting before BEGIN sees A's commit batch without overwrite or double replay (418.413916ms)
+✔ R3 concurrent automatic creation preserves identity and detail (368.424084ms)
+✔ R3 concurrent explicit creation preserves identity and detail (304.968708ms)
+✔ R4 self/ancestor cycles rejected across patch/upsert; corrupt historical rollup terminates (212.139167ms)
+✔ R1 caught SQLite commit failure removes the published batch before releasing the lock (244.175584ms)
+✔ R2 recovery refuses a noncontiguous pending journal without allocating across the gap (165.193125ms)
+(node:50438) Warning: Journal committed; watermark update failed: Error: injected meta rename failure
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ P1 watermark: concurrent out-of-order post-commit updates converge on the max and stay parseable (386.367834ms)
+✔ P1 watermark persistence failure: commit stays accepted, store records the stale marker, repair keeps loss detection, open self-heals (213.264958ms)
+✔ P1 parent-fsync failure after single-entry publication durably removes the entry before rejecting (208.458709ms)
+✔ P1 parent-fsync failure after batch publication durably removes the whole batch before rejecting (224.370875ms)
+✔ P1 cleanup fsync failure surfaces an explicit INDETERMINATE outcome instead of a safe-sounding rejection (172.698958ms)
+✔ openDatabase creates schema_migrations and applies migrations exactly once (45.03025ms)
+✔ existing v1 store upgrades without losing v1 data (200.804583ms)
+✔ existing v3 store upgrades to 004 without losing plan period data (148.173583ms)
+✔ existing v5 store upgrades to v6 with legacy effort provenance left nullable (347.188708ms)
+✔ openDatabase rejects a diverged migration checksum (68.28ms)
+✔ StoreHandle.open materializes store-meta.json, mapctx.db, and integrity checks pass (134.542084ms)
+✔ property: store state -> export -> reimport is a fixed point on the Markdown-representable field set (7024.473667ms)
+✔ R14: openReadOnly reads data without migrations, reindex, or metadata writes (183.409333ms)
+✔ R14: pending journal entry surfaces as an explicit maintenance condition (248.467875ms)
+✔ R14 P2#2: maintenance-needed is a distinct validate status with a repair remedy (173.41575ms)
+✔ R14 P3#8: hard-crash leftovers are readable-with-recovery or named repair-needed (383.279875ms)
+✔ store repair rebuilds mapctx.db from the independent journal when the SQLite file is corrupt (400.228167ms)
+✔ store repair reports a named gap for a missing journal entry and leaves mapctx.db untouched (265.568333ms)
+✔ store repair detects a fully-deleted trailing journal entry via the sequence watermark, not just directory listing (191.66675ms)
+✔ store repair with an intact, non-corrupt store is a safe no-op reprojection (438.159458ms)
+✔ R12: live maintenance lock refuses open and writes; repair refuses too (306.071959ms)
+✔ R12: a stale maintenance lock left by a dead process is stolen, not a permanent brick (426.044291ms)
+✔ R12 P2#1: repair removes a stale -wal/-shm so the replacement is never paired with old frames (371.796792ms)
+✔ R12 P3#4: an aged lock is stale even with a live PID, and open/write recover (233.834416ms)
+✔ T-118: repair replays a historical dispatch on a then-legal terminal task from a multi-node journal (174.997458ms)
+✔ T-118: repeated repair replay is deterministic (269.916708ms)
+✔ T-118: repair replay distinguishes imported historical dispatch from a forbidden NEW dispatch on a terminal task (276.453875ms)
+✔ T-118 P1: repair fails closed with a named gap when an intact DB indexes a node absent from journal and watermarks (300.090458ms)
+✔ T-118 P1: a corrupt database contributes no floor -- nodes are never derived from untrusted rows (397.704209ms)
+✔ T-118 P2: raw appendEvent refuses a fresh dispatch.attempted onto a terminal task and journals nothing (204.224042ms)
+✔ T-118 P2: runInWriteTransaction callback refuses a terminal dispatch and aborts the whole transaction (170.683458ms)
+✔ T-118 P2: raw writer refuses an illegal execution transition without the retry-admission reset (181.698292ms)
+✔ T-118 P2: raw writer refuses a completed receipt whose task is not in-progress or review (244.772667ms)
+✔ T-118 P2: crash-window reindex still projects already-journaled history without re-adjudication (204.382917ms)
+✔ T-118 P2a: blocked receipt on a terminal-planning task is refused by BOTH command and raw writer, journaling nothing (507.957292ms)
+✔ T-118 P2a: a composed transaction rolls back fully when its raw blocked receipt is refused (240.376459ms)
+✔ T-118 P2a: failed receipt parity -- in-progress/blocked tasks accept it via both command and raw writer (370.451292ms)
+✔ T-118 P2a: completed receipt parity -- refusal reason is identical on both paths (186.187541ms)
+✔ T-118 P2a: blocked receipt good path -- in-progress task accepts it via raw writer; planning stays exportable (R9) (71.015792ms)
+✔ foldSearchText strips diacritics and lowercases (3.700292ms)
+✔ searchTasks matches accent-folded titles and ranks title matches first (913.618166ms)
+✔ searchTasks matches summary text only (954.579667ms)
+✔ searchTasks ANDs terms across fields (763.227667ms)
+✔ searchTasks filters by status and honors limit (969.087291ms)
+✔ searchTasks returns no matches for blank queries (924.892875ms)
+✔ start persists claim, planning hops and dispatch together; competing start loses (147.168875ms)
+✔ dispatch failure rolls back claim, expiry and planning events, including durable journal (254.44875ms)
+✔ start retry keeps completed receipt and rejects unknown or other-task dispatch before claiming (413.126959ms)
+✔ start rejects terminal, unknown and incomplete planning without events (205.42625ms)
+✔ waitReason validates and survives projection reads (909.272542ms)
+✔ T-102 predictedStart patches, validates, clears, and survives projection reads (905.255375ms)
+✔ createTask retains waitReason through event, projection, and export; rejects invalid input (920.270917ms)
+✔ acceptance parser requires explicit checks and keeps nested acceptance headings in scope (0.510667ms)
+✔ moveTask follows the planning state machine and stamps completedOn on done (1096.604083ms)
+✔ moveTask refuses illegal transitions, unknown states, unexportable states, and unknown tasks (910.045625ms)
+✔ reopenTask moves done to review, clears completion, and records audit provenance (399.163083ms)
+✔ moveTask to done or cancelled releases an active claim (427.648375ms)
+✔ moveTask to cancelled releases the claim, stamps no completedOn, exports, and reopens to review (504.689167ms)
+✔ updateTask patches whitelisted fields and refuses unknown fields, no-changes, and unknown tasks (399.26375ms)
+✔ updateTask --depends-on/--blocking replace edges and detail lists together (533.803125ms)
+✔ createTask auto-assigns the next free id and lands at the end of the board (424.661375ms)
+✔ createTask refuses duplicate ids, bad types, unknown parents, unknown deps, and unexportable states (919.998791ms)
+✔ createTask and updateTask reject noncanonical workload and nonpositive or malformed effort (453.592292ms)
+✔ updateTask accepts explicit null effort as a clear and removes active provenance (565.914458ms)
+✔ regenerated export reflects moves and updates byte-for-byte (drift stays PASS) (400.274708ms)
+✔ completed receipt on a task that was never claimed is rejected with the remedy; the retroactive attestation path is accepted (673.801292ms)
+✔ store validate is identical across divergent or absent worktree mirrors and performs no writes (998.999792ms)
+✔ store validate reports pending schema migration without applying it (851.096375ms)
+✔ F1: null due/completed with a startDate is valid; order errors only when both dates exist (304.549958ms)
+✔ F2: canonical validate restores domain/date/specMode/state/title/type and edge guarantees (292.443208ms)
+✔ F2: domains without declared project work domains are an error (231.484541ms)
+✔ T-092: done requires completedOn; terminal cancelled/archived may be null or keep legacy date; non-terminal date rejected (292.550584ms)
+✔ N3: external-id-format and empty-work-domains warnings port DB-only at warning severity (428.56425ms)
+✔ wave violation persists, queries, survives reopen, and is idempotent (344.776625ms)
+✔ incomplete or failed wave emits nothing (272.978125ms)
+✔ failed terminal receipt also suppresses the whole wave (311.037125ms)
+✔ dispatch freezes the planned workload at hand-off; untagged stays null (345.607541ms)
+✔ client-supplied workloadAtDispatch is ignored -- the store stamps the board's belief (236.128875ms)
+✔ executorModel is captured as a raw fact when supplied, null otherwise (342.768667ms)
+✔ receipt freezes the discovered workload; planned stamp survives re-classification (297.765917ms)
+✔ untagged runs never gain a guessed workload on either stamp (260.809458ms)
+✔ workload stamps survive projection rebuild from the event log (155.54475ms)
+ℹ tests 219
+ℹ suites 0
+ℹ pass 219
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18888.61875
+
+> @mapctx/sync-engine@0.3.0 test
+> npm run build && node --test dist/**/*.test.js test/*.test.cjs
+
+
+> @mapctx/sync-engine@0.3.0 build
+> rm -rf node_modules/@mapctx/core && tsc -p tsconfig.json && chmod +x dist/cli.js dist/mapctx-cli.js && rm -rf dist/workspace-ui && mkdir -p dist/workspace-ui && cp src/workspace-ui/workspaceV2.* dist/workspace-ui/
+
+Error: Repair aborted: 1 journal gap(s) found. mapctx.db was left untouched.
+Error: Approval hash mismatch: reviewed token was 0000000000000000000000000000000000000000000000000000000000000000, current draft hashes to 980011ba84593b50cbad6579b7aedc90cf40870b689019240daef8537ed93974. Re-review the draft; the store changed since it was produced.
+Error: Node 23224427-9da8-458b-ab90-18ebadbb8613 is already attested with different reviewed content (existing pin 980011ba84593b50cbad6579b7aedc90cf40870b689019240daef8537ed93974, redraft pins dc78380b25b268f4a1bf5af23a8e33385f8d5c16dc420782223f8f94299b1cde); refusing to alter an existing approval. Nothing was written.
+✔ store attest-orphan CLI: draft, approve, then repair replays the attested row (1509.412292ms)
+✔ store attest-orphan CLI: blank/whitespace reason is refused before any draft, witness, or file (224.93225ms)
+✔ store attest-orphan CLI end-to-end: approval, witness loss, named gap, re-confirmation, repair (1921.760292ms)
+{
+  "ok": true,
+  "from": "backlog",
+  "to": "ready"
+}
+{
+  "ok": true,
+  "from": "ready",
+  "to": "in-progress"
+}
+{
+  "taskId": "T-201",
+  "ok": true,
+  "applied": {
+    "fields": [],
+    "detailFields": [
+      "prerequisites"
+    ],
+    "edges": true
+  }
+}
+✔ mapctx board: store authority serves the SQLite projection through the export field mapping (1674.447834ms)
+✔ mapctx board: pre-cutover repos keep parsing TASKS.md with the v2-status model (294.995625ms)
+✔ mapctx gantt: pre-cutover detail effort produces duration-only planned active time (562.062417ms)
+Tasks file: /private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-resolution-ULT5pz/TASKS.md
+Total tasks: 1
+Active tasks: 1
+Waves: 1
+Wave 1: T-001
+Recommended next: T-001
+Tasks file: /private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-resolution-Lth5nt/TASKS.md
+Total tasks: 1
+Active tasks: 1
+Waves: 1
+Wave 1: T-001
+Recommended next: T-001
+Tasks file: /private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-resolution-raVbYV/boards/WORK.md
+Total tasks: 1
+Active tasks: 1
+Waves: 1
+Wave 1: T-001
+Recommended next: T-001
+Tasks file: /private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-resolution-Ebl2VS/nested/ALT.md
+Total tasks: 1
+Active tasks: 1
+Waves: 1
+Wave 1: T-001
+Recommended next: T-001
+Tasks file: /private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-resolution-J9EuDE/wt/TASKS.md
+Total tasks: 1
+Active tasks: 1
+Waves: 1
+Wave 1: T-001
+Recommended next: T-001
+✔ mapctx plan resolves TASKS.md by walking up from a nested subdirectory (4.870708ms)
+✔ mapctx task show resolves from a nested subdirectory (4.615ms)
+✔ mapctx task context resolves from a nested subdirectory (4.146916ms)
+✔ mapctx validate reports the resolved board path in --json from a nested subdirectory (2.982958ms)
+✔ mapcs plan resolves TASKS.md by walking up from a nested subdirectory (3.194584ms)
+✔ mapcs validate resolves TASKS.md by walking up from a nested subdirectory (12.481125ms)
+✔ mapcs and mapctx agree on the resolved board path from the same nested subdirectory (2.482375ms)
+✔ mapcs and mapctx honor a discovered root config and its configured tasksFile from a nested subdirectory (360.782667ms)
+✔ explicit --tasks-file overrides discovery and is resolved relative to cwd (4.906625ms)
+✔ resolution stops at the repository root and does not adopt a TASKS.md from an outer directory (381.855875ms)
+✔ git worktree: mapcs and mapctx resolve the board from a nested subdirectory inside the worktree (465.304833ms)
+✔ store-only mapctx reads work from nested cwd without requiring TASKS.md and preserve git detail sections (226.631625ms)
+✔ mapctx validate --json emits one machine-readable error when board resolution fails (244.169458ms)
+Tasks file: /var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapcs-board-tools-mnMSWP/TASKS.md
+Validation: PASS
+Tasks: 1
+Errors: 0
+Warnings: 0
+Tasks file: /private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapcs-board-tools-jGR5cW/TASKS.md
+Validation: PASS
+Tasks: 1
+Errors: 0
+Warnings: 0
+Tasks file: /var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapcs-board-tools-ipxB43/TASKS.md
+Validation: FAIL
+Tasks: 1
+Errors: 1
+Warnings: 0
+- [error] missing-detail-file T-001: Detail file not found: ./tasks/T-001.md
+Tasks file: /var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapcs-board-tools-4Y9NGA/TASKS.md
+Total tasks: 4
+Active tasks: 3
+Waves: 2
+Wave 1: T-002, T-004
+Wave 2: T-003
+Recommended next: T-002, T-004
+Tasks file: /var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapcs-board-tools-lXNLwG/TASKS.md
+Total tasks: 3
+Active tasks: 2
+Waves: 2
+Wave 1: T-002
+Wave 2: T-003
+Recommended next: T-002
+Tasks file: /var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapcs-board-tools-Relfgp/TASKS.md
+Validation: FAIL
+Tasks: 2
+Errors: 1
+Warnings: 0
+- [error] dependency-cycle: Dependency cycle detected: T-001, T-002
+✔ validate command passes for canonical single-list board (9.288041ms)
+✔ validate command works without config when TASKS.md exists in cwd (1.102541ms)
+✔ validate command fails when detail file does not exist (4.712041ms)
+✔ plan command returns dependency waves and recommendations (16.782542ms)
+✔ plan command works without config when tasks file override is provided (0.754583ms)
+✔ plan command fails when validation reports dependency cycle (3.885084ms)
+✔ budget CLI end-to-end: account, plan period, budget set/status through the store (573.687166ms)
+✔ budget commands fail closed outside store authority (0.536709ms)
+✔ R6 plan periods refuse non-USD fees and currency/account mismatches without recording (161.266542ms)
+✔ export strips only the real Acceptance section: fenced Git-authored prose survives byte-for-byte (205.534042ms)
+✔ T-121 public export CLI refuses both trailing-evidence reassociation repros before publication (513.64075ms)
+✔ finish refuses a task-end checkpoint when acceptance is revised in the gate-to-publication gap (335.538834ms)
+✔ finish refuses a task-end checkpoint when the task is reopened in the gap (216.317667ms)
+✔ finish retry with pending acceptance classifies at the move stage; manual export never requires done (318.544333ms)
+✔ N1: tilde and four-backtick fenced prose survives checkpoints byte-for-byte; inline spans never grow the mirror (908.410667ms)
+✔ N1: unterminated fence with canonical Acceptance refuses export BEFORE any write, consistently, with zero growth (206.313084ms)
+✔ N1: unterminated fence prose without canonical revisioning exports untouched; validate --snapshots reports refusal honestly (216.209833ms)
+✔ Gantt exposes measured agent, human, parked, and lead figures independently (53.857709ms)
+✔ Gantt keeps recovered session dates exact and infers missing dates from dependencies and siblings (2.290375ms)
+✔ synthetic schedule lays done work backwards from measured evidence by difficulty (1.529542ms)
+✔ pre-cutover dataset is honest about prior forecasts, blockers, and absent active dates (0.525917ms)
+✔ dataset carries calendar commitments, measured forecast provenance, actual variance, and claim violations (0.688958ms)
+✔ Gantt prefers durable snapshot duration coverage over legacy assumption text (0.129041ms)
+✔ pools workload receipts for active forecasts and gives terminal work a retrospective baseline (0.724416ms)
+✔ Gantt renders duration-only planned effort from both agent-active and legacy sources (0.423125ms)
+✔ Gantt uses dates for placement but valid effort for planned duration and variance (0.424917ms)
+✔ aligned plans and receipt-less done tasks are excluded from accuracy and duration measurement (2.928583ms)
+✔ T-102 history tier rides the latest receipt and inferred backfills never calibrate (1.921042ms)
+Note: github.sourceMode is "projection": local state is authoritative and GitHub is a one-way export. "pull" is an explicit one-off import from GitHub (ADR 0003/0004).
+pull completed. Updated tasks file: /private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-roundtrip-create-QcB35V/TASKS.md
+✔ getIssues paginates beyond the first 100 results (0.956042ms)
+✔ getProjectIssueItems paginates via GraphQL cursor beyond 100 items (1.037834ms)
+✔ scope failures surface the missing scope by name with the remedy (0.631125ms)
+✔ a 403 with all scopes present stays a generic error, not a fake scope diagnosis (0.157584ms)
+✔ github.sourceMode canonical fails closed and invalid values are rejected (19.381083ms)
+✔ >100-item round trip: pull imports 150 fixture issues, push dry-run replays them without writes (26.752875ms)
+✔ >100-item round trip: unlinked tasks are reported as creates in dry-run, not written (21.476708ms)
+correct: receipt 33333333-3333-4333-8333-333333333333/1 marked invalid for T-201 (correction 222f838a-4ce6-474a-a930-7a5995b89c29); original remains queryable
+correct: evidence 71c64629-2f2a-5c4d-d41e-234b3651359e marked invalid for T-202 (correction 33d949ec-4920-4f9d-82a9-03bf87ec5ad6); original remains queryable
+correct: evidence 94660c15-807b-af25-d895-79bb0978f5e1 marked invalid for T-202 (correction 4a3850b8-849a-4897-8172-25e9ff3aba94); original remains queryable
+correct: receipt 33333333-3333-4333-8333-333333333333/1 marked invalid for T-201 (correction 1c6152d8-4419-4b0f-b71f-cb9d5da86d8d); original remains queryable
+correct: evidence 71c64629-2f2a-5c4d-d41e-234b3651359e marked invalid for T-202 (correction a0cf31a6-1691-4564-841d-7b0b6007dbee); original remains queryable
+Error: history commit refused -- approval set does not match the current scoped scan (nothing written):
+  - T-202 opencode:oc-pin: session source changed since the approved dry-run (approval pin a5709282 != scan f873e4ba) -- re-review required
+correct: receipt 55555555-5555-4555-8555-555555555555/1 marked invalid for E-005 (correction bebcf1f0-8dd4-4ab1-b4d9-c5d79ce01f42); original remains queryable
+✔ scoped scan: foreign-project sessions never link; worktree + genuine do; stale cwd excluded (1405.127375ms)
+✔ commit requires an approval file (1415.894625ms)
+✔ approved evidence commit: done task history without lifecycle mutation, idempotent re-run (1449.002333ms)
+✔ correction: invalid receipt drops out of forecast + roadmap, original stays queryable (2124.523375ms)
+✔ corrected evidence re-approval re-activates and the date cache follows validity (1478.085292ms)
+✔ reconstruct tiers after corrections; repair replay reproduces evidence + corrections (1519.996125ms)
+✔ approval file validation rejects malformed input (1.294208ms)
+✔ review2 finding3: one stale entry aborts the whole approval set with zero writes (881.296041ms)
+✔ review2 finding3: mid-transaction conflict rolls back the full set (784.360375ms)
+✔ review2 finding4: approval pinned to the reviewed source refuses grown/changed sessions (745.457334ms)
+✔ review2 finding6: date cache aggregates all measured sessions per task and tags tiers (542.992458ms)
+✔ review2 finding6: roadmap displays inferred evidence distinctly via historySpan tier (516.10875ms)
+✔ review3 finding1: degraded mixed session is inferred evidence, never measured, and template excludes it by default (633.166625ms)
+✔ review3 finding2: provenance path-cap truncation degrades to unverifiable, never fails open (752.383667ms)
+✔ review4: inferred-only history stays activeMs null through cache and Gantt; mixed aggregate stays measured-only (699.338833ms)
+✔ review5: CLI --include-inferred reaches the emitted approval template (end-to-end parser, not helper) (2141.880334ms)
+✔ review5b: opencode source pin covers session content; stale approvals refuse with zero writes (4395.541084ms)
+✔ review5c: CLI corrects an epic-owned receipt on a TERMINAL epic without lifecycle mutation (547.628125ms)
+✔ R13: legacy sync mutation commands fail closed under store authority, before any write or API call (12.901667ms)
+✔ R13: the guard only triggers on store authority; markdown authority stays a legacy-writer regime (0.830584ms)
+✔ R13 P3#6: out-of-repo config with absolute tasksFile into a store-authority repo is refused (1.051125ms)
+✔ R13 review P2: --tasks-file override into a store-authority repo is refused from anywhere (1.518917ms)
+✔ mapcs alias still executes commands but prints a deprecation notice on stderr (148.782666ms)
+✔ mapcs alias deprecation notice goes to stderr, never stdout (144.07625ms)
+✔ mapctx plan --json and direct planExecution agree on the same board (CLI/library parity) (20.607958ms)
+✔ real board (this repo TASKS.md): every non-terminal, non-container task is scheduled or named in blockedReasons (6.514417ms)
+✔ task search markdown fallback matches accent-folded and returns compact hits (15.997625ms)
+✔ task search markdown fallback filters by status and limit (5.584625ms)
+{
+  "dryRun": true,
+  "created": [
+    {
+      "taskId": "T-003",
+      "title": "[T-003] third"
+    }
+  ],
+  "updated": [
+    {
+      "taskId": "T-001",
+      "issueNumber": 7,
+      "fields": [
+        "title",
+        "body",
+        "state",
+        "labels"
+      ]
+    },
+    {
+      "taskId": "T-002",
+      "issueNumber": 8,
+      "fields": [
+        "title",
+        "body",
+        "labels"
+      ]
+    }
+  ],
+  "skipped": 0,
+  "conflicts": []
+}
+{
+  "dryRun": true,
+  "created": [
+    {
+      "taskId": "T-003",
+      "title": "[T-003] third"
+    }
+  ],
+  "updated": [
+    {
+      "taskId": "T-001",
+      "issueNumber": 7,
+      "fields": [
+        "title",
+        "body",
+        "state",
+        "labels"
+      ]
+    },
+    {
+      "taskId": "T-002",
+      "issueNumber": 8,
+      "fields": [
+        "title",
+        "body",
+        "labels"
+      ]
+    }
+  ],
+  "skipped": 0,
+  "conflicts": []
+}
+✔ planningStateToBoardStatus maps canonical states to board vocabulary and passes the rest through (0.575959ms)
+✔ labelsFromTaskRecord builds type/priority/workload/tag labels (1.088959ms)
+✔ planForTask: create / skip / update fields / conflicts (0.365291ms)
+✔ buildStoreIssueBody embeds metadata and description, deterministic output (0.081958ms)
+✔ pushStoreCommand dry-run plans without mutating (321.364208ms)
+✔ pushStoreCommand end-to-end: skip/update/create with externalId writeback (265.963375ms)
+✔ pushStoreCommand uses canonical store despite stale local snapshots (274.807375ms)
+✔ pushStoreCommand refuses store-missing binding and non-store authority (3.648833ms)
+✔ remoteIssueSnapshot normalizes labels (0.103ms)
+✔ pushStoreCommand renders Acceptance from canonical store, never the stale mirror (198.214209ms)
+✔ pushStoreCommand publishes no Acceptance section when canonical revisioning is absent (117.654417ms)
+✔ N4: mirror-absent checkout still publishes canonical criteria with an explicit prose-absence note (349.022ms)
+✔ N4: mirror-absent checkout without canonical revisioning publishes no Detail/Acceptance (documented absent) (262.133875ms)
+✔ N1: push refuses before any remote write when prose has an unterminated fence and canonical revisioning exists (245.970375ms)
+✔ T-121: push body carries Git-authored Acceptance prose next to the canonical criteria (mocked gh) (140.896959ms)
+✔ T-121: push refuses an in-section unclosed fence before any remote write (mocked gh) (118.021542ms)
+✔ T-121: push refuses both trailing-evidence reassociation repros before any mocked gh call (511.582542ms)
+✔ T-121 F1: push with canonical EMPTY revision preserves authored-only Acceptance prose (mocked gh) (115.630375ms)
+✔ T-121 F1: push with canonical EMPTY revision refuses stranded checkbox evidence before any remote write (mocked gh) (220.605625ms)
+✔ T-121 F1: push with NO canonical revision preserves authored Acceptance prose and refuses stale checkboxes (mocked gh) (105.693333ms)
+Created /var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapcs-vkyaTx/mapcs.config.json
+This config works for local board commands. Fill in GitHub owner/repo/project fields only before GitHub sync commands.
+Tasks file: /var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapcs-1Z6pPg/TASKS.md
+Local tasks: 1
+Linked tasks: 0
+Unlinked tasks: 1
+Remote issues: 0
+Missing remote for linked: 0
+Remote-only issues: 0
+Diverged statuses: 0
+Tasks file: /var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapcs-jCoBge/TASKS.md
+Local tasks: 1
+Linked tasks: 0
+Unlinked tasks: 1
+Remote issues: 0
+Missing remote for linked: 0
+Remote-only issues: 0
+Diverged statuses: 0
+Note: github.sourceMode is "projection": local state is authoritative and GitHub is a one-way export. "pull" is an explicit one-off import from GitHub (ADR 0003/0004).
+pull completed. Updated tasks file: /var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapcs-xQ4OB0/TASKS.md
+Note: github.sourceMode is "projection": local state is authoritative and GitHub is a one-way export. "pull" is an explicit one-off import from GitHub (ADR 0003/0004).
+pull completed. Updated tasks file: /var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapcs-s7pfoa/TASKS.md
+[dry-run] update issue #11 from task T-001
+[dry-run] skip body update for T-001 (detail unchanged since last pull)
+[dry-run] ensure issue #11 is in project
+[dry-run] set project status for issue #11 -> Design
+[dry-run] push summary: create=0, update=1
+Note: github.sourceMode is "projection": local state is authoritative and GitHub is a one-way export. "bootstrap --from github" is an explicit one-off import from GitHub (ADR 0003/0004).
+bootstrap --from github completed. Created 1, updated 1.
+Note: github.sourceMode is "projection": local state is authoritative and GitHub is a one-way export. "bootstrap --from github" is an explicit one-off import from GitHub (ADR 0003/0004).
+bootstrap --from github completed. Created 1, updated 1.
+Note: github.sourceMode is "projection": local state is authoritative and GitHub is a one-way export. "bootstrap --from github" is an explicit one-off import from GitHub (ADR 0003/0004).
+bootstrap --from github completed. Created 1, updated 1.
+✔ default config keeps legacy status behavior (3.088709ms)
+✔ init command creates a starter config when none exists (31.284167ms)
+✔ init command refuses to overwrite existing config without force (4.50625ms)
+✔ custom partial workflow accepts extra status (5.373667ms)
+✔ custom full replacement works without default statuses (1.469167ms)
+✔ custom completionStatuses drive completed semantics on pull (23.061958ms)
+✔ fails when statusMap does not cover all allowedStatuses (2.883458ms)
+✔ fails when completionStatuses has values outside allowedStatuses (2.885125ms)
+✔ fails when idGeneration preferredPrefix is invalid (1.470667ms)
+✔ roundtrip pull/push/bootstrap preserves custom statuses (17.5345ms)
+✔ parseTasksFile accepts metadata bullets with flexible indentation (6.432708ms)
+✔ parseTasksFile accepts deprecated touch and maps to domains (7.314875ms)
+✔ writeBoard always serializes work domains and domains key (5.073167ms)
+✔ bootstrap from github keeps existing id prefix for new tasks (10.113125ms)
+✔ bootstrap from github honors configured idGeneration preferredPrefix (13.404791ms)
+✔ fails when TASKS.md contains invalid status (5.683458ms)
+{
+  "ok": true,
+  "from": "backlog",
+  "to": "ready"
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "83a24c8d-1c16-4ebe-b831-019663d74dd6",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "83a24c8d-1c16-4ebe-b831-019663d74dd6",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  },
+  "snapshots": {
+    "status": "failed",
+    "structural": {
+      "tasksFilePath": "/private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-cli-write-4soIEp/TASKS.md",
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "drift": {
+      "status": "store-authority",
+      "projectId": "83a24c8d-1c16-4ebe-b831-019663d74dd6",
+      "drift": {
+        "hasDrift": true,
+        "issues": [
+          {
+            "taskId": "T-201",
+            "file": "/private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-cli-write-4soIEp/TASKS.md",
+            "reason": "task field drift"
+          }
+        ]
+      }
+    }
+  }
+}
+{
+  "ok": false,
+  "reason": "illegal-transition",
+  "from": "ready",
+  "to": "done",
+  "message": "ready -> done is not a legal planning transition."
+}
+{
+  "ok": true,
+  "from": "backlog",
+  "to": "ready"
+}
+{
+  "ok": true,
+  "from": "ready",
+  "to": "in-progress"
+}
+{
+  "ok": true,
+  "from": "in-progress",
+  "to": "review"
+}
+{
+  "ok": false,
+  "reason": "acceptance-incomplete",
+  "message": "task T-201 cannot move to done: 1 acceptance criterion/criteria are pending approval in the store. Approve with `mapctx task acceptance approve T-201 --index <n>`.",
+  "from": "review",
+  "to": "done"
+}
+{
+  "ok": true,
+  "from": "review",
+  "to": "done"
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "4c8f13d2-c2a7-4f08-b259-9ae6dbd6b56c",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+{
+  "taskId": "T-201",
+  "ok": true,
+  "applied": {
+    "fields": [
+      "priority"
+    ],
+    "detailFields": [
+      "estimatedEffort",
+      "estimatedEffortSource",
+      "prerequisites"
+    ],
+    "edges": true
+  }
+}
+{
+  "taskId": "T-201",
+  "ok": true,
+  "applied": {
+    "fields": [],
+    "detailFields": [
+      "waitReason"
+    ],
+    "edges": false
+  }
+}
+{
+  "ok": false,
+  "reason": "invalid-wait-reason",
+  "to": "T-201",
+  "message": "waitReason must be review|decision|parked|blocked-external or empty"
+}
+{
+  "taskId": "T-201",
+  "ok": true,
+  "applied": {
+    "fields": [],
+    "detailFields": [
+      "waitReason"
+    ],
+    "edges": false
+  }
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "54f57ddd-0eb3-495f-8129-11e779dab98f",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+{
+  "ok": false,
+  "reason": "unknown-field",
+  "to": "T-201",
+  "message": "task field \"planningState\" is not patchable; allowed: title, type, parentTaskId, priority, workload, tags, domains, startDate, dueDate, predictedStart, externalId, specMode, assignees, iteration, milestone"
+}
+{
+  "taskId": "T-201",
+  "ok": true,
+  "applied": {
+    "fields": [],
+    "detailFields": [
+      "estimatedEffort",
+      "estimatedEffortSource"
+    ],
+    "edges": false
+  }
+}
+{
+  "taskId": "T-201",
+  "ok": true,
+  "applied": {
+    "fields": [],
+    "detailFields": [
+      "estimatedEffort",
+      "estimatedEffortSource"
+    ],
+    "edges": false
+  }
+}
+{
+  "ok": false,
+  "reason": "missing-workload-or-estimate",
+  "message": "Executable task planning invalid: missing estimatedEffort. Fix: mapctx task update T-201 --set detail.estimatedEffort=1d"
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "916996c6-15f5-4b05-b31d-402ad086a026",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+{
+  "ok": true,
+  "taskId": "T-202",
+  "detailPath": "./tasks/T-202.md",
+  "warnings": [
+    "Missing workload. Set it before claim: mapctx task update T-202 --set workload=Normal"
+  ]
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "269f189d-16f5-4da8-8e67-2007109895f4",
+    "canonical": {
+      "totalTasks": 3,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+{
+  "ok": false,
+  "reason": "duplicate-id",
+  "taskId": "T-202"
+}
+{
+  "ok": true,
+  "claim": {
+    "claimId": "0122d900-de4b-4a55-810a-90fa592f7085",
+    "taskId": "T-201",
+    "leaseToken": "[redacted]",
+    "state": "active",
+    "claimedAt": "2026-10-05T18:05:50.576Z",
+    "expiresAt": "2026-10-05T18:35:50.576Z",
+    "holder": {
+      "pid": 70040,
+      "host": "alotth-mac-air.local"
+    },
+    "eventNode": "53be538f-6516-43b5-9ad7-31008ad0353c",
+    "eventSequence": 4
+  },
+  "planningTransitionsTo": "in-progress"
+}
+{
+  "ok": true,
+  "claim": {
+    "claimId": "3d17bda5-b406-4c43-bb5d-71b28287d520",
+    "taskId": "T-201",
+    "leaseToken": "[redacted]",
+    "state": "active",
+    "claimedAt": "2026-10-05T18:05:51.395Z",
+    "expiresAt": "2026-10-05T18:35:51.395Z",
+    "holder": {
+      "pid": 70040,
+      "host": "alotth-mac-air.local"
+    },
+    "eventNode": "720a9abc-6c31-45c5-90c1-646e49b616ca",
+    "eventSequence": 4
+  },
+  "planningTransitionsTo": "in-progress"
+}
+{
+  "ok": true,
+  "receipt": {
+    "schemaVersion": 1,
+    "dispatchId": "8ed3bd52-2b5c-4d4b-a2f4-604051a3fe04",
+    "attempt": 1,
+    "outcome": "completed",
+    "startedAt": "2026-09-08T12:00:00.000Z",
+    "endedAt": "2026-09-08T12:10:00.000Z",
+    "changedFiles": [
+      "tasks/T-201.md"
+    ],
+    "usageEvents": [],
+    "evidence": [],
+    "timeEvidence": {
+      "schemaVersion": 1,
+      "source": "claude-jsonl",
+      "policy": {
+        "idleThresholdMs": 600000,
+        "reviewThresholdMs": 900000,
+        "parkedThresholdMs": 7200000,
+        "timeZone": "UTC"
+      },
+      "intervals": [
+        {
+          "start": "2026-09-08T12:00:00.000Z",
+          "end": "2026-09-08T12:05:00.000Z",
+          "owner": "agent",
+          "kind": "active",
+          "sessionId": "s1"
+        },
+        {
+          "start": "2026-09-08T12:05:00.000Z",
+          "end": "2026-09-08T12:10:00.000Z",
+          "owner": "human",
+          "kind": "review",
+          "confidence": "inferred",
+          "sessionId": "s1"
+        }
+      ],
+      "sessionSpans": [
+        {
+          "start": "2026-09-08T12:00:00.000Z",
+          "end": "2026-09-08T12:10:00.000Z",
+          "sessionId": "s1"
+        }
+      ]
+    },
+    "failure": null
+  },
+  "dispatch": {
+    "dispatchId": "8ed3bd52-2b5c-4d4b-a2f4-604051a3fe04",
+    "taskId": "T-201",
+    "executorKind": "test",
+    "attempt": 1,
+    "contextHash": "3fed7b318a06f4427357893bfc6d1c89e799a37a80dcfa5cea35ab59d7c63637",
+    "status": "completed",
+    "workloadAtDispatch": "Normal",
+    "executorModel": null
+  }
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "c69ed30c-c459-4fb9-9406-53cee2946fca",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "c69ed30c-c459-4fb9-9406-53cee2946fca",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  },
+  "snapshots": {
+    "status": "failed",
+    "structural": {
+      "tasksFilePath": "/private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-cli-write-eSXwt4/TASKS.md",
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "drift": {
+      "status": "store-authority",
+      "projectId": "c69ed30c-c459-4fb9-9406-53cee2946fca",
+      "drift": {
+        "hasDrift": true,
+        "issues": [
+          {
+            "taskId": "T-201",
+            "file": "/private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-cli-write-eSXwt4/TASKS.md",
+            "reason": "task field drift"
+          }
+        ]
+      }
+    }
+  }
+}
+{
+  "ok": false,
+  "reason": "active-claim-held",
+  "activeClaim": {
+    "claimId": "91ffca78-5e5d-46d4-a921-4d14cbfb993a",
+    "taskId": "T-201",
+    "leaseToken": "[redacted]",
+    "state": "active",
+    "claimedAt": "2026-10-05T18:05:52.054Z",
+    "expiresAt": "2026-10-05T18:35:52.054Z",
+    "holder": {
+      "provider": "traycer"
+    },
+    "eventNode": "f21443f8-b0af-4585-833c-16cf8b3bcf0f",
+    "eventSequence": 4
+  }
+}
+{
+  "ok": true,
+  "from": "backlog",
+  "to": "ready"
+}
+{
+  "ok": true,
+  "from": "ready",
+  "to": "in-progress"
+}
+{
+  "ok": true,
+  "from": "in-progress",
+  "to": "review"
+}
+Error: Acceptance revision drifted: store holds 2, caller expected 1.
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "a2ffd392-9d37-48e7-a3b7-2a583d7dc1d1",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+✔ task move: canonical store changes without regenerating local mirrors (979.702084ms)
+✔ task move and reopen: completion gate then done-to-review reopen (2047.107875ms)
+✔ task update: whitelisted fields land in canonical store without snapshot writes (2367.008541ms)
+✔ task update CLI clears estimatedEffort=null and claim refuses the missing plan (1322.525042ms)
+✔ task create: auto id, create its Git-authored detail only, validate canonical store (1459.46775ms)
+✔ dispatch create: fresh dispatch then attempt+1 on the same dispatch id (792.648167ms)
+✔ R10: dispatch receipt updates canonical store without regenerating the board (901.72375ms)
+✔ task start CLI returns lease and dispatch without exporting, and rejects a second start (593.888125ms)
+✔ public validate CLI gives same canonical result when second worktree has no snapshots (568.465917ms)
+✔ finish publishes checkpoint last; partial publication keeps done and retry skips duplicate move (1193.33925ms)
+✔ acceptance approve forwards --evidence pairs into show and the durable event; malformed/stale pairs mutate nothing (1255.518708ms)
+✔ attempt6: approve without --evidence keeps null semantics; prototype-unsafe keys survive show and event (1786.55875ms)
+✔ attempt6: malformed/unsupported evidence refuses BEFORE the writable open -- schema-9 pending-journal store stays byte-identical (943.99325ms)
+✔ visible roadmap row shows agent-active Planned duration without dates (5.407291ms)
+✔ calendar dates place row while active effort remains displayed duration (12.477125ms)
+✔ approximate date positions undated work with a visible approximation marker (1.277875ms)
+✔ visible row keeps legacy provenance beside ratio and labels substituted actual (1.882459ms)
+✔ visible row distinguishes aligned plan and receipt-less done work (2.416458ms)
+✔ visible actual coverage follows measured value when present (1.020125ms)
+✔ live row shows measured human and parked separately (0.833541ms)
+✔ done work with measured history is positioned by tier, never unscheduled (1.23675ms)
+✔ done work with inferred history is positioned and excluded from accuracy (0.872667ms)
+✔ done work with dates but no receipt renders declared tier, never unscheduled (0.927916ms)
+✔ done and cancelled work without evidence show no history; archived without dates stays unscheduled (1.909875ms)
+✔ synthetic-schedule approximate renders a duration span, not a point (2.233083ms)
+✔ unscheduled is for work not started; started work without dates has its own lane (3.521333ms)
+✔ substituted actuals keep their label and never borrow the measured style (0.818417ms)
+✔ predicted starts display distinctly from planned dates and never position (0.621834ms)
+✔ predicted marker renders distinctly once the date falls inside the timeline (1.018292ms)
+✔ history view scans chronologically and filters by epic and tier (3.719833ms)
+✔ epic group period spans related work, extends to today while open, skips halted (1.4325ms)
+✔ epic group of only done work ends at the last span (0.676291ms)
+✔ epic period spanning years shows both years (0.909042ms)
+✔ cancelled work counts as concluded in group progress (1.261834ms)
+✔ history timeline bar keeps its tier: inferred is not labelled Actual/Measured (2.970791ms)
+ℹ tests 153
+ℹ suites 0
+ℹ pass 153
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22378.992125

@@ -1,0 +1,26 @@
+{
+  "node22-smoke.log": {
+    "sha256": "ed976b5075f561b4cc8d9c6b31bb3211a84366b438041df0f9cf57775b68bfbb",
+    "bytes": 11202
+  },
+  "pack-smoke.log": {
+    "sha256": "a42b13e6e6a0fb3cedf778d99f6b9f1d25237e3ad26a7b9498ef9acce05671f6",
+    "bytes": 10957
+  },
+  "tests.log": {
+    "sha256": "f8bcbbe281236c2d1067a376d6d7f9755d9947319b58adc420a2e06bc4debc82",
+    "bytes": 66721
+  },
+  "clean-build.log": {
+    "sha256": "73b9dd533a15d39d60cca3228c84dac490601fe6d7b7e1b28b6fd6485c88bab8",
+    "bytes": 5640
+  },
+  "ci.log": {
+    "sha256": "330ad7b97d6b835fc6b0281e4b13e10663752666649ce49c87f05c565ae7bb11",
+    "bytes": 28
+  },
+  "build.log": {
+    "sha256": "8f28ab38eb129c07dd5fcb909ee826e45c21305357115ccdabd7e99a477bf4f7",
+    "bytes": 970
+  }
+}

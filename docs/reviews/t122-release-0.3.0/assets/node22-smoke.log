@@ -1,0 +1,153 @@
+Wrote to /private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-pack-ONyIn4/install/package.json:
+
+{
+  "name": "install",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
+
+
+
+added 1 package in 579ms
+mapctx CLI
+
+Commands:
+  mapctx (no command)
+    Opens the workspace UI (same as: mapctx workspace). Focuses the running UI if it is already up.
+  mapctx workspace [path] [--add path] [--org id] [--org-name name] [--org-path path] [--target target-id] [--port n] [--no-open]
+  mapctx workspace:add <path> [--org id] [--org-name name] [--org-path path]
+  mapctx store init [--json]
+    Materializes the local store. If plansAuthority=store but ~/.mapctx/projects/<id>/
+    is missing entirely (lost machine, fresh clone, unrepairable corruption), this
+    recovers from the last git-committed TASKS.md/tasks/*.md checkpoint into a fresh
+    incarnation. Event history, claims, and cost/usage data strictly older than that
+    checkpoint are permanently gone -- back up ~/.mapctx/projects/<id>/mapctx.db and
+    commit checkpoints on your own cadence if you need more than that.
+  mapctx store repair [--json]
+  mapctx store attest-orphan <node-id> --reason "text" [--evidence key=value ...] [--json]
+    Drafts a T-119 attestation pinning a DB-only node's complete event_log rows
+    (journal-less, verifiable payload hashes only) and prints its content sha256.
+    Writes nothing. Re-run with --approve-hash <sha256-from-the-draft> to write
+    node-attestations.json, which lets `mapctx store repair` replay those rows and
+    treat the node's absent prefix as a declared fact instead of a gap.
+  mapctx import --dry-run [--json] [--tasks-file path]
+  mapctx import --commit [--json] [--tasks-file path] [--config path] [--actor name]
+  mapctx export [--reason manual|wave-end|epic-end] [--json]
+  mapctx validate [--json] [--snapshots]
+    Under store authority, default checks canonical store only. --snapshots explicitly checks local mirrors; failure returns non-zero.
+  mapctx acceptance import [--commit] [--json]
+    Dry-run by default; --commit imports observed checkboxes atomically, pins source bytes, skips existing revisions.
+  mapctx task acceptance <show|revise|approve|unapprove> <task-id> [--from-file path] [--expect-revision n] [--criterion-id id|--index n] [--evidence key=value ...]
+  mapctx task finish <task-id> [--json]
+    Moves through canonical done gate, then publishes final checkpoint; retry after checkpoint failure is safe.
+  mapctx task show <task-id> [--json]
+  mapctx task context <task-id> --budget <n> [--json]
+  mapctx task search --query "<text>" [--status <planning-state>] [--limit n] [--json]
+    Duplicate-check helper: case/accent-insensitive AND match over title, tags, domains and
+    summary from the task projection (title/tags/domains from TASKS.md pre-cutover). Title
+    matches rank first; blank queries return no matches.
+  mapctx plan [--json]
+  mapctx gantt [--json]
+  mapctx board [--json]
+    Kanban board dataset (title/mode/tasks) for the workspace UI: TASKS.md
+    pre-cutover, SQLite store under store authority (T-094).
+  mapctx push [--dry-run] [--json] [--actor name]
+    Store-backed GitHub projection (ADR 0003): reads canonical task projections from the SQLite
+    store (never TASKS.md), checks store maintenance, remote conflicts and GitHub preconditions;
+    local mirrors are not consulted (there is no snapshot-drift gate). Reconciles
+    issues/status/dates in the GitHub repo+project bound in mapctx.toml [github].
+    Requires the gh CLI authenticated.
+  mapctx task claim <task-id> [--json] [--actor name] [--holder json]
+  mapctx task start <task-id> [--dispatch-id id] [--executor kind] [--context-hash hash] [--status claimed|running] [--holder json] [--actor name] [--json]
+    Atomically claims the task and creates a dispatch. Returns claimId, leaseToken, dispatchId and attempt; preferred execution entry point.
+  mapctx task renew <task-id> --claim id --token token [--json] [--actor name]
+  mapctx task release <task-id> --claim id --token token [--json] [--actor name]
+  mapctx task create --title "<title>" [--id T-###] [--type epic|feature|task|bug|chore] [--parent id] [--status planning-state]
+    [--priority p] [--workload w] [--tags a,b] [--domains d,e] [--depends-on a,b] [--blocking x,y]
+    [--start date] [--due date] [--role r] [--impact i] [--effort e] [--summary s]
+    `--effort` is agent active time: 1d=8 active hours, 1w=40 active hours. Executable tasks without workload or effort are warned and cannot be claimed.
+    (--description text | --description-file path) [--json] [--actor name]
+    Auto-assigns the next free id for the type prefix (E for epic, T otherwise). The
+    description prose goes into the new detail file and stays Git-authored.
+  mapctx task move <task-id> --status <planning-state> [--json] [--actor name]
+    Legal transition under store authority (backlog|ready-for-do|doing|review|done|paused|cancelled|archived,
+    or canonical backlog|ready|in-progress|review|done|paused|cancelled|archived). done stamps completedOn and
+    releases any active claim; done also requires every current store Acceptance criterion to be approved.
+    cancelled and archived release any active claim but do not stamp completedOn. cancelled means the
+    work was aborted; archived means it will not proceed.
+    Store-authority only: Markdown stays the editor pre-cutover.
+  mapctx task reopen <task-id> --status review [--json] [--actor name]
+    Reopens a done, cancelled, or archived task for review, clears completedOn, and records an audit event. Publish mirrors at an explicit checkpoint.
+  mapctx task update <task-id> [--set key=value ...] [--depends-on a,b] [--blocking x,y] [--json] [--actor name]
+    Whitelisted fields only (title,type,parentTaskId,priority,workload,tags,domains,startDate,dueDate,
+    externalId,specMode,assignees,iteration,milestone; detail.* for role,impact,estimatedEffort,
+    filesAffected,testsRequired,summary,prerequisites,blocking; waitReason=review|decision|parked|blocked-external).
+    --depends-on/--blocking replace both
+    the dependency edges and the detail prerequisites/blocking so the two surfaces never diverge.
+  mapctx dispatch create <task-id> [--dispatch-id id] [--status claimed|running] (default claimed) [--executor kind] [--context-hash hash] [--json] [--actor name]
+    New dispatch (fresh id, attempt 1) or --dispatch-id to append attempt max+1 to an existing one.
+    Prints the dispatchId/attempt to feed `mapctx dispatch receipt`.
+  mapctx dispatch receipt <dispatch-id> --receipt path [--claude-transcript path] [--other-session-activity path] [--idle-threshold-ms n] [--review-threshold-ms n] [--parked-threshold-ms n] [--time-zone zone] [--json]
+  mapctx dispatch receipt <dispatch-id> --read --json
+  mapctx reconcile <task-id> [--accept | --discard] [--json] [--actor name]
+  mapctx sync status [--json]
+  mapctx account add <name> [--currency USD] [--note text] [--json] [--actor name]
+    Records a paid-plan account ("Codex Pro") in the store. Budgets and plan periods
+    reference accounts; projects declare which accounts they draw from via `bind`.
+  mapctx account list [--json]
+  mapctx account bind <account-id-or-name> [--remove] [--json] [--actor name]
+  mapctx plan-period record --account <id-or-name> --amount <decimal> --start <date|datetime>
+    --end <date|datetime> [--currency c] [--plan-name n] [--seats n] [--json] [--actor name]
+    Records the plan payment on the ACCOUNT (T-070: accounts own plans, projects consume).
+  mapctx budget set <epic-id> (--amount <decimal> | --minutes n) [--currency USD] [--start date]
+    [--end date] [--note text] [--json] [--actor name]   (--project targets the whole project)
+    Event-sourced: every set is a revision; history is kept, latest wins.
+  mapctx budget status <epic-id> [--json]   (--project for the whole project)
+    Planned/spent/remaining/spent% from the cost chain. Scopes with no cost data say
+    "no cost data" -- never zeros that look measured.
+  mapctx budget history <epic-id> [--json]
+  mapctx history scan [--dry-run | --commit --approve <file>] [--emit-approval-template <path>] [--include-inferred] [--json] [--codex-sessions dir] [--opencode-db path] [--claude-dir dir] [--repo dir] [--task T-1,T-2]
+    --emit-approval-template writes approval CANDIDATES (schemaVersion 2, source-hash pinned)
+    from the dry-run. Degraded mixed-provenance sessions are EXCLUDED unless --include-inferred
+    opts them in as explicit intendedTier "inferred" candidates. It is not an approval:
+    prune, review, then pass to --commit --approve.
+    Links local Codex/OpenCode/Claude sessions plus git to tasks by signal
+    strength (T-101), scoped to this repository/worktree identity (T-116):
+    sessions from other repositories and sessions with unverifiable cwd are
+    listed but never linked. --dry-run reports tiers/intervals/confidence and
+    writes nothing; --commit records approved links as historical evidence
+    through the journal -- no claim/dispatch/receipt, no lifecycle mutation,
+    works for done tasks too -- and refreshes the measured-date cache.
+  mapctx history correct <task-id> --target receipt:<dispatchId>/<attempt> | evidence:<id> --because "<reason>" [--json]
+    Journals an auditable correction: the original receipt/evidence stays
+    queryable, but invalid evidence drops out of roadmap + calibration.
+    Receipt targets must be exactly <canonical-uuid>/<positive-attempt>.
+  mapctx history reconstruct [--json] [--task T-1,T-2]
+    Rebuilds the approved history view after corrections, tiering tasks
+    measured / inferred / declared / synthetic / no-history.
+(node:11671) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Warning: `mapcs` is deprecated and will be removed in an upcoming release. Use `mapctx` instead. See docs/migration-mapcs-to-mapctx.md for the CLI and skill migration guide.
+mapcs CLI (deprecated alias; canonical CLI is `mapctx`)
+
+Commands:
+  mapcs init [--force] [--config path] [--tasks-file path]
+  mapcs status [--json] [--config path] [--tasks-file path]
+  mapcs validate [--json] [--config path] [--tasks-file path]
+  mapcs plan [--json] [--mermaid] [--config path] [--tasks-file path]
+  mapcs pull [--dry-run] [--config path] [--tasks-file path]
+  mapcs push [--dry-run] [--force] [--config path] [--tasks-file path]
+  mapcs bootstrap --from <local|github> [--dry-run] [--confirm] [--config path] [--tasks-file path]
+  mapcs reconcile <task-id> [--accept <local|remote>] [--config path] [--tasks-file path]
+  mapcs reconcile --list [--json] [--config path] [--tasks-file path]
+(node:11672) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Verified packed CLI, store, Acceptance, checkpoint and HTTP assets in /var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-pack-ONyIn4/install

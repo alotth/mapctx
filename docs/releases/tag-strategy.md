@@ -1,28 +1,5 @@
-# Tag Strategy
+# Release tags
 
-This repository uses tag prefixes to route release pipelines in monorepo mode.
+Active distribution: `@mapctx/sync-engine`, including standalone web assets. Tag `sync-vX.Y.Z` must match package version; release workflow builds, tests and smoke-installs before npm publish.
 
-## Tag Prefixes
-
-- `ext-vX.Y.Z`: release VS Code extension workflow.
-- `sync-vX.Y.Z`: release npm package `@mapctx/sync-engine`.
-- `plugin-vX.Y.Z`: release OpenCode plugin package workflow.
-
-## Why Prefixes
-
-- Avoid accidental cross-release triggers.
-- Keep extension and npm package releases independent.
-- Allow separate cadence for each artifact.
-
-## Examples
-
-```bash
-git tag ext-v2.1.0
-git push origin ext-v2.1.0
-
-git tag sync-v0.1.3
-git push origin sync-v0.1.3
-
-git tag plugin-v0.1.0
-git push origin plugin-v0.1.0
-```
+`ext-v*`, `plugin-v*` and earlier generic tags are historical. VS Code/OpenCode adapter source and runbooks remain in `legacy/integrations-pre-0.3.0` (c6c3efa), with no active release workflow on main.

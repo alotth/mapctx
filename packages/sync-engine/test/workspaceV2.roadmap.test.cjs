@@ -16,7 +16,7 @@ function renderLiveRow(data, status = 'ready') {
     __dataset: { tasks: [data], claimViolations: [] },
     __boardTask: { id: data.id, title: data.title, status, type: 'feature' }
   });
-  const source = fs.readFileSync(path.join(__dirname, '..', 'html', 'workspaceV2.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'workspace-ui', 'workspaceV2.js'), 'utf8');
   vm.runInContext(source, context, { filename: 'workspaceV2.js' });
   return vm.runInContext(`(() => {
     ganttDataset = __dataset;
@@ -46,7 +46,7 @@ function historyItems(boardTasks, datasetTasks, filters) {
     __boardTasks: boardTasks,
     __filters: filters
   });
-  const source = fs.readFileSync(path.join(__dirname, '..', 'html', 'workspaceV2.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'workspace-ui', 'workspaceV2.js'), 'utf8');
   vm.runInContext(source, context, { filename: 'workspaceV2.js' });
   return vm.runInContext(`(() => {
     ganttDataset = __dataset;
@@ -309,7 +309,7 @@ function epicGroups(boardTasks, datasetTasks) {
     __dataset: { tasks: datasetTasks, claimViolations: [] },
     __boardTasks: boardTasks
   });
-  const source = fs.readFileSync(path.join(__dirname, '..', 'html', 'workspaceV2.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'workspace-ui', 'workspaceV2.js'), 'utf8');
   vm.runInContext(source, context, { filename: 'workspaceV2.js' });
   return vm.runInContext(`(() => {
     ganttDataset = __dataset;
