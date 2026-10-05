@@ -1,0 +1,17 @@
+{
+  "promotion": "Complete review assets; lease values redacted in logs; hashes recomputed for repository copy",
+  "files": {
+    "coordinator-doc-correction.json": {
+      "sha256": "17ec5eda92294e45a2f44ae00cae1e388a8425daeb0be5ee1449bf8a63a89bad",
+      "bytes": 514
+    },
+    "doc-delta-audit.json": {
+      "sha256": "73e548162e239676348d43c2269b38f3b0523200cafa471ca1e4c2c827d080d7",
+      "bytes": 779
+    },
+    "report-correction.diff": {
+      "sha256": "188fdf24630569df81762655379246ffc95bd95feaa27313a826c1a3f9b932f8",
+      "bytes": 2311
+    }
+  }
+}

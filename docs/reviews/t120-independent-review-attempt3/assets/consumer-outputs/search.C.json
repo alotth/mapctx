@@ -1,0 +1,14 @@
+{
+  "query": "review",
+  "matches": [
+    {
+      "taskId": "T-001",
+      "title": "[T-001] Review task",
+      "planningState": "ready",
+      "completedOn": null,
+      "tags": [],
+      "domains": [],
+      "summary": "Review task"
+    }
+  ]
+}

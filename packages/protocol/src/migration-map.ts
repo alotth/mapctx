@@ -219,7 +219,21 @@ export const MIGRATION_MAP: readonly MigrationRule[] = [
     field: "estimatedEffort",
     destination: "TaskDetail.estimatedEffort",
     classification: "persist",
-    notes: "Subjective effort string. Not a duration measure."
+    notes: "Declared agent-active-time effort for new values; legacy meaning is retained by source."
+  },
+  {
+    origin: "tasks/<ID>.md",
+    field: "estimatedEffortSource",
+    destination: "TaskDetail.estimatedEffortSource",
+    classification: "persist",
+    notes: "agent-active is explicit; absence means legacy-human for historic estimates."
+  },
+  {
+    origin: "tasks/<ID>.md",
+    field: "waitReason",
+    destination: "TaskDetail.waitReason",
+    classification: "persist",
+    notes: "Optional human wait context; observed interval ownership remains timestamp-derived."
   },
   {
     origin: "tasks/<ID>.md",

@@ -7,6 +7,7 @@ import { recordCostEvent, recordDispatchAttempt, recordEstimateSnapshot, recordR
 import { claimTask, releaseClaim, renewClaim } from "./claims"
 import { repairStore } from "./repair"
 import { StoreHandle } from "./store-handle"
+import { approveAcceptanceCriterion, reviseAcceptance } from "./acceptance"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
 import { buildExport } from "./export"
 import { getTask } from "./projections"
@@ -32,11 +33,16 @@ function seedTask(handle: StoreHandle): void {
         title: "x",
         planningState: "in-progress",
         executionState: "claimed",
+        workload: "Normal",
         detailPath: "./tasks/T-001.md",
         tags: [],
         domains: [],
         externalLinks: [],
         assignees: []
+      },
+      detail: {
+        taskId: "T-001", role: "implementation", impact: "medium", estimatedEffort: "1d",
+        prerequisites: [], blocking: [], filesAffected: [], testsRequired: [], summary: "x"
       }
     }
   });
@@ -91,6 +97,18 @@ function runEvent(sequence: number, timestamp: string, type: "started" | "progre
     timestamp,
     payload: { sequence }
   } as const;
+}
+
+
+/** T-120: the done gate reads store acceptance; tests author + approve it explicitly. */
+function approveAllCriteria(handle: StoreHandle, taskId: string, texts: string[]): void {
+  const revised = reviseAcceptance(handle, { taskId, condition: "criteria", texts, actor: "test", expectRevision: 0 });
+  assert.ok(revised.ok, JSON.stringify(revised));
+  if (!revised.ok) return;
+  revised.criteria.forEach((criterion, index) => {
+    const approved = approveAcceptanceCriterion(handle, { taskId, index, actor: "test", expectRevision: revised.revision });
+    assert.ok(approved.ok, JSON.stringify(approved));
+  });
 }
 
 test("dispatch attempt and receipt persist losslessly and query by task", () => {
@@ -364,7 +382,8 @@ for (const action of ["release", "expire", "reclaim"] as const) {
       const next = action === "reclaim" ? undefined : claimTask(handle, { taskId: "T-001", actor: "test", now: later });
       if (next) assert.ok(next.ok);
       assert.equal(getTask(handle.db, "T-001")?.executionState, "completed");
-      assert.ok(moveTask(handle, { taskId: "T-001", to: "done", actor: "test", tasksRoot: dir }).ok);
+      approveAllCriteria(handle, "T-001", ["Acceptance satisfied."]);
+      assert.ok(moveTask(handle, { taskId: "T-001", to: "done", actor: "test" }).ok);
       assert.equal(getTask(handle.db, "T-001")?.executionState, "completed");
       assert.deepEqual(claimTask(handle, { taskId: "T-001", actor: "test" }), { ok: false, reason: "terminal-state" });
       const count = handle.listEvents().length;

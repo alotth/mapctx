@@ -9,6 +9,10 @@
 // keeping store access inside the CLI. All other routes remain frozen:
 // no new features beyond keeping the build green until the external-adoption
 // gate.
+// T-112/T-113 sidebar-count exception: non-active targets report the task
+// count `mapctx board --json` computes for their own TASKS.md (mtime-cached),
+// still transport-only -- no planning logic, and unreadable targets stay
+// unknown (null), never a fabricated zero.
 // See: workspace-server is the only host serving workspaceV2.html (used by planned Gantt).
 //
 import * as childProcess from 'child_process';
@@ -60,8 +64,8 @@ type WorkspaceTargetView = {
   accent?: string;
   active: boolean;
   hasTasksFile: boolean;
-  taskCount: number;
-  threadCount: number;
+  taskCount: number | null;
+  threadCount: number | null;
 };
 
 type ActiveWorkspace = {
@@ -489,6 +493,37 @@ function buildWorkspaceTargets(registry: WorkspaceRegistry, tasks: WorkspaceTask
   return targets;
 }
 
+/**
+ * T-113 sidebar counts come from the bank, per target. Results are cached by
+ * TASKS.md mtime so repeat page loads cost a stat call, not a CLI spawn.
+ * Unreadable targets resolve to null (unknown) instead of a false zero.
+ */
+const targetCountCache = new Map<string, { mtimeMs: number; count: number }>();
+
+function countBoardTasks(tasksFilePath: string, projectRoot: string): number | null {
+  try {
+    const mtimeMs = fs.statSync(tasksFilePath).mtimeMs;
+    const cached = targetCountCache.get(tasksFilePath);
+    if (cached && cached.mtimeMs === mtimeMs) return cached.count;
+    const cliPath = path.join(__dirname, 'mapctx-cli.js');
+    const result = childProcess.spawnSync(process.execPath, [
+      cliPath, 'board', '--json', '--tasks-file', tasksFilePath
+    ], {
+      cwd: projectRoot,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 20000
+    });
+    if (result.error || result.status !== 0) return null;
+    const count = (JSON.parse(String(result.stdout)).tasks || []).length;
+    if (!Number.isFinite(count)) return null;
+    targetCountCache.set(tasksFilePath, { mtimeMs, count });
+    return count;
+  } catch {
+    return null;
+  }
+}
+
 function targetFromRegistry(
   type: WorkspaceTargetType,
   source: WorkspaceOrganization | WorkspaceProject,
@@ -501,6 +536,11 @@ function targetFromRegistry(
   const tasksPath = source.path ? resolveWorkspaceTargetTasksFile(source) : '';
   const hasTasksFile = fs.existsSync(tasksPath);
   const hasCurrentTasksFile = hasTasksFile && tasksPath === activeTasksFilePath;
+  // T-113: the active target reuses its loaded board; every other target
+  // counts its own bank through the CLI transport (mtime-cached).
+  const taskCount = hasCurrentTasksFile ? activeTaskCount
+    : hasTasksFile ? countBoardTasks(tasksPath, path.dirname(tasksPath))
+      : null;
 
   return {
     id: source.id,
@@ -514,8 +554,8 @@ function targetFromRegistry(
     accent: source.accent,
     active: currentTargetId === activeTargetId,
     hasTasksFile,
-    taskCount: hasCurrentTasksFile ? activeTaskCount : 0,
-    threadCount: hasCurrentTasksFile ? activeThreadCount : 0
+    taskCount,
+    threadCount: hasCurrentTasksFile ? activeThreadCount : null
   };
 }
 

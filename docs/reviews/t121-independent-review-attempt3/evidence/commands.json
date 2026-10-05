@@ -1,0 +1,37 @@
+[
+  {
+    "command": "zsh -lic \"npm run build:sync-engine\"",
+    "cwd": "/tmp/mapctx-t121-review-attempt3/repo",
+    "exit": 0
+  },
+  {
+    "command": "zsh -lic \"npm run test:store\"",
+    "cwd": "/tmp/mapctx-t121-review-attempt3/repo",
+    "exit": 0
+  },
+  {
+    "command": "zsh -lic \"npm run test:sync-engine\"",
+    "cwd": "/tmp/mapctx-t121-review-attempt3/repo",
+    "exit": 0
+  },
+  {
+    "command": "MAPCTX_REVIEW_COPY=/path/to/isolated-copy node evidence/render-probes.cjs",
+    "cwd": "isolated build copy",
+    "exit": 0
+  },
+  {
+    "command": "MAPCTX_REVIEW_COPY=/path/to/isolated-copy node evidence/cli-reorder-repro.cjs",
+    "cwd": "isolated fixture",
+    "exit": 0
+  },
+  {
+    "command": "MAPCTX_REVIEW_COPY=/path/to/isolated-copy node evidence/cli-refusal-repro.cjs",
+    "cwd": "isolated fixture",
+    "exit": 0
+  },
+  {
+    "command": "MAPCTX_REVIEW_COPY=<isolated-copy> ELA_SOURCE_ROOT=/Users/alt/repos/ela ELA_RECOVERY_COPY=<isolated-recovered-copy> node evidence/check-current-prose.cjs",
+    "cwd": "isolated fixture; source ELA read-only",
+    "exit": 0
+  }
+]

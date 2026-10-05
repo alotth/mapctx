@@ -1,0 +1,21 @@
+{
+  "changedNonCheckpointTables": [],
+  "storeMetaBefore": {
+    "node_id": "\"0b848095-27e7-4d0d-83e0-bc7ff9655010\"",
+    "incarnation_id": "\"3640fed3-d063-4126-993d-cfb0b5019abe\"",
+    "logical_clock": "3168"
+  },
+  "storeMetaAfter": {
+    "node_id": "\"0b848095-27e7-4d0d-83e0-bc7ff9655010\"",
+    "incarnation_id": "\"3640fed3-d063-4126-993d-cfb0b5019abe\"",
+    "logical_clock": "3170"
+  },
+  "checkpointExportEventsBefore": 76,
+  "checkpointExportEventsAfter": 78,
+  "exportCheckpointRowsBefore": 76,
+  "exportCheckpointRowsAfter": 78,
+  "eventAndCheckpointDelta": 2,
+  "checkpointRowDelta": 2,
+  "allDomainTablesUnchanged": true,
+  "changedDomainTables": []
+}

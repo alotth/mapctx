@@ -1,0 +1,117 @@
+--- /tmp/mapctx-t120-baseline/mapctx-cli.ts.attempt5	2026-10-05 04:33:07
++++ packages/sync-engine/src/mapctx-cli.ts	2026-10-05 04:56:44
+@@ -570,16 +570,20 @@
+ /**
+  * Parses `--evidence key=value` pairs into a plain record. The key must be
+  * nonempty; everything after the FIRST '=' is the value, so values may
+- * themselves contain '='. Refuses before callers mutate anything.
++ * themselves contain '='. Built with Object.fromEntries so ARBITRARY
++ * nonempty keys -- including `__proto__`, `constructor`, `toString` --
++ * become own data properties and survive JSON/event/show exactly, instead
++ * of silently disappearing through prototype setters. Refuses before
++ * callers mutate anything.
+  */
+ export function parseEvidencePairs(pairs: string[] | undefined): Record<string, string> {
+-  const evidence: Record<string, string> = {};
++  const entries: Array<[string, string]> = [];
+   for (const pair of pairs ?? []) {
+     const eq = pair.indexOf('=');
+     if (eq <= 0) throw new Error(`--evidence expects key=value, got: ${pair}`);
+-    evidence[pair.slice(0, eq)] = pair.slice(eq + 1);
++    entries.push([pair.slice(0, eq), pair.slice(eq + 1)]);
+   }
+-  return evidence;
++  return Object.fromEntries(entries);
+ }
+ 
+ function storeAttestOrphanCommand(nodeId: string | undefined, options: MapctxOptions): void {
+@@ -1242,6 +1246,40 @@
+ export function taskAcceptanceCommand(action: string | undefined, taskId: string | undefined, options: MapctxOptions): void {
+   if (!action || !taskId) throw new Error('Usage: mapctx task acceptance <show|revise|approve|unapprove> <task-id> [options]');
+   const cwd = process.cwd();
++  // ---- Preflight: EVERY input that can refuse is validated here, before
++  // any store handle exists (attempt-6 review): a malformed --evidence, a
++  // missing --expect-revision, a bad selector or source file must never
++  // trigger the writable open, because StoreHandle.open migrates schemas,
++  // replays pending journals and writes identity metadata. ----
++  let reviseArgs: { condition: "criteria" | "empty"; texts: string[] } | undefined;
++  let expectRevision: number | undefined;
++  let approveEvidence: Record<string, string> | undefined;
++  if (action === 'revise') {
++    if (!options.fromFile) throw new Error('acceptance revise requires --from-file <detail.md>');
++    if (options.expectRevision === undefined) throw new Error('acceptance revise requires --expect-revision <current-revision> (use 0 when no revision exists)');
++    const source = fs.readFileSync(path.resolve(cwd, options.fromFile), 'utf8');
++    const parsed = parseAcceptanceRead(source);
++    if (parsed.condition === 'absent') throw new Error('Source has no ## Acceptance section; use a file with explicit checklist criteria.');
++    expectRevision = options.expectRevision;
++    reviseArgs = { condition: parsed.condition, texts: parsed.condition === 'criteria' ? parsed.items.map(item => item.text) : [] };
++  } else if (action === 'approve' || action === 'unapprove') {
++    if (options.expectRevision === undefined) throw new Error(`acceptance ${action} requires --expect-revision <current-revision>`);
++    if (options.criterionId === undefined && options.index === undefined) throw new Error(`acceptance ${action} requires --criterion-id <id> or --index <zero-based-index>`);
++    // Evidence belongs to approvals only; refusing it on unapprove keeps
++    // the CLI from silently dropping caller input (review: CLI evidence gap).
++    if (action === 'unapprove' && (options.evidencePairs ?? []).length > 0) {
++      throw new Error('acceptance unapprove does not take --evidence; evidence belongs to approvals.');
++    }
++    expectRevision = options.expectRevision;
++    // Parse BEFORE any store call: a malformed pair must refuse with zero
++    // mutations, never after an approval landed (or after a migration).
++    if (action === 'approve' && (options.evidencePairs ?? []).length > 0) {
++      approveEvidence = parseEvidencePairs(options.evidencePairs);
++    }
++  } else if (action !== 'show') {
++    throw new Error(`Unknown acceptance action: ${action}`);
++  }
++
+   if (action === 'show') {
+     const { handle } = openStoreOrFail(cwd, { mode: 'read' });
+     try { print({ taskId, acceptance: getAcceptance(handle.db, taskId) ?? { condition: 'absent' } }, options.json); }
+@@ -1251,40 +1289,28 @@
+   const { handle } = requireStoreAuthority(cwd);
+   try {
+     if (action === 'revise') {
+-      if (!options.fromFile) throw new Error('acceptance revise requires --from-file <detail.md>');
+-      if (options.expectRevision === undefined) throw new Error('acceptance revise requires --expect-revision <current-revision> (use 0 when no revision exists)');
+-      const source = fs.readFileSync(path.resolve(cwd, options.fromFile), 'utf8');
+-      const parsed = parseAcceptanceRead(source);
+-      if (parsed.condition === 'absent') throw new Error('Source has no ## Acceptance section; use a file with explicit checklist criteria.');
+       const result = reviseAcceptance(handle, {
+         taskId,
+-        condition: parsed.condition,
+-        texts: parsed.condition === 'criteria' ? parsed.items.map(item => item.text) : [],
++        condition: reviseArgs!.condition,
++        texts: reviseArgs!.texts,
+         actor: defaultActor(options.actor),
+-        expectRevision: options.expectRevision
++        expectRevision: expectRevision!
+       });
+       print(result, options.json);
+       if (!result.ok) throw new Error(result.message);
+       return;
+     }
+     if (action === 'approve' || action === 'unapprove') {
+-      if (options.expectRevision === undefined) throw new Error(`acceptance ${action} requires --expect-revision <current-revision>`);
+-      if (options.criterionId === undefined && options.index === undefined) throw new Error(`acceptance ${action} requires --criterion-id <id> or --index <zero-based-index>`);
+-      // Evidence belongs to approvals only; refusing it on unapprove keeps
+-      // the CLI from silently dropping caller input (review: CLI evidence gap).
+-      if (action === 'unapprove' && (options.evidencePairs ?? []).length > 0) {
+-        throw new Error('acceptance unapprove does not take --evidence; evidence belongs to approvals.');
+-      }
+-      // Parse BEFORE any store call: a malformed pair must refuse with zero
+-      // mutations, never after an approval landed.
+-      const evidence = parseEvidencePairs(options.evidencePairs);
++      // Forward evidence ONLY when the caller actually supplied pairs: an
++      // absent flag must keep the store's null/omitted semantics, never
++      // invent an empty evidence map (attempt-6 review).
+       const args = {
+         taskId,
+         criterionId: options.criterionId,
+         index: options.index,
+         actor: defaultActor(options.actor),
+-        expectRevision: options.expectRevision,
+-        ...(action === 'approve' ? { evidence } : {})
++        expectRevision: expectRevision!,
++        ...(approveEvidence ? { evidence: approveEvidence } : {})
+       };
+       const result = action === 'approve' ? approveAcceptanceCriterion(handle, args) : unapproveAcceptanceCriterion(handle, args);
+       print(result, options.json);

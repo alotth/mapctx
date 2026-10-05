@@ -5,9 +5,11 @@ import * as fs from "fs"
 import * as path from "path"
 import { importCommit } from "./cutover"
 import { createTask, moveTask, reopenTask, updateTask } from "./tasks"
+import { approveAcceptanceCriterion, reviseAcceptance } from "./acceptance"
 import { getTask, getTaskDetail, listDependencies, getActiveClaimForTask } from "./projections"
 import { claimTask, releaseClaim } from "./claims"
 import { StoreHandle } from "./store-handle"
+import { buildExport } from "./export"
 import { cleanupDir, setupGoldenRepo } from "./__test-helpers__"
 
 function materialize() {
@@ -16,6 +18,80 @@ function materialize() {
   const handle = StoreHandle.open(committed.storeDir);
   return { repoDir, restoreEnv, handle, committed };
 }
+
+/** T-120: the done gate reads store acceptance; tests author + approve it explicitly. */
+function approveAllCriteria(handle: StoreHandle, taskId: string, texts: string[]): void {
+  const revised = reviseAcceptance(handle, { taskId, condition: "criteria", texts, actor: "test", expectRevision: 0 });
+  assert.ok(revised.ok, JSON.stringify(revised));
+  if (!revised.ok) return;
+  revised.criteria.forEach((criterion, index) => {
+    const approved = approveAcceptanceCriterion(handle, { taskId, index, actor: "test", expectRevision: revised.revision });
+    assert.ok(approved.ok, JSON.stringify(approved));
+  });
+}
+
+test("waitReason validates and survives projection reads", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    assert.equal(updateTask(handle, { taskId: "T-101", detailPatch: { waitReason: "decision" }, actor: "test" }).ok, true);
+    assert.equal(getTaskDetail(handle.db, "T-101")?.waitReason, "decision");
+    const invalid = updateTask(handle, { taskId: "T-101", detailPatch: { waitReason: "unsure" as never }, actor: "test" });
+    assert.equal(invalid.ok, false);
+    if (!invalid.ok) assert.equal(invalid.reason, "invalid-wait-reason");
+    assert.equal(getTaskDetail(handle.db, "T-101")?.waitReason, "decision");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-102 predictedStart patches, validates, clears, and survives projection reads", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    assert.equal(getTask(handle.db, "T-101")?.predictedStart ?? null, null);
+    const applied = updateTask(handle, {
+      taskId: "T-101",
+      patch: { predictedStart: { start: "2026-10-15", method: "manual", confidence: "low" } },
+      actor: "test"
+    });
+    assert.equal(applied.ok, true);
+    assert.deepEqual(getTask(handle.db, "T-101")?.predictedStart, { start: "2026-10-15", method: "manual", confidence: "low" });
+    const badDate = updateTask(handle, {
+      taskId: "T-101",
+      patch: { predictedStart: { start: "tomorrow", method: "manual", confidence: "low" } as never },
+      actor: "test"
+    });
+    assert.equal(badDate.ok, false);
+    if (!badDate.ok) assert.equal(badDate.reason, "invalid-predicted-start");
+    const badMethod = updateTask(handle, {
+      taskId: "T-101",
+      patch: { predictedStart: { start: "2026-10-15", method: "guess", confidence: "low" } as never },
+      actor: "test"
+    });
+    assert.equal(badMethod.ok, false);
+    assert.deepEqual(getTask(handle.db, "T-101")?.predictedStart, { start: "2026-10-15", method: "manual", confidence: "low" });
+    assert.equal(updateTask(handle, { taskId: "T-101", patch: { predictedStart: null }, actor: "test" }).ok, true);
+    assert.equal(getTask(handle.db, "T-101")?.predictedStart ?? null, null);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("createTask retains waitReason through event, projection, and export; rejects invalid input", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const created = createTask(handle, { id: "T-900", title: "Wait reason", workload: "Normal", detail: { estimatedEffort: "1d", waitReason: "decision" }, actor: "test" });
+    assert.equal(created.ok, true);
+    assert.equal(getTaskDetail(handle.db, "T-900")?.waitReason, "decision");
+    const exported = buildExport(handle.db, { tasksRoot: repoDir });
+    assert.match(exported.taskDetailFiles.find(file => file.path.endsWith("T-900.md"))?.content ?? "", /- waitReason: decision/);
+    const invalid = createTask(handle, { id: "T-901", title: "Invalid wait", workload: "Normal", detail: { estimatedEffort: "1d", waitReason: "guess" as never }, actor: "test" });
+    assert.equal(invalid.ok, false);
+    if (!invalid.ok) assert.equal(invalid.reason, "invalid-wait-reason");
+    assert.equal(getTask(handle.db, "T-901"), undefined);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
 
 test("acceptance parser requires explicit checks and keeps nested acceptance headings in scope", () => {
   const parsed = parseAcceptanceChecklist(`
@@ -48,7 +124,8 @@ test("moveTask follows the planning state machine and stamps completedOn on done
     assert.equal(result.ok, true);
     result = moveTask(handle, { taskId: "T-101", to: "review", actor: "test" });
     assert.equal(result.ok, true);
-    result = moveTask(handle, { taskId: "T-101", to: "done", actor: "test", tasksRoot: repoDir });
+    approveAllCriteria(handle, "T-101", ["Golden task acceptance is complete."]);
+    result = moveTask(handle, { taskId: "T-101", to: "done", actor: "test" });
     assert.equal(result.ok, true);
 
     const task = getTask(handle.db, "T-101");
@@ -131,11 +208,13 @@ test("moveTask to done or cancelled releases an active claim", () => {
   const { repoDir, restoreEnv, handle } = materialize();
   try {
     moveTask(handle, { taskId: "T-101", to: "ready", actor: "test" });
+    updateTask(handle, { taskId: "T-101", patch: { workload: "Normal" }, actor: "test" });
     const claim = claimTask(handle, { taskId: "T-101", actor: "worker" });
     assert.ok(claim.ok);
 
     moveTask(handle, { taskId: "T-101", to: "in-progress", actor: "test" });
-    const result = moveTask(handle, { taskId: "T-101", to: "done", actor: "test", tasksRoot: repoDir });
+    approveAllCriteria(handle, "T-101", ["Golden task acceptance is complete."]);
+    const result = moveTask(handle, { taskId: "T-101", to: "done", actor: "test" });
     assert.equal(result.ok, true);
     if (result.ok) assert.equal(result.releasedClaimId, claim.claim.claimId);
     assert.equal(getActiveClaimForTask(handle.db, "T-101"), undefined);
@@ -151,6 +230,7 @@ test("moveTask to cancelled releases the claim, stamps no completedOn, exports, 
   const { repoDir, restoreEnv, handle } = materialize();
   try {
     moveTask(handle, { taskId: "T-101", to: "ready", actor: "test" });
+    updateTask(handle, { taskId: "T-101", patch: { workload: "Normal" }, actor: "test" });
     const claim = claimTask(handle, { taskId: "T-101", actor: "worker" });
     assert.ok(claim.ok);
     moveTask(handle, { taskId: "T-101", to: "in-progress", actor: "test" });
@@ -194,6 +274,7 @@ test("updateTask patches whitelisted fields and refuses unknown fields, no-chang
     assert.equal(task!.priority, "high");
     assert.equal(task!.workload, "Hard");
     assert.equal(getTaskDetail(handle.db, "T-101")!.estimatedEffort, "2d");
+    assert.equal(getTaskDetail(handle.db, "T-101")!.estimatedEffortSource, "agent-active");
     assert.ok(task!.updatedOn, "update stamps updatedOn");
 
     const unknownField = updateTask(handle, { taskId: "T-101", patch: { planningState: "done" } as never, actor: "test" });
@@ -271,6 +352,10 @@ test("createTask auto-assigns the next free id and lands at the end of the board
     assert.equal(created.ok, true);
     if (!created.ok) return;
     assert.equal(created.taskId, "T-103", "next free sequential id after the golden board");
+    assert.deepEqual(created.warnings, [
+      "Missing workload. Set it before claim: mapctx task update T-103 --set workload=Normal",
+      "Missing estimatedEffort. Set it before claim: mapctx task update T-103 --set detail.estimatedEffort=1d"
+    ]);
 
     const task = getTask(handle.db, "T-103");
     assert.equal(task!.title, "[T-103] Created via CLI", "board convention: heading title carries the bracketed id");
@@ -285,7 +370,7 @@ test("createTask auto-assigns the next free id and lands at the end of the board
     const detail = getTaskDetail(handle.db, "T-103");
     assert.equal(detail!.summary, "Custom summary");
     assert.deepEqual(detail!.prerequisites, ["T-101"]);
-    assert.equal(detail!.estimatedEffort, "1d", "default effort when none given");
+    assert.equal(detail!.estimatedEffort, "", "missing effort is not silently invented");
   } finally {
     handle.close();
     restoreEnv();
@@ -307,6 +392,67 @@ test("createTask refuses duplicate ids, bad types, unknown parents, unknown deps
     const epic = createTask(handle, { title: "New epic", type: "epic", actor: "t" });
     assert.equal(epic.ok, true);
     if (epic.ok) assert.match(epic.taskId, /^E-\d+$/, "epic type implies the E- prefix");
+  } finally {
+    handle.close();
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
+test("createTask and updateTask reject noncanonical workload and nonpositive or malformed effort", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const invalidCreates = [
+      createTask(handle, { title: "medium", workload: "Medium", detail: { estimatedEffort: "1d" }, actor: "t" }),
+      createTask(handle, { title: "unknown", workload: "Banana", detail: { estimatedEffort: "1d" }, actor: "t" }),
+      createTask(handle, { title: "malformed", workload: "Normal", detail: { estimatedEffort: "tomorrow" }, actor: "t" }),
+      createTask(handle, { title: "zero", workload: "Normal", detail: { estimatedEffort: "0d" }, actor: "t" }),
+      createTask(handle, { title: "sub-ms", workload: "Normal", detail: { estimatedEffort: "0.0000001m" }, actor: "t" }),
+      createTask(handle, { title: "overflow", workload: "Normal", detail: { estimatedEffort: `${"9".repeat(400)}w` }, actor: "t" })
+    ];
+    assert.deepEqual(invalidCreates.map(result => result.ok ? "ok" : result.reason), [
+      "invalid-workload",
+      "invalid-workload",
+      "invalid-estimated-effort",
+      "invalid-estimated-effort",
+      "invalid-estimated-effort",
+      "invalid-estimated-effort"
+    ]);
+
+    const invalidUpdates = [
+      updateTask(handle, { taskId: "T-101", patch: { workload: "Medium" }, actor: "t" }),
+      updateTask(handle, { taskId: "T-101", patch: { workload: "Banana" }, actor: "t" }),
+      updateTask(handle, { taskId: "T-101", detailPatch: { estimatedEffort: "tomorrow" }, actor: "t" }),
+      updateTask(handle, { taskId: "T-101", detailPatch: { estimatedEffort: "0h" }, actor: "t" }),
+      updateTask(handle, { taskId: "T-101", detailPatch: { estimatedEffort: "0.0000001m" }, actor: "t" }),
+      updateTask(handle, { taskId: "T-101", detailPatch: { estimatedEffort: `${"9".repeat(400)}w` }, actor: "t" })
+    ];
+    assert.deepEqual(invalidUpdates.map(result => result.ok ? "ok" : result.reason), [
+      "invalid-workload",
+      "invalid-workload",
+      "invalid-estimated-effort",
+      "invalid-estimated-effort",
+      "invalid-estimated-effort",
+      "invalid-estimated-effort"
+    ]);
+  } finally {
+    handle.close();
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
+test("updateTask accepts explicit null effort as a clear and removes active provenance", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    assert.equal(updateTask(handle, { taskId: "T-101", patch: { workload: "Normal" }, detailPatch: { estimatedEffort: "2d" }, actor: "t" }).ok, true);
+    assert.equal(getTaskDetail(handle.db, "T-101")?.estimatedEffortSource, "agent-active");
+    assert.equal(updateTask(handle, { taskId: "T-101", detailPatch: { estimatedEffort: null } as never, actor: "t" }).ok, true);
+    assert.equal(getTaskDetail(handle.db, "T-101")?.estimatedEffort, "");
+    assert.equal(getTaskDetail(handle.db, "T-101")?.estimatedEffortSource, undefined);
+    const claim = claimTask(handle, { taskId: "T-101", actor: "worker" });
+    assert.equal(claim.ok, false);
+    if (!claim.ok) assert.equal(claim.reason, "missing-workload-or-estimate");
   } finally {
     handle.close();
     restoreEnv();
@@ -372,6 +518,7 @@ test("completed receipt on a task that was never claimed is rejected with the re
     // The retroactive attestation flow: claim now (carries to doing), then the
     // same receipt with the TRUE historical times is accepted, and the board
     // lands in review without anyone fabricating the in-progress moment.
+    updateTask(handle, { taskId: "T-101", patch: { workload: "Normal" }, actor: "operator" });
     const claim = require("./claims").claimTask(handle, { taskId: "T-101", actor: "orchestrator" });
     assert.ok(claim.ok);
     assert.equal(getTask(handle.db, "T-101")!.planningState, "in-progress");

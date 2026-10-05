@@ -4,6 +4,7 @@ import type {
   EstimateSnapshot,
   UsageEvent
 } from "@mapctx/protocol"
+import type { TimeEvidence } from "@mapctx/protocol"
 
 export type Timestamp = string | number | Date
 
@@ -24,6 +25,7 @@ export type DurationInput = {
   readyAt?: Timestamp
   doneAt?: Timestamp
   idleThresholdMs?: number
+  timeEvidence?: TimeEvidence
 }
 
 /**
@@ -55,6 +57,14 @@ export type ForecastSample = {
   duration: DurationMeasures | MeasuredDurations
   usageEvents?: UsageEvent[]
   costEvents?: CostEvent[]
+  timePolicy?: TimeEvidence["policy"]
+  /**
+   * T-101 history tier of the receipt this sample came from. Inferred and
+   * declared backfills never enter calibration/accuracy metrics (same rule as
+   * T-099 aligned-from-actual): they carry no agent-time measurement.
+   * Undefined = live executor receipt (or pre-T-101 data); always calibratable.
+   */
+  historyTier?: "measured" | "inferred" | "declared" | "no-history"
   /**
    * DISCOVERED workload of the task this sample came from: its latest declared
    * value at sample-build time (T-071 last-wins). Historical pools key on

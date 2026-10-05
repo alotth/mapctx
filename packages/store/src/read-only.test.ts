@@ -138,7 +138,7 @@ test("R14 P2#2: maintenance-needed is a distinct validate status with a repair r
     const last = sequences[sequences.length - 1];
     fs.copyFileSync(`${journalDir}/${nodeId}/${last}.json`, `${journalDir}/${nodeId}/${last + 1}.json`);
 
-    const status = validateStoreRegime(dir, dir);
+    const status = validateStoreRegime(dir);
     assert.equal(status.status, "maintenance-needed");
     if (status.status === "maintenance-needed") {
       assert.match(status.maintenanceNeeded, /journal/);
@@ -146,7 +146,7 @@ test("R14 P2#2: maintenance-needed is a distinct validate status with a repair r
 
     // After the manufactured lag is removed, the store is healthy again.
     fs.rmSync(`${journalDir}/${nodeId}/${last + 1}.json`, { force: true });
-    assert.equal(validateStoreRegime(dir, dir).status, "store-authority");
+    assert.equal(validateStoreRegime(dir).status, "store-authority");
   } finally {
     if (previousHome === undefined) delete process.env.MAPCTX_HOME;
     else process.env.MAPCTX_HOME = previousHome;

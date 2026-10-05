@@ -292,6 +292,8 @@ export function planImport(tasksFilePath: string): ImportPlan {
       role: detailFile.role,
       impact: detailFile.impact,
       estimatedEffort: detailFile.estimatedEffort,
+      ...(detailFile.estimatedEffortSource === "agent-active" ? { estimatedEffortSource: "agent-active" as const } : {}),
+      ...(detailFile.waitReason ? { waitReason: detailFile.waitReason } : {}),
       prerequisites: detailFile.prerequisites,
       blocking: detailFile.blocking,
       filesAffected: detailFile.filesAffected,

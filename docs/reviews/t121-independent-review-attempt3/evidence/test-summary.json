@@ -1,0 +1,12 @@
+{
+  "buildSyncEngineExit": 0,
+  "storeSuiteExit": 0,
+  "storeTests": 213,
+  "storePass": 213,
+  "storeFail": 0,
+  "syncSuiteExit": 0,
+  "syncTests": 129,
+  "syncPass": 129,
+  "syncFail": 0,
+  "testLogsSanitized": true
+}

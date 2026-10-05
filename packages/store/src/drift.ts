@@ -33,7 +33,23 @@ function normalizeBytes(content: string): string {
  * LF-normalization and trailing-whitespace trimming, enumerated per task ID.
  */
 export function checkDrift(db: DatabaseSync, tasksRoot: string): DriftReport {
-  const exported = buildExport(db, { tasksRoot });
+  let exported: ReturnType<typeof buildExport>;
+  try {
+    exported = buildExport(db, { tasksRoot });
+  } catch (error) {
+    // Review N1: an explicit export refusal (unterminated fence over a task
+    // with canonical Acceptance) is an honest, non-crashing snapshot
+    // inspection outcome -- the mirror cannot be compared, nothing was
+    // rewritten, and the remedy is fixing the Git prose.
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("acceptance-render-refused")) {
+      return {
+        hasDrift: true,
+        issues: [{ taskId: BOARD_METADATA_SENTINEL, file: tasksRoot, reason: `snapshot comparison refused: ${message}` }]
+      };
+    }
+    throw error;
+  }
   const issues: DriftIssue[] = [];
 
   const onDiskTasksMd = fs.existsSync(exported.tasksMd.path) ? fs.readFileSync(exported.tasksMd.path, "utf8") : "";

@@ -1,0 +1,19 @@
+✔ PASS: schema10 pending journal validation reports maintenance without replay or byte writes (54.09825ms)
+✔ PASS: raw stale approvals/refusals, revision through empty, done gate and stale unapprove (114.66375ms)
+✔ PASS: finish journal publication failure leaves done, no checkpoint, cleaned temp, deterministic retry (115.351166ms)
+✔ PASS: acceptance import preflight source change and midbatch append failure apply nothing (79.697958ms)
+✔ PASS: honest absent/empty/missing/unchecked import, idempotence after authored revision (86.936291ms)
+✔ PASS: default CLI avoids malicious mirrors; explicit inspection and Markdown compatibility work (381.092875ms)
+(node:83135) Warning: Journal committed; watermark update failed: Error: injected watermark metadata rename failure
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ PASS: concurrent callers pin old Acceptance; stale approve and unapprove both refuse (159.539583ms)
+✔ PASS: epic finish closes planning, never dispatches container; hierarchy and DAG retained (146.922833ms)
+✔ PASS: postcommit watermark metadata failure reports degraded witness; checkpoint stays durable (101.769625ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1311.840375

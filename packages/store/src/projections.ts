@@ -12,6 +12,10 @@ import {
   type UsageEvent
 } from "@mapctx/protocol"
 import type {
+  AcceptanceCondition,
+  AcceptanceCriterionRecord,
+  AcceptanceCriterionState,
+  AcceptanceRevisionRecord,
   DependencyRecord,
   EventRevision,
   ExternalRefRecord,
@@ -87,10 +91,11 @@ export function upsertTask(db: DatabaseSync, task: TaskRecord, revision: EventRe
   db.prepare(`
     INSERT INTO task_projection (
       task_id, position_key, title, planning_state, execution_state, type, parent_task_id,
-      priority, workload, tags_json, domains_json, start_date, due_date, completed_on,
+      priority, workload, tags_json, domains_json, start_date, due_date, predicted_start,
+      predicted_method, predicted_confidence, completed_on,
       external_id, external_links_json, iteration, assignees_json, milestone, spec_mode,
       detail_path, updated_on, revision_event_node, revision_event_sequence
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(task_id) DO UPDATE SET
       position_key = excluded.position_key,
       title = excluded.title,
@@ -104,6 +109,9 @@ export function upsertTask(db: DatabaseSync, task: TaskRecord, revision: EventRe
       domains_json = excluded.domains_json,
       start_date = excluded.start_date,
       due_date = excluded.due_date,
+      predicted_start = excluded.predicted_start,
+      predicted_method = excluded.predicted_method,
+      predicted_confidence = excluded.predicted_confidence,
       completed_on = excluded.completed_on,
       external_id = excluded.external_id,
       external_links_json = excluded.external_links_json,
@@ -129,6 +137,9 @@ export function upsertTask(db: DatabaseSync, task: TaskRecord, revision: EventRe
     JSON.stringify(task.domains ?? []),
     nullableStr(task.startDate),
     nullableStr(task.dueDate),
+    nullableStr(task.predictedStart?.start),
+    nullableStr(task.predictedStart?.method),
+    nullableStr(task.predictedStart?.confidence),
     nullableStr(task.completedOn),
     nullableStr(task.externalId),
     JSON.stringify(task.externalLinks ?? []),
@@ -222,6 +233,14 @@ function rowToTask(row: Record<string, unknown>): TaskRecord {
     domains: JSON.parse(row.domains_json as string),
     startDate: row.start_date as string | null,
     dueDate: row.due_date as string | null,
+    // Pre-T-102 rows (migration 8 not yet applied) read as no prediction.
+    predictedStart: (row.predicted_start as string | null | undefined)
+      ? ({
+          start: row.predicted_start as string,
+          method: ((row.predicted_method as string | null | undefined) ?? "manual") as "manual" | "heuristic" | "model",
+          confidence: ((row.predicted_confidence as string | null | undefined) ?? "low") as "low" | "medium" | "high"
+        })
+      : null,
     completedOn: row.completed_on as string | null,
     externalId: row.external_id as string | null,
     externalLinks: JSON.parse(row.external_links_json as string),
@@ -239,13 +258,15 @@ function rowToTask(row: Record<string, unknown>): TaskRecord {
 export function upsertTaskDetail(db: DatabaseSync, detail: TaskDetailRecord): void {
   db.prepare(`
     INSERT INTO task_detail_projection (
-      task_id, role, impact, estimated_effort, prerequisites_json, blocking_json,
+      task_id, role, impact, estimated_effort, estimated_effort_source, wait_reason, prerequisites_json, blocking_json,
       files_affected_json, tests_required_json, summary, description_git_hash
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(task_id) DO UPDATE SET
       role = excluded.role,
       impact = excluded.impact,
       estimated_effort = excluded.estimated_effort,
+      estimated_effort_source = excluded.estimated_effort_source,
+      wait_reason = excluded.wait_reason,
       prerequisites_json = excluded.prerequisites_json,
       blocking_json = excluded.blocking_json,
       files_affected_json = excluded.files_affected_json,
@@ -257,6 +278,8 @@ export function upsertTaskDetail(db: DatabaseSync, detail: TaskDetailRecord): vo
     detail.role,
     detail.impact,
     detail.estimatedEffort,
+    detail.estimatedEffortSource === "agent-active" ? "agent-active" : null,
+    detail.waitReason ?? null,
     JSON.stringify(detail.prerequisites ?? []),
     JSON.stringify(detail.blocking ?? []),
     JSON.stringify(detail.filesAffected ?? []),
@@ -274,6 +297,8 @@ export function getTaskDetail(db: DatabaseSync, taskId: string): TaskDetailRecor
     role: row.role as string,
     impact: row.impact as string,
     estimatedEffort: row.estimated_effort as string,
+    ...(row.estimated_effort_source === "agent-active" ? { estimatedEffortSource: "agent-active" as const } : {}),
+    ...(row.wait_reason ? { waitReason: row.wait_reason as TaskDetailRecord["waitReason"] } : {}),
     prerequisites: JSON.parse(row.prerequisites_json as string),
     blocking: JSON.parse(row.blocking_json as string),
     filesAffected: JSON.parse(row.files_affected_json as string),
@@ -873,7 +898,12 @@ export function applyRunReceipt(db: DatabaseSync, receipt: RunReceipt, revision:
       ? (task.planningState === "in-progress" || task.planningState === "blocked" ? "ready" : undefined)
       : undefined;
   if (targetPlanning !== undefined && task.planningState !== targetPlanning) {
-    assertPlanningReceiptTransition(task.planningState, targetPlanning);
+    // T-118: no admission re-adjudication on the shared applier. The FSM
+    // legality of a receipt's planning move is checked where NEW receipts are
+    // admitted (dispatch.ts validateReceiptTransition); here the journal event
+    // is an immutable historical fact -- replays of pre-machine history (e.g.
+    // a receipt completed while the task was already archived) must project
+    // what was recorded, not be rejected by today's rules.
     taskPatch.planningState = targetPlanning;
   }
   patchTask(db, task.taskId, taskPatch, revision);
@@ -995,17 +1025,6 @@ export function listClaimViolations(db: DatabaseSync, query: ClaimViolationQuery
 
 export const queryClaimViolations = listClaimViolations;
 
-function assertPlanningReceiptTransition(from: string, to: string): void {
-  // EXECUTION failure returns active work to retryable ready. The planning
-  // machine intentionally requires passing through blocked from in-progress.
-  if (from === "in-progress" && to === "ready") {
-    assertTransition("planning", from, "blocked");
-    assertTransition("planning", "blocked", to);
-    return;
-  }
-  assertTransition("planning", from, to);
-}
-
 // ---- export_checkpoint ----
 
 export function insertExportCheckpoint(db: DatabaseSync, checkpoint: {
@@ -1014,16 +1033,18 @@ export function insertExportCheckpoint(db: DatabaseSync, checkpoint: {
   generatedAt: string;
   filesHash: Record<string, string>;
   reason: string;
+  sourceState?: Record<string, unknown> | null;
 }): void {
   db.prepare(`
-    INSERT INTO export_checkpoint (export_id, event_cursor_json, generated_at, files_hash_json, reason)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO export_checkpoint (export_id, event_cursor_json, generated_at, files_hash_json, reason, source_state_json)
+    VALUES (?, ?, ?, ?, ?, ?)
   `).run(
     checkpoint.exportId,
     JSON.stringify(checkpoint.eventCursor),
     checkpoint.generatedAt,
     JSON.stringify(checkpoint.filesHash),
-    checkpoint.reason
+    checkpoint.reason,
+    checkpoint.sourceState ? JSON.stringify(checkpoint.sourceState) : null
   );
 }
 
@@ -1033,6 +1054,7 @@ export function listExportCheckpoints(db: DatabaseSync): Array<{
   generatedAt: string;
   filesHash: Record<string, string>;
   reason: string;
+  sourceState: Record<string, unknown> | null;
 }> {
   const rows = db.prepare("SELECT * FROM export_checkpoint ORDER BY generated_at ASC").all() as Record<string, unknown>[];
   return rows.map(row => ({
@@ -1040,6 +1062,313 @@ export function listExportCheckpoints(db: DatabaseSync): Array<{
     eventCursor: JSON.parse(row.event_cursor_json as string),
     generatedAt: row.generated_at as string,
     filesHash: JSON.parse(row.files_hash_json as string),
-    reason: row.reason as string
+    reason: row.reason as string,
+    sourceState: row.source_state_json ? JSON.parse(row.source_state_json as string) as Record<string, unknown> : null
   }));
+}
+
+// ---- T-120 acceptance revision + criteria ----
+
+export function upsertAcceptanceRevision(db: DatabaseSync, input: {
+  taskId: string;
+  revision: number;
+  condition: "criteria" | "empty";
+  revisionEventNode: string;
+  revisionEventSequence: number;
+}): void {
+  db.prepare(`
+    INSERT INTO acceptance_revision_projection (task_id, revision, condition, revision_event_node, revision_event_sequence)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(task_id) DO UPDATE SET
+      revision = excluded.revision,
+      condition = excluded.condition,
+      revision_event_node = excluded.revision_event_node,
+      revision_event_sequence = excluded.revision_event_sequence
+  `).run(input.taskId, input.revision, input.condition, input.revisionEventNode, input.revisionEventSequence);
+}
+
+export function replaceAcceptanceCriteria(db: DatabaseSync, taskId: string, revision: number, criteria: AcceptanceCriterionRecord[]): void {
+  db.prepare("DELETE FROM acceptance_criterion_projection WHERE task_id = ?").run(taskId);
+  const insert = db.prepare(`
+    INSERT INTO acceptance_criterion_projection (
+      task_id, criterion_id, revision, position, text, state, source,
+      evidence_json, approved_at, approved_by, approval_event_node, approval_event_sequence
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const criterion of criteria) {
+    insert.run(
+      taskId,
+      criterion.criterionId,
+      revision,
+      criterion.position,
+      criterion.text,
+      criterion.state,
+      criterion.source,
+      criterion.evidence ? JSON.stringify(criterion.evidence) : null,
+      criterion.approvedAt ?? null,
+      criterion.approvedBy ?? null,
+      null,
+      null
+    );
+  }
+}
+
+function criterionRowToRecord(row: Record<string, unknown>): AcceptanceCriterionRecord {
+  return {
+    criterionId: row.criterion_id as string,
+    revision: row.revision as number,
+    position: row.position as number,
+    text: row.text as string,
+    state: row.state as AcceptanceCriterionState,
+    source: row.source as string,
+    evidence: row.evidence_json ? JSON.parse(row.evidence_json as string) as Record<string, string> : null,
+    approvedAt: (row.approved_at as string | null) ?? null,
+    approvedBy: (row.approved_by as string | null) ?? null
+  };
+}
+
+export function getAcceptanceRevisionHeader(db: DatabaseSync, taskId: string): { revision: number; condition: AcceptanceCondition; revisionEventNode: string; revisionEventSequence: number } | undefined {
+  const row = db.prepare("SELECT * FROM acceptance_revision_projection WHERE task_id = ?").get(taskId) as Record<string, unknown> | undefined;
+  if (!row) return undefined;
+  return {
+    revision: row.revision as number,
+    condition: row.condition as "criteria" | "empty",
+    revisionEventNode: row.revision_event_node as string,
+    revisionEventSequence: row.revision_event_sequence as number
+  };
+}
+
+export function listAcceptanceCriteria(db: DatabaseSync, taskId: string): AcceptanceCriterionRecord[] {
+  const rows = db.prepare("SELECT * FROM acceptance_criterion_projection WHERE task_id = ? ORDER BY position ASC").all(taskId) as Record<string, unknown>[];
+  return rows.map(criterionRowToRecord);
+}
+
+export function getAcceptance(db: DatabaseSync, taskId: string): AcceptanceRevisionRecord | null {
+  const header = getAcceptanceRevisionHeader(db, taskId);
+  if (!header) return null;
+  return {
+    taskId,
+    revision: header.revision,
+    condition: header.condition,
+    criteria: listAcceptanceCriteria(db, taskId)
+  };
+}
+
+export function setCriterionApproval(db: DatabaseSync, taskId: string, criterionId: string, revision: number, approval: {
+  state: AcceptanceCriterionState;
+  evidence?: Record<string, string> | null;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+}): boolean {
+  const result = db.prepare(`
+    UPDATE acceptance_criterion_projection
+    SET state = ?, evidence_json = ?, approved_at = ?, approved_by = ?
+    WHERE task_id = ? AND criterion_id = ? AND revision = ?
+  `).run(
+    approval.state,
+    approval.evidence ? JSON.stringify(approval.evidence) : null,
+    approval.approvedAt ?? null,
+    approval.approvedBy ?? null,
+    taskId,
+    criterionId,
+    revision
+  );
+  return Number(result.changes) === 1;
+}
+
+// ---- T-116 history evidence + corrections ----
+
+export type HistoryEvidenceRecord = {
+  evidenceId: string;
+  taskId: string;
+  harness: string;
+  sessionId: string;
+  tier: "measured" | "inferred";
+  confidence: "high" | "medium" | "low";
+  repoRoot: string | null;
+  repoOrigin: string | null;
+  signals: string[];
+  spanStart: string | null;
+  spanEnd: string | null;
+  activeMs: number | null;
+  sourceHash: string | null;
+  recordedAt: string;
+};
+
+export type HistoryEvidenceRow = HistoryEvidenceRecord & {
+  status: "active" | "invalid";
+  revisionEventNode: string;
+  revisionEventSequence: number;
+};
+
+export function insertHistoryEvidence(db: DatabaseSync, evidence: HistoryEvidenceRecord, revision: EventRevision): void {
+  db.prepare(`
+    INSERT INTO history_evidence_projection (
+      evidence_id, task_id, harness, session_id, tier, confidence, repo_root, repo_origin,
+      signals_json, span_start, span_end, active_ms, source_hash, recorded_at, status,
+      revision_event_node, revision_event_sequence
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+    ON CONFLICT(evidence_id) DO UPDATE SET
+      tier = excluded.tier,
+      confidence = excluded.confidence,
+      repo_root = excluded.repo_root,
+      repo_origin = excluded.repo_origin,
+      signals_json = excluded.signals_json,
+      span_start = excluded.span_start,
+      span_end = excluded.span_end,
+      active_ms = excluded.active_ms,
+      source_hash = excluded.source_hash,
+      recorded_at = excluded.recorded_at,
+      status = 'active',
+      revision_event_node = excluded.revision_event_node,
+      revision_event_sequence = excluded.revision_event_sequence
+  `).run(
+    evidence.evidenceId,
+    evidence.taskId,
+    evidence.harness,
+    evidence.sessionId,
+    evidence.tier,
+    evidence.confidence,
+    evidence.repoRoot,
+    evidence.repoOrigin,
+    JSON.stringify(evidence.signals),
+    evidence.spanStart,
+    evidence.spanEnd,
+    evidence.activeMs,
+    evidence.sourceHash,
+    evidence.recordedAt,
+    revision.node,
+    revision.sequence
+  );
+}
+
+export function getHistoryEvidence(db: DatabaseSync, evidenceId: string): HistoryEvidenceRow | undefined {
+  const row = db.prepare("SELECT * FROM history_evidence_projection WHERE evidence_id = ?").get(evidenceId) as Record<string, unknown> | undefined;
+  return row ? rowToHistoryEvidence(row) : undefined;
+}
+
+export function listHistoryEvidence(db: DatabaseSync, taskId?: string): HistoryEvidenceRow[] {
+  const rows = taskId !== undefined
+    ? db.prepare("SELECT * FROM history_evidence_projection WHERE task_id = ? ORDER BY recorded_at ASC, evidence_id ASC").all(taskId) as Record<string, unknown>[]
+    : db.prepare("SELECT * FROM history_evidence_projection ORDER BY recorded_at ASC, evidence_id ASC").all() as Record<string, unknown>[];
+  return rows.map(rowToHistoryEvidence);
+}
+
+export function invalidateHistoryEvidence(db: DatabaseSync, evidenceId: string): void {
+  db.prepare("UPDATE history_evidence_projection SET status = 'invalid' WHERE evidence_id = ?").run(evidenceId);
+}
+
+function rowToHistoryEvidence(row: Record<string, unknown>): HistoryEvidenceRow {
+  return {
+    evidenceId: row.evidence_id as string,
+    taskId: row.task_id as string,
+    harness: row.harness as string,
+    sessionId: row.session_id as string,
+    tier: row.tier as HistoryEvidenceRecord["tier"],
+    confidence: row.confidence as HistoryEvidenceRecord["confidence"],
+    repoRoot: row.repo_root as string | null,
+    repoOrigin: row.repo_origin as string | null,
+    signals: JSON.parse(row.signals_json as string) as string[],
+    spanStart: row.span_start as string | null,
+    spanEnd: row.span_end as string | null,
+    activeMs: row.active_ms as number | null,
+    sourceHash: row.source_hash as string | null,
+    recordedAt: row.recorded_at as string,
+    status: row.status as HistoryEvidenceRow["status"],
+    revisionEventNode: row.revision_event_node as string,
+    revisionEventSequence: row.revision_event_sequence as number
+  };
+}
+
+export type HistoryCorrectionRecord = {
+  correctionId: string;
+  taskId: string;
+  targetKind: "receipt" | "evidence";
+  targetId: string;
+  verdict: "invalid";
+  reason: string;
+  recordedAt: string;
+};
+
+export type HistoryCorrectionRow = HistoryCorrectionRecord & {
+  eventNode: string;
+  eventSequence: number;
+};
+
+export function insertHistoryCorrection(db: DatabaseSync, correction: HistoryCorrectionRecord, revision: EventRevision): void {
+  db.prepare(`
+    INSERT INTO history_correction_projection (
+      correction_id, task_id, target_kind, target_id, verdict, reason, recorded_at, event_node, event_sequence
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(correction_id) DO NOTHING
+  `).run(
+    correction.correctionId,
+    correction.taskId,
+    correction.targetKind,
+    correction.targetId,
+    correction.verdict,
+    correction.reason,
+    correction.recordedAt,
+    revision.node,
+    revision.sequence
+  );
+}
+
+export function listHistoryCorrections(db: DatabaseSync, query: { taskId?: string; targetKind?: string; targetId?: string } = {}): HistoryCorrectionRow[] {
+  const clauses: string[] = [];
+  const args: string[] = [];
+  if (query.taskId !== undefined) { clauses.push("task_id = ?"); args.push(query.taskId); }
+  if (query.targetKind !== undefined) { clauses.push("target_kind = ?"); args.push(query.targetKind); }
+  if (query.targetId !== undefined) { clauses.push("target_id = ?"); args.push(query.targetId); }
+  const where = clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : "";
+  const rows = db.prepare(`SELECT * FROM history_correction_projection${where} ORDER BY recorded_at ASC, correction_id ASC`).all(...args) as Record<string, unknown>[];
+  return rows.map(row => ({
+    correctionId: row.correction_id as string,
+    taskId: row.task_id as string,
+    targetKind: row.target_kind as HistoryCorrectionRecord["targetKind"],
+    targetId: row.target_id as string,
+    verdict: row.verdict as HistoryCorrectionRecord["verdict"],
+    reason: row.reason as string,
+    recordedAt: row.recorded_at as string,
+    eventNode: row.event_node as string,
+    eventSequence: row.event_sequence as number
+  }));
+}
+
+/**
+ * Receipt identity keys (dispatchId/attempt) invalidated by an accepted
+ * history correction. Original receipt rows stay untouched and queryable;
+ * roadmap display and duration/accuracy calibration use this list to
+ * exclude them.
+ */
+export function listInvalidatedReceiptKeys(db: DatabaseSync): Set<string> {
+  const rows = db.prepare("SELECT target_id FROM history_correction_projection WHERE target_kind = 'receipt' AND verdict = 'invalid'").all() as Array<{ target_id: string }>;
+  return new Set(rows.map(row => row.target_id));
+}
+
+/**
+ * T-118: the receipt planning ADMISSION rule, shared by the command-level
+ * receipt path (dispatch.ts) and the new-event writer gate (events.ts via
+ * assertNewEventAdmission) so the two can never drift. For every outcome
+ * that implies a planning target -- completed -> review, blocked -> blocked,
+ * failed -> ready from in-progress/blocked -- the task's current planning
+ * state must be able to reach it; in-progress reaches ready through blocked
+ * by design. This is admission only: the projection (applyRunReceipt) keeps
+ * R9 semantics and never moves planning for a blocked RUN.
+ */
+export function assertReceiptPlanningAdmission(planningState: string, outcome: string): void {
+  const targetPlanning = outcome === "completed"
+    ? "review"
+    : outcome === "failed"
+      ? (planningState === "in-progress" || planningState === "blocked" ? "ready" : undefined)
+      : outcome === "blocked"
+        ? "blocked"
+        : undefined;
+  if (targetPlanning === undefined || planningState === targetPlanning) return;
+  if (planningState === "in-progress" && targetPlanning === "ready") {
+    assertTransition("planning", "in-progress", "blocked");
+    assertTransition("planning", "blocked", "ready");
+    return;
+  }
+  assertTransition("planning", planningState, targetPlanning);
 }

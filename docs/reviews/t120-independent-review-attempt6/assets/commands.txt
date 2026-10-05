@@ -1,0 +1,13 @@
+Isolated checkout: /tmp/mapctx-t120-review-attempt6/code
+
+zsh -lic 'npm run build:sync-engine'                         # exit 0, build.log
+zsh -lic 'node --test packages/sync-engine/dist/task-write.test.js packages/sync-engine/dist/attest-orphan-cli.test.js' # exit 0, focused-tests.log
+node packages/sync-engine/dist/mapctx-cli.js --help         # exit 0, help.txt
+
+No tests or builds run against live MAPCTX_HOME. Focused task-write source in task-write.attempt6-probe.test.ts adds only an independent assertion that absent evidence is null in acceptance.approved event; this is a /tmp-only probe, not a source edit.
+
+Additional /tmp-only probes:
+- Added null assertion against acceptance.approved event to copied task-write.test.ts (diff: null-event-probe.diff).
+- Added `--evidence verifier=agent-7=trial` to copied attest-orphan test draft/approval flow; assert draft preserves embedded `=` (source: attest-orphan-attempt6-probe.test.ts).
+- zsh -lic 'npm run build --workspace @mapctx/sync-engine' # exit 0, probe-build.log
+- zsh -lic 'node --test packages/sync-engine/dist/task-write.test.js packages/sync-engine/dist/attest-orphan-cli.test.js' # exit 0, focused-tests.log

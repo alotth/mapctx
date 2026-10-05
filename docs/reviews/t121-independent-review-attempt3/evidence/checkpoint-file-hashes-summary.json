@@ -1,0 +1,18 @@
+{
+  "checkpoint1": {
+    "eventCursor": {
+      "node": "0b848095-27e7-4d0d-83e0-bc7ff9655010",
+      "sequence": 3168
+    },
+    "files": 318
+  },
+  "checkpoint2": {
+    "eventCursor": {
+      "node": "0b848095-27e7-4d0d-83e0-bc7ff9655010",
+      "sequence": 3169
+    },
+    "files": 318
+  },
+  "pathAndShaListsIdentical": true,
+  "filesHashSha256": "5a8e3214bfe5db9cde71eb281f0adc8a840825c0e65d679a0a00f57de68e4381"
+}

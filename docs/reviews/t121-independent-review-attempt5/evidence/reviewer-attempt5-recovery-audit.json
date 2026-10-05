@@ -1,0 +1,127 @@
+{
+  "independentAudit": "PASS",
+  "tasks": 15,
+  "authoredRecovered": 54,
+  "tasksDetail": [
+    {
+      "id": "T-063",
+      "authoredIncident": 1,
+      "authoredCurrent": 0,
+      "authoredRecovered": 1,
+      "criteria": 4,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-175",
+      "authoredIncident": 12,
+      "authoredCurrent": 0,
+      "authoredRecovered": 12,
+      "criteria": 4,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-180",
+      "authoredIncident": 5,
+      "authoredCurrent": 0,
+      "authoredRecovered": 5,
+      "criteria": 3,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-186",
+      "authoredIncident": 13,
+      "authoredCurrent": 0,
+      "authoredRecovered": 13,
+      "criteria": 9,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-187",
+      "authoredIncident": 4,
+      "authoredCurrent": 0,
+      "authoredRecovered": 4,
+      "criteria": 3,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-194",
+      "authoredIncident": 1,
+      "authoredCurrent": 0,
+      "authoredRecovered": 1,
+      "criteria": 5,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-212",
+      "authoredIncident": 2,
+      "authoredCurrent": 0,
+      "authoredRecovered": 2,
+      "criteria": 9,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-213",
+      "authoredIncident": 2,
+      "authoredCurrent": 0,
+      "authoredRecovered": 2,
+      "criteria": 5,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-248",
+      "authoredIncident": 5,
+      "authoredCurrent": 0,
+      "authoredRecovered": 5,
+      "criteria": 4,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-254",
+      "authoredIncident": 1,
+      "authoredCurrent": 0,
+      "authoredRecovered": 1,
+      "criteria": 4,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-257",
+      "authoredIncident": 1,
+      "authoredCurrent": 0,
+      "authoredRecovered": 1,
+      "criteria": 5,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-261",
+      "authoredIncident": 1,
+      "authoredCurrent": 0,
+      "authoredRecovered": 1,
+      "criteria": 4,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-268",
+      "authoredIncident": 1,
+      "authoredCurrent": 0,
+      "authoredRecovered": 1,
+      "criteria": 5,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-271",
+      "authoredIncident": 4,
+      "authoredCurrent": 0,
+      "authoredRecovered": 4,
+      "criteria": 4,
+      "canonicalAndOutsideStable": true
+    },
+    {
+      "id": "T-274",
+      "authoredIncident": 1,
+      "authoredCurrent": 0,
+      "authoredRecovered": 1,
+      "criteria": 4,
+      "canonicalAndOutsideStable": true
+    }
+  ]
+}

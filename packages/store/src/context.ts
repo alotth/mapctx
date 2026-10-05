@@ -3,7 +3,7 @@ import * as path from "node:path"
 import type { DatabaseSync } from "node:sqlite"
 import { parseTasksFile, readTaskDetailFile, type TaskBoard } from "@mapctx/core"
 import { STATUS_TO_PLANNING } from "@mapctx/protocol"
-import { getTask, getTaskDetail, listDependencies, listTasks } from "./projections"
+import { getAcceptance, getTask, getTaskDetail, listDependencies, listTasks } from "./projections"
 import type { DependencyRecord, TaskDetailRecord, TaskRecord } from "./types"
 
 /**
@@ -106,14 +106,14 @@ function extractSection(content: string, heading: string): string[] {
   return out
 }
 
-function gitSections(task: TaskRecord, tasksRoot?: string): { acceptance: string[]; decisions: string[] } {
+function gitSections(task: TaskRecord, tasksRoot?: string, includeAcceptance = true): { acceptance: string[]; decisions: string[] } {
   if (!tasksRoot || !task.detailPath) return { acceptance: [], decisions: [] }
   const detailPath = path.resolve(tasksRoot, task.detailPath)
   if (!fs.existsSync(detailPath)) return { acceptance: [], decisions: [] }
   const content = fs.readFileSync(detailPath, "utf8")
   const decisions = extractSection(content, "## Decisions Taken")
   return {
-    acceptance: extractSection(content, "## Acceptance"),
+    acceptance: includeAcceptance ? extractSection(content, "## Acceptance") : [],
     // Entries are authored oldest-to-newest in task files. Return newest first
     // so budget trimming keeps latest decisions deterministic.
     decisions: decisions.reverse()
@@ -143,20 +143,21 @@ function buildTaskContext(
   dependencies: DependencyRecord[],
   options: ContextQueryOptions,
   taskProvenance: ContextProvenance,
-  detailProvenance: ContextProvenance
+  detailProvenance: ContextProvenance,
+  canonicalAcceptance?: string[]
 ): TaskContext {
   if (!Number.isInteger(options.budget) || options.budget < 1) throw new Error("context budget must be a positive integer")
   const byId = new Map(allTasks.map(value => [value.taskId, value]))
   const ancestors = ancestorsFor(task, byId)
   const unsatisfiedDependencies = dependencyTasks(task.taskId, dependencies, byId)
-  const git = gitSections(task, options.tasksRoot)
+  const git = gitSections(task, options.tasksRoot, canonicalAcceptance === undefined)
   const truncated: ContextTruncation[] = []
   const result = {
     task,
     detail,
     ancestors: [...ancestors],
     unsatisfiedDependencies: [...unsatisfiedDependencies],
-    acceptanceCriteria: [...git.acceptance],
+    acceptanceCriteria: [...(canonicalAcceptance ?? git.acceptance)],
     decisions: [...git.decisions]
   }
   const count = () => estimateTokens(result)
@@ -185,7 +186,7 @@ function buildTaskContext(
       detail: detailProvenance,
       ancestors: "derived",
       dependencies: "derived",
-      acceptance: "git",
+      acceptance: canonicalAcceptance === undefined ? "git" : "store",
       decisions: "git"
     },
     truncationOrder: ["decisions", "ancestors", "detail", "acceptance", "dependencies"],
@@ -220,7 +221,12 @@ export function queryTaskContext(db: DatabaseSync, taskId: string, options: Cont
     listDependencies(db),
     options,
     "store",
-    "store"
+    "store",
+    (() => {
+      const acceptance = getAcceptance(db, taskId)
+      if (!acceptance) return []
+      return acceptance.criteria.map(criterion => `${criterion.state === "approved" ? "[x]" : "[ ]"} ${criterion.text}`)
+    })()
   )
 }
 
@@ -261,6 +267,8 @@ function markdownDetail(task: TaskRecord, tasksRoot: string): TaskDetailRecord |
     role: detail.role,
     impact: detail.impact,
     estimatedEffort: detail.estimatedEffort,
+    ...(detail.estimatedEffortSource === "agent-active" ? { estimatedEffortSource: "agent-active" as const } : {}),
+    ...(detail.waitReason ? { waitReason: detail.waitReason } : {}),
     prerequisites: detail.prerequisites,
     blocking: detail.blocking,
     filesAffected: detail.filesAffected,

@@ -25,7 +25,7 @@ test("invalid durations render as no data", () => {
   assert.equal(formatDurationMs(Number.POSITIVE_INFINITY), "no data")
 })
 
-test("parseEstimatedEffortMs parses human-unit free text into milliseconds", () => {
+test("parseEstimatedEffortMs parses agent-active free text into milliseconds", () => {
   const hour = 60 * 60 * 1000
   assert.equal(parseEstimatedEffortMs("3d"), 24 * hour)
   assert.equal(parseEstimatedEffortMs("1w"), 5 * 8 * hour)
@@ -36,8 +36,8 @@ test("parseEstimatedEffortMs parses human-unit free text into milliseconds", () 
   assert.equal(parseEstimatedEffortMs(" 2d "), 16 * hour)
 })
 
-test("parseEstimatedEffortMs uses the human working-day convention the authors meant", () => {
-  // "1w" was authored as five working days, not seven calendar days.
+test("parseEstimatedEffortMs documents the agent-active day and week convention", () => {
+  // 1d is eight active hours; 1w is five active days, never calendar time.
   const week = parseEstimatedEffortMs("1w")
   const day = parseEstimatedEffortMs("1d")
   assert.ok(week !== null && day !== null)
@@ -46,6 +46,10 @@ test("parseEstimatedEffortMs uses the human working-day convention the authors m
 
 test("parseEstimatedEffortMs returns null for junk instead of fabricating a duration", () => {
   assert.equal(parseEstimatedEffortMs(""), null)
+  assert.equal(parseEstimatedEffortMs("0d"), null)
+  assert.equal(parseEstimatedEffortMs("0.0h"), null)
+  assert.equal(parseEstimatedEffortMs("0.0000001m"), null)
+  assert.equal(parseEstimatedEffortMs(`${"9".repeat(400)}w`), null)
   assert.equal(parseEstimatedEffortMs("soon"), null)
   assert.equal(parseEstimatedEffortMs("3x"), null)
   assert.equal(parseEstimatedEffortMs("d3"), null)

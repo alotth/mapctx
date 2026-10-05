@@ -1,5 +1,4 @@
-import * as fs from 'fs';
-import { buildExport, isStoreMaterialized, resolveMapctxToml, resolveProjectStoreDir, StoreHandle, type MapctxTomlConfig } from '@mapctx/store';
+import { isStoreMaterialized, resolveMapctxToml, resolveProjectStoreDir, StoreHandle, type MapctxTomlConfig } from '@mapctx/store';
 
 export type BudgetCliOptions = {
   json?: boolean;
@@ -56,19 +55,4 @@ export function requireStoreAuthorityForBudget(cwd: string, options: { mode?: 'w
     return { toml, handle, tasksRoot: toml.dir };
   }
   return { toml, handle: StoreHandle.open(storeDir), tasksRoot: toml.dir };
-}
-
-/**
- * After a budget write the canonical Markdown must follow in the same
- * operation (the epic detail carries the generated budget projection), or
- * the next validate fails closed. Safe to call on any store: no budgets set
- * means the export is byte-identical to before.
- */
-export function regenerateCanonicalFilesSafe(handle: StoreHandle, tasksRoot: string): { tasksMd: string; detailFiles: number } {
-  const exported = buildExport(handle.db, { tasksRoot });
-  fs.writeFileSync(exported.tasksMd.path, exported.tasksMd.content, 'utf8');
-  for (const file of exported.taskDetailFiles) {
-    fs.writeFileSync(file.path, file.content, 'utf8');
-  }
-  return { tasksMd: exported.tasksMd.path, detailFiles: exported.taskDetailFiles.length };
 }

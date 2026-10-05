@@ -1,4 +1,4 @@
-import { getTask, listCostEvents, listDispatchAttempts, listRunEvents, listRunReceipts, listWorkloadDeltaRows } from "@mapctx/store"
+import { getTask, listCostEvents, listDispatchAttempts, listInvalidatedReceiptKeys, listRunEvents, listRunReceipts, listWorkloadDeltaRows } from "@mapctx/store"
 import type { EstimateSnapshot } from "@mapctx/protocol"
 import { durationMeasuresFromReceipt } from "./duration"
 import { buildEstimateSnapshot, estimationErrorByPlannedWorkload } from "./estimate"
@@ -7,6 +7,17 @@ import type { EstimateOptions, ForecastSample, Workload, WorkloadEstimationError
 type StoreDatabase = Parameters<typeof listRunReceipts>[0]
 
 const WORKLOAD_VALUES: readonly Workload[] = ["Easy", "Normal", "Hard", "Extreme"]
+
+/**
+ * T-116: receipts invalidated by an accepted history correction are excluded
+ * from every duration/accuracy path. The original rows stay queryable in the
+ * store; they simply never calibrate or display as actuals again.
+ */
+function withoutInvalidated<T extends { dispatchId: string; attempt: number }>(items: readonly T[], db: StoreDatabase): T[] {
+  const invalidated = listInvalidatedReceiptKeys(db)
+  if (invalidated.size === 0) return [...items]
+  return items.filter(item => !invalidated.has(`${item.dispatchId}/${item.attempt}`))
+}
 
 /**
  * Canonical-workload coercion. Store rows carry free strings; the forecast
@@ -25,7 +36,7 @@ export function buildEstimateFromStore(
   taskId: string,
   options: EstimateOptions = {}
 ): EstimateSnapshot {
-  const receipts = listRunReceipts(db, undefined, taskId)
+  const receipts = withoutInvalidated(listRunReceipts(db, undefined, taskId), db)
   // T-071: dispatch attempts carry the planned workload frozen at hand-off.
   const plannedByAttempt = new Map(
     listDispatchAttempts(db, undefined, taskId).map(
@@ -40,10 +51,13 @@ export function buildEstimateFromStore(
   const samples = receipts.map(receipt => ({
     duration: durationMeasuresFromReceipt(receipt.startedAt, receipt.endedAt, {
       idleThresholdMs: options.idleThresholdMs,
+      timeEvidence: receipt.timeEvidence,
       events: listRunEvents(db, receipt.dispatchId, receipt.attempt)
     }),
     usageEvents: receipt.usageEvents,
+    timePolicy: receipt.timeEvidence?.policy,
     costEvents: listCostEvents(db, receipt.dispatchId),
+    historyTier: receipt.historyTier,
     workload: discovered,
     workloadPlanned: toWorkload(plannedByAttempt.get(`${receipt.dispatchId}/${receipt.attempt}`)) ?? null
   }))
@@ -59,8 +73,12 @@ export const forecastTaskFromStore = buildEstimateFromStore
  * stamp; both undefined when untagged.
  */
 export function workloadDeltaSamplesFromStore(db: StoreDatabase, taskId?: string): ForecastSample[] {
-  return listWorkloadDeltaRows(db, taskId).map(row => ({
-    duration: durationMeasuresFromReceipt(row.startedAt, row.endedAt),
+  const invalidated = listInvalidatedReceiptKeys(db)
+  return listWorkloadDeltaRows(db, taskId)
+    .filter(row => !invalidated.has(`${row.dispatchId}/${row.attempt}`))
+    .map(row => ({
+    duration: durationMeasuresFromReceipt(row.startedAt, row.endedAt, { timeEvidence: listRunReceipts(db, row.dispatchId).find(receipt => receipt.attempt === row.attempt)?.timeEvidence }),
+    historyTier: listRunReceipts(db, row.dispatchId).find(receipt => receipt.attempt === row.attempt)?.historyTier,
     workload: toWorkload(row.currentWorkload),
     workloadPlanned: toWorkload(row.plannedWorkload) ?? null
   }))

@@ -2,7 +2,7 @@ import * as path from "path"
 import { DatabaseSync } from "node:sqlite"
 import type { EventLogEntry } from "@mapctx/protocol"
 import { checkIntegrity, clearProjections, openDatabase, openDatabaseReadOnly, readMetaValue, schemaMaintenanceNeeded, writeMetaValue } from "./db"
-import { applyEventToProjections } from "./events"
+import { applyEventToProjections, assertNewEventAdmission } from "./events"
 import { bumpSequenceWatermark, createStoreMeta, readSequenceWatermark, readStoreMetaFile, withStoreMetaLock, writeStoreMetaFile, type StoreMeta } from "./identity"
 import { listJournalSequences, payloadSha256, readJournalEntry, writeJournalBatchSync, abortJournalBatchSync, type JournalPublicationError } from "./journal"
 import { assertNotUnderMaintenance } from "./maintenance"
@@ -132,6 +132,9 @@ export class StoreHandle {
    * (the durable-but-uncommitted window between fsync and SQLite COMMIT).
    * Runs inside its own write transaction so it composes safely with a
    * concurrent appendEvent from another process (SQLite serializes both).
+   * T-118: these entries were already admitted when journaled, so replay
+   * projects them through the applier with NO admission re-check -- that is
+   * what keeps pre-rules history replayable after a crash.
    */
   reindexPendingJournal(): void {
     this.db.exec("BEGIN IMMEDIATE");
@@ -236,6 +239,12 @@ export class StoreHandle {
         };
 
         try {
+          // T-118: this closure is the NEW-event admission point. Everything
+          // appended here creates fresh history and must satisfy today's
+          // admission rules; the reindex path below and repair's replay
+          // project already-journaled facts through the same applier with no
+          // re-adjudication.
+          assertNewEventAdmission(this.db, entry);
           this.insertEventLogRow(entry);
           applyEventToProjections(this.db, entry);
           writeMetaValue(this.db, "logical_clock", logicalClock);
@@ -313,7 +322,11 @@ export function resetProjectionsForRebuild(db: DatabaseSync): void {
   clearProjections(db);
 }
 
-export function insertEventLogRow(db: DatabaseSync, entry: EventLogEntry): void {
+export function insertEventLogRow(
+  db: DatabaseSync,
+  entry: EventLogEntry,
+  overrides?: { journalPath?: string; payloadJson?: string; causationJson?: string }
+): void {
   db.prepare(`
     INSERT INTO event_log (
       node_id, sequence, logical_clock, event_type, schema_version, occurred_at,
@@ -327,9 +340,12 @@ export function insertEventLogRow(db: DatabaseSync, entry: EventLogEntry): void 
     entry.schemaVersion,
     entry.occurredAt,
     entry.actor,
-    JSON.stringify(entry.causation),
-    JSON.stringify(entry.payload),
+    // T-119: attested DB-only rows replay with their original causation_json
+    // bytes too (e.g. "[ ]" must not re-serialize to "[]"), alongside the
+    // original payload bytes and journal_path.
+    overrides?.causationJson ?? JSON.stringify(entry.causation),
+    overrides?.payloadJson ?? JSON.stringify(entry.payload),
     entry.payloadSha256,
-    path.join("events", entry.nodeId, `${entry.sequence}.json`)
+    overrides?.journalPath ?? path.join("events", entry.nodeId, `${entry.sequence}.json`)
   );
 }

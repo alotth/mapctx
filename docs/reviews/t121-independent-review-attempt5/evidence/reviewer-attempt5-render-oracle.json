@@ -1,0 +1,16 @@
+{
+  "verdict": "PASS",
+  "probes": {
+    "T063": "PASS",
+    "empty": "PASS",
+    "absent": "PASS",
+    "orphan": "PASS",
+    "checkboxOnlyReorder": "PASS",
+    "reorderInsertAssociations": "PASS",
+    "preface": "PASS",
+    "hierarchy": "PASS",
+    "fencesAndSections": "PASS",
+    "duplicate": "PASS",
+    "newSection": "PASS"
+  }
+}

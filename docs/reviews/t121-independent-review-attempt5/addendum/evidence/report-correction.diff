@@ -1,0 +1,14 @@
+--- /Users/alt/.traycer/epics/e8873251-f6f0-490d-be16-8e5655300237/artifacts/t121-review-attempt5/evidence/worker-report-attempt5.md	2026-10-05 12:55:04
++++ /Users/alt/.traycer/worktrees/alotth__mapctx/fix-t121-acceptance-prose-ea633f82980d/docs/reviews/t121-acceptance-prose-preservation-2026-10-05.md	2026-10-05 12:57:08
+@@ -39,9 +39,9 @@
+ 
+ A prova utilizou somente cópia temporária de `mapctx.toml`, `TASKS.md`, `tasks/` e store. O HEAD ELA foi pinado antes e depois em `9933dd5c8326b7ac3fe8136fc8f6eea70b7df212`; os hashes dos 15 arquivos T-121 foram idênticos antes/depois na origem real. A fonte de prosa perdida foi pinada ao commit de incidente `fc3a5e2`. Nenhuma escrita, export, reset ou commit ocorreu no ELA real.
+ 
+-Na cópia, a prosa Acceptance faltante foi composta da fonte incidente com o texto atual fora de Acceptance, as notas Acceptance atuais e os critérios/estados canônicos atuais do store. Para os 15 alvos — T-063, T-175, T-180, T-186, T-187, T-194, T-212, T-213, T-248, T-254, T-257, T-261, T-268, T-271 e T-274 — a prova confirmou:
++Na cópia, as 54 linhas autorais de Acceptance foram recuperadas do commit de incidente `fc3a5e2` e compostas com a prosa atual fora de Acceptance e os critérios/estados canônicos atuais do store. Os 15 inputs atuais não continham linhas autorais dentro de Acceptance; portanto, o campo `currentAuthoredAcceptanceLinesRetained` da prova é verdadeiro por ausência de tais linhas, não comprova preservação de notas atuais nessa seção. Para os 15 alvos — T-063, T-175, T-180, T-186, T-187, T-194, T-212, T-213, T-248, T-254, T-257, T-261, T-268, T-271 e T-274 — a prova confirmou:
+ 
+-- 226 linhas autorais não vazias preservadas: 172 que já estavam no working tree atual e 54 Acceptance autorais recuperadas da fonte incidente;
++- 226 linhas autorais não vazias preservadas: 172 da prosa atual fora de Acceptance e 54 linhas autorais de Acceptance recuperadas da fonte incidente;
+ - texto, revisão, estados, evidências e aprovações dos critérios canônicos sem mudança;
+ - prosa atual fora de Acceptance byte-estável;
+ - dois `mapctx export --reason manual --json` públicos bem-sucedidos e idempotentes, com 318 arquivos no manifesto e hashes path/hash iguais (319 arquivos totais na cópia, incluindo `mapctx.toml`);

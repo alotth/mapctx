@@ -14,7 +14,7 @@ import {
   StoreHandle
 } from '@mapctx/store';
 import { DEFAULT_CURRENCY, formatMoney, parseMoneyAmount, type Account, type Budget } from '@mapctx/protocol';
-import { regenerateCanonicalFilesSafe, requireStoreAuthorityForBudget, type BudgetCliOptions } from './budget-cli-support';
+import { requireStoreAuthorityForBudget, type BudgetCliOptions } from './budget-cli-support';
 
 function print(value: unknown, json?: boolean): void {
   if (json) {
@@ -132,7 +132,7 @@ export function budgetSetCommand(ownerArg: string | undefined, options: BudgetCl
   if (!ownerArg && !options.project) throw new Error('Usage: mapctx budget set <epic-id> (--amount <decimal> | --minutes <n>) [--currency USD] [--start date] [--end date] [--note text] [--json]');
   if (options.amount === undefined && options.minutes === undefined) throw new Error('budget set requires --amount <decimal> (money) or --minutes <n> (time)');
   if (options.amount !== undefined && options.minutes !== undefined) throw new Error('budget set takes either --amount or --minutes, not both');
-  const { handle, tasksRoot } = requireStoreAuthorityForBudget(process.cwd());
+  const { handle } = requireStoreAuthorityForBudget(process.cwd());
   try {
     let budget: Budget;
     if (options.project) {
@@ -146,11 +146,7 @@ export function budgetSetCommand(ownerArg: string | undefined, options: BudgetCl
     if (!result.ok) {
       throw new Error(`Budget set refused: ${result.reason} (${budget.ownerKind} ${budget.ownerId}). Is "${budget.ownerId}" a task in this store?`);
     }
-    // The epic detail file carries the generated budget projection, so the
-    // canonical snapshot must be regenerated in the same operation or the
-    // next validate drifts (same authority story as task move).
-    const regenerated = regenerateCanonicalFilesSafe(handle, tasksRoot);
-    print({ ok: true, budget: result.budget, regenerated }, options.json);
+    print({ ok: true, budget: result.budget }, options.json);
   } finally {
     handle.close();
   }

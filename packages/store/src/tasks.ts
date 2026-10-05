@@ -1,9 +1,6 @@
 import * as crypto from "crypto"
-import * as fs from "fs"
-import * as path from "path"
-import { parseAcceptanceChecklist } from "@mapctx/core"
-import { STATUS_TO_PLANNING, transitionPlanning } from "@mapctx/protocol"
-import { getActiveClaimForTask, getTask, getTaskDetail } from "./projections"
+import { parseEstimatedEffortMs, predictedStartSchema, STATUS_TO_PLANNING, transitionPlanning, workloadSchema } from "@mapctx/protocol"
+import { getAcceptance, getActiveClaimForTask, getTask, getTaskDetail } from "./projections"
 import type { StoreHandle } from "./store-handle"
 import type { DependencyRecord, TaskDetailRecord, TaskRecord } from "./types"
 
@@ -21,8 +18,6 @@ export type MoveTaskOptions = {
   to: string;
   actor: string;
   now?: () => Date;
-  /** Repository root containing Git-authored task detail files. */
-  tasksRoot?: string;
 };
 
 export type MoveTaskResult =
@@ -38,8 +33,9 @@ export type MoveTaskResult =
 /**
  * Planning-state transition under store authority. The board `status:` field
  * is generated output, so this is the honest way to change it: a legal
- * transition recorded as an event; the caller (CLI) regenerates the canonical
- * TASKS.md afterwards. Terminal states have no outgoing edges by design --
+ * transition recorded as an event. The `done` gate reads the canonical
+ * acceptance revision from the store (T-120) -- never the markdown mirror.
+ * Terminal states have no outgoing edges by design --
  * reopening is a reconcile decision, never a silent move.
  */
 export function moveTask(store: StoreHandle, options: MoveTaskOptions): MoveTaskResult {
@@ -71,7 +67,7 @@ export function moveTask(store: StoreHandle, options: MoveTaskOptions): MoveTask
     }
 
     if (options.to === "done") {
-      const acceptance = acceptanceGate(task, options.tasksRoot);
+      const acceptance = acceptanceGate(store.db, options.taskId, task.planningState);
       if (!acceptance.ok) return acceptance;
     }
 
@@ -181,46 +177,43 @@ export type AcceptanceCheckResult =
   | { ok: true }
   | { ok: false; reason: "acceptance-incomplete"; message: string };
 
-export function checkTaskAcceptance(task: TaskRecord, tasksRoot?: string): AcceptanceCheckResult {
-  if (!tasksRoot || !task.detailPath) {
+/**
+ * T-120: the done gate reads ONLY the canonical acceptance revision in the
+ * store. A missing revision (never imported / never revised), an empty
+ * revision, or any pending criterion blocks `done`; the local markdown
+ * mirror is never consulted and can never open the gate.
+ */
+export function checkTaskAcceptance(db: StoreHandle["db"], taskId: string): AcceptanceCheckResult {
+  const acceptance = getAcceptance(db, taskId);
+  if (!acceptance) {
     return {
       ok: false,
       reason: "acceptance-incomplete",
-      message: `task ${task.taskId} cannot move to done: acceptance checklist is unavailable. Add ## Acceptance with every criterion marked [x].`
+      message: `task ${taskId} cannot move to done: no acceptance revision exists in the store. Author one with \`mapctx task acceptance revise ${taskId} --from-file <detail.md>\`, then approve every criterion.`
     };
   }
-
-  const detailPath = path.resolve(tasksRoot, task.detailPath);
-  let content: string;
-  try {
-    content = fs.readFileSync(detailPath, "utf8");
-  } catch {
+  if (acceptance.condition === "empty" || acceptance.criteria.length === 0) {
     return {
       ok: false,
       reason: "acceptance-incomplete",
-      message: `task ${task.taskId} cannot move to done: detail file ${task.detailPath} is unreadable. Add ## Acceptance with every criterion marked [x].`
+      message: `task ${taskId} cannot move to done: acceptance revision ${acceptance.revision} in the store is empty. Revise with criteria, then approve them.`
     };
   }
-
-  const checklist = parseAcceptanceChecklist(content);
-  const incomplete = checklist.items.filter(item => !item.completed).length;
-  if (!checklist.found || checklist.items.length === 0 || incomplete > 0) {
-    const detail = !checklist.found || checklist.items.length === 0
-      ? "acceptance checklist is missing"
-      : `${incomplete} acceptance criterion/criteria remain unchecked`;
+  const pending = acceptance.criteria.filter(criterion => criterion.state !== "approved").length;
+  if (pending > 0) {
     return {
       ok: false,
       reason: "acceptance-incomplete",
-      message: `task ${task.taskId} cannot move to done: ${detail}. Mark every item in ## Acceptance as [x].`
+      message: `task ${taskId} cannot move to done: ${pending} acceptance criterion/criteria are pending approval in the store. Approve with \`mapctx task acceptance approve ${taskId} --index <n>\`.`
     };
   }
   return { ok: true };
 }
 
-function acceptanceGate(task: TaskRecord, tasksRoot?: string): { ok: true } | Extract<MoveTaskResult, { ok: false }> {
-  const result = checkTaskAcceptance(task, tasksRoot);
+function acceptanceGate(db: StoreHandle["db"], taskId: string, planningState: string): { ok: true } | Extract<MoveTaskResult, { ok: false }> {
+  const result = checkTaskAcceptance(db, taskId);
   if (result.ok) return result;
-  return { ...result, from: task.planningState, to: "done" };
+  return { ...result, from: planningState, to: "done" };
 }
 
 /**
@@ -238,6 +231,7 @@ const PATCHABLE_TASK_FIELDS = new Set([
   "domains",
   "startDate",
   "dueDate",
+  "predictedStart",
   "externalId",
   "specMode",
   "assignees",
@@ -249,6 +243,7 @@ const PATCHABLE_DETAIL_FIELDS = new Set([
   "role",
   "impact",
   "estimatedEffort",
+  "waitReason",
   "filesAffected",
   "testsRequired",
   "summary",
@@ -272,7 +267,7 @@ export type UpdateTaskResult =
   | { ok: true; applied: { fields: string[]; detailFields: string[]; edges: boolean } }
   | {
       ok: false;
-      reason: "unknown-task" | "no-changes" | "unknown-field" | "unknown-dependency";
+      reason: "unknown-task" | "no-changes" | "unknown-field" | "unknown-dependency" | "invalid-workload" | "invalid-estimated-effort" | "invalid-wait-reason" | "invalid-predicted-start";
       to: string;
       message?: string;
     };
@@ -302,6 +297,43 @@ export function updateTask(store: StoreHandle, options: UpdateTaskOptions): Upda
     }
   }
 
+  const suppliedWorkload = options.patch?.workload;
+  if (typeof suppliedWorkload === "string" && suppliedWorkload.trim() !== "" && !workloadSchema.safeParse(suppliedWorkload.trim()).success) {
+    return {
+      ok: false,
+      reason: "invalid-workload",
+      to,
+      message: `workload must be one of ${workloadSchema.options.join("|")}; got "${suppliedWorkload}"`
+    };
+  }
+  const suppliedEffort = options.detailPatch?.estimatedEffort as string | null | undefined;
+  const suppliedWaitReason = options.detailPatch?.waitReason;
+  if (suppliedWaitReason !== undefined && suppliedWaitReason !== null &&
+      !["review", "decision", "parked", "blocked-external"].includes(suppliedWaitReason)) {
+    return { ok: false, reason: "invalid-wait-reason", to, message: "waitReason must be review|decision|parked|blocked-external or empty" };
+  }
+  // T-102 predictedStart: schema only. Null clears; object must validate
+  // (YYYY-MM-DD start, method, confidence). Never auto-derived here.
+  const suppliedPredicted = options.patch?.predictedStart;
+  if (suppliedPredicted !== undefined && suppliedPredicted !== null &&
+      !predictedStartSchema.safeParse(suppliedPredicted).success) {
+    return {
+      ok: false,
+      reason: "invalid-predicted-start",
+      to,
+      message: `predictedStart must be null or {start: YYYY-MM-DD, method: manual|heuristic|model, confidence: low|medium|high}`
+    };
+  }
+  if (suppliedEffort !== undefined && suppliedEffort !== null &&
+      (typeof suppliedEffort !== "string" || (suppliedEffort.trim() !== "" && parseEstimatedEffortMs(suppliedEffort) === null))) {
+    return {
+      ok: false,
+      reason: "invalid-estimated-effort",
+      to,
+      message: `estimatedEffort must be a positive m|h|d|w duration; got "${suppliedEffort}"`
+    };
+  }
+
   return store.runInWriteTransaction(append => {
     const task = getTask(store.db, to);
     if (!task) return { ok: false, reason: "unknown-task", to };
@@ -316,6 +348,17 @@ export function updateTask(store: StoreHandle, options: UpdateTaskOptions): Upda
 
     const patch: Partial<TaskRecord> = { ...(options.patch ?? {}) };
     const detailPatch: Partial<TaskDetailRecord> = { ...(options.detailPatch ?? {}) };
+    if (typeof patch.workload === "string") {
+      patch.workload = patch.workload.trim() || null;
+    }
+    // Editing an estimate after the T-099 convention is an explicit new
+    // declaration, not a reinterpretation of the legacy value it replaces.
+    if (detailPatch.estimatedEffort !== undefined) {
+      detailPatch.estimatedEffort = (detailPatch.estimatedEffort as string | null)?.trim() ?? "";
+      // Persist a clearing marker in the event. `undefined` would disappear
+      // during JSON serialization and leave the prior active provenance set.
+      detailPatch.estimatedEffortSource = detailPatch.estimatedEffort ? "agent-active" : "legacy-human";
+    }
 
     let edges: DependencyRecord[] | undefined;
     if (options.dependsOn !== undefined || options.blocking !== undefined) {
@@ -416,7 +459,7 @@ export type CreateTaskOptions = {
 };
 
 export type CreateTaskResult =
-  | { ok: true; taskId: string; detailPath: string }
+  | { ok: true; taskId: string; detailPath: string; warnings: string[] }
   | {
       ok: false;
       reason:
@@ -426,6 +469,9 @@ export type CreateTaskResult =
         | "invalid-type"
         | "unknown-parent"
         | "unknown-dependency"
+        | "invalid-workload"
+        | "invalid-estimated-effort"
+        | "invalid-wait-reason"
         | "state-not-exportable";
       message?: string;
       taskId?: string;
@@ -455,6 +501,28 @@ export function createTask(store: StoreHandle, options: CreateTaskOptions): Crea
       ok: false,
       reason: "state-not-exportable",
       message: `planningState "${status}" has no TASKS.md status mapping; the board vocabulary must grow before this state is creatable.`
+    };
+  }
+
+  const requested = options.detail ?? {};
+  const normalizedWorkload = options.workload?.trim() ?? "";
+  if (normalizedWorkload && !workloadSchema.safeParse(normalizedWorkload).success) {
+    return {
+      ok: false,
+      reason: "invalid-workload",
+      message: `workload must be one of ${workloadSchema.options.join("|")}; got "${options.workload}"`
+    };
+  }
+  const normalizedEffort = requested.estimatedEffort?.trim() ?? "";
+  if (requested.waitReason !== undefined && requested.waitReason !== null &&
+      !["review", "decision", "parked", "blocked-external"].includes(requested.waitReason)) {
+    return { ok: false, reason: "invalid-wait-reason", message: "waitReason must be review|decision|parked|blocked-external" };
+  }
+  if (normalizedEffort && parseEstimatedEffortMs(normalizedEffort) === null) {
+    return {
+      ok: false,
+      reason: "invalid-estimated-effort",
+      message: `estimatedEffort must be a positive m|h|d|w duration; got "${requested.estimatedEffort}"`
     };
   }
 
@@ -504,7 +572,7 @@ export function createTask(store: StoreHandle, options: CreateTaskOptions): Crea
       type,
       parentTaskId: options.parent ?? null,
       priority: options.priority ?? null,
-      workload: options.workload ?? null,
+      workload: normalizedWorkload || null,
       tags: [...(options.tags ?? [])],
       domains: [...(options.domains ?? [])],
       startDate: options.startDate ?? null,
@@ -521,12 +589,17 @@ export function createTask(store: StoreHandle, options: CreateTaskOptions): Crea
       ...(options.blocking ?? []).map(toTaskId => ({ fromTaskId: taskId, toTaskId, kind: "blocks" as const }))
     ];
 
-    const requested = options.detail ?? {};
     const detail: TaskDetailRecord = {
       taskId,
       role: requested.role ?? "implementation",
       impact: requested.impact ?? "medium",
-      estimatedEffort: requested.estimatedEffort ?? "1d",
+      // Do not silently invent a plan. The CLI returns a warning and claim
+      // refuses executable work until an operator supplies this value.
+      estimatedEffort: normalizedEffort,
+      // The convention attaches to a value, not to an intentionally blank
+      // field that the claim gate will make the operator fill later.
+      estimatedEffortSource: normalizedEffort ? "agent-active" : undefined,
+      waitReason: requested.waitReason,
       prerequisites: requested.prerequisites ?? [...(options.dependsOn ?? [])],
       blocking: requested.blocking ?? [...(options.blocking ?? [])],
       filesAffected: requested.filesAffected ?? [],
@@ -546,7 +619,12 @@ export function createTask(store: StoreHandle, options: CreateTaskOptions): Crea
       }
     });
 
-    return { ok: true, taskId, detailPath };
+    const warnings: string[] = [];
+    if (type !== "epic") {
+      if (!record.workload) warnings.push(`Missing workload. Set it before claim: mapctx task update ${taskId} --set workload=Normal`);
+      if (!detail.estimatedEffort.trim()) warnings.push(`Missing estimatedEffort. Set it before claim: mapctx task update ${taskId} --set detail.estimatedEffort=1d`);
+    }
+    return { ok: true, taskId, detailPath, warnings };
   });
 }
 

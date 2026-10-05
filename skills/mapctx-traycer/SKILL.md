@@ -9,7 +9,7 @@ MapCtx owns planning. Traycer executes. Ticket Markdown is projection, never sou
 
 ## Hard gate (precondition)
 
-No real work starts without a task. Before any code/file change, deliverable, or new scope planning, inspect the current plan and search related tasks (`mapctx plan --json`, `mapctx task search --query "..." --json`). Claim an existing T-### when it clearly covers the requested scope. When the requested scope is clear but uncovered, create a focused task automatically with summary, acceptance, and affected paths; the operator's explicit work request is approval to record that work. Ask only for material ambiguity, conflicting product intent, or destructive scope. Never execute unclaimed work. Conversation, read-only analysis, and quick diagnostics need no ticket. A Traycer ticket mirrors the T-###; it never substitutes the claim. Every child-agent brief embeds the T-### and the claim-before-work order.
+No real work starts without a task. Before any code/file change, deliverable, or new scope planning, inspect the current plan and search related tasks (`mapctx plan --json`, `mapctx task search --query "..." --json`). Claim an existing T-### when it clearly covers the requested scope. When the requested scope is clear but uncovered, create a focused task automatically with summary, acceptance, affected paths, **workload**, and **estimatedEffort**; executable tasks missing workload or effort are not claimable. `estimatedEffort` is agent active time (`1d = 8` active hours, `1w = 40` active hours), never human wait/review or wall time. The operator's explicit work request is approval to record that work. Ask only for material ambiguity, conflicting product intent, or destructive scope. Never execute unclaimed work. Conversation, read-only analysis, and quick diagnostics need no ticket. A Traycer ticket mirrors the T-###; it never substitutes the claim. Every child-agent brief embeds the T-### and the claim-before-work order.
 
 ## Execution routing
 
@@ -20,7 +20,7 @@ does not implement those tasks itself.
 
 Create one child agent per executable task. Every child brief must include the
 MapCtx task ID, bounded task context, worktree, claim-before-work order, and
-receipt requirements. A child claims and dispatches its own task before editing.
+receipt requirements. A child runs `task start` for its own task before editing (atomic claim + dispatch).
 
 For a single task, reuse the current session only when its context is relevant
 and it has sufficient context headroom. Start a fresh child agent when the
@@ -48,20 +48,19 @@ dispatches, and receipts.
 2. Use `@mapctx/adapter-traycer` pure functions to map each planned task to a validated `DispatchEnvelope`, then render a ticket projection. Keep only Traycer-closed frontmatter: `kind`, `title`, `status`.
 3. Write projection under epic artifact directory. This creates a reviewable Markdown artifact, **not** a live Traycer ticket.
 4. Human/operator attaches or recreates projection in Traycer UI. This is required: adapter cannot create Yjs docs, assign live agents, or sync Traycer board state.
-5. For each executable task in wave, claim through MapCtx CLI, then register the dispatch before any work starts:
+5. For each executable task in wave, atomically claim and register the dispatch before any work starts:
 
    ```sh
-   mapctx task claim <task-id> --actor traycer --holder '{"provider":"traycer","epic":"<epic-id>"}' --json
-   mapctx dispatch create <task-id> [--executor kind] --json
+   mapctx task start <task-id> --actor traycer --executor traycer --holder '{"provider":"traycer","epic":"<epic-id>"}' --json
    ```
 
-   `dispatch create` prints the `dispatchId`/attempt to feed the receipt step. Use `--dispatch-id` with the same id to append attempt max+1 on a retry instead of creating a fresh dispatch.
+   `task start` returns `claimId`, `leaseToken`, `expiresAt`, `dispatchId` and `attempt` in one result. Save the lease for renewal/release and the dispatch identity for the receipt. Claim or dispatch failure rolls back the whole start. The separate `task claim` then `dispatch create` path remains supported; dispatch requires a live claim. Use `--dispatch-id` with the same id to append attempt max+1 on a retry instead of creating a fresh dispatch.
 
-6. Claiming starts work: `task claim` carries the planning state to doing automatically (backlog goes through ready, one legal hop per event; paused/blocked/review stay put — unpausing is a human decision). No manual `task move --status doing` is needed before work.
+6. Starting work: `task start` (and the separate `task claim`) carries the planning state to doing automatically (backlog goes through ready, one legal hop per event; paused/blocked/review stay put — unpausing is a human decision). No manual `task move --status doing` is needed before work.
 
-   Correction after premature completion/archive: `done` and `archived` are terminal for normal planning moves, but existing work can be returned to review with `mapctx task reopen <task-id> --status review --actor traycer`. This clears `completedOn`, records an auditable `task-reopen` event, and regenerates snapshots. Do not hand-edit `TASKS.md`, use `reconcile` for intended workflow changes, or create a replacement task merely to undo a terminal state.
+   Correction after premature completion/archive: `done` and `archived` are terminal for normal planning moves, but existing work can be returned to review with `mapctx task reopen <task-id> --status review --actor traycer`. This clears `completedOn` and records an auditable `task-reopen` event. Routine operations do not regenerate snapshots; use explicit export or `mapctx task finish <id>` for a final checkpoint. Do not hand-edit `TASKS.md` or create a replacement task merely to undo a terminal state.
 
-   Reopen changes planning state only; it does not rewrite the completed execution attempt. When planning is non-terminal (`review`/`doing`) and `executionState` is `completed`, admit a new attempt with `mapctx dispatch create <task-id> --dispatch-id <dispatch-id>` (or a fresh dispatch). This journals `completed -> unclaimed` for the new attempt, preserves the prior receipt, and keeps late receipts stale. `done`/`cancelled`/`archived` planning states still refuse dispatch.
+   Reopen changes planning state only; it does not rewrite the completed execution attempt. When planning is non-terminal (`review`/`doing`) and `executionState` is `completed`, admit a new claim and attempt with `mapctx task start <task-id> --dispatch-id <dispatch-id>` (or omit `--dispatch-id` for a fresh dispatch). This journals `completed -> unclaimed` for the new attempt, preserves the prior receipt, and keeps late receipts stale. `done`/`cancelled`/`archived` planning states still refuse dispatch.
 
    Execute the ticket in the assigned worktree. The work is bounded by the claim's lease; renew or release it through `mapctx task renew`/`mapctx task release` with the saved `claimId`/`leaseToken`. Adapter does not spawn agents.
 7. Save normalized `RunReceipt` JSON outside the committed tree and submit it through the CLI against the dispatch created in step 5:
@@ -77,8 +76,7 @@ dispatches, and receipts.
    required assets into the repository's relevant `docs/` location, then link
    that copied artifact from the matching task. The repo must remain usable
    without Traycer access.
-   Before closing `review` as `done`, mark every criterion under `## Acceptance` as `[x]`; `mapctx task move ... --status done`
-   rejects missing, unchecked, or prose-only acceptance criteria.
+   Acceptance criteria live in the store. Before closing `review` as `done`, inspect them with `mapctx task acceptance show <task-id>` and explicitly approve each criterion for its current revision. Use `mapctx task finish <task-id>` to apply the completion gate and publish the final checkpoint. Import existing checkboxes explicitly with `mapctx acceptance import [--commit]`; observed `[x]` state does not claim independent verification.
 
 ### Difficulty discovered mid-flight
 
@@ -98,9 +96,8 @@ destroys it and biases every future Easy forecast.
 When an agent completed a task without claiming or dispatching (flow error, or work done in an earlier
 session/orchestration), the board can still record it honestly -- never by fabricating state transitions:
 
-1. `mapctx task claim <task-id>` now (claim carries it to doing; the transitions record when the *board learned*).
-2. `mapctx dispatch create <task-id>`.
-3. Submit the receipt with the agent's **true** historical times in `startedAt`/`endedAt` -- the receipt keeps
+1. `mapctx task start <task-id>` now (atomic claim + dispatch carries it to doing; transitions record when the *board learned*).
+2. Submit the receipt with the agent's **true** historical times in `startedAt`/`endedAt` -- the receipt keeps
    when the work actually happened, the planning transitions keep when it was recorded. The completed receipt
    on a not-doing task is rejected with this same remedy in the error message.
 

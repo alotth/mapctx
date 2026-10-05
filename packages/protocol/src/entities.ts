@@ -41,6 +41,25 @@ export const prioritySchema = z.enum(["high", "medium", "low"]);
 export const workloadSchema = z.enum(["Easy", "Normal", "Hard", "Extreme"]);
 export const specModeSchema = z.enum(["lite", "standard", "strict"]);
 
+/**
+ * T-102: agent-authored start prediction for not-done tasks (schema only, no
+ * predictor yet). Never a calendar commitment: it carries its method and
+ * confidence so the view can render it distinctly from planned dates, and it
+ * never positions a bar or feeds calibration.
+ */
+export const predictedStartMethodSchema = z.enum(["manual", "heuristic", "model"]);
+export type PredictedStartMethod = z.infer<typeof predictedStartMethodSchema>;
+
+export const predictedStartConfidenceSchema = z.enum(["low", "medium", "high"]);
+export type PredictedStartConfidence = z.infer<typeof predictedStartConfidenceSchema>;
+
+export const predictedStartSchema = z.object({
+  start: isoDateSchema,
+  method: predictedStartMethodSchema,
+  confidence: predictedStartConfidenceSchema
+});
+export type PredictedStart = z.infer<typeof predictedStartSchema>;
+
 export const sourceModeSchema = z.enum(["local-canonical", "github-canonical"]);
 export const plansAuthoritySchema = z.enum(["markdown", "store"]);
 
@@ -110,6 +129,8 @@ export const taskSchema = z.object({
   domains: z.array(z.string()),
   start: isoDateSchema.nullable(),
   due: isoDateSchema.nullable(),
+  /** T-102 prediction (never a commitment, never positions). Null = none. */
+  predictedStart: predictedStartSchema.nullable().optional(),
   acceptance: z.array(z.string()),
   specMode: specModeSchema.nullable(),
   detailPath: z.string().nullable()
@@ -419,6 +440,8 @@ export type BudgetConsumed = z.infer<typeof budgetConsumedSchema>;
 export const durationMeasuresSchema = z.object({
   sessionWallClockMs: z.number().int().nonnegative(),
   activeTimeMs: z.number().int().nonnegative(),
+  humanTimeMs: z.number().int().nonnegative().optional(),
+  parkedTimeMs: z.number().int().nonnegative().optional(),
   taskDurationMs: z.number().int().nonnegative(),
   leadTimeMs: z.number().int().nonnegative(),
   idleThresholdMs: z.number().int().positive(),

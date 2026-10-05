@@ -1,0 +1,42 @@
+{
+  "baselineKind": "post-analysis-pre-completion baseline",
+  "capturedAt": "2026-10-05T15:03:52.578Z",
+  "statusLineCountAtBaseline": 210,
+  "statusLineCountAtReview": 210,
+  "baselineFiles": {
+    "packages/core/src/task-detail.ts": {
+      "precompletionSha256": "570ccf2b8f4a5e0c43b0d54323e78a67bc590931136fe0cef95dcbb4ad361243",
+      "reviewSha256": "fa0e51cf0edbb4d9c3a1d55ab184166417e57ad9567261456f348afbd095042f"
+    },
+    "packages/core/src/index.ts": {
+      "precompletionSha256": "429e5493160f5de2e6dacfe556d7444b37cfaac65d65adc10a6f6cb80784a75f",
+      "reviewSha256": "429e5493160f5de2e6dacfe556d7444b37cfaac65d65adc10a6f6cb80784a75f"
+    },
+    "packages/store/src/export.ts": {
+      "precompletionSha256": "21a5148bf7f4622ff6ef2118043c1c8b2cb5c6161b4b70576f1058ff759effcf",
+      "reviewSha256": "21a5148bf7f4622ff6ef2118043c1c8b2cb5c6161b4b70576f1058ff759effcf"
+    },
+    "packages/store/src/acceptance-prose.test.ts": {
+      "precompletionSha256": "cf64b167a747423a28386a9d3a29d57cea134db5d5940f43a5a92b291fbd43fe",
+      "reviewSha256": "cf64b167a747423a28386a9d3a29d57cea134db5d5940f43a5a92b291fbd43fe"
+    },
+    "packages/sync-engine/src/push-store.ts": {
+      "precompletionSha256": "5a1c47b61135994942ab2ac93f9fe15fffa0edba0b058bee9a25fa29a05fba31",
+      "reviewSha256": "5a1c47b61135994942ab2ac93f9fe15fffa0edba0b058bee9a25fa29a05fba31"
+    },
+    "packages/sync-engine/src/push-store.test.ts": {
+      "precompletionSha256": "06bee3d2bce3187ba12f1c0c9c7cf247ad9b45895c68c4ccbd13e95cb26ff90a",
+      "reviewSha256": "69c0de676f7b89e22cd7f5e183b189e89be24eea735cc43cc01ea59a2c927e9d"
+    },
+    "docs/reviews/t121-acceptance-prose-preservation-2026-10-05.md": {
+      "precompletionSha256": "cc68e556fa414d8e4ba7ad90a3553a378ad5934a583ba61faca993fe7521b22d",
+      "reviewSha256": "88b9ba8ac73e7c8a2c7e085714880416a2782754a66df3ece0fe47f3b69ac9d6"
+    },
+    "tasks/T-121.md": {
+      "precompletionSha256": "73550cb3230bafaca37ea4d78772b61667c8d8dcfc111cbeeb07b897d80b8021",
+      "reviewSha256": "4e81ed8847fdeb102f78e5317324a95a92e5325ccbe36560149109703b69b5b4"
+    }
+  },
+  "attempt4HashManifestLines": 547,
+  "attempt4HashManifestNonblankLines": 0
+}

@@ -1,0 +1,98 @@
+{
+  "repo": "/Users/alt/repos/ela",
+  "head": "07871fce2f9925a0298a6127668c33679deb8362",
+  "incidentHeadPresent": true,
+  "corpusHeadPresent": true,
+  "paths": [
+    {
+      "path": "tasks/T-063.md",
+      "worktreeSha256": "fe221284fe7835506255acb5fef57db2989cc1ac92672a13ca1871e4006425d2",
+      "headSha256": "43e91d7c8a3446e7692417f45f6ebed4e014b7800c04a50ac0033ac99a02741b",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-175.md",
+      "worktreeSha256": "dd810255a27765456bdaeb848ac89e9011b8c2de41ee60006d8e367947bb828b",
+      "headSha256": "3737df928ac74e1cc2abbdc0162befa00ffa5163b92ab002a3a5c62a0f4e875c",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-180.md",
+      "worktreeSha256": "66c4997fd164af0a7ae65e73670917c4cd758a6495bdf0ae26dedb2b4950abfa",
+      "headSha256": "e4910ea2386bbf9b88cb2c41fe784882a51694e2a2dcb14f2e62282112d6d117",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-186.md",
+      "worktreeSha256": "85a194c3d06b546b127a451a88b3cdff73c78151c33d027a675ec610196b80ae",
+      "headSha256": "98079d838b085daff33f60a1023a30a816508d8220f12e5a9c50c6357d655bcc",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-187.md",
+      "worktreeSha256": "bb1bf59fbed3ac4bfe8acecbed4204ac661799f8dfdfb36d8cf7c01f5a47b4fb",
+      "headSha256": "f27ff44250934f3734e0659cccb9b06d00369c47b66b9fc74bf561202d07f63e",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-194.md",
+      "worktreeSha256": "344a30d08814b3d597b9cc538416fd938019c4eb5a1c70ff703b9c48863a3881",
+      "headSha256": "b1635b52cff4fbf26468b7c1d7d00703d21fee394c52c75d074f24b30d5ad6b6",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-212.md",
+      "worktreeSha256": "e0d8d326c14d1610cbe6100c86ead3267fa28ce48eb166e31b4c9966268dbf6d",
+      "headSha256": "85eb15f09ecc29700767e523022a27d975998145f719484a64c42895d17369ec",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-213.md",
+      "worktreeSha256": "eeef93905d8dfcb8a8d854ccb8000731f4c9bdccf21be51690e3de1858e824f3",
+      "headSha256": "c1083c666b49687a15f6557dda2ea0d4674d284dc354c485675612cb68bae655",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-248.md",
+      "worktreeSha256": "4999932c4553a40a400d6198ba2f3b151fd33796ee6d3ac8e052444037b84aaa",
+      "headSha256": "0629dcc5766014d4e54c698ba505410e9a7316fb61d19dba503956a06f183e90",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-254.md",
+      "worktreeSha256": "33fdafd5e353e1cecb3226da10644841026a428c8690ba4f28e1b0cb1b6765c1",
+      "headSha256": "a0a3472c386a8481e47698bbf6d54ebdacaa1a677d4d9932e6c79ec1c5ce7b8f",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-257.md",
+      "worktreeSha256": "0d6ce025c45f53ea271e839d5f93f14b21a78f71a6f0aa850d03671a7a03347c",
+      "headSha256": "1c4d892bfe2513fd138013e34c8aabcab86696b1255d2fa2efe5c47d2bfefabc",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-261.md",
+      "worktreeSha256": "e97718ffe9473adc7a6220392df24ec1d3d36368fac53cda184e01108693dcdf",
+      "headSha256": "4ac37aab54b687006980388164f7459d71da8ef7487ab3e556f83705b49bdfd9",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-268.md",
+      "worktreeSha256": "0651d54f7794c4773e68310bcf10d79e3931b4c75fa568ed674119a7bf74b9cc",
+      "headSha256": "09105c9ef46f8950a9e6434baf7a6799dcec11d3701b3eb6ae88b9a5dfae2d7a",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-271.md",
+      "worktreeSha256": "f4690e5235d6b787e62776cffa38c96bc74b80cf1ecf8986dac67a55a7133642",
+      "headSha256": "8c81d4f0af3abbc81758cec6fe92c4335848ae1f41496d22b831f3c03d17e104",
+      "matchesHead": false
+    },
+    {
+      "path": "tasks/T-274.md",
+      "worktreeSha256": "cd72987d8896d54895a6e503b453b709025a4e07d00e832d3ba9e80e5852b03d",
+      "headSha256": "f8d9f39d989c3c7a4cac33b653621e63e74eacf0010503028453c60ad0ac9364",
+      "matchesHead": false
+    }
+  ]
+}

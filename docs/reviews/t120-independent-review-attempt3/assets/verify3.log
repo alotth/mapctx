@@ -1,0 +1,26 @@
+✔ F1: null due/completed with startDate valid; both-present order errors; malformed no false order error (320.624083ms)
+✔ T092 decision: done needs completedOn; archived/cancelled may be null, legacy date preserved+validated; nonterminal with date invalid; no mutation (491.345167ms)
+✔ F2: canonical validator covers applicable DB structural/date/domain/spec/state/type/title/ref/dependency checks (raw admission + SQL poison) (1421.429583ms)
+✔ F3: fence-aware strip keeps Git prose; checkpoint bytes; idempotent; malformed fence edges documented (1303.112417ms)
+✔ F4: push body = Git prose + canonical Acceptance only; mocks only (no real gh) (402.70675ms)
+✔ F5: raw acceptance.revised refuses approvedAt/approvedBy/evidence BEFORE journal; compose rollback; replay purity (139.404375ms)
+✔ F7: library expectRevision required at type+runtime; stale/absent -> no events (library, CLI, raw) (464.622916ms)
+✔ F6: finish publication precondition inside the same writer tx, before FS writes (revise/reopen in every gap) (1392.161333ms)
+✔ F6b: unapprove in gap refused; checkpoint cursor/revisions/hashes from one consistent locked read; concurrent writer cannot interleave publication (5627.715708ms)
+✔ consumers: show/context/search/plan/board/gantt/validate identical with absent or malicious mirrors; routine mutations never regenerate mirrors (1842.263542ms)
+✔ export into checkout without tasks/ dir: reported partial publication (observation) (108.621542ms)
+✔ N1 property: shared analyzer vs independent NEW-semantics reference (20000 random docs) + render round-trip (168.151958ms)
+✔ N1 named cases via real checkpoint export: markers survive, deterministic bytes, single generated section (2056.72075ms)
+✔ N1 refusal: unterminated fence OUTSIDE owned section refuses before any write; stable x4; snapshots honest read-only; repair then export ok; no-canonical unaffected (477.447292ms)
+✔ N1 ownership pathologies: unclosed fence INSIDE owned section, adjacent cases (481.791042ms)
+✔ N1 blast radius: one task with unterminated prose + canonical Acceptance blocks finish/export of OTHER tasks (observation, retry after fix) (146.794208ms)
+✔ N4 push: missing mirror -> canonical Acceptance + explicit note; no canonical -> no invented section; unterminated -> refuse before ANY gh call; mocks only (473.645084ms)
+✔ N3: external-id-format + empty-work-domains are warnings, DB-only, do not change error counts or exit (578.932125ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18022.5385

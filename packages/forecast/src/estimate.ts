@@ -53,6 +53,15 @@ function durationCoverageOf(samples: readonly ForecastSample[]): DurationCoverag
   return marks.every(mark => mark === "measured") ? "measured" : "substituted"
 }
 
+function hasAgentObservation(sample: ForecastSample): boolean {
+  if ("activeTimeCoverage" in sample.duration && sample.duration.activeTimeCoverage === "none") return false
+  // T-101: inferred/declared history backfills carry no agent-time
+  // measurement, so they never enter calibration/accuracy metrics -- the same
+  // exclusion T-099 applies to aligned-from-actual coverage gaps.
+  if (sample.historyTier === "inferred" || sample.historyTier === "declared" || sample.historyTier === "no-history") return false
+  return true
+}
+
 function tokenValues(samples: readonly ForecastSample[], key: "inputTokens" | "outputTokens" | "cacheTokens"): number[] {
   return samples.map(sample => (sample.usageEvents ?? []).reduce((sum, event) => sum + event[key], 0)).filter(value => value > 0)
 }
@@ -95,7 +104,7 @@ function median(values: number[]): number {
 export function estimationErrorByPlannedWorkload(samples: readonly ForecastSample[]): WorkloadEstimationError[] {
   const byPlanned = new Map<Workload, ForecastSample[]>()
   for (const sample of samples) {
-    if (!isReclassified(sample)) continue
+    if (!isReclassified(sample) || !hasAgentObservation(sample)) continue
     const planned = sample.workloadPlanned as Workload
     const list = byPlanned.get(planned) ?? []
     list.push(sample)
@@ -142,8 +151,10 @@ export function buildEstimateSnapshot(
     ? historical
     : historical.filter(sample => sample.workload === options.workload)
   const pool = sameWorkload.length > 0 ? sameWorkload : historical
+  const durationPool = pool.filter(hasAgentObservation)
+  const useDurationHistory = useHistory && durationPool.length >= minSamples
   const reattributedInPool = pool.filter(isReclassified).length
-  const durations = p50p90(pool.map(sample => sample.duration.activeTimeMs), prior.durationP50Ms, prior.durationP90Ms)
+  const durations = p50p90(useDurationHistory ? durationPool.map(sample => sample.duration.activeTimeMs) : [], prior.durationP50Ms, prior.durationP90Ms)
   const inputs = p50p90(tokenValues(pool, "inputTokens"), prior.inputTokensP50, prior.inputTokensP90)
   const outputs = p50p90(tokenValues(pool, "outputTokens"), prior.outputTokensP50, prior.outputTokensP90)
   const caches = p50p90(tokenValues(pool, "cacheTokens"), prior.cacheTokensP50, prior.cacheTokensP90)
@@ -152,11 +163,14 @@ export function buildEstimateSnapshot(
   // themselves substituted wall clock (receipt-only, no interior timestamps),
   // the estimate silently inherits idle time — so say so on the snapshot rather
   // than leave it indistinguishable from a measured forecast. See T-064.
-  const durationCoverage = durationCoverageOf(pool)
+  const durationCoverage = useDurationHistory ? durationCoverageOf(durationPool) : "none"
+  const timePolicies = [...new Set(pool.flatMap(sample => sample.timePolicy
+    ? [`interval policy: idle ${sample.timePolicy.idleThresholdMs}ms; review <=${sample.timePolicy.reviewThresholdMs}ms; parked >${sample.timePolicy.parkedThresholdMs}ms or overnight (${sample.timePolicy.timeZone})`]
+    : []))].sort()
   const assumptions = [
-    ...(!useHistory ? [
+    ...(!useDurationHistory ? [
       `prior: workload-aware ${options.workload ?? DEFAULT_WORKLOAD} prior (durationP50 ${prior.durationP50Ms}ms, durationP90 ${prior.durationP90Ms}ms); a declared starting guess, not a measurement`,
-      "historical actuals unavailable or below minimum sample count; conservative prior used"
+      "agent-time observations unavailable or below minimum sample count; conservative prior used"
     ] : []),
     ...(useHistory && options.workload !== undefined && sameWorkload.length === 0
       ? [`no samples declared workload ${options.workload}; all ${historical.length} sample(s) used ungrouped`]
@@ -170,6 +184,7 @@ export function buildEstimateSnapshot(
       ? [`workload re-attributed mid-flight: planned ${options.workloadPlanned} -> discovered ${options.workload}; pool keyed by discovered (${options.workload})`]
       : []),
     `forecast input: activeTimeMs; idle threshold ${options.idleThresholdMs ?? 600_000}ms`,
+    ...timePolicies,
     `duration coverage: ${durationCoverage}${durationCoverage === "substituted"
       ? " (activeTime stood in for wall clock; idle time not excluded)"
       : ""}`,
@@ -181,8 +196,8 @@ export function buildEstimateSnapshot(
     estimateId: options.estimateId ?? randomUUID(),
     taskId,
     createdAt: options.createdAt ?? new Date().toISOString(),
-    method: useHistory ? "historical-baseline" : "expert-guess",
-    confidence: useHistory && pool.length >= 3 ? "medium" : "low",
+    method: useDurationHistory ? "historical-baseline" : "expert-guess",
+    confidence: useDurationHistory && durationPool.length >= 3 ? "medium" : "low",
     estimatorVersion: options.estimatorVersion ?? "forecast-v1",
     idleThresholdMs: options.idleThresholdMs ?? 600_000,
     costCoverage: coverageOf(historical),
@@ -233,7 +248,7 @@ export function isPriorFallbackEstimate(snapshot: Pick<EstimateSnapshot, "method
 export function workloadBaselines(samples: readonly ForecastSample[]): WorkloadBaseline[] {
   const byWorkload = new Map<Workload, number[]>()
   for (const sample of samples) {
-    if (sample.workload === undefined) continue
+    if (sample.workload === undefined || !hasAgentObservation(sample)) continue
     const durations = byWorkload.get(sample.workload) ?? []
     durations.push(sample.duration.activeTimeMs)
     byWorkload.set(sample.workload, durations)

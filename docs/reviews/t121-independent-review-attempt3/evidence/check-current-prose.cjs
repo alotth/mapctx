@@ -1,0 +1,15 @@
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto')
+const reviewCopy=process.env.MAPCTX_REVIEW_COPY,source=process.env.ELA_SOURCE_ROOT||'/Users/alt/repos/ela',copy=process.env.ELA_RECOVERY_COPY
+if(!reviewCopy||!copy)throw new Error('Set MAPCTX_REVIEW_COPY and ELA_RECOVERY_COPY to isolated copies')
+const {parseTaskDetailFile}=require(path.join(reviewCopy,'packages/core/dist/task-detail.js'))
+const ids=['T-063','T-175','T-180','T-186','T-187','T-194','T-212','T-213','T-248','T-254','T-257','T-261','T-268','T-271','T-274']
+function linesAndBounds(desc){
+ const lines=desc.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');let open=null,level=null,start=-1,end=lines.length
+ for(let i=0;i<lines.length;i++){const line=lines[i];if(open){if(new RegExp('^\\s*'+open.char+'{'+open.length+',}[ \\t]*$').test(line))open=null;continue}const f=/^\s*(`{3,}|~{3,})(.*)$/.exec(line);if(f&&!(f[1][0]==='`'&&f[2].includes('`'))){open={char:f[1][0],length:f[1].length};continue}const h=/^\s*(#{1,6})\s+(.+?)\s*$/.exec(line);if(!h)continue;const n=h[1].length;if(level!==null&&n<=level){end=i;break}if(level===null&&h[2].trim().toLowerCase()==='acceptance'){start=i;level=n}}
+ return {lines,start,end}
+}
+function outside(desc){const b=linesAndBounds(desc);if(b.start<0)return desc;return [...b.lines.slice(0,b.start),...b.lines.slice(b.end)].join('\n')}
+function authoredAcceptance(desc){const b=linesAndBounds(desc);if(b.start<0)return [];let open=null,out=[];for(const line of b.lines.slice(b.start+1,b.end)){if(open){if(new RegExp('^\\s*'+open.char+'{'+open.length+',}[ \\t]*$').test(line))open=null;if(line.trim())out.push(line);continue}const f=/^\s*(`{3,}|~{3,})(.*)$/.exec(line);if(f&&!(f[1][0]==='`'&&f[2].includes('`'))){open={char:f[1][0],length:f[1].length};if(line.trim())out.push(line);continue}if(line.trimStart().startsWith('<!-- mapctx:store-owned acceptance revision'))continue;if(/^\s*[-*+]\s+\[[ xX]\]\s+/.test(line))continue;if(line.trim())out.push(line)}return out}
+const result=[]
+for(const id of ids){const orig=parseTaskDetailFile(fs.readFileSync(path.join(source,'tasks',id+'.md'),'utf8')).description;const out=parseTaskDetailFile(fs.readFileSync(path.join(copy,'tasks',id+'.md'),'utf8')).description;const a=outside(orig),b=outside(out);const curr=authoredAcceptance(orig),next=authoredAcceptance(out);const have=new Map();for(const x of next)have.set(x,(have.get(x)||0)+1);const missing=[];for(const x of curr){const n=have.get(x)||0;if(!n)missing.push(x);else have.set(x,n-1)}result.push({id,outsideAcceptanceByteEqual:a===b,currentAuthoredAcceptanceLineCount:curr.length,currentAuthoredAcceptanceLinesAllPreserved:missing.length===0,missingCurrentAcceptanceLines:missing.length,currentOutsideSha256:crypto.createHash('sha256').update(a).digest('hex'),outputOutsideSha256:crypto.createHash('sha256').update(b).digest('hex')})}
+console.log(JSON.stringify({tasks:result.length,allOutsideAcceptanceEqual:result.every(x=>x.outsideAcceptanceByteEqual),allCurrentAcceptanceLinesPreserved:result.every(x=>x.currentAuthoredAcceptanceLinesAllPreserved),details:result},null,2))

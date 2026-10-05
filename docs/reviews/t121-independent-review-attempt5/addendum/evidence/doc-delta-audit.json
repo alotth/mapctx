@@ -1,0 +1,16 @@
+{
+  "baseline": "reviewer attempt5 source-end manifest",
+  "baselineFileCount": 1535,
+  "currentFileCount": 1535,
+  "changedPaths": [
+    "docs/reviews/t121-acceptance-prose-preservation-2026-10-05.md"
+  ],
+  "docBeforeSha256": "88b9ba8ac73e7c8a2c7e085714880416a2782754a66df3ece0fe47f3b69ac9d6",
+  "docAfterSha256": "7467d6a6291a6ec53eb203997394eb98dad570192c0845a155d12b9327d11e22",
+  "correctionRecordBeforeMatches": true,
+  "correctionRecordAfterMatches": true,
+  "reportStatesCurrentAuthoredAcceptanceCount": 0,
+  "incidentAuthoredAcceptanceLines": 54,
+  "currentOutsideAcceptanceLines": 172,
+  "reviewerConclusion": "PASS; attempt5 P2 factual wording corrected; all prior independent code and copy-recovery PASS evidence carried forward; no reruns requested or performed"
+}

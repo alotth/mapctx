@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import test from 'node:test';
-import { buildExport, createTask, listTasks, resolveProjectStoreDir, StoreHandle, updateTask, upsertProject } from '@mapctx/store';
+import { buildExport, createTask, getAcceptance, listTasks, resolveProjectStoreDir, StoreHandle, updateTask, upsertProject, approveAcceptanceCriterion, reviseAcceptance } from '@mapctx/store';
+import { generateTaskDetailFile, parseTaskDetailFile } from '@mapctx/core';
 import { setGhRunnerForTests } from './github';
 import {
   buildStoreIssueBody,
@@ -402,14 +403,17 @@ test('pushStoreCommand end-to-end: skip/update/create with externalId writeback'
   }
 });
 
-test('pushStoreCommand refuses to run on board drift (fail-closed)', () => {
+test('pushStoreCommand uses canonical store despite stale local snapshots', () => {
   const { fixture, calls, issues } = setupPushFixture();
   try {
-    issues.push(issueFixture(7, { title: 'first', state: 'closed' }));
-    setGhRunnerForTests(fakeGh({ issues, projectItems: [], calls, nextIssueNumber: 7 }));
+    issues.push(issueFixture(7, { title: 'first', state: 'closed' }), issueFixture(8, { title: 'DRIFTED TITLE' }));
+    setGhRunnerForTests(fakeGh({ issues, projectItems: [{ id: 'a', issueNumber: 7, statusName: 'Done' }], calls, nextIssueNumber: 8 }));
     fs.writeFileSync(path.join(fixture.repoDir, 'TASKS.md'), '# Tasks - tampered\n', 'utf8');
     runInDir(fixture.repoDir, () => {
-      assert.throws(() => pushStoreCommand({ json: true }), /Refusing to push: board drift/);
+      const report = pushStoreCommand({ dryRun: true, json: true });
+      assert.equal(report.conflicts.length, 0);
+      assert.deepEqual(report.created.map(item => item.taskId), ['T-003']);
+      assert.deepEqual(report.updated.map(item => item.taskId).sort(), ['T-001', 'T-002']);
     });
   } finally {
     setGhRunnerForTests(null);
@@ -437,4 +441,415 @@ test('pushStoreCommand refuses store-missing binding and non-store authority', (
 test('remoteIssueSnapshot normalizes labels', () => {
   const snapshot = remoteIssueSnapshot(issueFixture(1, { labels: [{ name: 'a' } as never, { name: 'b' } as never] }));
   assert.deepEqual(snapshot.labelNames, ['a', 'b']);
+});
+
+test('pushStoreCommand renders Acceptance from canonical store, never the stale mirror', () => {
+  const fixture = setupStore([{ title: 'Canonical push', externalId: 'github:issue:7' }]);
+  const issues: GitHubIssue[] = [issueFixture(7, { title: 'Canonical push', body: 'stale remote body' })];
+  const calls: GhCall[] = [];
+  try {
+    runInDir(fixture.repoDir, () => {
+      const store = StoreHandle.open(fixture.storeDir);
+      try {
+        const revised = reviseAcceptance(store, { taskId: 'T-001', condition: 'criteria', texts: ['Old approved criterion'], actor: 'author', expectRevision: 0 });
+        assert.equal(revised.ok, true);
+        assert.equal(approveAcceptanceCriterion(store, { taskId: 'T-001', index: 0, expectRevision: 1, actor: 'reviewer', evidence: { uri: 'proof://r1' } }).ok, true);
+      } finally {
+        store.close();
+      }
+      // Mirror now carries the stale-but-current-at-export-time revision.
+      const reloaded = StoreHandle.open(fixture.storeDir);
+      try { writeRepoFiles(fixture.repoDir, reloaded); } finally { reloaded.close(); }
+      // A new canonical revision lands WITHOUT any re-export: the mirror is
+      // now stale ([x] Old approved criterion), canonical says pending.
+      const second = StoreHandle.open(fixture.storeDir);
+      try {
+        assert.equal(reviseAcceptance(second, { taskId: 'T-001', condition: 'criteria', texts: ['New pending criterion'], actor: 'author', expectRevision: 1 }).ok, true);
+      } finally {
+        second.close();
+      }
+
+      setGhRunnerForTests(fakeGh({ issues, projectItems: [], calls, nextIssueNumber: 8 }));
+      try {
+        const report = pushStoreCommand({});
+        assert.deepEqual(report.updated.map(entry => entry.taskId), ['T-001']);
+      } finally {
+        setGhRunnerForTests(null);
+      }
+    });
+    const bodyArg = calls.flatMap(entry => entry.args).find(arg => arg.startsWith('body='));
+    assert.ok(bodyArg, 'push must update the issue body');
+    const body = bodyArg!.slice('body='.length);
+    assert.ok(body.includes('- [ ] New pending criterion'), `canonical pending criterion must be published:\n${body}`);
+    assert.ok(!body.includes('Old approved criterion'), 'stale mirror approval must never reach GitHub');
+    // Git-authored prose survives; the acceptance block is canonical only.
+    assert.ok(body.includes('## Detail'));
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('pushStoreCommand publishes no Acceptance section when canonical revisioning is absent', () => {
+  const fixture = setupStore([{ title: 'No acceptance task', externalId: 'github:issue:9' }]);
+  const issues: GitHubIssue[] = [issueFixture(9, { title: 'No acceptance task', body: null })];
+  const calls: GhCall[] = [];
+  try {
+    runInDir(fixture.repoDir, () => {
+      // The mirror's generated Acceptance block (pending, from setup export)
+      // must NOT leak into the issue body without canonical revisioning.
+      setGhRunnerForTests(fakeGh({ issues, projectItems: [], calls, nextIssueNumber: 10 }));
+      try {
+        pushStoreCommand({});
+      } finally {
+        setGhRunnerForTests(null);
+      }
+    });
+    const bodyArg = calls.flatMap(entry => entry.args).find(arg => arg.startsWith('body='));
+    assert.ok(bodyArg, 'push must update the issue body');
+    const body = bodyArg!.slice('body='.length);
+    assert.ok(!body.includes('## Acceptance'), `absent canonical acceptance must not be invented:\n${body}`);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('N4: mirror-absent checkout still publishes canonical criteria with an explicit prose-absence note', () => {
+  const fixture = setupStore([{ title: 'Absent mirror', externalId: 'github:issue:11' }]);
+  const issues: GitHubIssue[] = [issueFixture(11, { title: 'Absent mirror', body: 'old remote body' })];
+  const calls: GhCall[] = [];
+  try {
+    runInDir(fixture.repoDir, () => {
+      const store = StoreHandle.open(fixture.storeDir);
+      try {
+        assert.equal(reviseAcceptance(store, { taskId: 'T-001', condition: 'criteria', texts: ['Pending without mirror'], actor: 'author', expectRevision: 0 }).ok, true);
+        assert.equal(approveAcceptanceCriterion(store, { taskId: 'T-001', index: 0, expectRevision: 1, actor: 'reviewer' }).ok, true);
+      } finally {
+        store.close();
+      }
+      // The whole tasks/ mirror is gone (worktree without snapshots).
+      fs.rmSync(path.join(fixture.repoDir, 'tasks'), { recursive: true, force: true });
+      fs.rmSync(path.join(fixture.repoDir, 'TASKS.md'), { force: true });
+
+      setGhRunnerForTests(fakeGh({ issues, projectItems: [], calls, nextIssueNumber: 12 }));
+      try {
+        pushStoreCommand({});
+      } finally {
+        setGhRunnerForTests(null);
+      }
+    });
+    const bodyArg = calls.flatMap(entry => entry.args).find(arg => arg.startsWith('body='));
+    assert.ok(bodyArg, 'push must update the issue body even without any mirror');
+    const body = bodyArg!.slice('body='.length);
+    assert.ok(body.includes('- [x] Pending without mirror'), 'canonical approval is published without the mirror');
+    assert.ok(body.includes('not available in this checkout'), 'prose absence is stated explicitly');
+    assert.ok(body.includes('## Acceptance'));
+    assert.ok(!body.includes('(empty description)'), 'no fabricated prose');
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('N4: mirror-absent checkout without canonical revisioning publishes no Detail/Acceptance (documented absent)', () => {
+  const fixture = setupStore([{ title: 'Absent everything', externalId: 'github:issue:13' }]);
+  const issues: GitHubIssue[] = [issueFixture(13, { title: 'Absent everything', body: null })];
+  const calls: GhCall[] = [];
+  try {
+    runInDir(fixture.repoDir, () => {
+      fs.rmSync(path.join(fixture.repoDir, 'tasks'), { recursive: true, force: true });
+      fs.rmSync(path.join(fixture.repoDir, 'TASKS.md'), { force: true });
+      setGhRunnerForTests(fakeGh({ issues, projectItems: [], calls, nextIssueNumber: 14 }));
+      try {
+        pushStoreCommand({});
+      } finally {
+        setGhRunnerForTests(null);
+      }
+    });
+    const bodyArg = calls.flatMap(entry => entry.args).find(arg => arg.startsWith('body='));
+    assert.ok(bodyArg);
+    const body = bodyArg!.slice('body='.length);
+    assert.ok(!body.includes('## Acceptance'), 'no canonical revision -> no invented section');
+    assert.ok(!body.includes('not available in this checkout'));
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('N1: push refuses before any remote write when prose has an unterminated fence and canonical revisioning exists', () => {
+  const fixture = setupStore([{ title: 'Fence refusal push', externalId: 'github:issue:15' }]);
+  const issues: GitHubIssue[] = [issueFixture(15, { title: 'Fence refusal push', body: null })];
+  const calls: GhCall[] = [];
+  try {
+    runInDir(fixture.repoDir, () => {
+      const store = StoreHandle.open(fixture.storeDir);
+      try {
+        assert.equal(reviseAcceptance(store, { taskId: 'T-001', condition: 'criteria', texts: ['Refused criterion'], actor: 'author', expectRevision: 0 }).ok, true);
+      } finally {
+        store.close();
+      }
+      const detailPath = path.join(fixture.repoDir, 'tasks', 'T-001.md');
+      const parsed = parseTaskDetailFile(fs.readFileSync(detailPath, 'utf8'));
+      fs.writeFileSync(detailPath, generateTaskDetailFile({ ...parsed, description: 'Intro\n```md\nnever closed\nKEEP.' }), 'utf8');
+
+      setGhRunnerForTests(fakeGh({ issues, projectItems: [], calls, nextIssueNumber: 16 }));
+      try {
+        assert.throws(() => pushStoreCommand({}), /acceptance-render-refused/);
+      } finally {
+        setGhRunnerForTests(null);
+      }
+      assert.equal(calls.length, 0, 'refusal happens before any gh invocation');
+    });
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('T-121: push body carries Git-authored Acceptance prose next to the canonical criteria (mocked gh)', () => {
+  const fixture = setupStore([{ title: 'Prose push', externalId: 'github:issue:21' }]);
+  const issues: GitHubIssue[] = [issueFixture(21, { title: 'Prose push', body: 'stale remote body' })];
+  const calls: GhCall[] = [];
+  try {
+    runInDir(fixture.repoDir, () => {
+      const detailPath = path.join(fixture.repoDir, 'tasks', 'T-001.md');
+      const parsed = parseTaskDetailFile(fs.readFileSync(detailPath, 'utf8'));
+      const description = [
+        '## Acceptance',
+        '- [ ] Prose criterion.',
+        '',
+        'Revisao independente: `docs/engineering/traycer/reviews/T-001.md` (aprovada em `68bb02b`).',
+        '- Evidência: link autoral preservado.'
+      ].join('\n');
+      fs.writeFileSync(detailPath, generateTaskDetailFile({ ...parsed, description }), 'utf8');
+      const store = StoreHandle.open(fixture.storeDir);
+      try {
+        assert.equal(reviseAcceptance(store, { taskId: 'T-001', condition: 'criteria', texts: ['Prose criterion.'], actor: 'author', expectRevision: 0 }).ok, true);
+        assert.equal(approveAcceptanceCriterion(store, { taskId: 'T-001', index: 0, expectRevision: 1, actor: 'reviewer', evidence: { uri: 'proof://t121' } }).ok, true);
+      } finally {
+        store.close();
+      }
+
+      setGhRunnerForTests(fakeGh({ issues, projectItems: [], calls, nextIssueNumber: 22 }));
+      try {
+        const report = pushStoreCommand({});
+        assert.deepEqual(report.updated.map(entry => entry.taskId), ['T-001']);
+      } finally {
+        setGhRunnerForTests(null);
+      }
+    });
+    const bodyArg = calls.flatMap(entry => entry.args).find(arg => arg.startsWith('body='));
+    assert.ok(bodyArg, 'push must update the issue body');
+    const body = bodyArg!.slice('body='.length);
+    assert.ok(body.includes('- [x] Prose criterion.'), 'canonical approved state is published');
+    assert.ok(body.includes('Revisao independente: `docs/engineering/traycer/reviews/T-001.md` (aprovada em `68bb02b`).'), 'Git-authored note survives the push render');
+    assert.ok(body.includes('- Evidência: link autoral preservado.'), 'authored plain evidence bullet survives the push render');
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('T-121: push refuses an in-section unclosed fence before any remote write (mocked gh)', () => {
+  const fixture = setupStore([{ title: 'Fence in section push', externalId: 'github:issue:23' }]);
+  const issues: GitHubIssue[] = [issueFixture(23, { title: 'Fence in section push', body: null })];
+  const calls: GhCall[] = [];
+  try {
+    runInDir(fixture.repoDir, () => {
+      const store = StoreHandle.open(fixture.storeDir);
+      try {
+        assert.equal(reviseAcceptance(store, { taskId: 'T-001', condition: 'criteria', texts: ['Fence criterion.'], actor: 'author', expectRevision: 0 }).ok, true);
+      } finally {
+        store.close();
+      }
+      const detailPath = path.join(fixture.repoDir, 'tasks', 'T-001.md');
+      const parsed = parseTaskDetailFile(fs.readFileSync(detailPath, 'utf8'));
+      const description = '## Acceptance\n- [ ] Fence criterion.\n```markdown\nnever closed';
+      fs.writeFileSync(detailPath, generateTaskDetailFile({ ...parsed, description }), 'utf8');
+
+      setGhRunnerForTests(fakeGh({ issues, projectItems: [], calls, nextIssueNumber: 24 }));
+      try {
+        assert.throws(() => pushStoreCommand({}), /acceptance-render-refused/);
+      } finally {
+        setGhRunnerForTests(null);
+      }
+      assert.equal(calls.length, 0, 'refusal happens before any gh invocation');
+    });
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('T-121: push refuses both trailing-evidence reassociation repros before any mocked gh call', () => {
+  const repros = [
+    {
+      title: 'Trailing evidence reorder refusal',
+      issueNumber: 41,
+      canonical: ['B.', 'A.'],
+      authored: '## Acceptance\n- [x] A.\n- [x] B.\nEvidence for B: docs/B.md'
+    },
+    {
+      title: 'Trailing evidence insertion refusal',
+      issueNumber: 42,
+      canonical: ['A.', 'B.'],
+      authored: '## Acceptance\n- [x] A.\nEvidence for A: docs/A.md'
+    }
+  ];
+
+  for (const repro of repros) {
+    const fixture = setupStore([{ title: repro.title, externalId: `github:issue:${repro.issueNumber}` }]);
+    const issues: GitHubIssue[] = [issueFixture(repro.issueNumber, { title: repro.title, body: null })];
+    const calls: GhCall[] = [];
+    try {
+      runInDir(fixture.repoDir, () => {
+        const store = StoreHandle.open(fixture.storeDir);
+        try {
+          assert.equal(reviseAcceptance(store, { taskId: 'T-001', condition: 'criteria', texts: repro.canonical, actor: 'author', expectRevision: 0 }).ok, true);
+        } finally {
+          store.close();
+        }
+
+        const detailPath = path.join(fixture.repoDir, 'tasks', 'T-001.md');
+        const parsed = parseTaskDetailFile(fs.readFileSync(detailPath, 'utf8'));
+        fs.writeFileSync(detailPath, generateTaskDetailFile({ ...parsed, description: repro.authored }), 'utf8');
+        setGhRunnerForTests(fakeGh({ issues, projectItems: [], calls, nextIssueNumber: repro.issueNumber + 1 }));
+        try {
+          assert.throws(() => pushStoreCommand({}), /acceptance-render-refused/, repro.title);
+        } finally {
+          setGhRunnerForTests(null);
+        }
+        assert.equal(calls.length, 0, `${repro.title}: refusal precedes every gh invocation`);
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  }
+});
+
+test('T-121 F1: push with canonical EMPTY revision preserves authored-only Acceptance prose (mocked gh)', () => {
+  const fixture = setupStore([{ title: 'Empty canonical push', externalId: 'github:issue:31' }]);
+  const issues: GitHubIssue[] = [issueFixture(31, { title: 'Empty canonical push', body: 'stale remote body' })];
+  const calls: GhCall[] = [];
+  try {
+    runInDir(fixture.repoDir, () => {
+      const store = StoreHandle.open(fixture.storeDir);
+      try {
+        assert.equal(reviseAcceptance(store, { taskId: 'T-001', condition: 'criteria', texts: ['Temporary criterion.'], actor: 'author', expectRevision: 0 }).ok, true);
+      } finally {
+        store.close();
+      }
+      // Export once so the mirror carries the generated block, then revise to
+      // empty and replace the mirror prose with authored-only content.
+      const reloaded = StoreHandle.open(fixture.storeDir);
+      try { writeRepoFiles(fixture.repoDir, reloaded); } finally { reloaded.close(); }
+      const emptied = StoreHandle.open(fixture.storeDir);
+      try {
+        assert.equal(reviseAcceptance(emptied, { taskId: 'T-001', condition: 'empty', texts: [], actor: 'author', expectRevision: 1 }).ok, true);
+      } finally {
+        emptied.close();
+      }
+      const detailPath = path.join(fixture.repoDir, 'tasks', 'T-001.md');
+      const parsed = parseTaskDetailFile(fs.readFileSync(detailPath, 'utf8'));
+      const description = [
+        '## Acceptance',
+        'Registro autoral: fechada sem critérios executáveis; evidência em docs/evidence.md.',
+        '- Nota autoral de escopo, não é aprovação.'
+      ].join('\n');
+      fs.writeFileSync(detailPath, generateTaskDetailFile({ ...parsed, description }), 'utf8');
+
+      setGhRunnerForTests(fakeGh({ issues, projectItems: [], calls, nextIssueNumber: 32 }));
+      try {
+        const report = pushStoreCommand({});
+        assert.deepEqual(report.updated.map(entry => entry.taskId), ['T-001']);
+      } finally {
+        setGhRunnerForTests(null);
+      }
+    });
+    const bodyArg = calls.flatMap(entry => entry.args).find(arg => arg.startsWith('body='));
+    assert.ok(bodyArg, 'push must update the issue body');
+    const body = bodyArg!.slice('body='.length);
+    assert.ok(body.includes('Registro autoral: fechada sem critérios executáveis; evidência em docs/evidence.md.'), 'authored note must survive canonical-empty push');
+    assert.ok(body.includes('- Nota autoral de escopo, não é aprovação.'), 'authored plain note must survive');
+    assert.ok(!body.includes('mapctx:store-owned acceptance revision'), 'no store-owned marker may be invented for an empty criteria set');
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('T-121 F1: push with canonical EMPTY revision refuses stranded checkbox evidence before any remote write (mocked gh)', () => {
+  const fixture = setupStore([{ title: 'Empty stranded push', externalId: 'github:issue:33' }]);
+  const issues: GitHubIssue[] = [issueFixture(33, { title: 'Empty stranded push', body: null })];
+  const calls: GhCall[] = [];
+  try {
+    runInDir(fixture.repoDir, () => {
+      const store = StoreHandle.open(fixture.storeDir);
+      try {
+        assert.equal(reviseAcceptance(store, { taskId: 'T-001', condition: 'criteria', texts: ['Doomed criterion.'], actor: 'author', expectRevision: 0 }).ok, true);
+        assert.equal(reviseAcceptance(store, { taskId: 'T-001', condition: 'empty', texts: [], actor: 'author', expectRevision: 1 }).ok, true);
+      } finally {
+        store.close();
+      }
+      const detailPath = path.join(fixture.repoDir, 'tasks', 'T-001.md');
+      const parsed = parseTaskDetailFile(fs.readFileSync(detailPath, 'utf8'));
+      const description = '## Acceptance\n- [x] Doomed criterion.\nEvidence for removed criterion: docs/evidence.md';
+      fs.writeFileSync(detailPath, generateTaskDetailFile({ ...parsed, description }), 'utf8');
+
+      setGhRunnerForTests(fakeGh({ issues, projectItems: [], calls, nextIssueNumber: 34 }));
+      try {
+        assert.throws(() => pushStoreCommand({}), /acceptance-render-refused/);
+      } finally {
+        setGhRunnerForTests(null);
+      }
+      assert.equal(calls.length, 0, 'refusal happens before any gh invocation');
+    });
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('T-121 F1: push with NO canonical revision preserves authored Acceptance prose and refuses stale checkboxes (mocked gh)', () => {
+  const fixture = setupStore([{ title: 'Absent canonical push', externalId: 'github:issue:35' }]);
+  const issues: GitHubIssue[] = [issueFixture(35, { title: 'Absent canonical push', body: 'stale remote body' })];
+  const calls: GhCall[] = [];
+  try {
+    runInDir(fixture.repoDir, () => {
+      // Author an Acceptance section WITHOUT canonical revisioning: authored
+      // notes and plain bullets only (no checkbox approvals).
+      const detailPath = path.join(fixture.repoDir, 'tasks', 'T-001.md');
+      const parsed = parseTaskDetailFile(fs.readFileSync(detailPath, 'utf8'));
+      const description = [
+        '## Acceptance',
+        'Critérios combinados com o operador em conversa; registro autoral.',
+        '- Evidência planejada: docs/evidence-planned.md'
+      ].join('\n');
+      fs.writeFileSync(detailPath, generateTaskDetailFile({ ...parsed, description }), 'utf8');
+
+      setGhRunnerForTests(fakeGh({ issues, projectItems: [], calls, nextIssueNumber: 36 }));
+      try {
+        const report = pushStoreCommand({});
+        assert.deepEqual(report.updated.map(entry => entry.taskId), ['T-001']);
+      } finally {
+        setGhRunnerForTests(null);
+      }
+      const bodyArg = calls.flatMap(entry => entry.args).find(arg => arg.startsWith('body='));
+      assert.ok(bodyArg, 'push must update the issue body');
+      const body = bodyArg!.slice('body='.length);
+      assert.ok(body.includes('Critérios combinados com o operador em conversa; registro autoral.'), 'authored Acceptance prose survives absent canonical revision');
+      assert.ok(body.includes('- Evidência planejada: docs/evidence-planned.md'), 'authored plain bullet survives');
+      assert.ok(!body.includes('mapctx:store-owned acceptance revision'), 'no marker invented without canonical authority');
+    });
+    // Second phase: a stale checkbox in an unowned section must refuse.
+    runInDir(fixture.repoDir, () => {
+      const detailPath = path.join(fixture.repoDir, 'tasks', 'T-001.md');
+      const parsed = parseTaskDetailFile(fs.readFileSync(detailPath, 'utf8'));
+      const description = '## Acceptance\n- [x] Stale unchecked criterion.\nEvidence: docs/evidence.md';
+      fs.writeFileSync(detailPath, generateTaskDetailFile({ ...parsed, description }), 'utf8');
+      const calls2: GhCall[] = [];
+      setGhRunnerForTests(fakeGh({ issues, projectItems: [], calls: calls2, nextIssueNumber: 37 }));
+      try {
+        assert.throws(() => pushStoreCommand({}), /acceptance-render-refused/);
+      } finally {
+        setGhRunnerForTests(null);
+      }
+      assert.equal(calls2.length, 0, 'stale checkbox in unowned section refuses before any gh invocation');
+    });
+  } finally {
+    fixture.cleanup();
+  }
 });

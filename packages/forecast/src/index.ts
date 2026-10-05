@@ -1,5 +1,7 @@
 export * from "./types"
 export * from "./duration"
+export * from "./claude-intervals"
+export * from "./history-scan"
 export * from "./cost"
 export * from "./prior"
 export * from "./format"

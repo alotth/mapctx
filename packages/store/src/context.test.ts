@@ -5,6 +5,7 @@ import * as path from "node:path"
 import test from "node:test"
 import { queryTask, queryTaskContext } from "./context"
 import { StoreHandle } from "./store-handle"
+import { reviseAcceptance } from "./acceptance"
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mapctx-context-"))
@@ -67,6 +68,8 @@ test("queryTask returns store task/detail and deterministic bounded context meta
       detail: { taskId: "T-001", role: "backend", impact: "high", estimatedEffort: "1d", prerequisites: ["T-002"], blocking: [], filesAffected: ["packages/store"], testsRequired: ["context"], summary: "compact context" },
       outgoingEdges: [{ fromTaskId: "T-001", toTaskId: "T-002", kind: "depends-on" }]
     } })
+    assert.equal(reviseAcceptance(handle, { taskId: "T-001", condition: "criteria", texts: ["Canonical criterion"], actor: "test", expectRevision: 0 }).ok, true)
+    fs.writeFileSync(path.join(root, "tasks", "T-001.md"), "# T-001\n\n## Acceptance\n- [x] Local-only criterion\n", "utf8")
     const shown = queryTask(handle.db, "T-001")
     assert.equal(shown.task.taskId, "T-001")
     assert.equal(shown.detail?.summary, "compact context")
@@ -74,8 +77,8 @@ test("queryTask returns store task/detail and deterministic bounded context meta
     const second = queryTaskContext(handle.db, "T-001", { budget: 500, tasksRoot: root })
     assert.deepEqual(first, second)
     assert.equal(first.tokenizer.method, "utf8-character-ceiling")
-    assert.equal(first.provenance.acceptance, "git")
-    assert.ok(first.acceptanceCriteria.length > 0)
+    assert.equal(first.provenance.acceptance, "store")
+    assert.deepEqual(first.acceptanceCriteria, ["[ ] Canonical criterion"])
     assert.deepEqual(first.unsatisfiedDependencies, [])
 
     const bounded = queryTaskContext(handle.db, "T-001", { budget: 40, tasksRoot: root })

@@ -1,0 +1,125 @@
+{
+  "promotion": "Complete review assets; lease values redacted in logs; hashes recomputed for repository copy",
+  "files": {
+    "build.log": {
+      "sha256": "fc6cc544ad6f6b4b6b2a4e837e14ca619cbb468bccf49fde7f90f2faddbfe39b",
+      "bytes": 2975
+    },
+    "check-current-prose.cjs": {
+      "sha256": "0b940e6225eff6acb6115105599ca5cf2132a25c2348c21a2da23d638590ff04",
+      "bytes": 3121
+    },
+    "checkpoint-1.json": {
+      "sha256": "945d9ea7a52fc3e9d7162fb102e60f20b64dc936a5064736f325e483c3720fed",
+      "bytes": 59667
+    },
+    "checkpoint-2.json": {
+      "sha256": "41a44170e8e282652bce15883bae4881478ac7b0cf565bf0cd58a37440c159ff",
+      "bytes": 59667
+    },
+    "checkpoint-content-summary.json": {
+      "sha256": "de344c69fbeb64113dc720aebd05931abef06af69e7b256f1a9501792ad8d52b",
+      "bytes": 3536
+    },
+    "checkpoint-content-summary.log": {
+      "sha256": "e69f65ca5e3c8243d2284a3645280fc4615ca605cae3d2d6fb7d9124e1d3d5d3",
+      "bytes": 3906
+    },
+    "checkpoint-file-hashes-summary.json": {
+      "sha256": "e3feb536ee6002375c24fadeb2e2cfb458e7d97a47433d326dce3be25f382be9",
+      "bytes": 420
+    },
+    "cli-refusal-repro.cjs": {
+      "sha256": "24f60cd0082c8085871b51da771b6e18f07095bd1ea105fcda93991303846c5e",
+      "bytes": 3363
+    },
+    "cli-refusal-repro.json": {
+      "sha256": "e90d48f615b0f66d616f16bb6272c6288a3ccf0e7794f0330fb0fa533832bbd5",
+      "bytes": 1283
+    },
+    "cli-reorder-repro.cjs": {
+      "sha256": "b7d611394e4784019c0e2e81541aa7b9884582ece83ec6a464f1daf9bc089026",
+      "bytes": 3153
+    },
+    "cli-reorder-repro.json": {
+      "sha256": "cc62a36c41b84dcf1deb0615331b5c2e9d2c420e8f1e8ec5e6f02966070dfda2",
+      "bytes": 453
+    },
+    "commands.json": {
+      "sha256": "b86655092cb9ee8038cb59b4efce0116ec232cfac51826e258a0934f6a0a25c6",
+      "bytes": 1088
+    },
+    "current-prose-preservation-summary.json": {
+      "sha256": "04fbf801c4ea039fe41778a26d169387b363ddd81817263774f4dfda16176980",
+      "bytes": 101
+    },
+    "current-prose-preservation.json": {
+      "sha256": "ea657dffe1148dfb49fa3241e0cbc9fbc1f3a908ad118153533421c8b1957163",
+      "bytes": 6375
+    },
+    "db-preservation-summary.json": {
+      "sha256": "2adf36b82dc6e14842936a3cf5dd513af706643593f45044a0559718b0a35d2a",
+      "bytes": 670
+    },
+    "ela-head-advance-audit.json": {
+      "sha256": "a6e98bbc890c9b937635e4c65339d0ffcb291481f305720fb51f12a836a2f588",
+      "bytes": 243
+    },
+    "ela-source-pin-end.json": {
+      "sha256": "d56eb5dc0fa22d9d9a8f647c51fc40bc628949cceedee0c47634b4cdf7c84e2e",
+      "bytes": 3948
+    },
+    "receipt-readback-audit.json": {
+      "sha256": "a9be81c95a71c9fa477f7cd90949f775beeb16773205a484c507e291904306c8",
+      "bytes": 4196
+    },
+    "recovery-input-manifest.json": {
+      "sha256": "07d5e84d53375b1aaf0001e81e43dfb1ecbba68362210b3085586e2449f672e7",
+      "bytes": 6084
+    },
+    "recovery-prepare.log": {
+      "sha256": "a64ef795bbbc9a3bebf080df934cd28a0693880bb07049730828c273c44b1b80",
+      "bytes": 5737
+    },
+    "render-probes.cjs": {
+      "sha256": "7032ef41e793dd5c142a2b2569751480b9b814a59dee6cae40463e82b8102c8c",
+      "bytes": 4577
+    },
+    "render-probes.json": {
+      "sha256": "2e8c2eac8a83784d87950680c8a9697feff2b154ed02c9a7f94c59f700ffd08c",
+      "bytes": 1506
+    },
+    "review-processes-end.txt": {
+      "sha256": "538897b2c150fb7439f3abd859044c3dde8c75e9ff698162ef57fc879c0c1aa9",
+      "bytes": 54
+    },
+    "root-end-hashes.json": {
+      "sha256": "63e13abd135ecf632be2e5607ca3977157a9a0e5ef0e3da3a4366ca3c561d852",
+      "bytes": 38736
+    },
+    "root-start-hashes.json": {
+      "sha256": "e9ee8a10a46dddf54bdf08391a731c36660540f7ba2fae6ac2e47cbb1a0215b2",
+      "bytes": 32280
+    },
+    "source-end-hashes.json": {
+      "sha256": "97179459770b2395d0da32cf1901bb3289b6f1645a11f1d0cdbff34c5a8c3ab4",
+      "bytes": 932
+    },
+    "source-start-hashes.json": {
+      "sha256": "97179459770b2395d0da32cf1901bb3289b6f1645a11f1d0cdbff34c5a8c3ab4",
+      "bytes": 932
+    },
+    "store-tests.log": {
+      "sha256": "179185e73f6a76840a298001efbcf952f9c16d57eca81d37ab37a3f5c6d57a66",
+      "bytes": 24425
+    },
+    "sync-tests.log": {
+      "sha256": "4cd0cdf10e3a5467e791efe3e4cb2341b1303c0ef452863479f64cbc36c50085",
+      "bytes": 34466
+    },
+    "test-summary.json": {
+      "sha256": "716cbbf48e1681cb51932f6babec69d3b722b82bc4e0731b1449ce3b1e1ef1f7",
+      "bytes": 220
+    }
+  }
+}

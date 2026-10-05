@@ -1,0 +1,62 @@
+{
+  "generatedAt": "2026-10-05T06:54:22.442Z",
+  "mode": "store",
+  "allForecastsArePriorFallback": true,
+  "tasks": [
+    {
+      "id": "T-001",
+      "title": "[T-001] Review task",
+      "status": "ready",
+      "type": "task",
+      "parentId": null,
+      "wave": 1,
+      "planned": {
+        "start": null,
+        "due": null,
+        "durationMs": 28800000,
+        "coverage": "duration-only",
+        "source": "estimated-effort-agent-active"
+      },
+      "measurement": null,
+      "history": null,
+      "predicted": null,
+      "blockedReasons": [],
+      "collisions": [],
+      "forecast": {
+        "estimateId": "dd501053-a8a5-4612-99c0-91957eb9a99b",
+        "method": "expert-guess",
+        "confidence": "low",
+        "estimatorVersion": "forecast-v1",
+        "durationP50Ms": 858436,
+        "durationP90Ms": 1716872,
+        "durationCoverage": "none",
+        "isPriorFallback": true
+      },
+      "actual": null,
+      "historySpan": null,
+      "approximateDate": null
+    }
+  ],
+  "calendarWindows": [],
+  "waves": [
+    {
+      "wave": 1,
+      "taskIds": [
+        "T-001"
+      ]
+    }
+  ],
+  "waveByTaskId": {
+    "T-001": 1
+  },
+  "blockedReasons": [],
+  "serializedPairs": [],
+  "claimViolations": [],
+  "policy": {
+    "scheduling": "collision-aware",
+    "claimsAreAdvisory": true,
+    "correctnessBackstop": "worktree-merge",
+    "guarantee": "none",
+    "explanation": "serialized-pairs"
+  }
+}

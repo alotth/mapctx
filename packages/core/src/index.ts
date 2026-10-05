@@ -19,9 +19,17 @@ export {
   generateTaskDetailFile,
   readTaskDetailFile,
   parseAcceptanceChecklist,
+  stripAcceptanceSection,
+  renderAcceptanceSection,
+  renderAcceptanceProse,
+  renderAcceptanceProseUnowned,
+  acceptanceRenderObstruction,
+  analyzeAcceptanceProse,
+  hasUnterminatedFence,
   type TaskDetailFile,
   type AcceptanceChecklist,
-  type AcceptanceChecklistItem
+  type AcceptanceChecklistItem,
+  type AcceptanceProseAnalysis
 } from "./task-detail"
 
 export function normalizeStatus(value: string | undefined | null): TaskStatus {

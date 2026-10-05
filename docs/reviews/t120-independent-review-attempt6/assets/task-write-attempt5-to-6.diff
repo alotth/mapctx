@@ -1,0 +1,143 @@
+--- /Users/alt/.traycer/epics/e8873251-f6f0-490d-be16-8e5655300237/artifacts/t120-review-attempt3/attempt6-focal-review/../attempt5-focal-review/assets/task-write.test.ts	2026-10-05 04:32:39
++++ packages/sync-engine/src/task-write.test.ts	2026-10-05 04:56:09
+@@ -16,7 +16,8 @@
+   taskUpdateCommand
+ } from './mapctx-cli';
+ import { finishTask } from './checkpoint';
+-import { listExportCheckpoints, resolveMapctxToml, resolveProjectStoreDir, StoreHandle } from '@mapctx/store';
++import { listExportCheckpoints, resolveMapctxToml, resolveProjectStoreDir, StoreHandle, writeJournalEntrySync, payloadSha256 } from '@mapctx/store';
++import { DatabaseSync } from 'node:sqlite';
+ 
+ const BOARD = `# Tasks - write test
+ 
+@@ -549,8 +550,130 @@
+ 
+     // unapprove refuses --evidence instead of silently dropping it.
+     assert.throws(() => execFileSync('node', [cli, 'task', 'acceptance', 'unapprove', 'T-201', '--index', '0', '--expect-revision', '2', '--evidence', 'uri=proof://x', '--json'], { stdio: 'pipe' }), /does not take --evidence/);
++  } finally {
++    handle?.close();
++    restore();
++  }
++});
++
++test('attempt6: approve without --evidence keeps null semantics; prototype-unsafe keys survive show and event', () => {
++  const { restore, repoDir } = setupCutoverRepo();
++  const cli = require.resolve('./mapctx-cli.js');
++  let handle: StoreHandle | undefined;
++  try {
++    execFileSync('node', [cli, 'import', '--commit'], { stdio: 'ignore' });
++    execFileSync('node', [cli, 'acceptance', 'import', '--commit', '--json'], { stdio: 'ignore' });
++
++    // (1) NO flag: prior null/omitted semantics, never an invented {}.
++    const approved = JSON.parse(execFileSync('node', [cli, 'task', 'acceptance', 'approve', 'T-201', '--index', '0', '--expect-revision', '1', '--json'], { encoding: 'utf8' })) as { ok: boolean };
++    assert.equal(approved.ok, true);
++    const shown = JSON.parse(execFileSync('node', [cli, 'task', 'acceptance', 'show', 'T-201', '--json'], { encoding: 'utf8' })) as { acceptance: { criteria: Array<{ evidence: Record<string, string> | null }> } };
++    assert.equal(shown.acceptance.criteria[0].evidence, null, 'absent flag keeps evidence null');
++
++    // (2) Prototype-unsafe keys become own properties and survive exactly.
++    assert.equal(JSON.parse(execFileSync('node', [cli, 'task', 'acceptance', 'revise', 'T-201', '--from-file', 'tasks/T-201.md', '--expect-revision', '1', '--json'], { encoding: 'utf8' })).revision, 2);
++    const protoApproved = JSON.parse(execFileSync('node', [cli, 'task', 'acceptance', 'approve', 'T-201', '--index', '0', '--expect-revision', '2', '--evidence', '__proto__=proof', '--evidence', 'constructor=ctor-value', '--evidence', 'toString=str-value', '--json'], { encoding: 'utf8' })) as { ok: boolean };
++    assert.equal(protoApproved.ok, true);
++    const shownProto = JSON.parse(execFileSync('node', [cli, 'task', 'acceptance', 'show', 'T-201', '--json'], { encoding: 'utf8' })) as { acceptance: { criteria: Array<{ evidence: Record<string, string> | null }> } };
++    const evidence = shownProto.acceptance.criteria[0].evidence;
++    assert.ok(evidence, 'evidence present');
++    assert.deepEqual(evidence, { ['__proto__']: 'proof', constructor: 'ctor-value', toString: 'str-value' });
++    assert.ok(Object.prototype.hasOwnProperty.call(evidence, '__proto__'), '__proto__ is an own property');
++
++    const toml = resolveMapctxToml(repoDir)!;
++    handle = StoreHandle.open(resolveProjectStoreDir(toml.config.projectId));
++    const events = handle.listEvents().filter(event => event.eventType === 'acceptance.approved');
++    const lastPayload = JSON.parse(JSON.stringify(events[events.length - 1].payload)) as { evidence: Record<string, string> };
++    assert.deepEqual(lastPayload.evidence, { ['__proto__']: 'proof', constructor: 'ctor-value', toString: 'str-value' }, 'event payload preserves the exact keys');
+   } finally {
+     handle?.close();
+     restore();
+   }
+ });
++
++test('attempt6: malformed/unsupported evidence refuses BEFORE the writable open -- schema-9 pending-journal store stays byte-identical', () => {
++  const { restore, repoDir } = setupCutoverRepo();
++  const cli = require.resolve('./mapctx-cli.js');
++  try {
++    execFileSync('node', [cli, 'import', '--commit'], { stdio: 'ignore' });
++    const toml = resolveMapctxToml(repoDir)!;
++    const storeDir = resolveProjectStoreDir(toml.config.projectId);
++
++    // Downgrade to a TRUE schema-9 shape: migration 10 is fully
++    // IF NOT EXISTS, so dropping its tables + row makes this store
++    // re-migratable exactly like the live schema-9 stores.
++    {
++      const db = new DatabaseSync(path.join(storeDir, 'mapctx.db'));
++      db.exec('DROP TABLE IF EXISTS acceptance_criterion_projection');
++      db.exec('DROP TABLE IF EXISTS acceptance_revision_projection');
++      // Migration 10 also ALTERs export_checkpoint; DROP COLUMN makes the
++      // downgrade a genuine schema-9 shape that migration 10 can re-apply.
++      db.exec('ALTER TABLE export_checkpoint DROP COLUMN source_state_json');
++      db.prepare('DELETE FROM schema_migrations WHERE version = 10').run();
++      db.close();
++    }
++    // Append an UNREPLAYED pending journal entry: a writable open would
++    // replay it (and bump the watermark); a parse-first refusal must not.
++    const last = (() => {
++      const db = new DatabaseSync(path.join(storeDir, 'mapctx.db'));
++      const row = db.prepare('SELECT node_id, sequence, logical_clock FROM event_log ORDER BY logical_clock DESC LIMIT 1').get() as { node_id: string; sequence: number; logical_clock: number };
++      db.close();
++      return row;
++    })();
++    const pendingPayload = { taskId: 'T-201', patch: { title: 'Pending journal title' } };
++    writeJournalEntrySync(storeDir, {
++      nodeId: last.node_id,
++      sequence: last.sequence + 1,
++      logicalClock: last.logical_clock + 1,
++      eventType: 'task.patched',
++      occurredAt: '2026-10-05T00:00:00.000Z',
++      actor: 'fixture',
++      payload: pendingPayload,
++      payloadSha256: payloadSha256(pendingPayload)
++    } as never);
++
++    const snapshot = (): Record<string, string> => {
++      const out: Record<string, string> = {};
++      const hash = (p: string) => { out[path.relative(storeDir, p)] = require('crypto').createHash('sha256').update(fs.readFileSync(p)).digest('hex'); };
++      hash(path.join(storeDir, 'mapctx.db'));
++      hash(path.join(storeDir, 'store-meta.json'));
++      for (const entry of fs.readdirSync(path.join(storeDir, 'events'), { recursive: true }) as unknown as string[]) {
++        const p = path.join(storeDir, 'events', entry);
++        if (fs.statSync(p).isFile()) hash(p);
++      }
++      return out;
++    };
++    const before = snapshot();
++
++    // Malformed pair: refused before any handle; nothing migrates/replays.
++    assert.throws(() => execFileSync('node', [cli, 'task', 'acceptance', 'approve', 'T-201', '--index', '0', '--expect-revision', '1', '--evidence', 'bad-pair', '--json'], { stdio: 'pipe' }), /key=value/);
++    assert.deepEqual(snapshot(), before, 'malformed refusal leaves DB/meta/journals byte-identical');
++    {
++      const db = new DatabaseSync(path.join(storeDir, 'mapctx.db'));
++      assert.equal((db.prepare('SELECT COUNT(*) n FROM schema_migrations WHERE version = 10').get() as { n: number }).n, 0, 'schema still 9: no migration ran');
++      assert.throws(() => db.prepare('SELECT * FROM acceptance_revision_projection').all(), /no such table/, 'acceptance tables still absent');
++      db.close();
++    }
++
++    // Unsupported evidence on unapprove: also refused pre-open.
++    assert.throws(() => execFileSync('node', [cli, 'task', 'acceptance', 'unapprove', 'T-201', '--index', '0', '--expect-revision', '1', '--evidence', 'uri=proof://x', '--json'], { stdio: 'pipe' }), /does not take --evidence/);
++    assert.deepEqual(snapshot(), before, 'unapprove-evidence refusal also leaves the store untouched');
++
++    // Missing --expect-revision: refused pre-open as well.
++    assert.throws(() => execFileSync('node', [cli, 'task', 'acceptance', 'approve', 'T-201', '--index', '0', '--json'], { stdio: 'pipe' }), /--expect-revision/);
++    assert.deepEqual(snapshot(), before, 'shape refusal leaves the store untouched');
++
++    // Control: the SAME store, once opened by a WRITABLE command (this one
++    // then fails on missing revisioning — irrelevant), DOES migrate +
++    // replay, proving the fixture really was a pending schema-9 store and
++    // that the refusals above genuinely skipped the open.
++    assert.throws(() => execFileSync('node', [cli, 'task', 'acceptance', 'approve', 'T-201', '--index', '0', '--expect-revision', '1', '--json'], { stdio: 'pipe' }));
++    {
++      const db = new DatabaseSync(path.join(storeDir, 'mapctx.db'));
++      assert.equal((db.prepare('SELECT COUNT(*) n FROM schema_migrations WHERE version = 10').get() as { n: number }).n, 1, 'control: writable open migrates to 10');
++      db.close();
++    }
++  } finally {
++    restore();
++  }
++});

@@ -74,6 +74,7 @@ const DETAIL_T201 = `# T-201
   - role: implementation
   - impact: low
   - estimatedEffort: 1d
+  - estimatedEffortSource: agent-active
   - prerequisites: []
   - blocking: []
   - filesAffected: []
@@ -106,6 +107,14 @@ const LEGACY_CONFIG = {
 
 function runBoardCli(): { title: string; mode: string; tasks: Array<Record<string, unknown>> } {
   const stdout = execFileSync('node', [require.resolve('./mapctx-cli.js'), 'board', '--json'], {
+    encoding: 'utf8',
+    cwd: process.cwd()
+  });
+  return JSON.parse(stdout);
+}
+
+function runGanttCli(): { mode: string; tasks: Array<Record<string, unknown>> } {
+  const stdout = execFileSync('node', [require.resolve('./mapctx-cli.js'), 'gantt', '--json'], {
     encoding: 'utf8',
     cwd: process.cwd()
   });
@@ -198,6 +207,29 @@ test('mapctx board: pre-cutover repos keep parsing TASKS.md with the v2-status m
     const child = taskById(dataset, 'T-201');
     assert.equal(child.parent, 'E-200');
     assert.equal(child.completed, undefined);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test('mapctx gantt: pre-cutover detail effort produces duration-only planned active time', () => {
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mapctx-gantt-file-'));
+  const previousCwd = process.cwd();
+  process.chdir(repoDir);
+
+  try {
+    writeBoardRepo(repoDir);
+    const dataset = runGanttCli();
+    const task = taskById(dataset, 'T-201');
+    assert.equal(dataset.mode, 'pre-cutover');
+    assert.deepEqual(task.planned, {
+      start: null,
+      due: null,
+      durationMs: 8 * 60 * 60_000,
+      coverage: 'duration-only',
+      source: 'estimated-effort-agent-active'
+    });
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(repoDir, { recursive: true, force: true });

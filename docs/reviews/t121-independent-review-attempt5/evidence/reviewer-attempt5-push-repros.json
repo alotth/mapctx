@@ -1,0 +1,19 @@
+{
+  "verdict": "PASS",
+  "results": [
+    {
+      "case": "reorder trailing evidence",
+      "refused": true,
+      "error": "acceptance-render-refused: task T-121: the canonical criteria sequence differs from the prose (reorder or added criteria) while authored prose follows the first criterion (interleaved or trailing: notes, evidence, plain lists, fenced examples, nested headings) or bullets are hierarchical; rewriting the sequence would reassociate that prose or break bullet parentage, and the renderer never synthesizes associations — trailing prose has no reliable anchor after the block moves. Render is refused before any write. A human must adjudicate the Git-authored prose (re-anchor the notes to criteria that exist or move them out of the Acceptance section), then retry.",
+      "ghCalls": 0,
+      "repoUnchanged": true
+    },
+    {
+      "case": "added criterion trailing evidence",
+      "refused": true,
+      "error": "acceptance-render-refused: task T-121: the canonical criteria sequence differs from the prose (reorder or added criteria) while authored prose follows the first criterion (interleaved or trailing: notes, evidence, plain lists, fenced examples, nested headings) or bullets are hierarchical; rewriting the sequence would reassociate that prose or break bullet parentage, and the renderer never synthesizes associations — trailing prose has no reliable anchor after the block moves. Render is refused before any write. A human must adjudicate the Git-authored prose (re-anchor the notes to criteria that exist or move them out of the Acceptance section), then retry.",
+      "ghCalls": 0,
+      "repoUnchanged": true
+    }
+  ]
+}

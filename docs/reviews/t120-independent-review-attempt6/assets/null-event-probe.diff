@@ -1,0 +1,16 @@
+--- packages/sync-engine/src/task-write.test.ts	2026-10-05 04:56:09
++++ /tmp/mapctx-t120-review-attempt6/code/packages/sync-engine/src/task-write.test.ts	2026-10-05 05:07:38
+@@ -569,6 +569,13 @@
+     assert.equal(approved.ok, true);
+     const shown = JSON.parse(execFileSync('node', [cli, 'task', 'acceptance', 'show', 'T-201', '--json'], { encoding: 'utf8' })) as { acceptance: { criteria: Array<{ evidence: Record<string, string> | null }> } };
+     assert.equal(shown.acceptance.criteria[0].evidence, null, 'absent flag keeps evidence null');
++    const noEvidenceToml = resolveMapctxToml(repoDir)!;
++    handle = StoreHandle.open(resolveProjectStoreDir(noEvidenceToml.config.projectId));
++    const noEvidenceEvents = handle.listEvents().filter(event => event.eventType === 'acceptance.approved');
++    const noEvidenceEvent = noEvidenceEvents[noEvidenceEvents.length - 1];
++    assert.equal((noEvidenceEvent.payload as { evidence: Record<string, string> | null }).evidence, null, 'durable event keeps evidence null');
++    handle.close();
++    handle = undefined;
+ 
+     // (2) Prototype-unsafe keys become own properties and survive exactly.
+     assert.equal(JSON.parse(execFileSync('node', [cli, 'task', 'acceptance', 'revise', 'T-201', '--from-file', 'tasks/T-201.md', '--expect-revision', '1', '--json'], { encoding: 'utf8' })).revision, 2);

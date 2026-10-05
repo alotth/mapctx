@@ -1,0 +1,46 @@
+{
+  "waves": [
+    {
+      "wave": 1,
+      "taskIds": [
+        "T-001"
+      ],
+      "tasks": [
+        {
+          "id": "T-001",
+          "title": "[T-001] Review task",
+          "status": "ready",
+          "type": "task",
+          "dependsOn": [],
+          "executorKind": "default"
+        }
+      ]
+    }
+  ],
+  "waveByTaskId": {
+    "T-001": 1
+  },
+  "serializedPairs": [],
+  "claims": [],
+  "graphTaskIds": [
+    "T-001"
+  ],
+  "runnableTaskIds": [
+    "T-001"
+  ],
+  "excludedTaskIds": [],
+  "blockedTaskIds": [],
+  "blockedReasons": [],
+  "cycleTaskIds": [],
+  "recommendedNext": [
+    "T-001"
+  ],
+  "policy": {
+    "scheduling": "collision-aware",
+    "claimsAreAdvisory": true,
+    "correctnessBackstop": "worktree-merge",
+    "guarantee": "none",
+    "explanation": "serialized-pairs"
+  },
+  "tasksFilePath": "/private/tmp/mapctx-t120-review-attempt3/fixtures/r62-ebcc42c6-014e-4662-99ec-bb408c27e376/B/TASKS.md"
+}

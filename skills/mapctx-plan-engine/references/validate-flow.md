@@ -10,6 +10,12 @@ Preferred (local binary):
 mapctx validate [--config ./mapcs.config.json] [--tasks-file <tasks-path>] [--json]
 ```
 
+Under `plansAuthority = "store"`, this checks canonical store state using a
+read-only handle; local Markdown snapshots do not affect the result. Add
+`--snapshots` only when explicitly inspecting local snapshot structure and
+drift. In Markdown authority, validation continues to inspect the Markdown
+board as before.
+
 Config-less board check:
 
 ```bash

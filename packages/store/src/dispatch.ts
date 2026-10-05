@@ -14,9 +14,11 @@ import {
   type RunEvent,
   type RunReceipt
 } from "@mapctx/protocol"
-import { getDispatchAttempt, getRunEvent, getTask, listDispatchAttempts, listRunReceipts } from "./projections"
+import {
+  assertReceiptPlanningAdmission, getActiveClaimForTask, getDispatchAttempt, getRunEvent, getTask, listDispatchAttempts, listRunReceipts } from "./projections"
 import type { DispatchAttemptRecord } from "./types"
-import { StoreHandle } from "./store-handle"
+import { StoreHandle, type AppendEventInput } from "./store-handle"
+import type { EventLogEntry } from "@mapctx/protocol"
 import type { DatabaseSync } from "node:sqlite"
 
 export type DispatchAttemptInput = Omit<DispatchAttemptRecord, "status"> & { status?: DispatchAttemptRecord["status"]; actor?: string }
@@ -42,54 +44,80 @@ export type RunEventWriteResult =
 export function recordDispatchAttempt(
   store: StoreHandle,
   rawInput: DispatchAttemptInput | DispatchAttemptEnvelopeInput,
-  actor?: string
+  actor?: string,
+  requireActiveClaim = false
+): DispatchWriteResult {
+  return store.runInWriteTransaction(append => appendDispatchAttempt(store, rawInput, append, actor, requireActiveClaim));
+}
+
+/** Compose dispatch admission with a claim in one caller-owned transaction. */
+export function appendDispatchAttempt(
+  store: StoreHandle,
+  rawInput: DispatchAttemptInput | DispatchAttemptEnvelopeInput,
+  append: (input: AppendEventInput) => EventLogEntry,
+  actor?: string,
+  requireActiveClaim = false
 ): DispatchWriteResult {
   const input: DispatchAttemptInput = "dispatch" in rawInput
     ? { ...rawInput.dispatch, actor: rawInput.actor ?? actor }
     : rawInput;
   const status = input.status ?? "running";
-  return store.runInWriteTransaction(append => {
-    const task = getTask(store.db, input.taskId);
-    if (!task) throw new Error(`Cannot dispatch unknown task: ${input.taskId}`);
-    if (["done", "cancelled", "archived"].includes(task.planningState)) throw new Error(`Cannot dispatch terminal task: ${input.taskId}`);
-    if (listDispatchAttempts(store.db, input.dispatchId).some(a => a.attempt === input.attempt)) {
-      return { ok: false, reason: "duplicate-attempt" };
+  if (status !== "claimed" && status !== "running") throw new Error(`Invalid dispatch admission status: ${status}`);
+  const task = getTask(store.db, input.taskId);
+  if (!task) throw new Error(`Cannot dispatch unknown task: ${input.taskId}`);
+  if (["done", "cancelled", "archived"].includes(task.planningState)) throw new Error(`Cannot dispatch terminal task: ${input.taskId}`);
+  if (requireActiveClaim) {
+    const claim = getActiveClaimForTask(store.db, input.taskId);
+    if (!claim || new Date(claim.expiresAt).getTime() <= Date.now()) {
+      throw new Error(`Dispatch requires an active claim. Use mapctx task start ${input.taskId}, or task claim followed by dispatch create.`);
     }
-    const desiredExecution = status === "claimed" ? "claimed" : "running";
-    if (task.executionState === "failed" || task.executionState === "blocked" || task.executionState === "completed") {
-      // New-attempt admission: dispatching a new attempt re-opens a terminal-
-      // for-the-attempt execution through a journaled reset to unclaimed
-      // (failed, blocked, or completed -> unclaimed). The old attempt remains
-      // immutable and its receipt remains queryable; only the new dispatch
-      // attempt may advance from the reset state. Without this the terminal
-      // state blocks every legal route to claimed/running and a completed run
-      // could never be retried after review.
+  }
+  if (listDispatchAttempts(store.db, input.dispatchId).some(a => a.attempt === input.attempt)) {
+    return { ok: false, reason: "duplicate-attempt" };
+  }
+  const desiredExecution = status === "claimed" ? "claimed" : "running";
+  if (task.executionState === "failed" || task.executionState === "blocked" || task.executionState === "completed") {
+    // New-attempt admission: dispatching a new attempt re-opens a terminal-
+    // for-the-attempt execution through a journaled reset to unclaimed
+    // (failed, blocked, or completed -> unclaimed). The old attempt remains
+    // immutable and its receipt remains queryable; only the new dispatch
+    // attempt may advance from the reset state. Without this the terminal
+    // state blocks every legal route to claimed/running and a completed run
+    // could never be retried after review.
+    append({
+      eventType: "task.patched",
+      actor: input.actor ?? "store",
+      payload: { taskId: input.taskId, patch: { executionState: "unclaimed" }, source: "retry-admission" }
+    });
+    if (desiredExecution === "running") {
+      // Replays must take both legal hops: unclaimed -> claimed -> running.
+      // The lease event preceded the completed-attempt reset and cannot do this hop.
       append({
         eventType: "task.patched",
         actor: input.actor ?? "store",
-        payload: { taskId: input.taskId, patch: { executionState: "unclaimed" }, source: "retry-admission" }
+        payload: { taskId: input.taskId, patch: { executionState: "claimed" }, source: "retry-admission" }
       });
-    } else if (task.executionState !== desiredExecution) {
-      assertTransition("execution", task.executionState, desiredExecution);
     }
-    // T-071: the store freezes the planned workload at hand-off. Server-side
-    // read, never client-supplied -- the stamp must record what the board
-    // believed when the executor took the task, not what a caller asserts.
-    // Untagged tasks stamp null and stay null.
-    const dispatch = {
-      ...input,
-      status,
-      workloadAtDispatch: task.workload ?? null,
-      executorModel: input.executorModel ?? null
-    };
-    delete dispatch.actor;
-    append({
-      eventType: "dispatch.attempted",
-      actor: input.actor ?? "store",
-      payload: { dispatch }
-    });
-    return { ok: true, dispatch };
+  } else if (task.executionState !== desiredExecution) {
+    assertTransition("execution", task.executionState, desiredExecution);
+  }
+  // T-071: the store freezes the planned workload at hand-off. Server-side
+  // read, never client-supplied -- the stamp must record what the board
+  // believed when the executor took the task, not what a caller asserts.
+  // Untagged tasks stamp null and stay null.
+  const dispatch = {
+    ...input,
+    status,
+    workloadAtDispatch: task.workload ?? null,
+    executorModel: input.executorModel ?? null
+  };
+  delete dispatch.actor;
+  append({
+    eventType: "dispatch.attempted",
+    actor: input.actor ?? "store",
+    payload: { dispatch }
   });
+  return { ok: true, dispatch };
 }
 
 function receiptHistory(store: StoreHandle, dispatchId: string) {
@@ -272,23 +300,7 @@ function assertReceiptTransitions(store: StoreHandle, receipt: RunReceipt, dispa
   }
   assertTransition("dispatch", dispatchStatus, receipt.outcome);
   assertTransition("execution", execution, receipt.outcome);
-  const targetPlanning = receipt.outcome === "completed"
-    ? "review"
-    : receipt.outcome === "failed"
-      ? (task.planningState === "in-progress" || task.planningState === "blocked" ? "ready" : undefined)
-      : receipt.outcome === "blocked"
-        ? "blocked"
-        : undefined;
-  if (targetPlanning !== undefined && task.planningState !== targetPlanning) {
-    assertPlanningReceiptTransition(task.planningState, targetPlanning);
-  }
-}
-
-function assertPlanningReceiptTransition(from: string, to: string): void {
-  if (from === "in-progress" && to === "ready") {
-    assertTransition("planning", from, "blocked");
-    assertTransition("planning", "blocked", to);
-    return;
-  }
-  assertTransition("planning", from, to);
+  // T-118: shared with the new-event writer gate (events.ts) so command and
+  // raw admission can never drift apart on any outcome.
+  assertReceiptPlanningAdmission(task.planningState, receipt.outcome);
 }

@@ -52,8 +52,11 @@ reconciliation choice is human, never silent.
      `description:` prose stays Git-authored.
    - All board changes via `mapctx task ...`; drift is healed by
      `mapctx reconcile <task-id>`, never by hand.
-   - Snapshots regenerate at end-of-wave / end-of-epic (`mapctx export`);
-     committing them is the rollback checkpoint.
+   - Routine mutations do not regenerate mirrors. `mapctx export` is explicit;
+     `mapctx task finish <id>` publishes a task/epic completion checkpoint.
+     Wave-end is not automatic because no wave controller exists. A checkpoint
+     contains Markdown mirrors and source cursor/revision metadata, not the
+     complete event/journal/receipt/evidence/attestation backup.
    - A worktree/clone without a local store under `store` authority fails
      closed — remedy is `mapctx store init` (rehydrates from the last
      committed checkpoint), never a silent fallback to Markdown.

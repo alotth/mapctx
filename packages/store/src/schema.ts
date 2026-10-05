@@ -312,5 +312,111 @@ ALTER TABLE dispatch_projection ADD COLUMN workload_at_dispatch TEXT;
 ALTER TABLE dispatch_projection ADD COLUMN executor_model TEXT;
 ALTER TABLE run_receipt_projection ADD COLUMN workload_at_receipt TEXT;
 `.trim()
+  },
+  {
+    // T-099: historic estimates retain their human-working-time provenance;
+    // only estimates authored after the convention change are agent-active.
+    // Nullable preserves every existing row as legacy-human without a rewrite.
+    version: 6,
+    sql: `
+ALTER TABLE task_detail_projection ADD COLUMN estimated_effort_source TEXT;
+`.trim()
+  },
+  {
+    version: 7,
+    sql: `ALTER TABLE task_detail_projection ADD COLUMN wait_reason TEXT;`
+  },
+  {
+    // T-102: agent-authored start prediction (schema only, no predictor).
+    // Nullable triple preserves every existing row as "no prediction".
+    version: 8,
+    sql: `
+ALTER TABLE task_projection ADD COLUMN predicted_start TEXT;
+ALTER TABLE task_projection ADD COLUMN predicted_method TEXT;
+ALTER TABLE task_projection ADD COLUMN predicted_confidence TEXT;
+`.trim()
+  },
+  {
+    // T-116: historical evidence + auditable corrections. Evidence registers
+    // session linkage for ANY planning state (including done) without claims,
+    // dispatches or receipts, so done history never mutates lifecycle.
+    // Corrections never rewrite or delete originals (receipts/events stay);
+    // they journal an auditable verdict that readers use to exclude invalid
+    // evidence from roadmap display and duration/accuracy calibration.
+    version: 9,
+    sql: `
+CREATE TABLE IF NOT EXISTS history_evidence_projection (
+  evidence_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  harness TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  tier TEXT NOT NULL,
+  confidence TEXT NOT NULL,
+  repo_root TEXT,
+  repo_origin TEXT,
+  signals_json TEXT NOT NULL,
+  span_start TEXT,
+  span_end TEXT,
+  active_ms INTEGER,
+  source_hash TEXT,
+  recorded_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  revision_event_node TEXT NOT NULL,
+  revision_event_sequence INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_history_evidence_task ON history_evidence_projection(task_id);
+CREATE INDEX IF NOT EXISTS idx_history_evidence_session ON history_evidence_projection(harness, session_id);
+CREATE TABLE IF NOT EXISTS history_correction_projection (
+  correction_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  target_kind TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  verdict TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  recorded_at TEXT NOT NULL,
+  event_node TEXT NOT NULL,
+  event_sequence INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_history_correction_task ON history_correction_projection(task_id);
+CREATE INDEX IF NOT EXISTS idx_history_correction_target ON history_correction_projection(target_kind, target_id);
+`.trim()
+  },
+  {
+    // T-120: acceptance criteria live in the store. The per-task revision
+    // header is the minimal fix for revision-counter loss: removing every
+    // criterion (condition 'empty') keeps the revision, so a later revise
+    // never reuses an old revision number and stale approvals can never be
+    // re-attached by revision confusion. No header row = no acceptance
+    // revisioning has ever happened (honest 'absent'). Criteria rows carry
+    // the revision they belong to; approval facts (who/when/evidence) ride
+    // on the row and the distinguishing audit events. Additive only --
+    // never edit earlier migrations in place post-cutover.
+    version: 10,
+    sql: `
+CREATE TABLE IF NOT EXISTS acceptance_revision_projection (
+  task_id TEXT PRIMARY KEY,
+  revision INTEGER NOT NULL,
+  condition TEXT NOT NULL,
+  revision_event_node TEXT NOT NULL,
+  revision_event_sequence INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS acceptance_criterion_projection (
+  task_id TEXT NOT NULL,
+  criterion_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  position INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  state TEXT NOT NULL,
+  source TEXT NOT NULL,
+  evidence_json TEXT,
+  approved_at TEXT,
+  approved_by TEXT,
+  approval_event_node TEXT,
+  approval_event_sequence INTEGER,
+  PRIMARY KEY (task_id, criterion_id)
+);
+CREATE INDEX IF NOT EXISTS idx_acceptance_criterion_task ON acceptance_criterion_projection(task_id, revision, position);
+ALTER TABLE export_checkpoint ADD COLUMN source_state_json TEXT;
+`.trim()
   }
 ]

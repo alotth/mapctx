@@ -5,6 +5,7 @@ import test from "node:test"
 import { claimTask, releaseClaim, renewClaim } from "./claims"
 import { recordDispatchAttempt, recordRunReceipt } from "./dispatch"
 import { moveTask } from "./tasks"
+import { approveAcceptanceCriterion, reviseAcceptance } from "./acceptance"
 import { getTask } from "./projections"
 import { StoreHandle } from "./store-handle"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
@@ -27,13 +28,30 @@ function seedOneTask(handle: StoreHandle): void {
         title: "x",
         planningState: "backlog",
         executionState: "unclaimed",
+        workload: "Normal",
         detailPath: "./tasks/T-001.md",
         tags: [],
         domains: [],
         externalLinks: [],
         assignees: []
+      },
+      detail: {
+        taskId: "T-001", role: "implementation", impact: "medium", estimatedEffort: "1d",
+        prerequisites: [], blocking: [], filesAffected: [], testsRequired: [], summary: "x"
       }
     }
+  });
+}
+
+
+/** T-120: the done gate reads store acceptance; tests author + approve it explicitly. */
+function approveAllCriteria(handle: StoreHandle, taskId: string, texts: string[]): void {
+  const revised = reviseAcceptance(handle, { taskId, condition: "criteria", texts, actor: "test", expectRevision: 0 });
+  assert.ok(revised.ok, JSON.stringify(revised));
+  if (!revised.ok) return;
+  revised.criteria.forEach((criterion, index) => {
+    const approved = approveAcceptanceCriterion(handle, { taskId, index, actor: "test", expectRevision: revised.revision });
+    assert.ok(approved.ok, JSON.stringify(approved));
   });
 }
 
@@ -189,10 +207,15 @@ test("claimTask: ready claims jump straight to in-progress; done tasks refuse to
           title: "y",
           planningState: "paused",
           executionState: "unclaimed",
+          workload: "Normal",
           tags: [],
           domains: [],
           externalLinks: [],
           assignees: []
+        },
+        detail: {
+          taskId: "T-002", role: "implementation", impact: "medium", estimatedEffort: "1d",
+          prerequisites: [], blocking: [], filesAffected: [], testsRequired: [], summary: "y"
         }
       }
     });
@@ -202,6 +225,68 @@ test("claimTask: ready claims jump straight to in-progress; done tasks refuse to
   } finally {
     handle.close();
     cleanupDir(storeDir);
+  }
+});
+
+test("claimTask requires workload and estimated effort for executable tasks but exempts epics", () => {
+  const dir = mkTmpDir("mapctx-store-claims-estimate-gate-");
+  const handle = StoreHandle.open(dir);
+  try {
+    handle.appendEvent({
+      eventType: "project.initialized", actor: "test",
+      payload: { projectId: "p1", boardTitle: "T", workDomains: [], notesMarkdown: "", plansAuthority: "markdown" }
+    });
+    handle.appendEvent({
+      eventType: "task.upserted", actor: "test",
+      payload: { task: { taskId: "T-009", positionKey: 0, title: "missing", planningState: "backlog", executionState: "unclaimed", tags: [], domains: [], externalLinks: [], assignees: [] } }
+    });
+    const refused = claimTask(handle, { taskId: "T-009", actor: "worker" });
+    assert.equal(refused.ok, false);
+    if (!refused.ok) {
+      assert.equal(refused.reason, "missing-workload-or-estimate");
+      assert.match(refused.message ?? "", /mapctx task update T-009 --set workload=Normal/);
+      assert.match(refused.message ?? "", /mapctx task update T-009 --set detail\.estimatedEffort=1d/);
+    }
+
+    const invalidCases = [
+      { taskId: "T-010", workload: "Medium", effort: "1d", repair: /mapctx task update T-010 --set workload=Normal/ },
+      { taskId: "T-011", workload: "Banana", effort: "1d", repair: /mapctx task update T-011 --set workload=Normal/ },
+      { taskId: "T-012", workload: "Normal", effort: "tomorrow", repair: /mapctx task update T-012 --set detail\.estimatedEffort=1d/ },
+      { taskId: "T-013", workload: "Normal", effort: "0d", repair: /mapctx task update T-013 --set detail\.estimatedEffort=1d/ },
+      { taskId: "T-014", workload: "Normal", effort: "0.0000001m", repair: /mapctx task update T-014 --set detail\.estimatedEffort=1d/ },
+      { taskId: "T-015", workload: "Normal", effort: `${"9".repeat(400)}w`, repair: /mapctx task update T-015 --set detail\.estimatedEffort=1d/ }
+    ];
+    for (const [index, value] of invalidCases.entries()) {
+      handle.appendEvent({
+        eventType: "task.upserted", actor: "test",
+        payload: {
+          task: {
+            taskId: value.taskId, positionKey: index + 1, title: "invalid", type: "task",
+            planningState: "backlog", executionState: "unclaimed", workload: value.workload,
+            tags: [], domains: [], externalLinks: [], assignees: []
+          },
+          detail: {
+            taskId: value.taskId, role: "implementation", impact: "medium", estimatedEffort: value.effort,
+            prerequisites: [], blocking: [], filesAffected: [], testsRequired: [], summary: "invalid"
+          }
+        }
+      });
+      const invalid = claimTask(handle, { taskId: value.taskId, actor: "worker" });
+      assert.equal(invalid.ok, false);
+      if (!invalid.ok) {
+        assert.equal(invalid.reason, "invalid-workload-or-estimate");
+        assert.match(invalid.message ?? "", value.repair);
+      }
+    }
+
+    handle.appendEvent({
+      eventType: "task.upserted", actor: "test",
+      payload: { task: { taskId: "E-009", positionKey: 10, title: "container", type: "epic", planningState: "backlog", executionState: "unclaimed", tags: [], domains: [], externalLinks: [], assignees: [] } }
+    });
+    assert.equal(claimTask(handle, { taskId: "E-009", actor: "worker" }).ok, true);
+  } finally {
+    handle.close();
+    cleanupDir(dir);
   }
 });
 
@@ -286,7 +371,8 @@ test("R11: a done task refuses both claim and fresh dispatch", () => {
       evidence: [],
       failure: null
     }, "test", dispatchId).ok, true);
-    const moved = moveTask(handle, { taskId: "T-001", to: "done", actor: "reviewer", tasksRoot: dir });
+    approveAllCriteria(handle, "T-001", ["Acceptance satisfied."]);
+    const moved = moveTask(handle, { taskId: "T-001", to: "done", actor: "reviewer" });
     assert.equal(moved.ok, true);
     void claim;
 
@@ -346,7 +432,8 @@ test("R11: completed execution is not reset when planning moves to done", () => 
     assert.equal(before?.planningState, "review");
     assert.equal(before?.executionState, "completed");
 
-    moveTask(handle, { taskId: "T-001", to: "done", actor: "reviewer", tasksRoot: dir });
+    approveAllCriteria(handle, "T-001", ["Acceptance satisfied."]);
+    moveTask(handle, { taskId: "T-001", to: "done", actor: "reviewer" });
 
     const after = getTask(handle.db, "T-001");
     assert.equal(after?.planningState, "done");

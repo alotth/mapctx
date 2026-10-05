@@ -2,7 +2,7 @@ import * as fs from "fs"
 import * as path from "path"
 import type { DatabaseSync } from "node:sqlite"
 import { parseTasksFile, readTaskDetailFile } from "@mapctx/core"
-import { STATUS_TO_PLANNING } from "@mapctx/protocol"
+import { parseEstimatedEffortMs, STATUS_TO_PLANNING, workloadSchema } from "@mapctx/protocol"
 import { buildExport } from "./export"
 import { getTask, getTaskDetail, listOutgoingDependencies } from "./projections"
 import { checkTaskAcceptance } from "./tasks"
@@ -28,6 +28,12 @@ function eq(a: unknown, b: unknown): boolean {
 
 function sortedArr(items: string[]): string[] {
   return [...items].sort();
+}
+
+function authoredEffortSource(filePath: string): string | undefined {
+  const matches = [...fs.readFileSync(filePath, "utf8").matchAll(/^  - estimatedEffortSource:\s*(.*)$/gm)];
+  if (matches.length > 1) return "<duplicate>";
+  return matches[0]?.[1].trim();
 }
 
 /**
@@ -85,6 +91,10 @@ export function diffTaskForReconcile(db: DatabaseSync, tasksRoot: string, taskId
       pushDetail("role", detail.role, onDisk.role);
       pushDetail("impact", detail.impact, onDisk.impact);
       pushDetail("estimatedEffort", detail.estimatedEffort, onDisk.estimatedEffort);
+      // The ordinary detail parser intentionally ignores unknown metadata.
+      // Reconcile must see the authored value to reject invalid provenance.
+      pushDetail("estimatedEffortSource", detail.estimatedEffortSource, authoredEffortSource(detailFilePath));
+      pushDetail("waitReason", detail.waitReason, onDisk.waitReason);
       pushDetail("filesAffected", sortedArr(detail.filesAffected), sortedArr(onDisk.filesAffected));
       pushDetail("testsRequired", sortedArr(detail.testsRequired), sortedArr(onDisk.testsRequired));
       pushDetail("summary", detail.summary, onDisk.summary);
@@ -119,12 +129,32 @@ export function reconcileDiscard(db: DatabaseSync, tasksRoot: string): void {
  */
 export function reconcileAccept(store: StoreHandle, tasksRoot: string, taskId: string, actor: string): ReconcileDiff {
   const diff = diffTaskForReconcile(store.db, tasksRoot, taskId);
+
+  const boardTask = parseTasksFile(path.join(tasksRoot, "TASKS.md")).tasks.find(task => task.id === taskId);
+  if (boardTask?.droppedFields?.workload) {
+    throw new Error(`Invalid workload "${boardTask.droppedFields.workload}"; expected ${workloadSchema.options.join("|")}`);
+  }
   if (!diff.hasDrift) return diff;
+  const workload = diff.taskFields.find(field => field.field === "workload")?.fileValue;
+  if (workload != null && !workloadSchema.safeParse(workload).success) {
+    throw new Error(`Invalid workload "${workload}"; expected ${workloadSchema.options.join("|")}`);
+  }
+  const effortField = diff.detailFields.find(field => field.field === "estimatedEffort");
+  const sourceField = diff.detailFields.find(field => field.field === "estimatedEffortSource");
+  if (sourceField && sourceField.fileValue !== undefined &&
+      sourceField.fileValue !== "agent-active" && sourceField.fileValue !== "legacy-human") {
+    throw new Error(`Invalid estimatedEffortSource "${sourceField.fileValue}"; expected agent-active|legacy-human`);
+  }
+  const onDiskEffort = effortField?.fileValue as string | undefined;
+  if (effortField && onDiskEffort && parseEstimatedEffortMs(onDiskEffort) === null) {
+    throw new Error(`Invalid estimatedEffort "${onDiskEffort}"; expected a positive m|h|d|w duration`);
+  }
 
   const planningChange = diff.taskFields.find(field => field.field === "planningState");
   if (planningChange?.fileValue === "done") {
-    const task = getTask(store.db, taskId);
-    const acceptance = task ? checkTaskAcceptance(task, tasksRoot) : { ok: false as const, reason: "acceptance-incomplete" as const, message: `task ${taskId} cannot move to done: task projection is unavailable.` };
+    // T-120: the done gate reads the canonical acceptance revision in the
+    // store -- a manual markdown edit can never approve criteria by itself.
+    const acceptance = checkTaskAcceptance(store.db, taskId);
     if (!acceptance.ok) throw new Error(acceptance.message);
   }
 
@@ -137,7 +167,19 @@ export function reconcileAccept(store: StoreHandle, tasksRoot: string, taskId: s
   const detailPatch: Partial<TaskDetailRecord> = {};
   for (const field of diff.detailFields) {
     if (field.field === "blocking") continue;
-    (detailPatch as Record<string, unknown>)[field.field] = field.fileValue;
+    (detailPatch as Record<string, unknown>)[field.field] = field.field === "waitReason" && field.fileValue === undefined ? null : field.fileValue;
+  }
+  if (effortField) {
+    // A changed estimate is a fresh agent-active declaration, even when the
+    // manually edited file still carries an old legacy marker.
+    detailPatch.estimatedEffortSource = onDiskEffort ? "agent-active" : "legacy-human";
+  } else if (sourceField && sourceField.fileValue === undefined) {
+    // JSON events cannot carry `undefined`; use an explicit clearing marker.
+    detailPatch.estimatedEffortSource = "legacy-human";
+  }
+  const effectiveEffort = effortField ? onDiskEffort : getTaskDetail(store.db, taskId)?.estimatedEffort;
+  if (detailPatch.estimatedEffortSource === "agent-active" && (!effectiveEffort || parseEstimatedEffortMs(effectiveEffort) === null)) {
+    throw new Error("estimatedEffortSource agent-active requires a valid estimatedEffort");
   }
 
   const dependsOnField = diff.taskFields.find(f => f.field === "dependsOn");

@@ -191,6 +191,14 @@ test("one substituted sample downgrades an otherwise measured estimate", () => {
   assert.match(coverage ?? "", /substituted/)
 })
 
+test("estimate provenance records interval classification policy", () => {
+  const snapshot = buildEstimateSnapshot("T-100", [{
+    duration: measuredDurations(10),
+    timePolicy: { idleThresholdMs: 300_000, reviewThresholdMs: 600_000, parkedThresholdMs: 3_600_000, timeZone: "America/Sao_Paulo" }
+  }], { estimateId: "a2345678-90ab-4cde-8f01-23456789abcd", createdAt: "2026-10-01T00:00:00.000Z" })
+  assert.ok(snapshot.assumptions.some(line => line.includes("interval policy: idle 300000ms") && line.includes("America/Sao_Paulo")))
+})
+
 test("durationCoverageFromAssumptions reads the coverage back out of a real snapshot", () => {
   const noSamples = buildEstimateSnapshot("T-055", [], {
     estimateId: "42345678-90ab-4cde-8f01-23456789abcd",

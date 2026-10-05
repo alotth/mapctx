@@ -82,6 +82,102 @@ protocol exposes only per-profile rate-limit gauges, so per-run usage arrives
 from harness transcripts and hooks with uneven coverage. Duration is therefore
 the mandatory forecasting signal and cost is best-effort per harness.
 
+### Usage ingestion from harness session stores (amended 2026-09-30)
+
+The per-run usage data can be available on the harness host even when the
+dispatch flows through Traycer: Claude Code writes per-message `usage` to
+`~/.claude/projects/<slug>/<sessionId>.jsonl`, OpenCode writes per-message
+`tokens` and a native `cost` to its session storage, and Codex writes
+`token_count` events to `~/.codex/sessions/`. Traycer attaches to live
+sessions and does not expose this data through its protocol, so MapCtx
+ingests the harness session stores on that host. If the store is not
+accessible, coverage remains partial or none.
+
+Policy decisions:
+
+- **Token-usage source hierarchy.** For the same dispatch and usage interval, prefer
+  `harness-transcript` (the session store of the harness that executed the
+  dispatch) over `provider-api`, then `manual` (labeled estimate); `absent`
+  means no measured usage. Sources must not be added together for the same
+  interval. The receipt filer supplies the session identity; the importer
+  attributes records within the receipt time window and checks provider and
+  model. A session shared by multiple dispatches is not counted in full for
+  each. Records that cannot be attributed lower `coverage`; they never
+  become fabricated usage. Repeated message records and cumulative counters
+  are deduplicated or converted to deltas before aggregation.
+- **Ingestion is append-only and repeatable.** A receipt is accepted only
+  once, so later transcript discovery cannot rewrite its `usageEvents`.
+  The importer appends a separate usage event for an existing dispatch
+  attempt, before or after receipt acceptance. Its identity is stable for
+  the harness session, attributed interval, model, and dispatch attempt;
+  replay or retry does not add a second charge. Receipt-embedded v1 usage
+  stays historical. Backfill skips attempts with usage already embedded
+  unless an operator can prove the new source covers a disjoint interval.
+- **Token classes are priced separately.** Provider rates differ for cache
+  read, cache write, input, and output. `UsageEvent` v2 records
+  `cacheReadTokens`, `cacheWriteTokens`, and `cacheUnknownTokens`. A v1
+  `cacheTokens` value maps only to `cacheUnknownTokens`: v1 never recorded
+  its class, so treating it as write would invent precision and overstate
+  shadow cost. Existing v1 `CostEvent`s retain their recorded
+  `shadowMicros`, `priceTableVersion`, and applied rate without repricing.
+  If no historical cost exists and unknown cache tokens are nonzero, full
+  shadow cost stays `unpriced` until the source can be classified. This
+  rule also applies to new harness records with only aggregate cache usage.
+- **Normalized classes do not overlap.** In v2, `inputTokens` means uncached
+  input. Each token belongs to exactly one of uncached input, cache read,
+  cache write, unknown cache, or output. Importers must account for harness
+  fields that include cache in their input total and must leave a class
+  unknown when it cannot be derived. Missing class data is not an observed
+  zero.
+- **Shadow pricing sums known classes.** For fully classified v2 events,
+  `shadowMicros = Σ class_tokens × class_list_rate` from the price table.
+  The v2 `priceTableVersion` identifies that class-rate contract;
+  `appliedRateMicrosPerToken` remains the input-class rate for display.
+  Historical v1 versions retain their original flat-rate meaning.
+- **Billed cash requires billing evidence.** OpenCode `cost` and Claude
+  headless `total_cost_usd` are harness-calculated run prices, not proof of
+  an amount billed under a subscription or credits. Keep them as labeled
+  estimates for comparison with shadow. Write `cashCents` with
+  `costStatus: reported` only for a verifiable charge from the billing
+  source; subscription-included runs have billed cash of zero. The two
+  measures are never merged into one number.
+- **Price table coverage.** The vendored table covers known executed
+  provider/model IDs, including known `zai/glm-*` and Traycer-harness
+  models. Rates are versioned by exact model and token class; a wildcard
+  model name is not a price. A model outside the table yields `unpriced`
+  shadow — labeled, never zero-silent.
+
+### API charges and subscription plans
+
+Task and epic views show billed or debited API spend, list-price shadow,
+and allocated subscription fee as separate amounts. Each run identifies
+the account and billing route that paid for it; model name alone cannot
+distinguish an API key from a Codex or Claude Code subscription.
+
+- **API and OpenRouter.** Token classes and a versioned model price yield
+  shadow cost. When a matched OpenRouter generation has reported
+  `total_cost`, use that value as the precise amount debited from OpenRouter
+  credits; a provider billing record supplies any separate upstream BYOK
+  charge. Do not count a credit top-up again as a task charge. Without a
+  matched billing record, show only estimated shadow. An optional importer
+  may fetch generation cost by ID and current model rates from OpenRouter;
+  it snapshots the applied rates because the catalog can change. It must
+  not infer a task from account-wide credit totals.
+- **Codex and Claude Code plans.** Record the amount and dates on an
+  `Account`/`PlanPeriod`, initially through the existing manual CLI. An
+  optional billing import can fill the same fields when a reliable bill is
+  available; it must not guess the user's paid amount from a public plan
+  price. Included runs have zero per-run billed cash, measured token-based
+  shadow, and a share of the period fee proportional to shadow across all
+  projects bound to that account. The share is provisional until period
+  close; runs without priced usage stay unattributed.
+- **Precision.** API generations can cost less than one cent. Cost contract
+  v2 must store reported spend in integer USD micros (or the equivalent
+  `Money` minor-unit representation) before task aggregation. Legacy
+  `cashCents` converts exactly to micros; rounding each generation to cents
+  would silently erase small charges. Account payments and per-generation
+  credit debits occupy different ledger levels so rollups do not add both.
+
 ## State locality
 
 v1 is single-host and single-user. A second machine or a second developer on the
@@ -122,7 +218,9 @@ multi-session tasks both inflate it.
 
 ```text
 sessionWallClock = last(ts) - first(ts)                 per session/dispatch
-activeTime       = sum of inter-event gaps < threshold  default 10 min
+activeTime       = union of agent-owned gaps < threshold default 10 min
+humanTime        = union of review + human-owned waits
+parkedTime       = union of parked waits                  separate from humanTime
 taskDuration     = union of session intervals           not max - min
 leadTime         = readyAt -> doneAt                    calendar, includes waiting
 ```
@@ -130,6 +228,56 @@ leadTime         = readyAt -> doneAt                    calendar, includes waiti
 Gantt displays wall clock and lead time. P50/P90 forecasting uses `activeTime`.
 The idle threshold is configuration and is recorded in every estimate's
 provenance.
+
+### Interval ownership (T-100, 2026-10-01)
+
+Claude Code JSONL rows provide `timestamp`, `sessionId`, `type`, and `uuid`.
+Only a real user text message starts an agent turn; `user` rows containing
+`tool_result` alone stay inside that turn. Assistant `end_turn` returns
+ownership to the human. Agent gaps at or above the configured idle threshold
+are excluded from active time. End of assistant turn to next real prompt is
+human-owned: up to 15 minutes is inferred `review`, 15 minutes to 2 hours is
+`human`, and over 2 hours or crossing a day in the configured time zone is
+`parked`. These are time classes, not proof of productive human work. The
+optional task `waitReason` (`review|decision|parked|blocked-external`) records
+human context without overriding observed timestamps.
+When timestamp-only activity from another session overlaps a parked wait,
+its classification confidence becomes `corroborated`; otherwise it stays
+`inferred`. This does not assert that the human worked on the current task.
+
+`RunReceipt.timeEvidence` version 1 holds only start/end timestamps, owner,
+kind, session ID, and policy thresholds/time zone. Transcript text and tool
+content never enter receipts or the store. Old receipts remain valid and show
+`substituted` coverage; empty, malformed, or out-of-bounds evidence cannot
+claim measured coverage. Overlapping sessions are unioned once: agent wins
+cross-owner collisions; within human intervals parked wins over human and
+review. Raw session correlation and project-wide backfill belong to T-101.
+Traycer child-agent session messages are excluded here: orchestrator and child
+messages do not reliably identify genuine human prompts, so treating them as
+human wait boundaries would misattribute ownership.
+
+### Planned effort convention (T-099, 2026-09-30)
+
+`estimatedEffort` is a declared **agent active-time** plan for every new value:
+`1d = 8` agent-active hours and `1w = 5d = 40` agent-active hours. It uses the
+same `activeTime` unit as P50/P90 forecasting; it excludes human answer waits,
+review queues, parked sessions, and other lead/wall time. Those remain separate
+`leadTime` and wall-clock measures.
+
+The parser accepts decimal `m`, `h`, `d`, and `w` values (for example `0.5d`,
+`1d`, `1w`). An invalid value is no plan, never a guessed duration. Existing
+values are not reinterpreted: absence of `estimatedEffortSource: agent-active`
+marks an estimate `legacy-human` when shown beside actuals. A newly created or
+edited estimate emits that source marker. This preserves the historical human
+working-day meaning while keeping future forecast comparisons unit-consistent.
+
+When a completed task has neither valid effort nor dates but has a receipt,
+Gantt may display a retrospective planned value with
+`plannedSource: aligned-from-actual`. Its planned-vs-actual ratio is excluded
+from accuracy/calibration because it would be trivially one. A completed task
+without a receipt is `no measurement`, not zero duration, and contributes no
+duration-pool sample. Receipt-only active time remains `substituted`; it must
+never be displayed as measured active time.
 
 ## Validation gates
 
@@ -163,20 +311,12 @@ local database happens to exist.
   git-authored regardless of regime — it is durable intent under Decision item
   3, not live board state, and T-048's field-by-field migration mapping decides
   case by case which structured fields, if any, keep a Markdown-only existence.
-- Drift detection recomputes canonical Markdown from current store state and
-  compares it, byte-for-byte after LF-normalization and trailing-whitespace
-  trimming, against the on-disk file. No mtime and no separately stored hash:
-  mtime does not survive `git checkout`/merge, and a stored hash needs its own
-  invalidation rule that regenerate-and-compare avoids entirely. A mismatch is
-  enumerated per task by diffing regenerated against on-disk blocks.
-- `mapctx validate` runs the drift check only when `plansAuthority: store`. A
-  mismatch is reported as an `error`, the same severity tier as any other
-  contract violation, non-zero exit. It is never auto-merged. The exit path for
-  a good-faith manual edit is `mapctx reconcile <task-id>`, which diffs the
-  drifted block against store state and asks, per field, to either discard the
-  edit (regenerate from store) or accept it (write it into the store as a new
-  event with `source: manual-reconcile` provenance). Silent merge is never an
-  option.
+- Snapshot inspection recomputes canonical Markdown from current store state
+  and compares it with on-disk files. This is explicit via
+  `mapctx validate --snapshots`; operational `mapctx validate` does not read
+  snapshots. A good-faith manual edit can be accepted/discarded with
+  `mapctx reconcile <task-id>`, which records accepted fields with
+  `source: manual-reconcile` provenance. Silent merge is never an option.
 - `plansAuthority` is a property of the project, not of the checkout. A
   worktree or clone that has `plansAuthority: store` but no local
   `~/.mapctx/projects/<id>/mapctx.db` is not pre-cutover — it is a store regime
@@ -208,13 +348,11 @@ real cases (multi-line descriptions, unicode, epics with subtasks, empty optiona
 fields); the property test covers the general case, fixtures catch regressions a
 generator is unlikely to hit.
 
-**Checkpoint timing.** Export runs automatically at end-of-wave and end-of-epic,
-not only on manual invocation. Deterministic generation is already a T-049
-requirement; checkpointing is additional trigger points on that same path, not
-new mechanism. A manual `mapctx export` stays available for on-demand snapshots.
-Manual-only was rejected: the exit hatch is only as good as its most recent
-snapshot, and relying on a human to run it before disaster strikes reproduces the
-stale-derived-field problem this ADR already rejects for `TASKS.md`.
+**Checkpoint timing.** `mapctx export` is explicit. `mapctx task finish <id>`
+publishes a final task or epic checkpoint after the canonical done gate.
+`wave-end` is a reason label only; automatic wave-end export requires a wave
+controller and remains unimplemented. No routine claim/start/update/receipt/move
+operation rewrites mirrors.
 
 **Corruption chain.** Two tiers, closed to the point of surviving total directory
 loss:
@@ -403,3 +541,33 @@ append-only log delivers the same outcome with no vendor and no default cost.
 
 Rejected: duplicates Traycer, Orca, and Paperclip in agents, worktrees, sessions,
 messages, and lifecycle. MapCtx will dispatch through adapters and ingest receipts.
+
+### T-120 implementation amendment (2026-10-05)
+
+For `plansAuthority = "store"`, operational `mapctx validate` reads identity
+configuration and canonical store projections through a read-only handle. It
+does not read local `TASKS.md` or task detail mirrors. Schema/journal maintenance
+is returned explicitly. `mapctx validate --snapshots` separately checks local
+mirror structure and drift. Markdown-authority validation remains unchanged.
+
+Acceptance criteria and approval state are event-backed store data. Explicit
+`mapctx acceptance import` maps observed `[x]` items to `import-observed` and
+unchecked items to pending, records source-byte SHA-256, and is dry-run unless
+`--commit` is passed. `mapctx task acceptance revise|approve|unapprove` edits
+store state; a new revision resets all criteria to pending. Planning `done` is
+never used to infer approval.
+
+Routine task, budget, and receipt mutations no longer regenerate local mirrors.
+`mapctx export` remains explicit; `mapctx task finish <id>` uses the canonical
+completion gate and then publishes the task or epic checkpoint. File publication
+uses per-file temporary writes and renames, so a multi-file checkpoint is not
+globally atomic. Partial publication returns failure and records no checkpoint;
+retry after accepted completion does not add another completion event. `wave-end`
+is an explicit reason label only; there is no automatic wave controller.
+
+A checkpoint records exported file hashes, event cursor, and captured Acceptance
+revisions from one consistent store read. It is not a complete backup of event
+journals, receipts, evidence, corrections, or attestations. Git-authored task
+description prose also remains outside store recovery. See
+`docs/reviews/t120-store-validation-checkpoints-2026-10-05.md` for implementation
+and verification details.

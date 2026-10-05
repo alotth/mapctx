@@ -1,0 +1,26 @@
+{
+  "frozenWorktree": {
+    "expectedEntries": 472,
+    "matched": 472,
+    "mismatchCount": 0,
+    "mismatches": {}
+  },
+  "rootBaseline": {
+    "expectedEntries": 465,
+    "matched": 465,
+    "mismatchCount": 0,
+    "mismatches": {}
+  },
+  "receipt": {
+    "entries": 43,
+    "hashMatches": 43,
+    "mismatches": []
+  },
+  "deltaCounts": {
+    "pathsIncludingGeneratedTasks": 44,
+    "physicalReceiptPaths": 43,
+    "receiptOutcome": "completed",
+    "dispatchId": "7524abd1-8f3e-448b-8dd7-23774fd9ebb7",
+    "attempt": 3
+  }
+}

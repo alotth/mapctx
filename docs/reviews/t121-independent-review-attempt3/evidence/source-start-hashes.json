@@ -1,0 +1,11 @@
+{
+  "packages/core/src/task-detail.ts": "31c8883a1bcb657bdf779e04adcc4366ba55fa2446ab72c4c05eb88c089c6d78",
+  "packages/core/src/index.ts": "429e5493160f5de2e6dacfe556d7444b37cfaac65d65adc10a6f6cb80784a75f",
+  "packages/store/src/export.ts": "21a5148bf7f4622ff6ef2118043c1c8b2cb5c6161b4b70576f1058ff759effcf",
+  "packages/sync-engine/src/push-store.ts": "5a1c47b61135994942ab2ac93f9fe15fffa0edba0b058bee9a25fa29a05fba31",
+  "packages/sync-engine/src/push-store.test.ts": "06bee3d2bce3187ba12f1c0c9c7cf247ad9b45895c68c4ccbd13e95cb26ff90a",
+  "packages/store/src/acceptance-prose.test.ts": "a3e68681aa76eea07da311747bbb05e7fc83b90aae5d794d2ced2c4e5b24b644",
+  "docs/reviews/t121-acceptance-prose-preservation-2026-10-05.md": "cc68e556fa414d8e4ba7ad90a3553a378ad5934a583ba61faca993fe7521b22d",
+  "HEAD": "7fdc161c6d139e176999397494db8d62041c7d80",
+  "statusSha256": "91a639abf3d9af5903ff408cc523295b2bb8d22acf40c1c93dec792341eb34cc"
+}

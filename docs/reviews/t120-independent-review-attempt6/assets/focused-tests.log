@@ -1,0 +1,488 @@
+Error: Repair aborted: 1 journal gap(s) found. mapctx.db was left untouched.
+Error: Approval hash mismatch: reviewed token was 0000000000000000000000000000000000000000000000000000000000000000, current draft hashes to 7d2bc515137e4ac2e204530d1d68776fd5a253f8bdb72072922f36940a481be1. Re-review the draft; the store changed since it was produced.
+Error: Node 23224427-9da8-458b-ab90-18ebadbb8613 is already attested with different reviewed content (existing pin 7d2bc515137e4ac2e204530d1d68776fd5a253f8bdb72072922f36940a481be1, redraft pins dc78380b25b268f4a1bf5af23a8e33385f8d5c16dc420782223f8f94299b1cde); refusing to alter an existing approval. Nothing was written.
+✔ store attest-orphan CLI: draft, approve, then repair replays the attested row (619.925833ms)
+✔ store attest-orphan CLI: blank/whitespace reason is refused before any draft, witness, or file (103.542542ms)
+✔ store attest-orphan CLI end-to-end: approval, witness loss, named gap, re-confirmation, repair (590.746333ms)
+{
+  "ok": true,
+  "from": "backlog",
+  "to": "ready"
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "05694538-8e3a-4d66-8611-28b6f3c45c8b",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "05694538-8e3a-4d66-8611-28b6f3c45c8b",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  },
+  "snapshots": {
+    "status": "failed",
+    "structural": {
+      "tasksFilePath": "/private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-cli-write-P5eI34/TASKS.md",
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "drift": {
+      "status": "store-authority",
+      "projectId": "05694538-8e3a-4d66-8611-28b6f3c45c8b",
+      "drift": {
+        "hasDrift": true,
+        "issues": [
+          {
+            "taskId": "T-201",
+            "file": "/private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-cli-write-P5eI34/TASKS.md",
+            "reason": "task field drift"
+          }
+        ]
+      }
+    }
+  }
+}
+{
+  "ok": false,
+  "reason": "illegal-transition",
+  "from": "ready",
+  "to": "done",
+  "message": "ready -> done is not a legal planning transition."
+}
+{
+  "ok": true,
+  "from": "backlog",
+  "to": "ready"
+}
+{
+  "ok": true,
+  "from": "ready",
+  "to": "in-progress"
+}
+{
+  "ok": true,
+  "from": "in-progress",
+  "to": "review"
+}
+{
+  "ok": false,
+  "reason": "acceptance-incomplete",
+  "message": "task T-201 cannot move to done: 1 acceptance criterion/criteria are pending approval in the store. Approve with `mapctx task acceptance approve T-201 --index <n>`.",
+  "from": "review",
+  "to": "done"
+}
+{
+  "ok": true,
+  "from": "review",
+  "to": "done"
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "9b888aad-37b0-4497-92db-3b06bf977b0d",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+{
+  "taskId": "T-201",
+  "ok": true,
+  "applied": {
+    "fields": [
+      "priority"
+    ],
+    "detailFields": [
+      "estimatedEffort",
+      "estimatedEffortSource",
+      "prerequisites"
+    ],
+    "edges": true
+  }
+}
+{
+  "taskId": "T-201",
+  "ok": true,
+  "applied": {
+    "fields": [],
+    "detailFields": [
+      "waitReason"
+    ],
+    "edges": false
+  }
+}
+{
+  "ok": false,
+  "reason": "invalid-wait-reason",
+  "to": "T-201",
+  "message": "waitReason must be review|decision|parked|blocked-external or empty"
+}
+{
+  "taskId": "T-201",
+  "ok": true,
+  "applied": {
+    "fields": [],
+    "detailFields": [
+      "waitReason"
+    ],
+    "edges": false
+  }
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "2fdb4000-0ed0-4b63-a952-26276b5a3147",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+{
+  "ok": false,
+  "reason": "unknown-field",
+  "to": "T-201",
+  "message": "task field \"planningState\" is not patchable; allowed: title, type, parentTaskId, priority, workload, tags, domains, startDate, dueDate, predictedStart, externalId, specMode, assignees, iteration, milestone"
+}
+{
+  "taskId": "T-201",
+  "ok": true,
+  "applied": {
+    "fields": [],
+    "detailFields": [
+      "estimatedEffort",
+      "estimatedEffortSource"
+    ],
+    "edges": false
+  }
+}
+{
+  "taskId": "T-201",
+  "ok": true,
+  "applied": {
+    "fields": [],
+    "detailFields": [
+      "estimatedEffort",
+      "estimatedEffortSource"
+    ],
+    "edges": false
+  }
+}
+{
+  "ok": false,
+  "reason": "missing-workload-or-estimate",
+  "message": "Executable task planning invalid: missing estimatedEffort. Fix: mapctx task update T-201 --set detail.estimatedEffort=1d"
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "340bd4fb-680a-40ed-bc47-0f76a1df557f",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+{
+  "ok": true,
+  "taskId": "T-202",
+  "detailPath": "./tasks/T-202.md",
+  "warnings": [
+    "Missing workload. Set it before claim: mapctx task update T-202 --set workload=Normal"
+  ]
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "86752bf5-ee9c-4015-ad50-97617f3667ce",
+    "canonical": {
+      "totalTasks": 3,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+{
+  "ok": false,
+  "reason": "duplicate-id",
+  "taskId": "T-202"
+}
+{
+  "ok": true,
+  "claim": {
+    "claimId": "6bf17bf4-5432-4be2-b623-4b572d8b15d6",
+    "taskId": "T-201",
+    "leaseToken": "[redacted]",
+    "state": "active",
+    "claimedAt": "2026-10-05T08:11:05.707Z",
+    "expiresAt": "2026-10-05T08:41:05.706Z",
+    "holder": {
+      "pid": 72788,
+      "host": "alotth-mac-air.local"
+    },
+    "eventNode": "c1fea72a-ce88-42f2-90cb-9e02389d586f",
+    "eventSequence": 4
+  },
+  "planningTransitionsTo": "in-progress"
+}
+{
+  "ok": true,
+  "claim": {
+    "claimId": "a3a6f750-e7bf-4ca1-bd8b-19c22856922c",
+    "taskId": "T-201",
+    "leaseToken": "[redacted]",
+    "state": "active",
+    "claimedAt": "2026-10-05T08:11:06.064Z",
+    "expiresAt": "2026-10-05T08:41:06.064Z",
+    "holder": {
+      "pid": 72788,
+      "host": "alotth-mac-air.local"
+    },
+    "eventNode": "35c9616c-ff7c-47a1-94a0-0e68167c72e1",
+    "eventSequence": 4
+  },
+  "planningTransitionsTo": "in-progress"
+}
+{
+  "ok": true,
+  "receipt": {
+    "schemaVersion": 1,
+    "dispatchId": "c8954b1f-d942-4728-9ff9-bf091ca19474",
+    "attempt": 1,
+    "outcome": "completed",
+    "startedAt": "2026-09-08T12:00:00.000Z",
+    "endedAt": "2026-09-08T12:10:00.000Z",
+    "changedFiles": [
+      "tasks/T-201.md"
+    ],
+    "usageEvents": [],
+    "evidence": [],
+    "timeEvidence": {
+      "schemaVersion": 1,
+      "source": "claude-jsonl",
+      "policy": {
+        "idleThresholdMs": 600000,
+        "reviewThresholdMs": 900000,
+        "parkedThresholdMs": 7200000,
+        "timeZone": "UTC"
+      },
+      "intervals": [
+        {
+          "start": "2026-09-08T12:00:00.000Z",
+          "end": "2026-09-08T12:05:00.000Z",
+          "owner": "agent",
+          "kind": "active",
+          "sessionId": "s1"
+        },
+        {
+          "start": "2026-09-08T12:05:00.000Z",
+          "end": "2026-09-08T12:10:00.000Z",
+          "owner": "human",
+          "kind": "review",
+          "confidence": "inferred",
+          "sessionId": "s1"
+        }
+      ],
+      "sessionSpans": [
+        {
+          "start": "2026-09-08T12:00:00.000Z",
+          "end": "2026-09-08T12:10:00.000Z",
+          "sessionId": "s1"
+        }
+      ]
+    },
+    "failure": null
+  },
+  "dispatch": {
+    "dispatchId": "c8954b1f-d942-4728-9ff9-bf091ca19474",
+    "taskId": "T-201",
+    "executorKind": "test",
+    "attempt": 1,
+    "contextHash": "3fed7b318a06f4427357893bfc6d1c89e799a37a80dcfa5cea35ab59d7c63637",
+    "status": "completed",
+    "workloadAtDispatch": "Normal",
+    "executorModel": null
+  }
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "1dacc3ec-a743-4e93-994a-ec1fcf782782",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "1dacc3ec-a743-4e93-994a-ec1fcf782782",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  },
+  "snapshots": {
+    "status": "failed",
+    "structural": {
+      "tasksFilePath": "/private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-cli-write-JOPYTB/TASKS.md",
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "drift": {
+      "status": "store-authority",
+      "projectId": "1dacc3ec-a743-4e93-994a-ec1fcf782782",
+      "drift": {
+        "hasDrift": true,
+        "issues": [
+          {
+            "taskId": "T-201",
+            "file": "/private/var/folders/43/4t8t4zqs71j1q9mym6413mkm0000gn/T/mapctx-cli-write-JOPYTB/TASKS.md",
+            "reason": "task field drift"
+          }
+        ]
+      }
+    }
+  }
+}
+{
+  "ok": false,
+  "reason": "active-claim-held",
+  "activeClaim": {
+    "claimId": "9e260fa4-2103-44e0-ac45-66ee6eb935ed",
+    "taskId": "T-201",
+    "leaseToken": "[redacted]",
+    "state": "active",
+    "claimedAt": "2026-10-05T08:11:06.507Z",
+    "expiresAt": "2026-10-05T08:41:06.507Z",
+    "holder": {
+      "provider": "traycer"
+    },
+    "eventNode": "8b85eea8-7808-48cd-8f8b-006268e6ea37",
+    "eventSequence": 4
+  }
+}
+{
+  "ok": true,
+  "from": "backlog",
+  "to": "ready"
+}
+{
+  "ok": true,
+  "from": "ready",
+  "to": "in-progress"
+}
+{
+  "ok": true,
+  "from": "in-progress",
+  "to": "review"
+}
+Error: Acceptance revision drifted: store holds 2, caller expected 1.
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "0e23b88b-7a98-4138-8a62-3a81020c154c",
+    "canonical": {
+      "totalTasks": 2,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}
+✔ task move: canonical store changes without regenerating local mirrors (389.410458ms)
+✔ task move and reopen: completion gate then done-to-review reopen (694.510166ms)
+✔ task update: whitelisted fields land in canonical store without snapshot writes (367.836291ms)
+✔ task update CLI clears estimatedEffort=null and claim refuses the missing plan (327.094833ms)
+✔ task create: auto id, create its Git-authored detail only, validate canonical store (320.208625ms)
+✔ dispatch create: fresh dispatch then attempt+1 on the same dispatch id (386.02ms)
+✔ R10: dispatch receipt updates canonical store without regenerating the board (385.160417ms)
+✔ task start CLI returns lease and dispatch without exporting, and rejects a second start (448.367459ms)
+✔ public validate CLI gives same canonical result when second worktree has no snapshots (419.039709ms)
+✔ finish publishes checkpoint last; partial publication keeps done and retry skips duplicate move (928.823958ms)
+✔ acceptance approve forwards --evidence pairs into show and the durable event; malformed/stale pairs mutate nothing (880.941292ms)
+✔ attempt6: approve without --evidence keeps null semantics; prototype-unsafe keys survive show and event (751.479541ms)
+✔ attempt6: malformed/unsupported evidence refuses BEFORE the writable open -- schema-9 pending-journal store stays byte-identical (610.652625ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7009.538875

@@ -1,5 +1,5 @@
 import type { DurationCoverage, DurationInput, MeasuredDurations, Session, SessionInterval, Timestamp } from "./types"
-import type { RunEvent } from "@mapctx/protocol"
+import { timeEvidenceSchema, type RunEvent, type TimeEvidence } from "@mapctx/protocol"
 
 export const DEFAULT_IDLE_THRESHOLD_MS = 10 * 60 * 1000
 
@@ -80,6 +80,16 @@ function sessionInterval(session: Session): SessionInterval | undefined {
  * rather than passed off as a measurement.
  */
 export function measureDurations(input: DurationInput): MeasuredDurations {
+  if (input.timeEvidence && input.sessions.length > 0) {
+    const bounds = input.sessions.map(sessionInterval).filter((item): item is SessionInterval => Boolean(item))
+    if (bounds.length > 0) {
+      return durationMeasuresFromReceipt(
+        Math.min(...bounds.map(item => timestampMs(item.startedAt))),
+        Math.max(...bounds.map(item => timestampMs(item.endedAt))),
+        { timeEvidence: input.timeEvidence, readyAt: input.readyAt, idleThresholdMs: input.idleThresholdMs }
+      )
+    }
+  }
   const idleThresholdMs = input.idleThresholdMs ?? DEFAULT_IDLE_THRESHOLD_MS
   if (!Number.isInteger(idleThresholdMs) || idleThresholdMs <= 0) {
     throw new Error("idleThresholdMs must be a positive integer")
@@ -115,6 +125,8 @@ export function measureDurations(input: DurationInput): MeasuredDurations {
   return {
     sessionWallClockMs: Math.round(sessionWallClock),
     activeTimeMs: Math.round(activeTime),
+    humanTimeMs: 0,
+    parkedTimeMs: 0,
     taskDurationMs: Math.round(unionDurationMs(intervals)),
     leadTimeMs: Math.round(leadTime),
     idleThresholdMs,
@@ -134,10 +146,55 @@ export function measureDurations(input: DurationInput): MeasuredDurations {
 export function durationMeasuresFromReceipt(
   startedAt: Timestamp,
   endedAt: Timestamp,
-  options: { readyAt?: Timestamp; idleThresholdMs?: number; events?: readonly Pick<RunEvent, "timestamp">[] } = {}
+  options: { readyAt?: Timestamp; idleThresholdMs?: number; events?: readonly Pick<RunEvent, "timestamp">[]; timeEvidence?: TimeEvidence } = {}
 ): MeasuredDurations {
   const startedMs = timestampMs(startedAt)
   const endedMs = timestampMs(endedAt)
+  const evidence = timeEvidenceSchema.safeParse(options.timeEvidence)
+  if (evidence.success && evidence.data.intervals.length > 0 && evidence.data.intervals.every(interval =>
+    timestampMs(interval.start) >= startedMs && timestampMs(interval.end) <= endedMs
+  ) && (evidence.data.sessionSpans ?? []).every(span =>
+    timestampMs(span.start) >= startedMs && timestampMs(span.end) <= endedMs
+  )) {
+    // Partition overlapping sessions on one timeline. Agent ownership wins a
+    // collision; within human intervals parked wins, then human, then review.
+    const spans = evidence.data.intervals.map(interval => ({
+      start: timestampMs(interval.start), end: timestampMs(interval.end), owner: interval.owner, kind: interval.kind
+    }))
+    const points = [...new Set(spans.flatMap(span => [span.start, span.end]))].sort((a, b) => a - b)
+    let active = 0, human = 0, parked = 0
+    for (let i = 1; i < points.length; i += 1) {
+      const start = points[i - 1], end = points[i]
+      const covering = spans.filter(span => span.start <= start && span.end >= end)
+      if (covering.length === 0) continue
+      if (covering.some(span => span.owner === "agent")) active += end - start
+      else if (covering.some(span => span.kind === "parked")) parked += end - start
+      else human += end - start
+    }
+    // Older interval evidence may omit sessionSpans. Reconstruct the best
+    // available per-session envelope; new extractor evidence carries exact
+    // first/last event boundaries, including idle gaps at either edge.
+    const sessionSpans: SessionInterval[] = evidence.data.sessionSpans?.map(span => ({ startedAt: span.start, endedAt: span.end })) ?? (() => {
+      const grouped = new Map<string, { start: number; end: number }>()
+      evidence.data.intervals.forEach((interval, index) => {
+        const key = interval.sessionId ?? `interval-${index}`
+        const prior = grouped.get(key)
+        const start = timestampMs(interval.start), end = timestampMs(interval.end)
+        grouped.set(key, { start: Math.min(prior?.start ?? start, start), end: Math.max(prior?.end ?? end, end) })
+      })
+      return [...grouped.values()].map(span => ({ startedAt: span.start, endedAt: span.end }))
+    })()
+    return {
+      sessionWallClockMs: sessionSpans.reduce((sum, span) => sum + intervalDurationMs(span), 0),
+      taskDurationMs: unionDurationMs(sessionSpans),
+      activeTimeMs: active,
+      humanTimeMs: human,
+      parkedTimeMs: parked,
+      leadTimeMs: options.readyAt === undefined ? 0 : Math.max(0, endedMs - timestampMs(options.readyAt)),
+      idleThresholdMs: evidence.data.policy.idleThresholdMs,
+      activeTimeCoverage: spans.some(span => span.owner === "agent") ? "measured" : "none"
+    }
+  }
   // Receipt boundaries define run scope. Boundary and late/out-of-range
   // events cannot prove intra-run activity and must not alter wall clock.
   const interiorEvents = (options.events ?? []).filter(event => {

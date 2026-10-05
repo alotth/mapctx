@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
   buildExport,
-  checkDrift,
+  getAcceptance,
   isStoreMaterialized,
   listDependencies,
   listTasks,
@@ -13,7 +13,7 @@ import {
   type GithubBinding,
   type TaskRecord
 } from '@mapctx/store';
-import { parseTaskDetailFile } from '@mapctx/core';
+import { parseTaskDetailFile, renderAcceptanceSection, renderAcceptanceProse, renderAcceptanceProseUnowned } from '@mapctx/core';
 import {
   addIssueToProject,
   clearProjectItemFieldValue,
@@ -32,7 +32,7 @@ import { parseExternalIssueNumber, todayISO, unique } from './utils';
 /**
  * Store-backed GitHub push (E-013/T-076): GitHub is a projection of the store
  * (ADR 0003), never a source. The command reads task projections from SQLite
- * (never TASKS.md), is fail-closed on board drift, and carries no state back
+ * (never TASKS.md for canonical planning fields), and carries no state back
  * from GitHub into the store -- the only store write is the externalId of
  * issues this push itself created.
  */
@@ -243,17 +243,6 @@ export function pushStoreCommand(options: PushOptions = {}): PushPlanReport {
       throw new Error(`Store maintenance needed, refusing to push stale state: ${maintenance}`);
     }
 
-    // Fail-closed drift gate (ADR 0003): drift means the on-disk board
-    // disagrees with the store. Publishing projections while the repo holds a
-    // stale snapshot is a silent fork; resolve drift first.
-    const drift = checkDrift(handle.db, toml.dir);
-    if (drift.hasDrift) {
-      throw new Error(
-        `Refusing to push: board drift detected (${drift.issues.length} issue(s)). Regenerate the board first (run \`mapctx validate\`).\n` +
-        drift.issues.slice(0, 10).map(issue => `- [${issue.taskId}] ${issue.reason} (${issue.file})`).join('\n')
-      );
-    }
-
     const tasks = listTasks(handle.db);
     const statusMap = normalizeStatusMap(binding.statusMap);
 
@@ -270,10 +259,54 @@ export function pushStoreCommand(options: PushOptions = {}): PushPlanReport {
       if (task.detailPath) {
         const detailPath = path.resolve(toml.dir, task.detailPath);
         if (fs.existsSync(detailPath)) {
-          // Post-drift-check this file matches the store export; the
-          // description prose is the git-authored section (never stored).
+          // Description prose is Git-authored; canonical task fields below
+          // come from the store and never require a current snapshot.
           description = parseTaskDetailFile(fs.readFileSync(detailPath, 'utf8')).description;
         }
+      }
+      const acceptance = getAcceptance(handle.db, task.taskId);
+      if (description !== null) {
+        // Acceptance in the issue body is a projection of the STORE (review
+        // F4/T-121). Every canonical state goes through the shared renderer:
+        // - criteria: canonical render IN PLACE (authored prose preserved,
+        //   canonical order/indentation win, conservative refusals);
+        // - empty: authored prose preserved, canonical criteria absent, no
+        //   invented marker (the renderer emits none for an empty list);
+        // - absent: the section is pure Git content — preserved, with stale
+        //   checkboxes refused rather than published or deleted.
+        // Review N1/T-121: ambiguous prose (unclosed code fence anywhere,
+        // multiple real Acceptance sections, stranded evidence, unownable
+        // reorder) refuses BEFORE any remote write; the Git prose is not
+        // rewritten and GitHub receives nothing.
+        try {
+          if (acceptance && acceptance.condition === 'criteria') {
+            description = renderAcceptanceProse(
+              description,
+              acceptance.criteria.map(criterion => ({ text: criterion.text, completed: criterion.state === 'approved' })),
+              acceptance.revision
+            );
+          } else if (acceptance && acceptance.condition === 'empty') {
+            description = renderAcceptanceProse(description, [], acceptance.revision);
+          } else {
+            description = renderAcceptanceProseUnowned(description);
+          }
+        } catch (error) {
+          throw new Error(
+            `acceptance-render-refused: task ${task.taskId}: ${(error as Error).message.replace(/^acceptance-render-refused: /, '')}`
+          );
+        }
+      } else if (acceptance && acceptance.condition === 'criteria') {
+        // Review N4: a checkout without the detail mirror still publishes
+        // the canonical criteria. Absent Git prose is reported as absent --
+        // it is never reconstructed or fabricated.
+        description = [
+          '(Git-authored description prose is not available in this checkout; the criteria below are canonical store state.)',
+          '',
+          renderAcceptanceSection(
+            acceptance.criteria.map(criterion => ({ text: criterion.text, completed: criterion.state === 'approved' })),
+            acceptance.revision
+          )
+        ].join('\n');
       }
       descriptionByTask.set(task.taskId, description);
     }
@@ -464,9 +497,6 @@ function applyPlans(args: ApplyPlansArgs): void {
     }
   } finally {
     if (writeHandle) {
-      const exported = buildExport(writeHandle.db, { tasksRoot });
-      fs.writeFileSync(exported.tasksMd.path, exported.tasksMd.content, 'utf8');
-      for (const file of exported.taskDetailFiles) fs.writeFileSync(file.path, file.content, 'utf8');
       writeHandle.close();
     }
   }

@@ -3,6 +3,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { execFileSync } from 'child_process';
 import test from 'node:test';
 import { parseTaskDetailFile } from '@mapctx/core';
 import { resolveProjectStoreDir, StoreHandle } from '@mapctx/store';
@@ -142,10 +143,12 @@ test('budget CLI end-to-end: account, plan period, budget set/status through the
     assert.equal(period.period.periodStart, '2026-09-01T00:00:00.000Z');
     assert.equal(period.period.periodEnd, '2026-09-30T23:59:59.000Z');
 
-    const setStatus = captureJson(() => budgetSetCommand('E-001', { json: true, amount: '500.00' } as never)) as { ok: boolean; budget: { unit: string; money: { amountMinor: number } }; regenerated: { detailFiles: number } };
+    const setStatus = captureJson(() => budgetSetCommand('E-001', { json: true, amount: '500.00' } as never)) as { ok: boolean; budget: { unit: string; money: { amountMinor: number } } };
     assert.equal(setStatus.ok, true);
     assert.equal(setStatus.budget.money.amountMinor, 50_000);
-    assert.ok(setStatus.regenerated.detailFiles >= 1, 'budget set regenerates canonical files');
+    assert.doesNotMatch(fs.readFileSync(path.join(repoDir, 'tasks', 'E-001.md'), 'utf8'), /budgetPlanned:/, 'budget set leaves snapshots untouched');
+
+    execFileSync('node', [require.resolve('./mapctx-cli.js'), 'export', '--json'], { encoding: 'utf8' });
 
     const detail = parseTaskDetailFile(fs.readFileSync(path.join(repoDir, 'tasks', 'E-001.md'), 'utf8'));
     assert.equal(detail.description, 'Seed prose.', 'budget section must not leak into the description');

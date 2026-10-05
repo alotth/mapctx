@@ -2,11 +2,12 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import * as fs from "fs"
 import * as path from "path"
+import { execFileSync } from "child_process"
 import { importCommit, importDryRun, recoverStoreFromCheckpoint } from "./cutover"
 import { buildExport } from "./export"
 import { planImport } from "./import"
 import { readMapctxToml } from "./config"
-import { listTasks } from "./projections"
+import { getTaskDetail, listTasks } from "./projections"
 import { StoreHandle } from "./store-handle"
 import { cleanupDir, setupGoldenRepo } from "./__test-helpers__"
 import { GOLDEN_FILES } from "./__test-fixtures__"
@@ -143,6 +144,41 @@ test("importCommit: cutover writes mapctx.toml with plansAuthority=store, delete
     assert.equal(t102, GOLDEN_FILES["tasks/T-102.md"]);
 
     handle.close();
+  } finally {
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
+test("agent-active effort and waitReason survive import, projection, export, and re-import", () => {
+  const { repoDir, restoreEnv } = setupGoldenRepo();
+  try {
+    const detailPath = path.join(repoDir, "tasks", "T-101.md");
+    const original = fs.readFileSync(detailPath, "utf8");
+    fs.writeFileSync(
+      detailPath,
+      original.replace("  - estimatedEffort: 3d\n", "  - estimatedEffort: 3d\n  - estimatedEffortSource: agent-active\n  - waitReason: decision\n"),
+      "utf8"
+    );
+    execFileSync("git", ["add", "--", "tasks/T-101.md"], { cwd: repoDir, stdio: "ignore" });
+    execFileSync("git", ["commit", "-q", "-m", "mark active effort"], { cwd: repoDir, stdio: "ignore" });
+
+    const committed = importCommit({ cwd: repoDir, actor: "test-actor" });
+    const handle = StoreHandle.open(committed.storeDir);
+    try {
+      assert.equal(getTaskDetail(handle.db, "T-101")?.estimatedEffortSource, "agent-active");
+      assert.equal(getTaskDetail(handle.db, "T-101")?.waitReason, "decision");
+      const exported = buildExport(handle.db, { tasksRoot: repoDir });
+      const t101 = exported.taskDetailFiles.find(file => file.path.endsWith("tasks/T-101.md"));
+      assert.ok(t101?.content.includes("  - estimatedEffortSource: agent-active\n"));
+      assert.ok(t101?.content.includes("  - waitReason: decision\n"));
+    } finally {
+      handle.close();
+    }
+
+    const reimported = planImport(path.join(repoDir, "TASKS.md"));
+    assert.equal(reimported.tasks.find(item => item.task.taskId === "T-101")?.detail.estimatedEffortSource, "agent-active");
+    assert.equal(reimported.tasks.find(item => item.task.taskId === "T-101")?.detail.waitReason, "decision");
   } finally {
     restoreEnv();
     cleanupDir(repoDir);

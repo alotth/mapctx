@@ -1,0 +1,142 @@
+{
+  "tasks": 15,
+  "allOutsideAcceptanceEqual": true,
+  "allCurrentAcceptanceLinesPreserved": true,
+  "details": [
+    {
+      "id": "T-063",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "bf6184233aaca1f16ef0fa92b086866f6eeef0bd71ae60ca7036703d97dfc16a",
+      "outputOutsideSha256": "bf6184233aaca1f16ef0fa92b086866f6eeef0bd71ae60ca7036703d97dfc16a"
+    },
+    {
+      "id": "T-175",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "1da4c8249a7032fe8e84b70b7799efb0ee953db2069849ef44ac03fde6a96e4a",
+      "outputOutsideSha256": "1da4c8249a7032fe8e84b70b7799efb0ee953db2069849ef44ac03fde6a96e4a"
+    },
+    {
+      "id": "T-180",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "a2f744b7187bbd22816691aca4d43aea5b81cc64744a58506e94c407c95f3264",
+      "outputOutsideSha256": "a2f744b7187bbd22816691aca4d43aea5b81cc64744a58506e94c407c95f3264"
+    },
+    {
+      "id": "T-186",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "9ba9921e71194e251b0483942fd9feaa7c6531cd700493b4e96cf11917e2e253",
+      "outputOutsideSha256": "9ba9921e71194e251b0483942fd9feaa7c6531cd700493b4e96cf11917e2e253"
+    },
+    {
+      "id": "T-187",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "a6e4ca4e93334e41a30c392e25cbb712f91dba54917a7d72ceddadc76b6a5e03",
+      "outputOutsideSha256": "a6e4ca4e93334e41a30c392e25cbb712f91dba54917a7d72ceddadc76b6a5e03"
+    },
+    {
+      "id": "T-194",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "13738b4933b9497caf0686bf633535d7a3b921d876a3d99b5704181c41f846ad",
+      "outputOutsideSha256": "13738b4933b9497caf0686bf633535d7a3b921d876a3d99b5704181c41f846ad"
+    },
+    {
+      "id": "T-212",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "d8ef6b9da8c0d3f1b6f349cf0050da28041d872264bd87944525dd9730fd65fa",
+      "outputOutsideSha256": "d8ef6b9da8c0d3f1b6f349cf0050da28041d872264bd87944525dd9730fd65fa"
+    },
+    {
+      "id": "T-213",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "eae40f1f9155b5689e362a70e855894ba127a8bf2809ddb5e48723984d8c65e1",
+      "outputOutsideSha256": "eae40f1f9155b5689e362a70e855894ba127a8bf2809ddb5e48723984d8c65e1"
+    },
+    {
+      "id": "T-248",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "outputOutsideSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "T-254",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "bd4f3b937fde5f8ec0b2210926bf9430e2063bae399d11f2bcd3c419f2983db8",
+      "outputOutsideSha256": "bd4f3b937fde5f8ec0b2210926bf9430e2063bae399d11f2bcd3c419f2983db8"
+    },
+    {
+      "id": "T-257",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "30876de7bc39c12a5a73ca9ec1f3afe8b53858bb21401f000152515ac24aff3f",
+      "outputOutsideSha256": "30876de7bc39c12a5a73ca9ec1f3afe8b53858bb21401f000152515ac24aff3f"
+    },
+    {
+      "id": "T-261",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "10c49b3a0a728399c30a5e1e1970fba300600fc7dbd28d035d6e3343be9fc41c",
+      "outputOutsideSha256": "10c49b3a0a728399c30a5e1e1970fba300600fc7dbd28d035d6e3343be9fc41c"
+    },
+    {
+      "id": "T-268",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "outputOutsideSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "T-271",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "outputOutsideSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "T-274",
+      "outsideAcceptanceByteEqual": true,
+      "currentAuthoredAcceptanceLineCount": 0,
+      "currentAuthoredAcceptanceLinesAllPreserved": true,
+      "missingCurrentAcceptanceLines": 0,
+      "currentOutsideSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "outputOutsideSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

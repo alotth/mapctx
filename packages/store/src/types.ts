@@ -3,6 +3,8 @@ export type WorkDomain = {
   description: string
 }
 
+import type { PredictedStart } from "@mapctx/protocol"
+
 export type ProjectMetadata = {
   projectId: string
   boardTitle: string
@@ -26,6 +28,11 @@ export type TaskRecord = {
   domains: string[]
   startDate?: string | null
   dueDate?: string | null
+  /**
+   * T-102 agent-authored start prediction (schema only, no predictor).
+   * Null = none. Never exported to TASKS.md, never positions, never calibrates.
+   */
+  predictedStart?: PredictedStart | null
   completedOn?: string | null
   externalId?: string | null
   externalLinks: string[]
@@ -42,6 +49,9 @@ export type TaskDetailRecord = {
   role: string
   impact: string
   estimatedEffort: string
+  /** Absent rows predate T-099 and mean `legacy-human`. */
+  estimatedEffortSource?: "agent-active" | "legacy-human"
+  waitReason?: "review" | "decision" | "parked" | "blocked-external"
   prerequisites: string[]
   blocking: string[]
   filesAffected: string[]
@@ -148,4 +158,37 @@ export type TaskSearchFilter = {
   query: string
   status?: string
   limit?: number
+}
+
+/**
+ * T-120: acceptance criteria revisioned in the store. `condition` records the
+ * honest state of the latest revision: 'criteria' when criterion rows exist,
+ * 'empty' when the section was revised to zero criteria (prose-only/blank).
+ * No revision header at all means acceptance revisioning never happened
+ * ('absent') -- never confused with 'empty', and never filled from checkout.
+ * How the revision came to be lives in the audit events (authored revise,
+ * explicit approve/unapprove, or the cutover's import-observed mapping).
+ */
+export type AcceptanceCondition = "criteria" | "empty"
+
+export type AcceptanceCriterionState = "pending" | "approved"
+
+export type AcceptanceCriterionRecord = {
+  criterionId: string
+  revision: number
+  position: number
+  text: string
+  state: AcceptanceCriterionState
+  /** 'authored' | 'import-observed' | 'import-observed-unchecked' */
+  source: string
+  evidence?: Record<string, string> | null
+  approvedAt?: string | null
+  approvedBy?: string | null
+}
+
+export type AcceptanceRevisionRecord = {
+  taskId: string
+  revision: number
+  condition: AcceptanceCondition
+  criteria: AcceptanceCriterionRecord[]
 }

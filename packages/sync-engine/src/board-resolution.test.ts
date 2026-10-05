@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import test from 'node:test';
-import { StoreHandle, resolveProjectStoreDir, writeMapctxToml } from '@mapctx/store';
+import { StoreHandle, resolveProjectStoreDir, reviseAcceptance, writeMapctxToml } from '@mapctx/store';
 import { planCommand, getValidationReport } from './board-tools';
 import { mapctxPlanCommand, taskShowCommand, taskContextCommand, mapctxValidateCliCommand } from './mapctx-cli';
 
@@ -327,6 +327,7 @@ test('store-only mapctx reads work from nested cwd without requiring TASKS.md an
           outgoingEdges: []
         }
       });
+      assert.equal(reviseAcceptance(handle, { taskId: 'T-001', condition: 'criteria', texts: ['Canonical nested criterion'], actor: 'test', expectRevision: 0 }).ok, true);
     } finally {
       handle.close();
     }
@@ -349,7 +350,7 @@ test('store-only mapctx reads work from nested cwd without requiring TASKS.md an
     assert.equal(shown.task.taskId, 'T-001');
     assert.equal(shown.tasksFilePath, checkpointPath);
     assert.equal(context.tasksFilePath, checkpointPath);
-    assert.ok(context.acceptanceCriteria.some(value => value.includes('Nested store context')));
+    assert.deepEqual(context.acceptanceCriteria, ['[ ] Canonical nested criterion']);
     assert.ok(context.decisions.some(value => value.includes('project root')));
   } finally {
     if (previousHome === undefined) delete process.env.MAPCTX_HOME;

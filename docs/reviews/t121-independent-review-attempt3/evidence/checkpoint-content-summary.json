@@ -1,0 +1,137 @@
+[
+  {
+    "id": "T-063",
+    "condition": "criteria",
+    "criteria": 4,
+    "authoredLines": 19,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "9c2740920ab0f7ddfc511852a9c3a7b5d1ed18cc64dfb0179b5bac46b2fc3940"
+  },
+  {
+    "id": "T-175",
+    "condition": "criteria",
+    "criteria": 4,
+    "authoredLines": 49,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "415414bfa2e1ac92d9ae27a3e129004b3412268c5a620d8500e240131a69592b"
+  },
+  {
+    "id": "T-180",
+    "condition": "criteria",
+    "criteria": 3,
+    "authoredLines": 7,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "a572347d458794166de28698d6c11dcddd2ad628679631f008c777282aee9b49"
+  },
+  {
+    "id": "T-186",
+    "condition": "criteria",
+    "criteria": 9,
+    "authoredLines": 44,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "e8c12ff3b1d0ae1a0f1afcdccf656dffc37c163f4c45c54f7518a679e2f09478"
+  },
+  {
+    "id": "T-187",
+    "condition": "criteria",
+    "criteria": 3,
+    "authoredLines": 5,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "73136d9dd3bcabc9bef6754ac9d5b0cca6f6528b0c54a2510df6b7ea09900ee6"
+  },
+  {
+    "id": "T-194",
+    "condition": "criteria",
+    "criteria": 5,
+    "authoredLines": 20,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "9b45cd11c1c10b8c5392bb24260370ecf766987a6e07fbd2b2fd583ac7df4e35"
+  },
+  {
+    "id": "T-212",
+    "condition": "criteria",
+    "criteria": 9,
+    "authoredLines": 19,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "ce49ca157c6b71110256c63e8152bbc9f01db0490026522d210443ec6fe8a3eb"
+  },
+  {
+    "id": "T-213",
+    "condition": "criteria",
+    "criteria": 5,
+    "authoredLines": 19,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "20f4624d52fda5aeec7665eb5bf243c533b92d1c9a8d251051768739e829a592"
+  },
+  {
+    "id": "T-248",
+    "condition": "criteria",
+    "criteria": 4,
+    "authoredLines": 5,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "35cd8a3531135298573560a5b058d535f2b7da5319344d4e2d69040d5c879d24"
+  },
+  {
+    "id": "T-254",
+    "condition": "criteria",
+    "criteria": 4,
+    "authoredLines": 3,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "f778b8b433b79ff47383375bbcc25fc60c48b2b74949966e691b02f0c4b85b57"
+  },
+  {
+    "id": "T-257",
+    "condition": "criteria",
+    "criteria": 5,
+    "authoredLines": 11,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "006daaafde929482200272becca783e4d4cb6d1ab73c8cfae1d58a4cb9cc78ef"
+  },
+  {
+    "id": "T-261",
+    "condition": "criteria",
+    "criteria": 4,
+    "authoredLines": 19,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "ef37738c9352d5ebf0a16ed9eced063a5a52f11412b39fdde4bee9d9de610920"
+  },
+  {
+    "id": "T-268",
+    "condition": "criteria",
+    "criteria": 5,
+    "authoredLines": 1,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "50f5b30f2176df44c65d9ca46788c524abbe72e4c6af916baa796fc3b93b0524"
+  },
+  {
+    "id": "T-271",
+    "condition": "criteria",
+    "criteria": 4,
+    "authoredLines": 4,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "5d3f15e1f135c3d0bde89b1ccaa20a5088cfac57a4519d35b4317028ec986964"
+  },
+  {
+    "id": "T-274",
+    "condition": "criteria",
+    "criteria": 4,
+    "authoredLines": 1,
+    "missing": [],
+    "criteriaOK": true,
+    "descriptionSha256": "f421286977cf0bf7dc3be04aaee8e37abfb0a3c77935501caac99f8b4da0e6ed"
+  }
+]

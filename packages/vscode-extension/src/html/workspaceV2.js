@@ -14,7 +14,7 @@ let board = {
   activeProjectId: null
 };
 
-const VIEW_MODES = ['kanban', 'roadmap', 'execution'];
+const VIEW_MODES = ['kanban', 'roadmap', 'history', 'execution'];
 let activeView = normalizeView(window.localStorage?.getItem('mapctx:activeView'));
 let railExpanded = window.localStorage?.getItem('mapctx:railExpanded') === 'true';
 let projectFormMode = 'create';
@@ -58,6 +58,16 @@ const executionFilters = {
   from: window.localStorage?.getItem('mapctx:executionFrom') || '',
   to: window.localStorage?.getItem('mapctx:executionTo') || ''
 };
+
+// T-102 project history view: chronological scan of the whole timeline,
+// filterable by epic and history tier. Epics come from the live task set.
+const HISTORY_TIER_FILTERS = ['all', 'measured', 'inferred', 'declared', 'substituted', 'no-history', 'unknown'];
+let historyEpicFilter = window.localStorage?.getItem('mapctx:historyEpic') || 'all';
+let historyTierFilter = normalizeHistoryTierFilter(window.localStorage?.getItem('mapctx:historyTier'));
+
+function normalizeHistoryTierFilter(value) {
+  return HISTORY_TIER_FILTERS.includes(value) ? value : 'all';
+}
 
 const WORKSPACE_FILTER_DEFAULTS = {
   query: '',
@@ -357,6 +367,7 @@ function renderFilteredWorkspaceViews() {
   document.getElementById('board-meta').textContent = `${filteredWorkspaceTasks().length} of ${(board.tasks || []).length} tasks`;
   renderKanban();
   renderRoadmap();
+  renderHistory();
   renderExecution();
 }
 
@@ -377,10 +388,13 @@ function setView(view) {
   window.localStorage?.setItem('mapctx:activeView', activeView);
   document.getElementById('tab-kanban').classList.toggle('active', activeView === 'kanban');
   document.getElementById('tab-roadmap').classList.toggle('active', activeView === 'roadmap');
+  document.getElementById('tab-history').classList.toggle('active', activeView === 'history');
   document.getElementById('tab-execution').classList.toggle('active', activeView === 'execution');
   document.getElementById('kanban-view').classList.toggle('active', activeView === 'kanban');
   document.getElementById('roadmap-view').classList.toggle('active', activeView === 'roadmap');
+  document.getElementById('history-view').classList.toggle('active', activeView === 'history');
   document.getElementById('execution-view').classList.toggle('active', activeView === 'execution');
+  if (activeView === 'history') renderHistory();
 }
 
 function projectInitials(target) {
@@ -393,7 +407,15 @@ function projectInitials(target) {
 }
 
 function projectCountLabel(value) {
-  const count = Number(value || 0);
+  // T-112: the server reports null for non-active targets (unknown count);
+  // never render that as a misleading zero.
+  if (value === null || value === undefined) {
+    return '—';
+  }
+  const count = Number(value);
+  if (!Number.isFinite(count)) {
+    return '—';
+  }
   if (count > 99) {
     return '99+';
   }
@@ -418,8 +440,8 @@ function compactPath(value) {
 }
 
 function targetMetaLabel(target, type) {
-  const count = Number(target.taskCount || 0);
-  const taskLabel = `${count} task${count === 1 ? '' : 's'}`;
+  const unknown = target.taskCount === null || target.taskCount === undefined;
+  const taskLabel = unknown ? 'task count unknown' : `${Number(target.taskCount)} task${Number(target.taskCount) === 1 ? '' : 's'}`;
   const file = target.tasksFile || 'TASKS.md';
   if (target.hasTasksFile === false) {
     return `${type === 'organization' ? 'Organization' : 'Project'} · no TASKS.md`;
@@ -450,7 +472,14 @@ function renderProjects() {
     return;
   }
 
-  const targets = board.workspaceTargets || board.projects || [];
+  const allTargets = board.workspaceTargets || board.projects || [];
+  // Hide unlinked entries (no TASKS.md); keep an organization only if it still has a usable child.
+  const usableOrgIds = new Set(allTargets
+    .filter((t) => t.organizationId && t.hasTasksFile !== false)
+    .map((t) => t.organizationId));
+  const targets = allTargets.filter((t) => t.type === 'organization'
+    ? t.hasTasksFile !== false || usableOrgIds.has(t.id) || usableOrgIds.has(t.targetId)
+    : t.hasTasksFile !== false);
   if (!targets.length) {
     root.innerHTML = '<div class="project-empty" aria-hidden="true"></div>';
     return;
@@ -467,7 +496,8 @@ function renderProjects() {
       : `<span>${escapeHtml(projectInitials(target))}</span>`;
     const taskCount = projectCountLabel(target.taskCount);
     const kindLabel = type === 'organization' ? 'Org' : 'Project';
-    const title = `${kindLabel}: ${target.name || target.id} - ${target.taskCount || 0} tasks`;
+    const countLabel = target.taskCount === null || target.taskCount === undefined ? 'unknown task count' : `${target.taskCount} tasks`;
+    const title = `${kindLabel}: ${target.name || target.id} - ${countLabel}`;
     const hierarchyClass = target.organizationId ? 'child' : 'root';
     const disabled = target.hasTasksFile === false;
     const selectAttr = disabled ? `data-target-disabled="${escapeHtml(targetId)}"` : `data-select-target="${escapeHtml(targetId)}"`;
@@ -588,10 +618,16 @@ function renderKanban() {
   root.innerHTML = `<div class="kanban-grid">${columnsHtml}</div>`;
 }
 
+// Keep the selected target across API refreshes; without it the server falls back to the registry default.
+function apiUrl(path) {
+  const targetId = new URLSearchParams(window.location.search).get('target') || board.activeTargetId;
+  return targetId ? `${path}?target=${encodeURIComponent(targetId)}` : path;
+}
+
 async function loadBoard() {
   if (hasVsCodeApi) return;
   try {
-    const response = await fetch('/api/board', { cache: 'no-store' });
+    const response = await fetch(apiUrl('/api/board'), { cache: 'no-store' });
     if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
     const next = await response.json();
     board = {
@@ -623,7 +659,7 @@ async function loadGanttDataset() {
     return;
   }
   try {
-    const response = await fetch('/api/gantt', { cache: 'no-store' });
+    const response = await fetch(apiUrl('/api/gantt'), { cache: 'no-store' });
     if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
     ganttDataset = await response.json();
   } catch (error) {
@@ -631,6 +667,7 @@ async function loadGanttDataset() {
   } finally {
     ganttDatasetLoading = false;
     renderRoadmap();
+    renderHistory();
   }
 }
 
@@ -674,10 +711,11 @@ function renderRoadmap() {
         </div>
         ${renderRoadmapControls()}
         <div class="roadmap-legend" aria-label="Roadmap legend">
-          <span><i class="legend-dot planned"></i> planned (authored, epic/root level)</span>
+          <span><i class="legend-dot planned"></i> planned calendar position (dated tasks)</span>
           <span><i class="legend-chip"></i> forecast P50 / P90 (duration chip in task label)</span>
-          <span><i class="legend-dot actual"></i> actual (measured)</span>
+          <span><i class="legend-dot actual"></i> actual (coverage shown per row)</span>
           <span><i class="legend-line"></i> today</span>
+          <span><i class="legend-tier tier-measured"></i> measured history</span>
         </div>
       </section>
       ${renderForecastConfidenceBanner(ganttDataset)}
@@ -792,6 +830,151 @@ function renderRoadmapControls() {
         <button class="roadmap-control-button" data-roadmap-collapse-all="false" type="button">Expand</button>
         <button class="roadmap-control-button" data-roadmap-collapse-all="true" type="button">Collapse</button>
       </div>
+    </div>
+  `;
+}
+
+/**
+ * T-102 project history view: the whole timeline scanned chronologically,
+ * filterable by epic and history tier. Pure item builder (testable) plus a
+ * thin renderer. Predictions never position: they sort by their date but
+ * keep the unscheduled lane.
+ */
+function historyViewEpoch(task) {
+  const candidates = [];
+  const actualStart = parseExecutionTimestamp(task.actual && task.actual.startedAt);
+  if (actualStart) candidates.push(actualStart.getTime());
+  const historyStart = parseExecutionTimestamp(task.historySpan && task.historySpan.startedAt);
+  if (historyStart) candidates.push(historyStart.getTime());
+  const approximateStart = parseDate(task.approximateDate && task.approximateDate.date);
+  if (approximateStart) candidates.push(approximateStart.getTime());
+  const plannedStart = parseDate(task.planned && task.planned.start);
+  if (plannedStart) candidates.push(plannedStart.getTime());
+  const predictedStart = parseDate(task.predicted && task.predicted.start);
+  if (predictedStart) candidates.push(predictedStart.getTime());
+  const plannedDue = parseDate(task.planned && task.planned.due);
+  if (plannedDue) candidates.push(plannedDue.getTime());
+  const actualEnd = parseExecutionTimestamp(task.actual && task.actual.endedAt);
+  if (actualEnd) candidates.push(actualEnd.getTime());
+  return candidates.length ? Math.min(...candidates) : null;
+}
+
+function historyViewEpic(task, taskById) {
+  let cursor = task;
+  const seen = new Set();
+  while (cursor && !seen.has(cursor.id)) {
+    seen.add(cursor.id);
+    if (isEpicTask(cursor)) return cursor;
+    cursor = cursor.parent ? taskById.get(cursor.parent) : null;
+  }
+  return null;
+}
+
+function historyViewItems(tasks, filters) {
+  const list = Array.isArray(tasks) ? tasks : [];
+  const taskById = new Map(list.map(task => [task.id, task]));
+  const epicFilter = (filters && filters.epic) || 'all';
+  const tierFilter = (filters && filters.tier) || 'all';
+  return list
+    .map(task => {
+      const spans = roadmapTaskSpans(task);
+      const epic = historyViewEpic(task, taskById);
+      return {
+        task,
+        epoch: historyViewEpoch(task),
+        lane: roadmapLaneForTask(task, spans),
+        tier: roadmapHistoryTier(task),
+        epicId: epic ? epic.id : '',
+        epicTitle: epic ? taskDisplayTitle(epic) : 'No epic'
+      };
+    })
+    .filter(item => {
+      if (epicFilter !== 'all' && item.epicId !== epicFilter) return false;
+      if (tierFilter !== 'all' && item.tier !== tierFilter) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (a.epoch === null && b.epoch === null) return String(a.task.id).localeCompare(String(b.task.id));
+      if (a.epoch === null) return 1;
+      if (b.epoch === null) return -1;
+      return a.epoch - b.epoch || String(a.task.id).localeCompare(String(b.task.id));
+    });
+}
+
+function historyViewEpics(tasks) {
+  const list = Array.isArray(tasks) ? tasks : [];
+  const taskById = new Map(list.map(task => [task.id, task]));
+  const seen = new Map();
+  for (const task of list) {
+    const epic = historyViewEpic(task, taskById);
+    if (epic && !seen.has(epic.id)) seen.set(epic.id, taskDisplayTitle(epic));
+  }
+  return [...seen.entries()]
+    .map(([id, title]) => ({ id, title }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
+
+function setHistoryFilter(patch) {
+  if (patch.epic !== undefined) {
+    historyEpicFilter = patch.epic || 'all';
+    window.localStorage?.setItem('mapctx:historyEpic', historyEpicFilter);
+  }
+  if (patch.tier !== undefined) {
+    historyTierFilter = normalizeHistoryTierFilter(patch.tier);
+    window.localStorage?.setItem('mapctx:historyTier', historyTierFilter);
+  }
+  renderHistory();
+}
+
+function renderHistory() {
+  const root = document.getElementById('history-view');
+  if (!root) return;
+  const rawTasks = filteredWorkspaceTasks();
+  if (!ganttDataset) {
+    root.innerHTML = ganttDatasetError
+      ? `<p class="modal-error">Could not load the Gantt dataset: ${escapeHtml(ganttDatasetError)}</p>`
+      : '<p class="empty">Loading plan, forecast, and actuals&hellip;</p>';
+    return;
+  }
+  const tasks = normalizeRoadmapTasks(rawTasks);
+  const epics = historyViewEpics(tasks);
+  if (historyEpicFilter !== 'all' && !epics.some(epic => epic.id === historyEpicFilter)) {
+    historyEpicFilter = 'all';
+  }
+  const items = historyViewItems(tasks, { epic: historyEpicFilter, tier: historyTierFilter });
+  const rows = items.map(item => {
+    const date = item.epoch !== null ? formatShortDate(new Date(item.epoch)) : 'Undated';
+    return `
+      <article class="history-row lane-${escapeHtml(item.lane)} tier-${cssToken(item.tier)}" data-open-detail="${escapeHtml(item.task.id)}" tabindex="0" role="button"
+        aria-label="${escapeHtml(`${item.task.id} ${taskDisplayTitle(item.task)}. ${date}. lane ${item.lane}, history tier ${item.tier}, status ${normalizeStatus(item.task.status) || 'unknown'}`)}">
+        <span class="history-date">${escapeHtml(date)}</span>
+        <span class="history-main">
+          <span><span class="task-id">[${escapeHtml(item.task.id)}]</span> ${escapeHtml(taskDisplayTitle(item.task))}</span>
+          <span class="task-status">${escapeHtml([displayStatus(item.task.status), roadmapLaneLabel(item.task, roadmapTaskSpans(item.task)), item.epicTitle].join(' / '))}</span>
+        </span>
+        <span class="task-signals">${renderTaskSignalChips(item.task)}</span>
+      </article>
+    `;
+  }).join('');
+  root.innerHTML = `
+    <div class="history-layout">
+      <div class="history-controls" role="group" aria-label="History filters">
+        <label class="history-filter">
+          <span>Epic</span>
+          <select data-history-filter="epic" aria-label="Filter history by epic">
+            <option value="all">All epics</option>
+            ${epics.map(epic => `<option value="${escapeHtml(epic.id)}" ${historyEpicFilter === epic.id ? 'selected' : ''}>${escapeHtml(`[${epic.id}] ${epic.title}`)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="history-filter">
+          <span>Tier</span>
+          <select data-history-filter="tier" aria-label="Filter history by tier">
+            ${HISTORY_TIER_FILTERS.map(tier => `<option value="${escapeHtml(tier)}" ${historyTierFilter === tier ? 'selected' : ''}>${escapeHtml(tier === 'all' ? 'All tiers' : tier === 'no-history' ? 'no history' : tier)}</option>`).join('')}
+          </select>
+        </label>
+        <span class="history-count" role="status">${items.length} of ${tasks.length} tasks</span>
+      </div>
+      <div class="history-list">${rows || '<p class="empty">No tasks match the selected epic and tier.</p>'}</div>
     </div>
   `;
 }
@@ -1067,11 +1250,17 @@ function progressFromStatus(status) {
 }
 
 function isTaskComplete(task) {
-  return normalizeStatus(task.status) === 'done' || Boolean(task.completed);
+  // Done work and cancelled work both leave nothing behind: cancelled was
+  // aborted and will not proceed, so the group has no remaining work.
+  // Archived stays out (shelved scope may come back); paused is open work.
+  const status = normalizeStatus(task.status);
+  return status === 'done' || status === 'cancelled' || Boolean(task.completed);
 }
 
 function aggregateCompletionProgress(tasks) {
-  const items = (tasks || []).filter(Boolean);
+  // Progress measures executable work: epic containers are not work units,
+  // so they stay in the row count but out of the progress fraction.
+  const items = (tasks || []).filter(task => task && !isEpicTask(task));
   if (!items.length) {
     return 0;
   }
@@ -1104,12 +1293,76 @@ function normalizeRoadmapTasks(list) {
       planned: data.planned ?? null,
       forecast: data.forecast ?? null,
       actual: data.actual ?? null,
+      historySpan: data.historySpan ?? null,
+      approximateDate: data.approximateDate ?? null,
+      measurement: data.measurement ?? null,
+      // T-102: history evidence and prediction ride the dataset; read as-is.
+      history: data.history ?? null,
+      predicted: data.predicted ?? null,
       blockedReasons: data.blockedReasons || [],
       collisions: data.collisions || [],
       claimViolations: violations.filter((item) => item.taskAId === task.id || item.taskBId === task.id),
       progress: progressFromStatus(task.status)
     };
   });
+}
+
+/**
+ * T-109 status-to-lane mapping. Terminal work without a span gets an explicit
+ * "no history" lane. Work already started without a date gets its own lane;
+ * only work that has not started belongs in `unscheduled`. Predictions never position.
+ */
+function roadmapLaneForTask(task, spans) {
+  const status = normalizeStatus(task.status);
+  if ((spans || []).length > 0) return 'positioned';
+  // T-112: archived work without dates stays unscheduled (operator decision);
+  // done/cancelled without evidence keep the explicit "no history" lane.
+  if (status === 'archived') return 'unscheduled';
+  if (status === 'done' || status === 'cancelled') return 'no-history';
+  if (status === 'doing' || status === 'in-progress' || status === 'in_progress' || status === 'review' || parseExecutionTimestamp(task.actual?.startedAt)) return 'started';
+  return 'unscheduled';
+}
+
+/**
+ * T-102 evidence tier for styling. Reads the receipt's historyTier as-is
+ * (T-101 linkage is never recomputed here). Live receipts without a backfill
+ * tier fall back to their active-time coverage: only `measured` coverage
+ * earns the measured style; `substituted` is never shown as measured.
+ * Receipt-less done work with authored dates is declared evidence (T-101
+ * tiering); without dates it is "no history". Not-done tasks without
+ * evidence carry no tier badge at all.
+ */
+function roadmapHistoryTier(task) {
+  if (task.history && task.history.tier) return task.history.tier;
+  const status = normalizeStatus(task.status);
+  const terminal = status === 'done' || status === 'archived' || status === 'cancelled';
+  if (task.actual) {
+    if (task.actual.activeTimeCoverage === 'measured') return 'measured';
+    if (task.actual.activeTimeCoverage === 'substituted') return 'substituted';
+    return 'unknown';
+  }
+  if (task.historySpan) return task.historySpan.tier || 'measured';
+  if (terminal && (task.planned?.start || task.planned?.due)) return 'declared';
+  if (terminal) return 'no-history';
+  return null;
+}
+
+function roadmapTierLabel(task) {
+  const tier = roadmapHistoryTier(task);
+  if (!tier) return '';
+  if (tier === 'no-history') return 'no history';
+  return tier;
+}
+
+function roadmapLaneLabel(task, spans) {
+  const lane = roadmapLaneForTask(task, spans);
+  if (lane === 'positioned') {
+    const tier = roadmapHistoryTier(task);
+    return tier ? `tier ${roadmapTierLabel(task)}` : 'Scheduled';
+  }
+  if (lane === 'no-history') return 'no history';
+  if (lane === 'started') return 'Started · no date';
+  return 'Unscheduled';
 }
 
 function buildRoadmapTimeline(tasks) {
@@ -1139,6 +1392,21 @@ function roadmapTaskSpans(task) {
   const actualEnd = parseExecutionTimestamp(task.actual?.endedAt);
   if (actualStart && actualEnd && actualEnd >= actualStart) {
     spans.push({ kind: 'actual', start: actualStart, end: actualEnd });
+  } else {
+    const historyStart = parseExecutionTimestamp(task.historySpan?.startedAt);
+    const historyEnd = parseExecutionTimestamp(task.historySpan?.endedAt);
+    // T-116 review attempt 3: the tier rides the span so the bar and its
+    // tooltip can state the evidence tier honestly -- inferred history is a
+    // window, never measured active time.
+    if (historyStart && historyEnd && historyEnd >= historyStart) spans.push({ kind: 'actual', start: historyStart, end: historyEnd, historySource: task.historySpan?.source, historyConfidence: task.historySpan?.confidence, historyTier: task.historySpan?.tier || 'measured' });
+  }
+  const approximateDate = parseDate(task.approximateDate?.date);
+  if (approximateDate) {
+    // T-112: synthetic-schedule carries a calendar span; older methods stay
+    // point markers.
+    const approximateDuration = Number(task.approximateDate?.durationMs) || 0;
+    const approximateEnd = new Date(approximateDate.getTime() + Math.max(0, approximateDuration));
+    spans.push({ kind: 'approximate', start: approximateDate, end: approximateEnd, method: task.approximateDate.method, confidence: task.approximateDate.confidence });
   }
   return spans;
 }
@@ -1430,6 +1698,9 @@ function renderRoadmapGroups(groups, timeline) {
             </span>
           </button>
           <div class="milestone-summary-area">
+            ${renderScaleGridLines(timeline)}
+            ${renderTodayLine(timeline)}
+            ${renderWaveRangeBar(group, timeline)}
             <span class="group-signal">${escapeHtml(group.signal)}</span>
           </div>
         </div>
@@ -1437,6 +1708,106 @@ function renderRoadmapGroups(groups, timeline) {
       </section>
     `;
   }).join('');
+}
+
+/**
+ * T-111 wave period + visual progress. Range is the union of positioned
+ * spans (planned/actual/approximate) across the group: min start to max end.
+ * Tasks without spans never break the computation; groups with no spans
+ * render a compact progress-only fallback.
+ */
+function groupRangeForTasks(tasks) {
+  let start = null;
+  let end = null;
+  for (const task of tasks || []) {
+    for (const span of roadmapTaskSpans(task)) {
+      if (!span || !span.start || !span.end) continue;
+      if (!start || span.start < start) start = span.start;
+      if (!end || span.end > end) end = span.end;
+    }
+  }
+  if (!start || !end) return null;
+  return { start, end };
+}
+
+function formatWavePeriod(range) {
+  if (!range) return 'sem datas';
+  const startLabel = formatShortDate(range.start);
+  const endLabel = formatShortDate(range.end);
+  const startYear = range.start.getFullYear();
+  const endYear = range.end.getFullYear();
+  const currentYear = todayDate().getFullYear();
+  if (startLabel === endLabel && startYear === endYear) {
+    return startYear === currentYear ? startLabel : `${startLabel} ${startYear}`;
+  }
+  // T-113: ranges can span years (synthetic 2025 into measured 2026);
+  // show years whenever they differ, or when outside the current year.
+  if (startYear !== endYear) return `${startLabel} ${startYear} → ${endLabel} ${endYear}`;
+  if (startYear !== currentYear) return `${startLabel} → ${endLabel} ${startYear}`;
+  return `${startLabel} → ${endLabel}`;
+}
+
+function waveMetaForTasks(sortedItems, progress) {
+  const range = groupRangeForTasks(sortedItems);
+  const count = `${sortedItems.length} task${sortedItems.length === 1 ? '' : 's'}`;
+  return {
+    meta: `${count} · ${percentLabel(progress)} complete · ${formatWavePeriod(range)}`,
+    range
+  };
+}
+
+/**
+ * T-113 epic period: first date of related tasks to last date of last done
+ * work (or today). Paused, cancelled and archived tasks never count, and the
+ * epic container itself is not a date source (only a fallback when no member
+ * has spans). Any non-done member extends the end to today.
+ */
+function epicRangeForTasks(tasks) {
+  const today = todayDate();
+  const halted = new Set(['paused', 'cancelled', 'archived']);
+  const live = (tasks || []).filter(task => !halted.has(normalizeStatus(task.status)));
+  const primary = live.filter(task => !isEpicTask(task));
+  const basis = primary.length ? primary : live;
+  const range = groupRangeForTasks(basis);
+  if (!range) return null;
+  const scope = primary.length ? primary : live;
+  const hasOpen = scope.some(task => normalizeStatus(task.status) !== 'done');
+  if (!hasOpen) return range;
+  return { start: range.start, end: range.end > today ? range.end : today };
+}
+
+function epicMetaForTasks(sortedItems, progress) {
+  const range = epicRangeForTasks(sortedItems);
+  const count = `${sortedItems.length} task${sortedItems.length === 1 ? '' : 's'}`;
+  return {
+    meta: `${count} · ${percentLabel(progress)} complete · ${formatWavePeriod(range)}`,
+    range
+  };
+}
+
+function renderWaveRangeBar(group, timeline) {
+  const progress = Math.min(Math.max(Number(group.progress) || 0, 0), 1);
+  const percent = Math.round(progress * 100);
+  const range = group.range || (group.rangeStart && group.rangeEnd ? { start: group.rangeStart, end: group.rangeEnd } : null);
+  const ariaLabel = `${group.title}: ${percent}% complete${range ? `, ${formatShortDate(range.start)} to ${formatShortDate(range.end)}` : ', no dates'}`;
+  if (!range || !timeline || !timeline.start || !timeline.end) {
+    return `
+      <div class="wave-progress wave-progress-norange" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="${escapeHtml(ariaLabel)}" title="${escapeHtml(ariaLabel)}">
+        <div class="wave-progress-fill" style="width:${percent}%"></div>
+        <span class="wave-progress-label">${escapeHtml(`${percent}% · sem datas`)}</span>
+      </div>
+    `;
+  }
+  const left = Math.max(0, getPosition(range.start, timeline));
+  const width = Math.max(getWidth(range.start, range.end, timeline), 1.4);
+  const period = formatWavePeriod(range);
+  const title = `${group.title}: ${period} · ${percent}% complete`;
+  return `
+    <div class="group-range-bar wave-range-bar" style="left:${left}%;width:${width}%" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="${escapeHtml(ariaLabel)}" title="${escapeHtml(title)}">
+      <div class="group-range-bar-progress wave-range-progress" style="width:${percent}%"></div>
+      <span class="group-range-bar-label">${escapeHtml(`${percent}% · ${period}`)}</span>
+    </div>
+  `;
 }
 
 function groupRoadmapTasks(tasks) {
@@ -1460,12 +1831,16 @@ function groupRoadmapTasksByWave(tasks) {
       const progress = aggregateCompletionProgress(sortedItems);
       const blockedCount = sortedItems.filter(task => task.blockedReasons.length).length;
       const collisionCount = sortedItems.reduce((sum, task) => sum + task.collisions.length, 0);
+      const { meta, range } = waveMetaForTasks(sortedItems, progress);
       return {
         id: `wave:${wave}`,
-        title: wave === 'blocked' ? 'Not scheduled' : `Wave ${wave}`,
-        meta: `${sortedItems.length} task${sortedItems.length === 1 ? '' : 's'} · ${percentLabel(progress)} complete`,
+        title: wave === 'blocked' ? 'No wave' : `Wave ${wave}`,
+        meta,
         signal: [blockedCount ? `${blockedCount} blocked` : '', collisionCount ? `${collisionCount} serialized claim${collisionCount === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ') || 'No execution warnings',
         progress,
+        range,
+        rangeStart: range ? range.start : null,
+        rangeEnd: range ? range.end : null,
         taskCount: sortedItems.length,
         rows: sortedItems.map((task) => ({ task, depth: 0, node: null }))
       };
@@ -1492,13 +1867,19 @@ function groupRoadmapTasksByEpic(tasks) {
   }
   return [...grouped.entries()].map(([id, value]) => {
     const sorted = sortRoadmapTasks(value.tasks, tasks);
+    const progress = aggregateCompletionProgress(sorted);
     const blockedCount = sorted.filter(task => task.blockedReasons.length).length;
     const collisionCount = sorted.reduce((sum, task) => sum + task.collisions.length, 0);
+    const { meta, range } = epicMetaForTasks(sorted, progress);
     return {
       id: `epic:${id}`,
       title: value.epic ? `[${value.epic.id}] ${taskDisplayTitle(value.epic)}` : 'No epic',
-      meta: `${sorted.length} task${sorted.length === 1 ? '' : 's'} · ${percentLabel(aggregateCompletionProgress(sorted))} complete`,
+      meta,
       signal: [blockedCount ? `${blockedCount} blocked` : '', collisionCount ? `${collisionCount} serialized claim${collisionCount === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ') || 'No execution warnings',
+      progress,
+      range,
+      rangeStart: range ? range.start : null,
+      rangeEnd: range ? range.end : null,
       rows: sorted.map(task => ({ task, depth: 0, node: null }))
     };
   }).sort((a, b) => a.title.localeCompare(b.title));
@@ -1519,12 +1900,16 @@ function renderRoadmapRow(entry, timeline, index) {
     return `serialized with ${item.withTaskId}${cause ? ` (${cause})` : ''}`;
   }).join(' · ');
   const violations = task.claimViolations.map(item => `${item.kind}: ${item.path}`).join(' · ');
-  const statusMeta = [displayStatus(task.status), task.wave ? `Wave ${task.wave}` : 'Not scheduled', blocked, collision, violations].filter(Boolean);
+  const spans = roadmapTaskSpans(task);
+  const lane = roadmapLaneForTask(task, spans);
+  const tier = roadmapHistoryTier(task);
+  const statusMeta = [displayStatus(task.status), task.wave ? `Wave ${task.wave}` : roadmapLaneLabel(task, spans), blocked, collision, violations].filter(Boolean);
   const warningClass = task.blockedReasons.length || task.claimViolations.length ? 'has-warning' : '';
-  const unscheduledClass = roadmapTaskSpans(task).length ? '' : 'task-row-unscheduled';
+  const laneClass = lane === 'positioned' ? '' : lane === 'no-history' ? 'task-row-no-history' : lane === 'started' ? 'task-row-started' : 'task-row-unscheduled';
+  const tierClass = tier ? `tier-${cssToken(tier)}` : '';
 
   return `
-    <div class="task-row gantt-task-row ${index % 2 ? 'task-row-alt' : ''} status-${statusClass} ${warningClass} ${unscheduledClass}" style="--indent:${Number(entry.depth || 0) * 18}px">
+    <div class="task-row gantt-task-row ${index % 2 ? 'task-row-alt' : ''} status-${statusClass} ${warningClass} ${laneClass} ${tierClass}" style="--indent:${Number(entry.depth || 0) * 18}px">
       <div class="task-label">
         <span class="task-indent" aria-hidden="true"></span>
         <span class="task-state-mark status-${statusClass}" aria-hidden="true"></span>
@@ -1540,22 +1925,77 @@ function renderRoadmapRow(entry, timeline, index) {
 }
 
 function renderTaskSignalChips(task) {
+  const planned = task.planned;
+  const plannedChip = Number.isFinite(planned?.durationMs) && planned.durationMs > 0
+    ? `<span class="signal-badge planned-chip" title="${escapeHtml(`Planned source: ${plannedSourceLabel(planned.source)}`)}">Planned ${escapeHtml(formatDurationMs(planned.durationMs))} · ${escapeHtml(plannedSourceLabel(planned.source))}</span>`
+    : '';
+  const actual = task.actual;
+  const coverage = actual?.activeTimeCoverage || 'substituted';
+  const actualChip = actual
+    ? `<span class="signal-badge actual-chip" title="${escapeHtml(`Active-time coverage: ${coverage}`)}">${coverage === 'none' ? 'Agent active unknown' : `Actual ${escapeHtml(formatDurationMs(actual.durationMs))} · ${escapeHtml(coverage === 'substituted' ? 'substituted (not measured)' : `${coverage} active time`)}`}</span>`
+    : '';
+  const humanChip = actual && (coverage === 'measured' || coverage === 'none')
+    ? `<span class="signal-badge human-chip">Human ${escapeHtml(formatDurationMs(actual.humanTimeMs || 0))}</span><span class="signal-badge parked-chip">Parked ${escapeHtml(formatDurationMs(actual.parkedTimeMs || 0))}</span>`
+    : '';
   const forecastChip = task.forecast
     ? `<span class="signal-badge forecast-chip" title="${escapeHtml(`${task.forecast.confidence} confidence · ${task.forecast.durationCoverage}`)}">P50 ${escapeHtml(formatDurationMs(task.forecast.durationP50Ms))} / P90 ${escapeHtml(formatDurationMs(task.forecast.durationP90Ms))}</span>`
     : '';
-  return `${forecastChip} ${renderProvenanceBadge(task.forecast)} ${renderVarianceBadge(task)}`;
+  return `${plannedChip} ${renderVarianceBadge(task)} ${actualChip} ${humanChip} ${forecastChip} ${renderHistoryTierBadge(task)} ${renderPredictedChip(task)} ${renderProvenanceBadge(task.forecast)}`;
+}
+
+/**
+ * T-102 history tier badge: measured / inferred / declared read from the
+ * receipt; done work without evidence says "no history". Substituted actuals
+ * keep their T-100 label and never borrow the measured style.
+ */
+function renderHistoryTierBadge(task) {
+  const tier = roadmapHistoryTier(task);
+  if (!tier) return '';
+  const source = task.history && task.history.source ? ` · ${task.history.source}` : '';
+  const label = tier === 'measured' ? `tier measured${source}`
+    : tier === 'inferred' ? `tier inferred${source}`
+    : tier === 'declared' ? `tier declared`
+    : tier === 'substituted' ? 'tier substituted (not measured)'
+    : tier === 'unknown' ? 'tier unknown'
+    : 'no history';
+  return `<span class="signal-badge tier-badge tier-${cssToken(tier)}" title="${escapeHtml(`History evidence tier: ${tier}${source}`)}">${escapeHtml(label)}</span>`;
+}
+
+/**
+ * T-102 prediction chip: schema only, no predictor. Rendered with a dashed,
+ * distinct style and never confused with planned dates.
+ */
+function renderPredictedChip(task) {
+  const predicted = task.predicted;
+  if (!predicted || !predicted.start) return '';
+  const status = normalizeStatus(task.status);
+  if (status === 'done' || status === 'archived' || status === 'cancelled') return '';
+  const parsed = parseDate(predicted.start);
+  const dateLabel = parsed ? formatShortDate(parsed) : String(predicted.start);
+  return `<span class="signal-badge predicted-chip" title="${escapeHtml(`Predicted start: ${predicted.method}, ${predicted.confidence} confidence`)}">Predicted ${escapeHtml(dateLabel)} · ${escapeHtml(predicted.method)} (${escapeHtml(predicted.confidence)})</span>`;
 }
 
 function renderCalendarTaskCell(task, timeline) {
   const spans = roadmapTaskSpans(task);
-  if (!spans.length) {
+  const lane = roadmapLaneForTask(task, spans);
+  const predictedMarker = renderPredictedMarker(task, timeline);
+  if (lane === 'no-history') {
+    const aria = `${task.id} ${taskDisplayTitle(task)}. No history evidence (done without a receipt or dates)`;
+    return `<div class="calendar-task-cell" aria-label="${escapeHtml(aria)}"><span class="no-history-label">No history</span>${predictedMarker}</div>`;
+  }
+  if (lane === 'started') {
+    const aria = `${task.id} ${taskDisplayTitle(task)}. Work started, but no calendar date is available`;
+    return `<div class="calendar-task-cell" aria-label="${escapeHtml(aria)}"><span class="started-label">Started · no date</span>${predictedMarker}</div>`;
+  }
+  if (lane === 'unscheduled') {
     const aria = task.forecast
       ? `${task.id} ${taskDisplayTitle(task)}. Unscheduled. forecast P50 ${formatDurationMs(task.forecast.durationP50Ms)} / P90 ${formatDurationMs(task.forecast.durationP90Ms)} (no scheduled position)`
       : `${task.id} ${taskDisplayTitle(task)}. Unscheduled`;
-    return `<div class="calendar-task-cell" aria-label="${escapeHtml(aria)}"><span class="unscheduled-label">Unscheduled</span></div>`;
+    return `<div class="calendar-task-cell" aria-label="${escapeHtml(aria)}"><span class="unscheduled-label">Unscheduled</span>${predictedMarker}</div>`;
   }
   const planned = spans.find(span => span.kind === 'planned');
   const actual = spans.find(span => span.kind === 'actual');
+  const approximate = spans.find(span => span.kind === 'approximate');
   let plannedTooltip = '';
   if (planned) {
     plannedTooltip = `Planned ${formatShortDate(planned.start)} – ${formatShortDate(planned.end)}`;
@@ -1569,9 +2009,29 @@ function renderCalendarTaskCell(task, timeline) {
       ${renderScaleGridLines(timeline)}
       ${renderTodayLine(timeline)}
       ${planned ? renderCalendarSpanBar(planned, timeline, 'planned', 'Planned', true, plannedTooltip) : ''}
-      ${actual ? renderCalendarSpanBar(actual, timeline, 'actual', 'Actual') : ''}
+      ${actual ? renderCalendarSpanBar(actual, timeline, 'actual', actual.historyTier === 'inferred' ? 'Inferred' : 'Actual', false, actual.historySource ? (actual.historyTier === 'inferred' ? `Inferred session history (${actual.historyConfidence} confidence; ${actual.historySource}) -- date window, not measured active time` : `Measured session history (${actual.historyConfidence} confidence; ${actual.historySource})`) : '') : ''}
+      ${approximate ? `${renderCalendarSpanBar(approximate, timeline, 'approximate', '≈', true, `Approximate date from ${approximate.method} evidence (${approximate.confidence} confidence)`)}<span class="approximate-date-label" style="left:${Math.max(0, getPosition(approximate.start, timeline))}%">≈ ${escapeHtml(formatShortDate(approximate.start))}</span>` : ''}
+      ${predictedMarker}
     </div>
   `;
+}
+
+/**
+ * T-102 predicted marker: a dashed outline diamond at the predicted start,
+ * visually distinct from planned/actual bars. Never creates a span, so it
+ * never moves a task out of its lane.
+ */
+function renderPredictedMarker(task, timeline) {
+  const predicted = task.predicted;
+  if (!predicted || !predicted.start) return '';
+  const status = normalizeStatus(task.status);
+  if (status === 'done' || status === 'archived' || status === 'cancelled') return '';
+  const date = parseDate(predicted.start);
+  if (!date || !timeline || !timeline.start || !timeline.end) return '';
+  if (date < timeline.start || date > timeline.end) return '';
+  const left = Math.max(0, getPosition(date, timeline));
+  const title = `Predicted start ${predicted.start} (${predicted.method}, ${predicted.confidence} confidence)`;
+  return `<div class="calendar-predicted-marker" style="left:${left}%" title="${escapeHtml(title)}" aria-hidden="true"><span>Predicted</span></div>`;
 }
 
 function renderCalendarSpanBar(span, timeline, kind, label, inclusive = false, tooltip = '') {
@@ -1579,12 +2039,18 @@ function renderCalendarSpanBar(span, timeline, kind, label, inclusive = false, t
   const width = Math.max((inclusive ? getWidth : getExactWidth)(span.start, span.end, timeline), 0.8);
   const text = kind === 'actual'
     ? `${label} ${span.start.toISOString()} -> ${span.end.toISOString()}`
+    : kind === 'approximate'
+      ? `Approximate ${formatShortDate(span.start)}`
     : `${label} ${formatShortDate(span.start)} – ${formatShortDate(span.end)}`;
   return `<div class="calendar-span-bar ${kind}" style="left:${left}%;width:${width}%" title="${escapeHtml(tooltip || text)}"><span>${escapeHtml(label)}</span></div>`;
 }
 
 function calendarAriaLabel(task, spans, forecast) {
   const parts = [`${task.id} ${taskDisplayTitle(task)}`, ...spans.map(span => `${span.kind} ${formatShortDate(span.start)} to ${formatShortDate(span.end)}`)];
+  parts.push(`lane ${roadmapLaneForTask(task, spans)}, history tier ${roadmapTierLabel(task) || 'none'}, status ${normalizeStatus(task.status) || 'unknown'}`);
+  if (task.predicted && task.predicted.start) {
+    parts.push(`predicted start ${task.predicted.start} (${task.predicted.method}, ${task.predicted.confidence} confidence)`);
+  }
   if (forecast) {
     parts.push(`forecast P50 ${formatDurationMs(forecast.durationP50Ms)} / P90 ${formatDurationMs(forecast.durationP90Ms)}`);
   }
@@ -1594,32 +2060,42 @@ function calendarAriaLabel(task, spans, forecast) {
 function renderDurationCell(task, maxDurationMs) {
   const forecast = task.forecast;
   const actual = task.actual;
-  if (!forecast && !actual) {
+  const planned = task.planned?.durationMs ? task.planned : null;
+  if (!forecast && !actual && !planned) {
     return `<div class="duration-cell duration-cell-empty"><span>No duration data</span></div>`;
   }
 
   const p90Width = forecast ? durationScalePercent(forecast.durationP90Ms, maxDurationMs) : 0;
   const p50Width = forecast ? durationScalePercent(forecast.durationP50Ms, maxDurationMs) : 0;
   const actualWidth = actual ? durationScalePercent(actual.durationMs, maxDurationMs) : 0;
+  const plannedWidth = planned ? durationScalePercent(planned.durationMs, maxDurationMs) : 0;
+  const plannedSource = planned ? plannedSourceLabel(planned.source) : '';
   const tooltip = forecast
     ? `Forecast ${formatDurationMs(forecast.durationP50Ms)} P50 to ${formatDurationMs(forecast.durationP90Ms)} P90\nConfidence: ${forecast.confidence}\nMethod: ${forecast.method}\nEstimator: ${forecast.estimatorVersion}\nCoverage: ${forecast.durationCoverage}`
     : 'No forecast available';
   const actualTooltip = actual
-    ? `Actual ${formatDurationMs(actual.durationMs)}\nOutcome: ${actual.outcome}\n${actual.startedAt} -> ${actual.endedAt}`
+    ? `Agent ${formatDurationMs(actual.durationMs)}\nActive-time coverage: ${actual.activeTimeCoverage || 'substituted'}\nHuman ${formatDurationMs(actual.humanTimeMs || 0)}\nParked ${formatDurationMs(actual.parkedTimeMs || 0)}\nLead ${formatDurationMs(actual.leadTimeMs || 0)}\nOutcome: ${actual.outcome}\n${actual.startedAt} -> ${actual.endedAt}`
+    : '';
+  const plannedTooltip = planned
+    ? `Planned ${formatDurationMs(planned.durationMs)}\nSource: ${plannedSource}`
     : '';
 
   return `
     <div class="duration-cell">
-      <button class="duration-plot" data-open-detail="${escapeHtml(task.id)}" type="button" title="${escapeHtml(`${tooltip}${actualTooltip ? `\n\n${actualTooltip}` : ''}`)}" aria-label="${escapeHtml(durationAriaLabel(task))}">
+      <button class="duration-plot" data-open-detail="${escapeHtml(task.id)}" type="button" title="${escapeHtml(`${tooltip}${plannedTooltip ? `\n\n${plannedTooltip}` : ''}${actualTooltip ? `\n\n${actualTooltip}` : ''}`)}" aria-label="${escapeHtml(durationAriaLabel(task))}">
         ${renderDurationGuides(maxDurationMs)}
         ${forecast ? `
           <span class="forecast-p90" style="width:${p90Width}%" aria-hidden="true"></span>
           <span class="forecast-p50" style="width:${p50Width}%" aria-hidden="true"></span>
           <span class="forecast-label">P50 ${escapeHtml(formatDurationMs(forecast.durationP50Ms))} / P90 ${escapeHtml(formatDurationMs(forecast.durationP90Ms))}</span>
         ` : '<span class="forecast-label forecast-label-empty">No forecast</span>'}
+        ${planned ? `
+          <span class="planned-bar ${cssToken(planned.source)}" style="width:${plannedWidth}%" aria-hidden="true"></span>
+          <span class="planned-label">Planned ${escapeHtml(formatDurationMs(planned.durationMs))}</span>
+        ` : ''}
         ${actual ? `
           <span class="actual-bar ${actual.exceedsP90 ? 'exceeds-p90' : ''}" style="width:${actualWidth}%" aria-hidden="true"></span>
-          <span class="actual-label">Actual ${escapeHtml(formatDurationMs(actual.durationMs))}</span>
+          <span class="actual-label">Actual ${escapeHtml(formatDurationMs(actual.durationMs))} / ${escapeHtml(actual.activeTimeCoverage || 'substituted')}</span>
         ` : ''}
       </button>
       <div class="duration-signals">
@@ -1641,7 +2117,9 @@ function renderProvenanceBadge(forecast) {
 
 function renderVarianceBadge(task) {
   const actual = task.actual;
+  if (!actual && task.measurement?.status === 'no-measurement') return '<span class="signal-badge signal-muted">no measurement</span>';
   if (!actual) return '<span class="signal-badge signal-muted">awaiting actual</span>';
+  if (task.planned?.source === 'aligned-from-actual') return '<span class="signal-badge signal-muted">aligned from actual / excluded</span>';
   if (actual.actualVsPlannedRatio !== null) {
     const ratio = actual.actualVsPlannedRatio;
     const label = ratio > 1 ? `${formatRatio(ratio)} over plan` : `${formatRatio(1 / Math.max(ratio, 0.0001))} under plan`;
@@ -1655,16 +2133,25 @@ function renderVarianceBadge(task) {
   return '<span class="signal-badge signal-muted">actual, no baseline</span>';
 }
 
+function plannedSourceLabel(source) {
+  if (source === 'estimated-effort-agent-active') return 'agent-active estimate';
+  if (source === 'estimated-effort-legacy-human') return 'legacy-human estimate';
+  if (source === 'aligned-from-actual') return 'aligned from actual / excluded from accuracy';
+  return 'calendar dates';
+}
+
 function durationAriaLabel(task) {
   const parts = [`${task.id} ${taskDisplayTitle(task)}`];
   if (task.forecast) parts.push(`forecast P50 ${formatDurationMs(task.forecast.durationP50Ms)}, P90 ${formatDurationMs(task.forecast.durationP90Ms)}, ${task.forecast.confidence} confidence, ${task.forecast.durationCoverage} coverage`);
+  if (task.planned?.durationMs) parts.push(`planned ${formatDurationMs(task.planned.durationMs)}, ${plannedSourceLabel(task.planned.source)}`);
   if (task.actual) parts.push(`actual ${formatDurationMs(task.actual.durationMs)}`);
+  if (task.measurement?.status === 'no-measurement') parts.push('no measurement');
   if (task.blockedReasons.length) parts.push(task.blockedReasons.map(item => item.message).join(', '));
   return parts.join('. ');
 }
 
 function maxDurationAcrossDataset(dataset) {
-  const values = (dataset.tasks || []).flatMap(task => [task.forecast?.durationP90Ms, task.actual?.durationMs].filter(Number.isFinite));
+  const values = (dataset.tasks || []).flatMap(task => [task.forecast?.durationP90Ms, task.planned?.durationMs, task.actual?.durationMs].filter(Number.isFinite));
   return Math.max(DURATION_LOG_FLOOR_MS, ...values);
 }
 
@@ -1804,6 +2291,7 @@ function renderAll() {
   renderWorkspaceFilters();
   renderKanban();
   renderRoadmap();
+  renderHistory();
   renderExecution();
 }
 
@@ -2767,6 +3255,7 @@ window.addEventListener('keydown', (event) => {
 
 document.getElementById('tab-kanban').addEventListener('click', () => setView('kanban'));
 document.getElementById('tab-roadmap').addEventListener('click', () => setView('roadmap'));
+document.getElementById('tab-history').addEventListener('click', () => setView('history'));
 document.getElementById('tab-execution').addEventListener('click', () => setView('execution'));
 document.getElementById('project-form')?.addEventListener('submit', submitProjectForm);
 
@@ -2784,6 +3273,10 @@ document.addEventListener('change', (event) => {
   const target = event.target;
   if (target instanceof HTMLSelectElement && target.hasAttribute('data-roadmap-sort')) {
     setRoadmapSort(target.value);
+    return;
+  }
+  if (target instanceof HTMLSelectElement && target.dataset.historyFilter) {
+    setHistoryFilter({ [target.dataset.historyFilter]: target.value });
     return;
   }
   if (target instanceof HTMLSelectElement && target.dataset.workspaceFilter) {
@@ -2820,11 +3313,13 @@ window.addEventListener('message', (event) => {
     ganttDatasetError = null;
     ganttDatasetLoading = false;
     renderRoadmap();
+    renderHistory();
   }
   if (message.type === 'ganttDatasetError') {
     ganttDatasetError = message.message || 'Could not build Gantt dataset';
     ganttDatasetLoading = false;
     renderRoadmap();
+    renderHistory();
   }
   if (message.type === 'selectedFolder' && message.inputId && message.path) {
     const input = document.getElementById(message.inputId);

@@ -1,0 +1,33 @@
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "9176b907-4a73-4a03-bfdb-bb20eff306f6",
+    "canonical": {
+      "totalTasks": 134,
+      "errors": 0,
+      "warnings": 3,
+      "issues": [
+        {
+          "severity": "warning",
+          "code": "bulk-updated-timestamp",
+          "message": "44 tasks share updated date 2026-05-29; event history carries no per-task distinction."
+        },
+        {
+          "severity": "warning",
+          "code": "bulk-updated-timestamp",
+          "message": "14 tasks share updated date 2026-10-02; event history carries no per-task distinction."
+        },
+        {
+          "severity": "warning",
+          "code": "bulk-updated-timestamp",
+          "message": "25 tasks share updated date 2026-10-01; event history carries no per-task distinction."
+        }
+      ]
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}

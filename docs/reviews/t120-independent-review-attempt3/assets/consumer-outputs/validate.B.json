@@ -1,0 +1,17 @@
+{
+  "store": {
+    "status": "store-authority",
+    "projectId": "f97b2885-87e1-4dc0-b501-415980bfcd5b",
+    "canonical": {
+      "totalTasks": 1,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    },
+    "semantic": {
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  }
+}

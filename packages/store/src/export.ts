@@ -1,9 +1,9 @@
 import * as fs from "fs"
 import * as path from "path"
 import type { DatabaseSync } from "node:sqlite"
-import { generateTaskDetailFile, parseTaskDetailFile, type TaskDetailFile } from "@mapctx/core"
+import { renderAcceptanceProse, generateTaskDetailFile, parseTaskDetailFile, type TaskDetailFile } from "@mapctx/core"
 import { STATUS_TO_PLANNING, formatMoney } from "@mapctx/protocol"
-import { getSingleProject, getTaskDetail, listOutgoingDependencies, listTasks } from "./projections"
+import { getAcceptance, getSingleProject, getTaskDetail, listOutgoingDependencies, listTasks } from "./projections"
 import { budgetStatus } from "./budget"
 import type { ProjectMetadata, TaskRecord } from "./types"
 
@@ -170,12 +170,39 @@ export function buildExport(db: DatabaseSync, options: { tasksRoot: string }): E
     const detail = getTaskDetail(db, task.taskId);
     if (!detail) continue;
     const detailFilePath = path.resolve(options.tasksRoot, task.detailPath);
-    const description = readExistingDescription(detailFilePath);
+    let description = readExistingDescription(detailFilePath);
+    // T-120/T-121: once a task carries canonical acceptance revisioning, the
+    // ## Acceptance section in the mirror is rendered from the store
+    // (approved -> [x], pending -> [ ]) IN PLACE, clearly marked as
+    // store-owned. Non-checkbox Git-authored prose inside the section
+    // (notes, evidence, links, nested headings, fenced examples, authored
+    // plain bullets) is preserved byte-for-byte at its authored position;
+    // only managed spans (checkboxes, guard comment, plain bullets that
+    // exactly match a current criterion) are replaced. Tasks without
+    // revisioning keep their Git-authored prose untouched, so pre-adoption
+    // exports stay byte-compatible.
+    const acceptance = getAcceptance(db, task.taskId);
+    if (acceptance) {
+      // Review N1/T-121: ambiguous prose (unclosed code fence anywhere,
+      // multiple real Acceptance sections) is refused BEFORE anything is
+      // written; the prose itself stays unmodified.
+      try {
+        description = renderAcceptanceProse(
+          description,
+          acceptance.criteria.map(criterion => ({ text: criterion.text, completed: criterion.state === "approved" })),
+          acceptance.revision
+        );
+      } catch (error) {
+        throw new Error(`acceptance-render-refused: task ${task.taskId}: ${(error as Error).message.replace(/^acceptance-render-refused: /, "")}`);
+      }
+    }
     const detailFile: TaskDetailFile = {
       id: task.taskId,
       role: detail.role,
       impact: detail.impact,
       estimatedEffort: detail.estimatedEffort,
+      estimatedEffortSource: detail.estimatedEffortSource,
+      waitReason: detail.waitReason,
       prerequisites: listOutgoingDependencies(db, task.taskId).filter(e => e.kind === "depends-on").map(e => e.toTaskId),
       blocking: listOutgoingDependencies(db, task.taskId).filter(e => e.kind === "blocks").map(e => e.toTaskId),
       filesAffected: detail.filesAffected,

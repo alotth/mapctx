@@ -1,0 +1,113 @@
+{
+  "dispatchId": "c8adf88f-bc41-41ed-8719-5eadbbe2c844",
+  "attempt": 5,
+  "outcome": "completed",
+  "startedAt": "2026-10-05T15:08:30.331Z",
+  "endedAt": "2026-10-05T15:36:28.000Z",
+  "changedFiles": [
+    "docs/reviews/t121-acceptance-prose-preservation-2026-10-05.md",
+    "docs/reviews/t121-acceptance-prose-preservation-2026-10-05.copy-proof.json",
+    "packages/core/src/task-detail.ts",
+    "packages/sync-engine/src/checkpoint.test.ts",
+    "packages/sync-engine/src/push-store.test.ts",
+    "tasks/T-121.md"
+  ],
+  "changedFileCount": 6,
+  "evidenceCount": 11,
+  "allEvidenceHashesMatch": true,
+  "evidence": [
+    {
+      "path": "docs/reviews/t121-acceptance-prose-preservation-2026-10-05.md",
+      "expectedSha256": "88b9ba8ac73e7c8a2c7e085714880416a2782754a66df3ece0fe47f3b69ac9d6",
+      "actualSha256": "88b9ba8ac73e7c8a2c7e085714880416a2782754a66df3ece0fe47f3b69ac9d6",
+      "matches": true
+    },
+    {
+      "path": "docs/reviews/t121-acceptance-prose-preservation-2026-10-05.copy-proof.json",
+      "expectedSha256": "61e2084ee3903178bd4f48f22b6a79e14c80a82a8a0a337566ac5719304b4eb7",
+      "actualSha256": "61e2084ee3903178bd4f48f22b6a79e14c80a82a8a0a337566ac5719304b4eb7",
+      "matches": true
+    },
+    {
+      "path": "file:///Users/alt/.traycer/worktrees/alotth__mapctx/fix-t121-acceptance-prose-ea633f82980d/packages/core/src/task-detail.ts",
+      "expectedSha256": "fa0e51cf0edbb4d9c3a1d55ab184166417e57ad9567261456f348afbd095042f",
+      "actualSha256": "fa0e51cf0edbb4d9c3a1d55ab184166417e57ad9567261456f348afbd095042f",
+      "matches": true
+    },
+    {
+      "path": "file:///Users/alt/.traycer/worktrees/alotth__mapctx/fix-t121-acceptance-prose-ea633f82980d/packages/sync-engine/src/checkpoint.test.ts",
+      "expectedSha256": "e4817861946d6758e9b5bc56c6fb8d9ec2ed2cc336d438f76a8cfde27bfcddb6",
+      "actualSha256": "e4817861946d6758e9b5bc56c6fb8d9ec2ed2cc336d438f76a8cfde27bfcddb6",
+      "matches": true
+    },
+    {
+      "path": "file:///Users/alt/.traycer/worktrees/alotth__mapctx/fix-t121-acceptance-prose-ea633f82980d/packages/sync-engine/src/push-store.test.ts",
+      "expectedSha256": "69c0de676f7b89e22cd7f5e183b189e89be24eea735cc43cc01ea59a2c927e9d",
+      "actualSha256": "69c0de676f7b89e22cd7f5e183b189e89be24eea735cc43cc01ea59a2c927e9d",
+      "matches": true
+    },
+    {
+      "path": "file:///Users/alt/.traycer/worktrees/alotth__mapctx/fix-t121-acceptance-prose-ea633f82980d/tasks/T-121.md",
+      "expectedSha256": "4e81ed8847fdeb102f78e5317324a95a92e5325ccbe36560149109703b69b5b4",
+      "actualSha256": "4e81ed8847fdeb102f78e5317324a95a92e5325ccbe36560149109703b69b5b4",
+      "matches": true
+    },
+    {
+      "path": "file:///tmp/mapctx-acceptance-prose-preservation/build-codex-luna-final.log",
+      "expectedSha256": "fc6cc544ad6f6b4b6b2a4e837e14ca619cbb468bccf49fde7f90f2faddbfe39b",
+      "actualSha256": "fc6cc544ad6f6b4b6b2a4e837e14ca619cbb468bccf49fde7f90f2faddbfe39b",
+      "matches": true
+    },
+    {
+      "path": "file:///tmp/mapctx-acceptance-prose-preservation/store-suite-codex-luna-final.log",
+      "expectedSha256": "c71567238fa12fabb71599017d84494615144c7bf8dec49e186ed938aa304c88",
+      "actualSha256": "c71567238fa12fabb71599017d84494615144c7bf8dec49e186ed938aa304c88",
+      "matches": true
+    },
+    {
+      "path": "file:///tmp/mapctx-acceptance-prose-preservation/sync-suite-codex-luna-final.log",
+      "expectedSha256": "2a40176208d83612ed1a18761f1359c283aba2269392f15ca77233862d2c05d5",
+      "actualSha256": "2a40176208d83612ed1a18761f1359c283aba2269392f15ca77233862d2c05d5",
+      "matches": true
+    },
+    {
+      "path": "file:///tmp/mapctx-acceptance-prose-preservation/codex-luna-ela-copy-JCj7wp/proof-summary.json",
+      "expectedSha256": "85c230ff3eb48888b09660f1c4080dfe24852713f65f7ee49449939dc0d355e7",
+      "actualSha256": "85c230ff3eb48888b09660f1c4080dfe24852713f65f7ee49449939dc0d355e7",
+      "matches": true
+    },
+    {
+      "path": "file:///tmp/mapctx-acceptance-prose-preservation/baseline-session-codex-luna-precompletion.json",
+      "expectedSha256": "e09f0003621e77b60915066f554e8a79fa45e4d434d04e0d767f81deeac5c54f",
+      "actualSha256": "e09f0003621e77b60915066f554e8a79fa45e4d434d04e0d767f81deeac5c54f",
+      "matches": true
+    }
+  ],
+  "readbackOk": true,
+  "readbackReceipts": [
+    {
+      "attempt": 2,
+      "outcome": "completed",
+      "startedAt": "2026-10-05T12:21:19.263Z",
+      "endedAt": "2026-10-05T12:59:43.000Z",
+      "changedFileCount": 7,
+      "evidenceCount": 6
+    },
+    {
+      "attempt": 3,
+      "outcome": "completed",
+      "startedAt": "2026-10-05T13:37:20.391Z",
+      "endedAt": "2026-10-05T13:50:09.000Z",
+      "changedFileCount": 6,
+      "evidenceCount": 9
+    },
+    {
+      "attempt": 5,
+      "outcome": "completed",
+      "startedAt": "2026-10-05T15:08:30.331Z",
+      "endedAt": "2026-10-05T15:36:28.000Z",
+      "changedFileCount": 6,
+      "evidenceCount": 11
+    }
+  ]
+}

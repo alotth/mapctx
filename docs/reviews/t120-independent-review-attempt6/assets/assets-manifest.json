@@ -1,0 +1,57 @@
+{
+  "promotionNote": "Raw RunReceipt excluded. T-122 publication scrub: ephemeral test lease tokens redacted from logs; corresponding asset hashes recomputed.",
+  "files": {
+    "mapctx-cli.attempt6.ts": {
+      "sha256": "386988fc11fa1825d88208b8ca0ca7a89af5f583533fc54475bc9d48e43f85b8",
+      "bytes": 82240
+    },
+    "task-write-attempt5-to-6.diff": {
+      "sha256": "7582c3460211ed89ace6c0dd4fc44b6a8f8c8e99f19df32837987223521c9c4b",
+      "bytes": 9030
+    },
+    "receipt-integrity.json": {
+      "sha256": "5d3e5546ea00d7d409f2c3ee936f7eea893f388db968d56ee463d7a0bdd31747",
+      "bytes": 11784
+    },
+    "focused-tests.log": {
+      "sha256": "b1bd9d27f254b2dff221b2cc4fb0a1a65e21d050c3fb9f6da4bf33ad152bbc12",
+      "bytes": 12201
+    },
+    "null-event-probe.diff": {
+      "sha256": "da959f2cef3d57631d6728eeab1da3aeb902065ff886067c53404d69d2851ea3",
+      "bytes": 1353
+    },
+    "attest-orphan-attempt6-probe.test.ts": {
+      "sha256": "6aceb041890926076f4d3319c44b3a5125090defeb04ba50379d75a7009d458e",
+      "bytes": 15102
+    },
+    "task-write.attempt6.test.ts": {
+      "sha256": "92372bf82776dbbb4217625a3ff4839e0a499aea7a43752bf61235c38d0c585b",
+      "bytes": 34838
+    },
+    "probe-build.log": {
+      "sha256": "a7a53f1a85fe68c3bc159ced5c169db3815b919a9360cba139945fc22bde100b",
+      "bytes": 431
+    },
+    "mapctx-cli-attempt5-to-6.diff": {
+      "sha256": "bd286ec1d5afb9cd118de86aecde8aed39ee65b35690061954cb90ef288a3ebb",
+      "bytes": 7194
+    },
+    "commands.txt": {
+      "sha256": "1b49cf088ed24f74b0ba94fa535eeedfd8fe6ab3d9a805a9222ececc759714f2",
+      "bytes": 1179
+    },
+    "task-write.attempt6-probe.test.ts": {
+      "sha256": "60ccecb65861ec9565c03d5f170c3b0318422af8b9c04b5033fc643a3600fe0b",
+      "bytes": 35354
+    },
+    "help.txt": {
+      "sha256": "be4c8c82bcab077ea8a1554f2b69400cb86d1497e5ba69dc10cffbce4b1841ba",
+      "bytes": 9455
+    },
+    "build.log": {
+      "sha256": "fc6cc544ad6f6b4b6b2a4e837e14ca619cbb468bccf49fde7f90f2faddbfe39b",
+      "bytes": 2975
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "taskId": "T-001",
+  "task": {
+    "taskId": "T-001",
+    "positionKey": 0,
+    "title": "[T-001] Review task",
+    "planningState": "ready",
+    "executionState": "unclaimed",
+    "type": "task",
+    "parentTaskId": null,
+    "priority": null,
+    "workload": "Normal",
+    "tags": [],
+    "domains": [],
+    "startDate": null,
+    "dueDate": null,
+    "predictedStart": null,
+    "completedOn": null,
+    "externalId": null,
+    "externalLinks": [],
+    "iteration": null,
+    "assignees": [],
+    "milestone": null,
+    "specMode": null,
+    "detailPath": "./tasks/T-001.md",
+    "updatedOn": null
+  },
+  "detail": {
+    "taskId": "T-001",
+    "role": "implementation",
+    "impact": "medium",
+    "estimatedEffort": "1d",
+    "estimatedEffortSource": "agent-active",
+    "prerequisites": [],
+    "blocking": [],
+    "filesAffected": [],
+    "testsRequired": [],
+    "summary": "Review task",
+    "descriptionGitHash": null
+  },
+  "provenance": {
+    "task": "store",
+    "detail": "store"
+  },
+  "tasksFilePath": "/private/tmp/mapctx-t120-review-attempt3/fixtures/r62-ebcc42c6-014e-4662-99ec-bb408c27e376/C/TASKS.md"
+}

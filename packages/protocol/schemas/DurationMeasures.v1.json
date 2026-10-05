@@ -17,11 +17,19 @@
           "minimum": 0,
           "type": "integer"
         },
+        "humanTimeMs": {
+          "minimum": 0,
+          "type": "integer"
+        },
         "idleThresholdMs": {
           "exclusiveMinimum": 0,
           "type": "integer"
         },
         "leadTimeMs": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "parkedTimeMs": {
           "minimum": 0,
           "type": "integer"
         },

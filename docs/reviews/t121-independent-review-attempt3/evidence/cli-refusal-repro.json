@@ -1,0 +1,16 @@
+{
+  "exitStatus": 1,
+  "stdout": "{\n  \"ok\": false,\n  \"stage\": \"build\",\n  \"error\": \"acceptance-render-refused: task T-122: the section carries a checkbox bullet that matches no current criterion (removed or renamed) next to authored prose after the first criterion; dropping the marker would strand that prose on the wrong criterion. Render is refused before any write. A human must adjudicate the Git-authored prose (remove the orphaned evidence or restore the criterion via `mapctx task acceptance`); associations are never synthesized.\",\n  \"publishedFiles\": []\n}",
+  "stderr": "Error: Checkpoint failed at build: acceptance-render-refused: task T-122: the section carries a checkbox bullet that matches no current criterion (removed or renamed) next to authored prose after the first criterion; dropping the marker would strand that prose on the wrong criterion. Render is refused before any write. A human must adjudicate the Git-authored prose (remove the orphaned evidence or restore the criterion via `mapctx task acceptance`); associations are never synthesized.",
+  "repoBytesUnchanged": true,
+  "dbFactsBefore": {
+    "clock": "2",
+    "events": 2,
+    "checkpoints": 0
+  },
+  "dbFactsAfter": {
+    "clock": "2",
+    "events": 2,
+    "checkpoints": 0
+  }
+}

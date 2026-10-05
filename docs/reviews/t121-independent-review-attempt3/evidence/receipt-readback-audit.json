@@ -1,0 +1,84 @@
+{
+  "dispatchId": "c8adf88f-bc41-41ed-8719-5eadbbe2c844",
+  "attempt": 3,
+  "schemaVersion": 1,
+  "outcome": "completed",
+  "startedAt": "2026-10-05T13:37:20.391Z",
+  "endedAt": "2026-10-05T13:50:09.000Z",
+  "changedFiles": [
+    "packages/core/src/task-detail.ts",
+    "packages/core/src/index.ts",
+    "packages/sync-engine/src/push-store.ts",
+    "packages/sync-engine/src/push-store.test.ts",
+    "packages/store/src/acceptance-prose.test.ts",
+    "docs/reviews/t121-acceptance-prose-preservation-2026-10-05.md"
+  ],
+  "evidenceCount": 9,
+  "evidencePathsInspected": 9,
+  "allAvailableHashesMatch": true,
+  "evidence": [
+    {
+      "uri": "file:///Users/alt/.traycer/worktrees/alotth__mapctx/fix-t121-acceptance-prose-ea633f82980d/docs/reviews/t121-acceptance-prose-preservation-2026-10-05.md",
+      "contentHash": "sha256:cc68e556fa414d8e4ba7ad90a3553a378ad5934a583ba61faca993fe7521b22d",
+      "actualSha256": "sha256:cc68e556fa414d8e4ba7ad90a3553a378ad5934a583ba61faca993fe7521b22d",
+      "actualMatches": true,
+      "promotedPath": "docs/reviews/t121-acceptance-prose-preservation-2026-10-05.md"
+    },
+    {
+      "uri": "file:///Users/alt/.traycer/worktrees/alotth__mapctx/fix-t121-acceptance-prose-ea633f82980d/packages/core/src/task-detail.ts",
+      "contentHash": "sha256:31c8883a1bcb657bdf779e04adcc4366ba55fa2446ab72c4c05eb88c089c6d78",
+      "actualSha256": "sha256:31c8883a1bcb657bdf779e04adcc4366ba55fa2446ab72c4c05eb88c089c6d78",
+      "actualMatches": true,
+      "promotedPath": null
+    },
+    {
+      "uri": "file:///Users/alt/.traycer/worktrees/alotth__mapctx/fix-t121-acceptance-prose-ea633f82980d/packages/core/src/index.ts",
+      "contentHash": "sha256:429e5493160f5de2e6dacfe556d7444b37cfaac65d65adc10a6f6cb80784a75f",
+      "actualSha256": "sha256:429e5493160f5de2e6dacfe556d7444b37cfaac65d65adc10a6f6cb80784a75f",
+      "actualMatches": true,
+      "promotedPath": null
+    },
+    {
+      "uri": "file:///Users/alt/.traycer/worktrees/alotth__mapctx/fix-t121-acceptance-prose-ea633f82980d/packages/sync-engine/src/push-store.ts",
+      "contentHash": "sha256:5a1c47b61135994942ab2ac93f9fe15fffa0edba0b058bee9a25fa29a05fba31",
+      "actualSha256": "sha256:5a1c47b61135994942ab2ac93f9fe15fffa0edba0b058bee9a25fa29a05fba31",
+      "actualMatches": true,
+      "promotedPath": null
+    },
+    {
+      "uri": "file:///Users/alt/.traycer/worktrees/alotth__mapctx/fix-t121-acceptance-prose-ea633f82980d/packages/sync-engine/src/push-store.test.ts",
+      "contentHash": "sha256:06bee3d2bce3187ba12f1c0c9c7cf247ad9b45895c68c4ccbd13e95cb26ff90a",
+      "actualSha256": "sha256:06bee3d2bce3187ba12f1c0c9c7cf247ad9b45895c68c4ccbd13e95cb26ff90a",
+      "actualMatches": true,
+      "promotedPath": null
+    },
+    {
+      "uri": "file:///Users/alt/.traycer/worktrees/alotth__mapctx/fix-t121-acceptance-prose-ea633f82980d/packages/store/src/acceptance-prose.test.ts",
+      "contentHash": "sha256:a3e68681aa76eea07da311747bbb05e7fc83b90aae5d794d2ced2c4e5b24b644",
+      "actualSha256": "sha256:a3e68681aa76eea07da311747bbb05e7fc83b90aae5d794d2ced2c4e5b24b644",
+      "actualMatches": true,
+      "promotedPath": null
+    },
+    {
+      "uri": "file:///tmp/mapctx-acceptance-prose-preservation/corpus/proof-summary.json",
+      "contentHash": "sha256:90de77d337faa8b3047bfa48662f35551e7afe8e7dffe568b1fb6f9f07608b33",
+      "actualSha256": "sha256:90de77d337faa8b3047bfa48662f35551e7afe8e7dffe568b1fb6f9f07608b33",
+      "actualMatches": true,
+      "promotedPath": null
+    },
+    {
+      "uri": "file:///tmp/mapctx-acceptance-prose-preservation/store-suite-r3.log",
+      "contentHash": "sha256:fc3cccab1716349f9c03093d840285d0b8f840a9da309886b195cc12d0ced1c4",
+      "actualSha256": "sha256:fc3cccab1716349f9c03093d840285d0b8f840a9da309886b195cc12d0ced1c4",
+      "actualMatches": true,
+      "promotedPath": null
+    },
+    {
+      "uri": "file:///tmp/mapctx-acceptance-prose-preservation/sync-suite-r3.log",
+      "contentHash": "sha256:3c12b64d533337a6986720e8616371fa8c0ab1386aa15ff76bb71f263f5049c1",
+      "actualSha256": "sha256:3c12b64d533337a6986720e8616371fa8c0ab1386aa15ff76bb71f263f5049c1",
+      "actualMatches": true,
+      "promotedPath": null
+    }
+  ]
+}

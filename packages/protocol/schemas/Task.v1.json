@@ -63,6 +63,44 @@
           ],
           "type": "string"
         },
+        "predictedStart": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "confidence": {
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high"
+                  ],
+                  "type": "string"
+                },
+                "method": {
+                  "enum": [
+                    "manual",
+                    "heuristic",
+                    "model"
+                  ],
+                  "type": "string"
+                },
+                "start": {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "start",
+                "method",
+                "confidence"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "priority": {
           "anyOf": [
             {

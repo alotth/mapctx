@@ -1,0 +1,17 @@
+{
+  "title": "Review fixture",
+  "mode": "store",
+  "tasks": [
+    {
+      "id": "T-001",
+      "title": "[T-001] Review task",
+      "status": "ready-for-do",
+      "type": "task",
+      "workload": "Normal",
+      "tags": [],
+      "assignees": [],
+      "detailPath": "./tasks/T-001.md",
+      "dependsOn": []
+    }
+  ]
+}

@@ -22,7 +22,7 @@ Before any edit, detect which regime the project is in. Read `plansAuthority` fr
 
 - `markdown` regime: nothing changes. Edit `TASKS.md`/`tasks/*.md` directly through the workflow below. When the user asks to migrate the project to store authority (v0 → v1), follow `./references/cutover-to-store.md` — it is an explicit, human-confirmed operation (validate → `import --dry-run` → reconcile divergences → `import --commit`), never a side effect of a routine edit.
 - `store` regime: `TASKS.md` and the structured field block of every `tasks/<ID>.md` (`role`, `impact`, `estimatedEffort`, `prerequisites`, `blocking`, `filesAffected`, `testsRequired`, `summary`, and the `TASKS.md` field list) are generated, read-only output. Never hand-edit them.
-  - Translate the same request into `mapctx` CLI calls instead, and let the CLI regenerate the snapshot. Do not write the Markdown yourself, even to "match" what the CLI will produce:
+  - Translate the same request into `mapctx` CLI calls. Routine store mutations do not regenerate snapshots; use explicit `mapctx export` or `mapctx task finish <id>` at a supported final boundary. Do not write generated Markdown yourself, even to "match" what the CLI will produce:
     - Register a new task/epic: `mapctx task create --title "<title>" [--type ...] [--parent id] ...`. The CLI auto-assigns the next free id for the type prefix (E for epic, T otherwise); `--description`/`--description-file` prose lands in the new detail file and stays Git-authored.
     - Change workflow state: `mapctx task move <task-id> --status <planning-state>`. `done` stamps `completedOn` and releases any active claim; `archived` is terminal but does not mean completed. Reopen a `done` or `archived` task explicitly with `mapctx task reopen <task-id> --status review`; this clears `completedOn` and records auditable provenance.
     - `task claim` starts work: it carries the planning state to doing automatically (backlog hops through ready; paused/blocked/review stay put until a human moves them). Terminal tasks refuse to be claimed.
@@ -30,7 +30,8 @@ Before any edit, detect which regime the project is in. Read `plansAuthority` fr
     - Direct edits to `TASKS.md` or the structured detail blocks are drift, not edits.
   - Before calling the CLI, confirm the local store is materialized: `~/.mapctx/projects/<project-id>/mapctx.db` must resolve. If `plansAuthority: store` but no local store resolves, stop and tell the user to run `mapctx store init`. Do not fall back to editing Markdown as if this were the `markdown` regime — a missing local store under `store` authority is a materialization gap, not a lower authority tier.
   - The `description:` prose block in `tasks/<ID>.md` (Product Context, Decisions Taken, Implementation Notes, ...) stays human/agent-authored in both regimes; only the structured field block and `TASKS.md` move under CLI control after cutover.
-  - If a manual Markdown edit is found anyway (drift), never merge it and never regenerate over it silently. Point the user at `mapctx reconcile <task-id>`.
+  - `mapctx validate` checks canonical store state only. Use `mapctx validate --snapshots` for explicit mirror inspection. If a manual Markdown edit is found anyway, never merge it or regenerate over it silently; use `mapctx reconcile <task-id>` only when intentionally importing/discarding that task's drift.
+  - Acceptance criteria are store-owned. Use `mapctx task acceptance show|revise|approve|unapprove`; import existing checkboxes explicitly with `mapctx acceptance import [--commit]`. Do not infer approval from planning state.
 
 ## Workflow
 

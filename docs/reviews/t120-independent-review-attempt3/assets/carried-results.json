@@ -1,0 +1,139 @@
+{
+  "pendingJournal": {
+    "status": "maintenance-needed",
+    "projectId": "6ff0e67d-8361-43fd-90ad-b3777d5abdfb",
+    "storeDir": "/tmp/mapctx-t120-review-attempt3/fixtures/r1-e241801c-8459-48e2-95c2-025fe1641023/home/projects/6ff0e67d-8361-43fd-90ad-b3777d5abdfb",
+    "maintenanceNeeded": "journal holds 1 unindexed entry (run \"mapctx store repair\" to materialize)"
+  },
+  "staleAndRaw": "PASS",
+  "journalFailure": {
+    "failed": {
+      "ok": false,
+      "stage": "checkpoint",
+      "taskId": "T-001",
+      "move": {
+        "performed": true,
+        "from": "review",
+        "to": "done"
+      },
+      "checkpoint": {
+        "ok": false,
+        "stage": "journal",
+        "error": "injected checkpoint journal link failure",
+        "publishedFiles": [
+          "/tmp/mapctx-t120-review-attempt3/fixtures/r3-d882ec3a-80b5-49ce-b944-be53b7a45a8d/repo/TASKS.md",
+          "/tmp/mapctx-t120-review-attempt3/fixtures/r3-d882ec3a-80b5-49ce-b944-be53b7a45a8d/repo/tasks/T-001.md"
+        ]
+      }
+    },
+    "retry": {
+      "ok": true,
+      "taskId": "T-001",
+      "move": {
+        "performed": false,
+        "from": "done",
+        "to": "done"
+      },
+      "checkpoint": {
+        "ok": true,
+        "exportId": "4f29a0cd-3b16-4fe8-b111-5e6df46a227e",
+        "reason": "task-end",
+        "eventCursor": {
+          "node": "b9b249e6-35a3-4dbe-9b65-b94cb390fa89",
+          "sequence": 5
+        },
+        "files": [
+          {
+            "path": "/tmp/mapctx-t120-review-attempt3/fixtures/r3-d882ec3a-80b5-49ce-b944-be53b7a45a8d/repo/TASKS.md",
+            "sha256": "5547f91517f56c6c436d7f18b86f632835bc468d53ab4dd9de4e77840acc9dc5"
+          },
+          {
+            "path": "/tmp/mapctx-t120-review-attempt3/fixtures/r3-d882ec3a-80b5-49ce-b944-be53b7a45a8d/repo/tasks/T-001.md",
+            "sha256": "9ec503ba80fab9be884b080217f4d1494ed1297740c21a73c70965bb2f59503d"
+          }
+        ]
+      }
+    }
+  },
+  "batchAtomic": "PASS",
+  "honestImport": "PASS",
+  "readonlyAndMarkdown": {
+    "execs": [
+      "PRAGMA busy_timeout = 5000"
+    ],
+    "queries": [
+      "SELECT version, checksum FROM schema_migrations ORDER BY version ASC",
+      "SELECT MAX(sequence) as max_sequence FROM event_log WHERE node_id = ?",
+      "SELECT * FROM task_projection ORDER BY position_key ASC, task_id ASC",
+      "SELECT project_id FROM project_projection LIMIT 1",
+      "SELECT * FROM project_projection WHERE project_id = ?",
+      "SELECT from_task_id, to_task_id, kind FROM dependency_projection ORDER BY from_task_id, kind, to_task_id",
+      "SELECT * FROM task_projection ORDER BY position_key ASC, task_id ASC",
+      "SELECT * FROM event_log ORDER BY logical_clock ASC, node_id ASC, sequence ASC"
+    ],
+    "defaultCli": {
+      "store": {
+        "status": "store-authority",
+        "projectId": "4d8ad0b4-68bd-4a14-8477-06e8db7d1855",
+        "canonical": {
+          "totalTasks": 1,
+          "errors": 0,
+          "warnings": 0,
+          "issues": []
+        },
+        "semantic": {
+          "errors": 0,
+          "warnings": 0,
+          "issues": []
+        }
+      }
+    },
+    "explicitSnapshotExit": 1,
+    "markdown": {
+      "tasksFilePath": "/private/tmp/mapctx-t120-review-attempt3/fixtures/r6-bc136e63-7741-4152-a914-52058469c3c3/repo/TASKS.md",
+      "totalTasks": 1,
+      "errors": 0,
+      "warnings": 0,
+      "issues": [],
+      "store": {
+        "status": "markdown-authority",
+        "projectId": "4d8ad0b4-68bd-4a14-8477-06e8db7d1855"
+      }
+    }
+  },
+  "concurrentPinned": [
+    {
+      "action": "approve",
+      "pid": 83163,
+      "exit": 0,
+      "result": {
+        "ok": false,
+        "reason": "revision-conflict",
+        "message": "Acceptance revision drifted: store holds 2, caller expected 1."
+      }
+    },
+    {
+      "action": "unapprove",
+      "pid": 83164,
+      "exit": 0,
+      "result": {
+        "ok": false,
+        "reason": "revision-conflict",
+        "message": "Acceptance revision drifted: store holds 2, caller expected 1."
+      }
+    }
+  ],
+  "epicAndGraphs": {
+    "checkpointReason": "epic-end",
+    "dispatches": 0,
+    "issueCodes": [
+      "unknown-parent",
+      "dependency-cycle"
+    ]
+  },
+  "watermarkFailure": {
+    "checkpointDurable": true,
+    "taskDone": true,
+    "degradedWitnessRecorded": true
+  }
+}

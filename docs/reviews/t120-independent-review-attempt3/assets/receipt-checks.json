@@ -1,0 +1,20 @@
+{
+ "receiptChanged": 43,
+ "hashOk": 43,
+ "bad": [],
+ "a2toA3Changed": [
+  "docs/reviews/t120-store-validation-checkpoints-2026-10-05.md",
+  "packages/core/src/index.ts",
+  "packages/core/src/task-detail.ts",
+  "packages/store/src/drift.ts",
+  "packages/store/src/export.ts",
+  "packages/store/src/validate.test.ts",
+  "packages/store/src/validate.ts",
+  "packages/sync-engine/src/checkpoint.test.ts",
+  "packages/sync-engine/src/push-store.test.ts",
+  "packages/sync-engine/src/push-store.ts"
+ ],
+ "new": [
+  "packages/store/src/fence.test.ts"
+ ]
+}

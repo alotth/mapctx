@@ -1,0 +1,8 @@
+{
+  "taskId": "T-121",
+  "attempt": 6,
+  "change": "Coordinator documentation-only correction following independent attempt5 review; source and immutable attempt5 receipt untouched",
+  "file": "/Users/alt/.traycer/worktrees/alotth__mapctx/fix-t121-acceptance-prose-ea633f82980d/docs/reviews/t121-acceptance-prose-preservation-2026-10-05.md",
+  "beforeSha256": "88b9ba8ac73e7c8a2c7e085714880416a2782754a66df3ece0fe47f3b69ac9d6",
+  "afterSha256": "7467d6a6291a6ec53eb203997394eb98dad570192c0845a155d12b9327d11e22"
+}

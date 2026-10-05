@@ -1,0 +1,44 @@
+{
+  "results": [
+    {
+      "case": "reorder A,B with trailing B evidence",
+      "exitStatus": 1,
+      "stage": "build",
+      "error": "acceptance-render-refused: task T-121: the canonical criteria sequence differs from the prose (reorder or added criteria) while authored prose follows the first criterion (interleaved or trailing: notes, evidence, plain lists, fenced examples, nested headings) or bullets are hierarchical; rewriting the sequence would reassociate that prose or break bullet parentage, and the renderer never synthesizes associations — trailing prose has no reliable anchor after the block moves. Render is refused before any write. A human must adjudicate the Git-authored prose (re-anchor the notes to criteria that exist or move them out of the Acceptance section), then retry.",
+      "filesUnchanged": true,
+      "storeUnchanged": true,
+      "unchanged": true,
+      "dbBefore": {
+        "clock": "2",
+        "events": 2,
+        "checkpoints": 0
+      },
+      "dbAfter": {
+        "clock": "2",
+        "events": 2,
+        "checkpoints": 0
+      },
+      "treeCount": 2
+    },
+    {
+      "case": "add B after trailing A evidence",
+      "exitStatus": 1,
+      "stage": "build",
+      "error": "acceptance-render-refused: task T-121: the canonical criteria sequence differs from the prose (reorder or added criteria) while authored prose follows the first criterion (interleaved or trailing: notes, evidence, plain lists, fenced examples, nested headings) or bullets are hierarchical; rewriting the sequence would reassociate that prose or break bullet parentage, and the renderer never synthesizes associations — trailing prose has no reliable anchor after the block moves. Render is refused before any write. A human must adjudicate the Git-authored prose (re-anchor the notes to criteria that exist or move them out of the Acceptance section), then retry.",
+      "filesUnchanged": true,
+      "storeUnchanged": true,
+      "unchanged": true,
+      "dbBefore": {
+        "clock": "2",
+        "events": 2,
+        "checkpoints": 0
+      },
+      "dbAfter": {
+        "clock": "2",
+        "events": 2,
+        "checkpoints": 0
+      },
+      "treeCount": 2
+    }
+  ]
+}

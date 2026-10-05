@@ -93,6 +93,43 @@ test("existing v3 store upgrades to 004 without losing plan period data", () => 
   }
 });
 
+test("existing v5 store upgrades to v6 with legacy effort provenance left nullable", () => {
+  const dir = mkTmpDir("mapctx-store-migration-upgrade-006-");
+  try {
+    const dbPath = `${dir}/mapctx.db`;
+    const db = new DatabaseSync(dbPath);
+    db.exec("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)");
+    for (const migration of MIGRATIONS.filter(migration => migration.version <= 5)) {
+      db.exec(migration.sql);
+      const checksum = crypto.createHash("sha256").update(migration.sql, "utf8").digest("hex");
+      db.prepare("INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (?, ?, ?)").run(migration.version, checksum, "2026-09-30T00:00:00.000Z");
+    }
+    db.prepare(`
+      INSERT INTO task_detail_projection (
+        task_id, role, impact, estimated_effort, prerequisites_json, blocking_json,
+        files_affected_json, tests_required_json, summary, description_git_hash
+      ) VALUES ('T-099', 'implementation', 'high', '2d', '[]', '[]', '[]', '[]', 'legacy estimate', NULL)
+    `).run();
+    db.close();
+
+    const upgraded = openDatabase(dbPath);
+    try {
+      const row = upgraded.prepare("SELECT estimated_effort, estimated_effort_source FROM task_detail_projection WHERE task_id = 'T-099'").get() as {
+        estimated_effort: string;
+        estimated_effort_source: string | null;
+      };
+      assert.equal(row.estimated_effort, "2d");
+      assert.equal(row.estimated_effort_source, null, "pre-v6 estimates remain legacy by absent provenance");
+      const versions = upgraded.prepare("SELECT version FROM schema_migrations ORDER BY version").all() as Array<{ version: number }>;
+      assert.deepEqual(versions.map(row => row.version), MIGRATIONS.map(migration => migration.version));
+    } finally {
+      upgraded.close();
+    }
+  } finally {
+    cleanupDir(dir);
+  }
+});
+
 test("openDatabase rejects a diverged migration checksum", () => {
   const dir = mkTmpDir("mapctx-store-migration-checksum-");
   try {

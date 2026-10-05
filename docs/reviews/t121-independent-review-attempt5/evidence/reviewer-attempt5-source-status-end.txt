@@ -1,0 +1,210 @@
+ M TASKS.md
+ M docs/adr/0003-vnext-planning-intelligence-and-storage.md
+ M packages/core/src/index.ts
+ M packages/core/src/task-detail.ts
+ M packages/forecast/src/duration.ts
+ M packages/forecast/src/estimate.ts
+ M packages/forecast/src/forecast.test.ts
+ M packages/forecast/src/format.test.ts
+ M packages/forecast/src/format.ts
+ M packages/forecast/src/index.ts
+ M packages/forecast/src/store.ts
+ M packages/forecast/src/types.ts
+ M packages/protocol/schemas/Budget.v1.json
+ M packages/protocol/schemas/DispatchEnvelope.v1.json
+ M packages/protocol/schemas/DurationMeasures.v1.json
+ M packages/protocol/schemas/Money.v1.json
+ M packages/protocol/schemas/RunReceipt.v1.json
+ M packages/protocol/schemas/Task.v1.json
+ M packages/protocol/src/entities.ts
+ M packages/protocol/src/envelopes.ts
+ M packages/protocol/src/index.ts
+ M packages/protocol/src/migration-map.ts
+ M packages/store/src/claims.test.ts
+ M packages/store/src/claims.ts
+ M packages/store/src/context.test.ts
+ M packages/store/src/context.ts
+ M packages/store/src/db.ts
+ M packages/store/src/dispatch.test.ts
+ M packages/store/src/dispatch.ts
+ M packages/store/src/drift-reconcile.test.ts
+ M packages/store/src/drift.ts
+ M packages/store/src/events.ts
+ M packages/store/src/export.ts
+ M packages/store/src/import-export.test.ts
+ M packages/store/src/import.ts
+ M packages/store/src/index.ts
+ M packages/store/src/migration.test.ts
+ M packages/store/src/projections.ts
+ M packages/store/src/read-only.test.ts
+ M packages/store/src/reconcile.ts
+ M packages/store/src/repair.test.ts
+ M packages/store/src/repair.ts
+ M packages/store/src/schema.ts
+ M packages/store/src/store-handle.ts
+ M packages/store/src/tasks.test.ts
+ M packages/store/src/tasks.ts
+ M packages/store/src/types.ts
+ M packages/store/src/validate.ts
+ M packages/sync-engine/src/board-cli.test.ts
+ M packages/sync-engine/src/board-resolution.test.ts
+ M packages/sync-engine/src/budget-cli-support.ts
+ M packages/sync-engine/src/budget-cli.test.ts
+ M packages/sync-engine/src/budget-cli.ts
+ M packages/sync-engine/src/gantt.test.ts
+ M packages/sync-engine/src/gantt.ts
+ M packages/sync-engine/src/mapctx-cli.ts
+ M packages/sync-engine/src/push-store.test.ts
+ M packages/sync-engine/src/push-store.ts
+ M packages/sync-engine/src/task-write.test.ts
+ M packages/sync-engine/src/workspace-server.ts
+ M packages/vscode-extension/src/html/workspaceV2.css
+ M packages/vscode-extension/src/html/workspaceV2.html
+ M packages/vscode-extension/src/html/workspaceV2.js
+ M rules/AGENTS.md
+ M skills/mapctx-plan-engine/references/validate-flow.md
+ M skills/mapctx-tasks/SKILL.md
+ M skills/mapctx-tasks/references/cutover-to-store.md
+ M skills/mapctx-traycer/SKILL.md
+ M tasks/E-001.md
+ M tasks/E-002.md
+ M tasks/E-003.md
+ M tasks/E-004.md
+ M tasks/E-005.md
+ M tasks/E-006.md
+ M tasks/E-007.md
+ M tasks/E-008.md
+ M tasks/E-009.md
+ M tasks/E-010.md
+ M tasks/E-011.md
+ M tasks/E-012.md
+ M tasks/T-001.md
+ M tasks/T-002.md
+ M tasks/T-003.md
+ M tasks/T-004.md
+ M tasks/T-005.md
+ M tasks/T-008.md
+ M tasks/T-009.md
+ M tasks/T-010.md
+ M tasks/T-011.md
+ M tasks/T-012.md
+ M tasks/T-013.md
+ M tasks/T-014.md
+ M tasks/T-015.md
+ M tasks/T-016.md
+ M tasks/T-017.md
+ M tasks/T-018.md
+ M tasks/T-019.md
+ M tasks/T-020.md
+ M tasks/T-021.md
+ M tasks/T-022.md
+ M tasks/T-023.md
+ M tasks/T-024.md
+ M tasks/T-025.md
+ M tasks/T-026.md
+ M tasks/T-027.md
+ M tasks/T-028.md
+ M tasks/T-029.md
+ M tasks/T-030.md
+ M tasks/T-031.md
+ M tasks/T-032.md
+ M tasks/T-033.md
+ M tasks/T-034.md
+ M tasks/T-035.md
+ M tasks/T-036.md
+ M tasks/T-037.md
+ M tasks/T-038.md
+ M tasks/T-039.md
+ M tasks/T-040.md
+ M tasks/T-041.md
+ M tasks/T-042.md
+ M tasks/T-043.md
+ M tasks/T-044.md
+ M tasks/T-045.md
+ M tasks/T-046.md
+ M tasks/T-047.md
+ M tasks/T-048.md
+ M tasks/T-049.md
+ M tasks/T-050.md
+ M tasks/T-051.md
+ M tasks/T-052.md
+ M tasks/T-053.md
+ M tasks/T-054.md
+ M tasks/T-055.md
+ M tasks/T-056.md
+ M tasks/T-057.md
+ M tasks/T-058.md
+ M tasks/T-059.md
+ M tasks/T-060.md
+ M tasks/T-061.md
+ M tasks/T-062.md
+ M tasks/T-063.md
+ M tasks/T-064.md
+ M tasks/T-065.md
+ M tasks/T-066.md
+ M tasks/T-079.md
+ M tasks/T-080.md
+ M tasks/T-081.md
+ M tasks/T-082.md
+ M tasks/T-084.md
+ M tasks/T-085.md
+ M tasks/T-086.md
+ M tasks/T-087.md
+ M tasks/T-088.md
+ M tasks/T-089.md
+ M tasks/T-090.md
+ M tasks/T-091.md
+ M tasks/T-093.md
+ M tasks/T-094.md
+ M tasks/T-096.md
+?? docs/reviews/
+?? packages/forecast/src/claude-intervals.test.ts
+?? packages/forecast/src/claude-intervals.ts
+?? packages/forecast/src/history-scan.test.ts
+?? packages/forecast/src/history-scan.ts
+?? packages/protocol/src/effort.ts
+?? packages/store/src/acceptance-prose.test.ts
+?? packages/store/src/acceptance.test.ts
+?? packages/store/src/acceptance.ts
+?? packages/store/src/attestation.test.ts
+?? packages/store/src/attestation.ts
+?? packages/store/src/fence.test.ts
+?? packages/store/src/history.test.ts
+?? packages/store/src/history.ts
+?? packages/store/src/start.test.ts
+?? packages/store/src/start.ts
+?? packages/store/src/validate.test.ts
+?? packages/sync-engine/src/attest-orphan-cli.test.ts
+?? packages/sync-engine/src/checkpoint.test.ts
+?? packages/sync-engine/src/checkpoint.ts
+?? packages/sync-engine/src/history-cli.test.ts
+?? packages/sync-engine/src/history-cli.ts
+?? packages/vscode-extension/src/test/workspaceV2.roadmap.test.cjs
+?? tasks/E-014.md
+?? tasks/E-015.md
+?? tasks/E-016.md
+?? tasks/T-097.md
+?? tasks/T-098.md
+?? tasks/T-099.md
+?? tasks/T-100.md
+?? tasks/T-101.md
+?? tasks/T-102.md
+?? tasks/T-103.md
+?? tasks/T-104.md
+?? tasks/T-105.md
+?? tasks/T-106.md
+?? tasks/T-107.md
+?? tasks/T-108.md
+?? tasks/T-109.md
+?? tasks/T-110.md
+?? tasks/T-111.md
+?? tasks/T-112.md
+?? tasks/T-113.md
+?? tasks/T-114.md
+?? tasks/T-115.md
+?? tasks/T-116.md
+?? tasks/T-117.md
+?? tasks/T-118.md
+?? tasks/T-119.md
+?? tasks/T-120.md
+?? tasks/T-121.md
