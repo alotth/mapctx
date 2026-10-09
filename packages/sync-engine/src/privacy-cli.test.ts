@@ -104,8 +104,62 @@ test("privacy CLI dispatch receipt warns but still accepts schema-valid Artifact
   };
   fs.writeFileSync(path.join(f.repoDir, "receipt.json"), JSON.stringify(receipt));
   const result = f.cli(["dispatch", "receipt", dispatch.dispatchId, "--receipt", "receipt.json", "--actor", "test", "--json"]);
-  assertAdvisory(result, `dispatch receipt ${dispatch.dispatchId}`, "evidence.0.uri");
+  assertAdvisory(result, `dispatch receipt ${dispatch.dispatchId}`, "receipt.evidence.0.uri");
   f.read(handle => assert.deepEqual(getRunReceipt(handle.db, dispatch.dispatchId, 1)!.evidence, receipt.evidence));
+  // MÉDIA-1 cross-test: the lint promises the cure at exactly the field path
+  // `mapctx redact --field` accepts -- the warning must not point somewhere
+  // redaction refuses.
+  assert.match(String(result.stderr), /redact it after the fact/);
+  const match = /field "([^"]+)"/.exec(String(result.stderr));
+  assert.ok(match, result.stderr);
+  const fieldPath = match![1];
+  assert.equal(fieldPath, "receipt.evidence.0.uri");
+  const candidates = f.success(["redact", "list", "--json"]).candidates as Array<{ nodeId: string; sequence: number; eventType: string; redactableFieldPaths: string[] }>;
+  const receiptCandidate = candidates.find((c) => c.eventType === "run.receipt-recorded");
+  assert.ok(receiptCandidate, JSON.stringify(candidates));
+  assert.ok(receiptCandidate!.redactableFieldPaths.includes(fieldPath), JSON.stringify(receiptCandidate));
+  const accepted = f.success(["redact", "--node", receiptCandidate!.nodeId, "--sequence", String(receiptCandidate!.sequence),
+    "--field", fieldPath, "--reason", "cross-check field path from lint", "--actor", "dpo"]);
+  assert.equal(accepted.mode, "dry-run");
+});
+
+test("privacy CLI task create/update warn that the field is NOT redactable afterwards and never promise a cure", t => {
+  const f = fixture(t);
+  const createResult = f.cli(["task", "create", "--title", `Handle ${SECRET}`, "--summary", "fixture", "--actor", "test", "--json"]);
+  assert.equal(createResult.status, 0, createResult.stderr);
+  const createStderr = String(createResult.stderr);
+  assert.match(createStderr, /NOT redactable afterwards/);
+  assert.match(createStderr, /remove it before writing/);
+  assert.ok(!createStderr.includes("redact it after the fact"));
+
+  const updateResult = f.cli(["task", "update", "T-101", "--set", `detail.summary=Ticket ${SECRET}`, "--actor", "test", "--json"]);
+  assert.equal(updateResult.status, 0, updateResult.stderr);
+  const updateStderr = String(updateResult.stderr);
+  assert.match(updateStderr, /NOT redactable afterwards/);
+  assert.match(updateStderr, /remove it before writing/);
+  assert.ok(!updateStderr.includes("redact it after the fact"));
+});
+
+test("redact CLI --json refusal keeps stdout empty of a result and reports the structured refusal on stderr with a non-zero exit", t => {
+  const f = fixture(t);
+  const revision = f.approvalRevision();
+  f.success(["task", "acceptance", "approve", "T-101", "--index", "0", "--expect-revision", String(revision),
+    "--evidence", `customer=${SECRET}`, "--actor", "test"]);
+  const listing = f.success(["redact", "list", "--task", "T-101"]);
+  const target = listing.candidates[0];
+  const refused = f.cli(["redact", "--node", target.nodeId, "--sequence", String(target.sequence), "--field", "criterionId",
+    "--reason", "not a real field", "--actor", "dpo", "--json"]);
+  assert.notEqual(refused.status, 0);
+  assert.equal(refused.signal, null);
+  assert.equal(String(refused.stdout).trim(), "", "stdout is the result channel; a refusal is not a result");
+  const stderr = String(refused.stderr);
+  const jsonEnd = stderr.indexOf("\nError:");
+  assert.ok(jsonEnd > 0, stderr);
+  const parsed = JSON.parse(stderr.slice(0, jsonEnd));
+  assert.equal(parsed.ok, false);
+  assert.equal(parsed.reason, "not-redactable");
+  assert.match(stderr, /Error: Redaction refused: not-redactable/);
+  assert.ok(!stderr.includes(SECRET));
 });
 
 test("redact CLI lists paths without any secret preview, defaults to read-only dry-run and refuses missing --reason", t => {

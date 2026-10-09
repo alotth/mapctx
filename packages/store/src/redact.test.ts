@@ -3,6 +3,7 @@ import test, { type TestContext } from "node:test"
 import * as fs from "fs"
 import * as path from "path"
 import { createHash } from "node:crypto"
+import { DatabaseSync } from "node:sqlite"
 import { canonicalJson, runReceiptSchema, type EventLogEntry } from "@mapctx/protocol"
 import { commitNodeAttestation, draftNodeAttestation, loadNodeAttestations } from "./attestation"
 import { claimTask } from "./claims"
@@ -10,8 +11,8 @@ import { recordDispatchAttempt } from "./dispatch"
 import { journalEntryPath, payloadSha256, readJournalEntry } from "./journal"
 import { getAcceptance, getRunReceipt, listHistoryEvidence, listRedactions } from "./projections"
 import {
-  listRedactionCandidates, redactEvidence, REDACTED_SENTINEL,
-  verifyRedactionsFromLedger, type RedactionCommitResult, type RedactionTarget
+  listRedactionCandidates, reconcileRedactionsFromLedger, redactEvidence, REDACTED_SENTINEL,
+  verifyRedactions, verifyRedactionsFromLedger, type RedactionCommitResult, type RedactionTarget
 } from "./redact"
 import { repairStore } from "./repair"
 import { StoreHandle } from "./store-handle"
@@ -165,7 +166,7 @@ test("redaction destroys journal, indexed and projection plaintext but preserves
   assertApprovalScrubbed(f.handle, expected);
   const ledger = listRedactions(f.handle.db);
   assert.deepEqual(ledger, [{
-    eventNode: result.redactionEvent.nodeId, eventSequence: result.redactionEvent.sequence,
+    eventNode: result.redactionEvent.nodeId, eventSequence: result.redactionEvent.sequence, logicalClock: audit.logicalClock,
     targetNode: target.nodeId, targetSequence: target.sequence, fieldPaths: result.plan.fieldPaths,
     requestedFieldPath: "evidence", priorPayloadSha256: originalSha, redactedPayloadSha256: entry.payloadSha256,
     reason: "LGPD: remove production identifier", actor: "dpo", redactedAt: AT
@@ -291,7 +292,7 @@ test("repair refuses raw payload edit with stale hash", t => {
   assertRepairGap(f.dir, target, /payload hash mismatch/);
 });
 
-test("repair refuses self-consistent edit of already-redacted entry", t => {
+test("repair refuses self-consistent edit of already-redacted entry; opening the store refuses the same way", t => {
   const f = fixture(t);
   seed(f.handle);
   const target = approve(f.handle);
@@ -301,6 +302,9 @@ test("repair refuses self-consistent edit of already-redacted entry", t => {
   entry.payload.criterionId = "c-FORGED";
   entry.payloadSha256 = payloadSha256(entry.payload);
   fs.writeFileSync(journalEntryPath(f.dir, target.nodeId, target.sequence), canonicalJson(entry));
+  let threw = "";
+  try { StoreHandle.open(f.dir).close(); } catch (error) { threw = (error as Error).message; }
+  assert.match(threw, /redaction verification failed/);
   assertRepairGap(f.dir, target, /matches neither the pre-redaction payload/);
 });
 
@@ -367,7 +371,10 @@ test("named refusals for already redacted, structural, audit-event and unexplain
   const result = commit(f.handle, target);
   const before = snapshot(f.dir);
   const cases = [
-    { target, fieldPath: "evidence.shift", reason: "again", expected: "nothing-to-redact", message: /already redacted/ },
+    // Review BAIXA-2: holding the sentinel is not proof an audit record
+    // explains it, so the message points at `redact list` instead of
+    // asserting "already redacted" outright.
+    { target, fieldPath: "evidence.shift", reason: "again", expected: "nothing-to-redact", message: /already holds the redaction sentinel/ },
     { target, fieldPath: "criterionId", reason: "x", expected: "not-redactable", message: /Structural facts/ },
     { target: result.redactionEvent, fieldPath: "reason", reason: "x", expected: "not-redactable", message: /audit record itself/ },
     { target, fieldPath: "evidence", reason: "  ", expected: "invalid-request", message: /requires --reason/ }
@@ -495,5 +502,171 @@ test("redacting an older approval preserves newer approval evidence", t => {
   assert.equal(repairStore(f.dir).status, "ok");
   f.open();
   assertApprovalScrubbed(f.handle, { shift: "replacement-evidence" });
+  assertAbsent(f.dir);
+});
+
+// ---- review ALTA-1: a redacted target's journal FILE disappearing (lost
+// machine, fresh clone) must be an advisory, never a refusal that bricks the
+// store. ----
+
+test("losing a redacted target's journal file surfaces as a maintenanceAdvisory; reads, writable open and repair all stay reachable", t => {
+  const f = fixture(t);
+  seed(f.handle);
+  const target = approve(f.handle);
+  commit(f.handle, target);
+  f.close();
+  fs.rmSync(journalEntryPath(f.dir, target.nodeId, target.sequence));
+
+  const ro = f.open(true);
+  ro.db.prepare("SELECT COUNT(*) FROM event_log").get();
+  assert.equal(ro.maintenanceNeeded(), null, "an unresolved advisory must not refuse reads");
+  const advisory = ro.maintenanceAdvisory();
+  assert.equal(advisory.length, 1);
+  assert.match(advisory[0], /cannot be read/);
+  assert.match(advisory[0], /store repair/);
+  assert.match(advisory[0], /attest-orphan/);
+  assert.ok(!advisory.join("|").includes(SECRET), "advisory must never echo the secret");
+  f.close();
+
+  // Writable open must also succeed now (was: threw, store bricked).
+  let openOk = true, openError = "";
+  try { f.open(); } catch (error) { openOk = false; openError = (error as Error).message; }
+  assert.ok(openOk, openError);
+  f.close();
+
+  const repaired = repairStore(f.dir);
+  assert.equal(repaired.status, "gap", JSON.stringify(repaired));
+  assert.ok(repaired.status === "gap");
+  assert.ok(repaired.gaps.some(gap => gap.nodeId === target.nodeId && gap.sequence === target.sequence));
+  assertAbsent(f.dir);
+});
+
+// ---- review ALTA-1: attestation is the executable recovery route from
+// "redacted target, journal gone" to a healthy store, and refuses the
+// symmetric case where the pinned bytes would contradict the ledger. ----
+
+test("attesting a redacted DB-only node (journal gone) is accepted and lets repair reach a healthy store", t => {
+  const f = fixture(t);
+  seed(f.handle);
+  const target = approve(f.handle);
+  commit(f.handle, target);
+  const node = target.nodeId;
+  f.close();
+
+  // Simulate the T-119 condition this node's rows now live only in mapctx.db.
+  fs.rmSync(path.join(f.dir, "events", node), { recursive: true, force: true });
+  const db = new DatabaseSync(StoreHandle.dbPathFor(f.dir));
+  db.exec(`UPDATE event_log SET journal_path = '' WHERE node_id = '${node}'`);
+  db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  db.close();
+
+  const ro = f.open(true);
+  ro.db.prepare("SELECT COUNT(*) FROM event_log").get();
+  assert.equal(ro.maintenanceNeeded(), null);
+  assert.deepEqual(ro.maintenanceAdvisory(), [], "a redacted DB-only row holding the final state verifies cleanly");
+  f.close();
+
+  const options = { reason: "lost machine; rows are DB-only", approvedBy: "reviewer" };
+  const draft = draftNodeAttestation(f.dir, node, options);
+  commitNodeAttestation(f.dir, node, draft.contentSha256, options);
+  assert.ok(loadNodeAttestations(f.dir).has(node));
+
+  const repaired = repairStore(f.dir);
+  assert.equal(repaired.status, "ok", JSON.stringify(repaired).slice(0, 400));
+
+  f.open();
+  f.close();
+  assertAbsent(f.dir);
+});
+
+test("attesting a node that still holds the pre-redaction payload is refused by name and does not echo the secret", t => {
+  const f = fixture(t);
+  seed(f.handle);
+  const target = approve(f.handle);
+  const result = commit(f.handle, target);
+  f.close();
+
+  fs.rmSync(path.join(f.dir, "events", target.nodeId), { recursive: true, force: true });
+  const db = new DatabaseSync(StoreHandle.dbPathFor(f.dir));
+  db.exec(`UPDATE event_log SET journal_path = '' WHERE node_id = '${target.nodeId}'`);
+  // Put the pre-redaction payload back into the row an attestation would pin:
+  // the attestation must refuse rather than preserve destroyed content.
+  const original = { taskId: "T-001", revision: 1, criterionId: "c1", evidence: { shift: SECRET }, approvedAt: AT };
+  db.prepare("UPDATE event_log SET payload_json = ?, payload_sha256 = ? WHERE node_id = ? AND sequence = ?")
+    .run(JSON.stringify(original), result.plan.priorPayloadSha256, target.nodeId, target.sequence);
+  db.close();
+
+  let refused = "";
+  try { draftNodeAttestation(f.dir, target.nodeId, { reason: "x", approvedBy: "r" }); } catch (error) { refused = (error as Error).message; }
+  assert.match(refused, /recorded redaction/);
+  assert.match(refused, /store repair/);
+  assert.ok(!refused.includes(SECRET));
+});
+
+// ---- review MEDIA-2: a target's redactions are ordered by logicalClock
+// (causal order), never by the random node-id of the redaction events
+// themselves. ----
+
+test("multi-node redaction chain in causal (logicalClock) order verifies even when node ids sort the other way", () => {
+  const S0 = "a".repeat(64), S1 = "b".repeat(64), S2 = "c".repeat(64);
+  const targetEntry: EventLogEntry = {
+    nodeId: "t", sequence: 4, logicalClock: 1, eventType: "acceptance.approved", schemaVersion: 1,
+    occurredAt: AT, actor: "approver", causation: [], payload: { x: 1 }, payloadSha256: S2,
+    redactions: [
+      { fieldPaths: ["evidence.a"], reason: "r1", actor: "op", redactedAt: AT, priorPayloadSha256: S0, redactedPayloadSha256: S1,
+        redactionEvent: { nodeId: "ffffffff-0000-4000-8000-000000000001", sequence: 1 } },
+      { fieldPaths: ["evidence.b"], reason: "r2", actor: "op", redactedAt: AT, priorPayloadSha256: S1, redactedPayloadSha256: S2,
+        redactionEvent: { nodeId: "00000000-0000-4000-8000-000000000002", sequence: 1 } }
+    ]
+  };
+  const mkLink = (nodeId: string, logicalClock: number, requestedFieldPath: string, fieldPaths: string[], prior: string, redacted: string, reason: string): EventLogEntry => {
+    const payload = { target: { nodeId: "t", sequence: 4 }, targetEventType: "acceptance.approved", requestedFieldPath, fieldPaths, priorPayloadSha256: prior, redactedPayloadSha256: redacted, reason, redactedAt: AT };
+    return { nodeId, sequence: 1, logicalClock, eventType: "evidence.redacted", schemaVersion: 1, occurredAt: AT, actor: "op", causation: [], payload, payloadSha256: payloadSha256(payload) };
+  };
+  // Second link's node id sorts BEFORE the first link's, even though it is
+  // causally later: ordering by nodeId would call this chain broken.
+  const link1 = mkLink("ffffffff-0000-4000-8000-000000000001", 10, "evidence.a", ["evidence.a"], S0, S1, "r1");
+  const link2 = mkLink("00000000-0000-4000-8000-000000000002", 20, "evidence.b", ["evidence.b"], S1, S2, "r2");
+  const verified = verifyRedactions([targetEntry, link1, link2]);
+  assert.deepEqual(verified.problems, [], JSON.stringify(verified.problems));
+  assert.deepEqual(verified.unresolved, []);
+});
+
+// ---- review BAIXA-2: a string leaf that merely holds the sentinel with no
+// audit record covering it is "unexplained", never reported as an audited
+// redaction. ----
+
+test("a sentinel value with no covering redaction event is unexplained, not reported as redacted", t => {
+  const f = fixture(t);
+  seed(f.handle);
+  approve(f.handle, { shift: REDACTED_SENTINEL });
+  const candidates = listRedactionCandidates(f.handle.db);
+  assert.equal(candidates.length, 1);
+  assert.deepEqual(candidates[0].unexplainedFieldPaths, ["evidence.shift"]);
+  assert.deepEqual(candidates[0].redactedFieldPaths, []);
+  assert.deepEqual(candidates[0].redactableFieldPaths, []);
+  assert.ok(!JSON.stringify(candidates).includes(SECRET));
+});
+
+// ---- review BAIXA-3: completing a redaction that was pending from the
+// crash window (event committed, journal file not yet rewritten) must
+// reclaim database pages too, not only the live commit path. ----
+
+test("reconciling a pending redaction from the ledger reclaims database pages, matching the live commit path", t => {
+  const f = fixture(t);
+  seed(f.handle);
+  const target = approve(f.handle);
+  const targetPath = journalEntryPath(f.dir, target.nodeId, target.sequence);
+  const plaintext = fs.readFileSync(targetPath);
+  commit(f.handle, target);
+  // Crash between the transaction commit and the target-file rename.
+  fs.writeFileSync(targetPath, plaintext);
+  assert.ok(fs.readFileSync(targetPath).includes(SECRET));
+
+  const reconciled = reconcileRedactionsFromLedger(f.dir, f.handle.db);
+  assert.deepEqual(reconciled.problems, []);
+  assert.equal(reconciled.rewritten, 1);
+  assert.equal(reconciled.reclaimed, true, reconciled.reclaimWarning);
+  assert.deepEqual(journal(f.dir, target).payload.evidence, { shift: REDACTED_SENTINEL });
   assertAbsent(f.dir);
 });
