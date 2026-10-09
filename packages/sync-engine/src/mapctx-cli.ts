@@ -844,6 +844,7 @@ export function mapctxPlanCommand(options: MapctxOptions): void {
   try {
     const tasks = listTasks(handle.db);
     const edges = listDependencies(handle.db);
+    const detailsByTaskId = new Map(tasks.map(task => [task.taskId, getTaskDetail(handle.db, task.taskId)]));
     // dependencyEdges is the single source of truth here too; task.dependsOn is omitted (see
     // the TASKS.md fallback branch above and T-063).
     const report = planner.planExecution({
@@ -853,7 +854,10 @@ export function mapctxPlanCommand(options: MapctxOptions): void {
         status: task.planningState,
         type: task.type ?? undefined,
         parent: task.parentTaskId ?? null,
-        domains: task.domains
+        domains: task.domains,
+        // Store projections keep detail separately; pass its file evidence to
+        // planner so filesAffected can override broad inferred domains.
+        filesAffected: detailsByTaskId.get(task.taskId)?.filesAffected ?? []
       })),
       dependencyEdges: edges.map(edge => ({ fromTaskId: edge.fromTaskId, toTaskId: edge.toTaskId, kind: edge.kind }))
     });

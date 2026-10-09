@@ -37,6 +37,63 @@ test("DAG waves serialize colliding writes and expose per-claim explanation", ()
   assert.equal(report.policy.correctnessBackstop, "worktree-merge");
 });
 
+test("same inferred domain with disjoint filesAffected stays in one wave", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", status: "backlog", type: "task", domains: ["CODE"], filesAffected: ["src/a.ts"] },
+      { id: "T-B", status: "backlog", type: "task", domains: ["CODE"], filesAffected: ["src/b.ts"] }
+    ]
+  });
+
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]]);
+  assert.deepEqual(report.serializedPairs, []);
+});
+
+test("overlapping filesAffected serializes and reports exact path pair", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", status: "backlog", type: "task", domains: ["CODE"], filesAffected: ["src/shared.ts"] },
+      { id: "T-B", status: "backlog", type: "task", domains: ["CODE"], filesAffected: ["src/shared.ts"] }
+    ]
+  });
+
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
+  assert.equal(report.serializedPairs.length, 1);
+  assert.equal(report.serializedPairs[0].reason, "resource-claim-collision");
+  assert.deepEqual(report.serializedPairs[0].causes[0].paths, ["src/shared.ts ↔ src/shared.ts"]);
+});
+
+test("low-confidence inferred domain overlap is advisory and stays in one wave", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", status: "backlog", type: "task", domains: ["CODE"] },
+      { id: "T-B", status: "backlog", type: "task", domains: ["CODE"] }
+    ]
+  });
+
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]]);
+  assert.deepEqual(report.serializedPairs, []);
+  const advisories = report.advisories ?? [];
+  assert.equal(advisories.length, 1);
+  assert.equal(advisories[0].reason, "low-confidence-inferred-domain-overlap");
+});
+
+test("glob path prefix overlaps matching descendant", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", status: "backlog", type: "task" },
+      { id: "T-B", status: "backlog", type: "task" }
+    ],
+    claims: [
+      claim("00000000-0000-5000-8000-000000000011", "T-A", ["src/**"]),
+      claim("00000000-0000-5000-8000-000000000012", "T-B", ["src/lib/a.ts"])
+    ]
+  });
+
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
+  assert.deepEqual(report.serializedPairs[0].causes[0].paths, ["src/** ↔ src/lib/a.ts"]);
+});
+
 test("same board gives byte-identical output regardless of task input order", () => {
   const input: Parameters<typeof planExecution>[0] = {
     tasks: [
