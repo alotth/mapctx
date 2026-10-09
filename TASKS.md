@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 2/7
+  - subIssueProgress: 3/7
   - priority: high
   - workload: null
   - tags: []
@@ -2649,7 +2649,7 @@
 ### [T-124] R2 design: renovacao de lease por dispatch, review concorrente e fatias como subtasks
 
   - id: T-124
-  - status: review
+  - status: done
   - type: task
   - parent: E-017
   - subIssueProgress: null
@@ -2660,7 +2660,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-09
   - externalId: null
   - updated: 2026-10-09
   - detail: ./tasks/T-124.md
