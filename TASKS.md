@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 3/7
+  - subIssueProgress: 4/7
   - priority: high
   - workload: null
   - tags: []
@@ -2687,7 +2687,7 @@
 ### [T-126] R5 redacao auditavel de evidencia sensivel + lint [privacy] patterns
 
   - id: T-126
-  - status: review
+  - status: done
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -2698,7 +2698,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-09
   - externalId: null
   - updated: 2026-10-09
   - detail: ./tasks/T-126.md
