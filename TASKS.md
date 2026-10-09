@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 4/7
+  - subIssueProgress: 4/10
   - priority: high
   - workload: null
   - tags: []
@@ -2759,6 +2759,63 @@
   - externalId: null
   - updated: 2026-10-09
   - detail: ./tasks/T-129.md
+
+### [T-130] T-126 hardening: ramo db-only exige atestação e recomputa hash (MÉDIA-4/5/6)
+
+  - id: T-130
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [STORE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-09
+  - detail: ./tasks/T-130.md
+
+### [T-131] Redação de receipt.failure, changedFiles e payloads de run event
+
+  - id: T-131
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [STORE]
+  - dependsOn: [T-126]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-09
+  - detail: ./tasks/T-131.md
+
+### [T-132] Planner: globs com chaves/extglob/negação e normalização de paths
+
+  - id: T-132
+  - status: backlog
+  - type: chore
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-09
+  - detail: ./tasks/T-132.md
 
 ## Notes
 
