@@ -508,6 +508,32 @@ export const eventIdentitySchema = z.object({
 });
 export type EventIdentity = z.infer<typeof eventIdentitySchema>;
 
+/**
+ * T-126: one applied redaction, declared on the journal entry it changed.
+ *
+ * The marker lives OUTSIDE `payload`, so it is deliberately not covered by
+ * `payloadSha256` -- the hash keeps describing exactly the (now redacted)
+ * payload bytes, and the existing self-consistency check in the journal
+ * reader keeps working untouched. The marker is the entry's own declaration
+ * that it was redacted on purpose; the matching `evidence.redacted` event is
+ * the independent proof. Neither alone is accepted (see store/redact.ts).
+ *
+ * `priorPayloadSha256` is the preserved hash of the ORIGINAL payload. Only
+ * whole-payload hashes are recorded, never per-field ones: a field hash over
+ * a low-entropy identifier (a six-digit shift number) is brute-forceable and
+ * would re-leak exactly what the redaction removed.
+ */
+export const redactionMarkerSchema = z.object({
+  fieldPaths: z.array(nonEmptyStringSchema).min(1),
+  reason: nonEmptyStringSchema,
+  actor: nonEmptyStringSchema,
+  redactedAt: isoDateTimeSchema,
+  priorPayloadSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  redactedPayloadSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  redactionEvent: eventIdentitySchema
+});
+export type RedactionMarker = z.infer<typeof redactionMarkerSchema>;
+
 export const eventLogEntrySchema = z.object({
   nodeId: uuidSchema,
   sequence: z.number().int().positive(),
@@ -518,7 +544,9 @@ export const eventLogEntrySchema = z.object({
   actor: nonEmptyStringSchema,
   causation: z.array(eventIdentitySchema),
   payload: z.record(z.string(), z.unknown()),
-  payloadSha256: z.string().regex(/^[a-f0-9]{64}$/)
+  payloadSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  /** T-126: present only on entries whose payload fields were redacted. */
+  redactions: z.array(redactionMarkerSchema).min(1).optional()
 });
 export type EventLogEntry = z.infer<typeof eventLogEntrySchema>;
 

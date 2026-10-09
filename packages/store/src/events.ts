@@ -20,6 +20,7 @@ import {
   insertHistoryCorrection,
   insertHistoryEvidence,
   insertPlanPeriod,
+  insertRedaction,
   insertRunEvent,
   invalidateHistoryEvidence,
   listAcceptanceCriteria,
@@ -37,6 +38,7 @@ import {
   type HistoryCorrectionRecord,
   type HistoryEvidenceRecord
 } from "./projections"
+import { redactionFactsOf } from "./redact"
 import type {
   AcceptanceCriterionRecord,
   DependencyRecord,
@@ -72,7 +74,8 @@ export const EVENT_TYPES = [
   "acceptance.revised",
   "acceptance.approved",
   "acceptance.unapproved",
-  "acceptance.imported"
+  "acceptance.imported",
+  "evidence.redacted"
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -182,6 +185,24 @@ export type AcceptanceUnapprovedPayload = {
 export type AcceptanceImportedPayload = AcceptanceRevisedPayload & {
   sourcePath: string;
   sourceSha256: string;
+};
+
+/**
+ * T-126: the audit record of one applied redaction. It names the target event
+ * and the exact field paths whose content was destroyed, and carries the
+ * payload hash chain (prior -> redacted) that lets repair tell a sanctioned
+ * redaction apart from tampering. It never carries the removed content, nor a
+ * per-field hash of it (see redact.ts on low-entropy field hashes).
+ */
+export type EvidenceRedactedPayload = {
+  target: { nodeId: string; sequence: number };
+  targetEventType: string;
+  requestedFieldPath: string;
+  fieldPaths: string[];
+  priorPayloadSha256: string;
+  redactedPayloadSha256: string;
+  reason: string;
+  redactedAt: string;
 };
 
 /**
@@ -412,6 +433,29 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
       if (!applied) throw new Error(`Cannot apply acceptance.unapproved: criterion ${payload.criterionId} not found at revision ${payload.revision} for ${payload.taskId}`);
       return;
     }
+    case "evidence.redacted": {
+      // T-126: the ONLY projection effect of a redaction event is its own
+      // ledger row. The target's indexed payload and the rows derived from it
+      // need no work here: replay rebuilds everything from the journal, whose
+      // target entry is already redacted by the time the event replays. The
+      // live path does the extra scrub itself (redact.ts), because only there
+      // do the original values still exist to match against.
+      const payload = entry.payload as unknown as EvidenceRedactedPayload;
+      const facts = redactionFactsOf(entry);
+      insertRedaction(db, {
+        logicalClock: entry.logicalClock,
+        targetNode: facts.target.nodeId,
+        targetSequence: facts.target.sequence,
+        fieldPaths: facts.fieldPaths,
+        requestedFieldPath: facts.requestedFieldPath,
+        priorPayloadSha256: facts.priorPayloadSha256,
+        redactedPayloadSha256: facts.redactedPayloadSha256,
+        reason: payload.reason,
+        actor: entry.actor,
+        redactedAt: facts.redactedAt
+      }, revision);
+      return;
+    }
     default:
       throw new Error(`Unknown event type: ${entry.eventType}`);
   }
@@ -441,6 +485,26 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
  *   the current revision in the matching state.
  */
 export function assertNewEventAdmission(db: DatabaseSync, entry: EventLogEntry): void {
+  if (entry.eventType === "evidence.redacted") {
+    // T-126: a fresh redaction must name a target that exists and is in the
+    // exact state the event claims to start from. Replay never re-checks this
+    // (the applier has no guards); this stops a hand-rolled appendEvent from
+    // journaling a redaction whose hash chain could never verify, which would
+    // brick every later repair.
+    const facts = redactionFactsOf(entry);
+    const row = db.prepare("SELECT payload_sha256 FROM event_log WHERE node_id = ? AND sequence = ?")
+      .get(facts.target.nodeId, facts.target.sequence) as { payload_sha256: string } | undefined;
+    if (!row) throw new Error(`Cannot redact unknown event: ${facts.target.nodeId}/${facts.target.sequence}`);
+    if (row.payload_sha256 !== facts.priorPayloadSha256) {
+      throw new Error(
+        `Cannot redact ${facts.target.nodeId}/${facts.target.sequence}: indexed payload hash ${row.payload_sha256} does not match the declared pre-redaction hash ${facts.priorPayloadSha256}.`
+      );
+    }
+    if (facts.priorPayloadSha256 === facts.redactedPayloadSha256) {
+      throw new Error("Cannot record a redaction that changes nothing: prior and redacted payload hashes are identical.");
+    }
+    return;
+  }
   if (entry.eventType === "dispatch.attempted") {
     const payload = entry.payload as unknown as DispatchAttemptedPayload;
     const dispatch = payload.dispatch ?? payload as unknown as DispatchAttemptedPayload["dispatch"];
