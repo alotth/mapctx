@@ -16,6 +16,8 @@ export type PlannerTask = Partial<Task> & {
   parent?: string | null;
   parentId?: string | null;
   dependsOn?: readonly string[];
+  /** Store-owned task-detail paths, promoted to planner claims by the CLI. */
+  filesAffected?: readonly string[];
   paths?: readonly string[];
   touch?: readonly string[];
   workflowGates?: readonly WorkflowGate[];
@@ -57,6 +59,11 @@ export type ClaimCollision = {
   reason: "resource-claim-collision";
 };
 
+/** A weak inferred-domain overlap that is shown but never changes wave placement. */
+export type ClaimAdvisory = Omit<ClaimCollision, "reason"> & {
+  reason: "low-confidence-inferred-domain-overlap";
+};
+
 export type PlannedTask = {
   id: string;
   title: string;
@@ -84,6 +91,12 @@ export type PlanReport = {
   waves: PlanWave[];
   waveByTaskId: Record<string, number>;
   serializedPairs: ClaimCollision[];
+  /**
+   * Backward-compatible additive warnings; do not affect scheduling. Emitted
+   * only for pairs actually considered in a shared wave, so capacity changes
+   * which advisories are present.
+   */
+  advisories?: ClaimAdvisory[];
   claims: ResourceClaim[];
   /** Non-terminal graph context; includes containers and active/blocked statuses. */
   graphTaskIds: string[];
@@ -143,12 +156,17 @@ function claimSort(a: ResourceClaim, b: ResourceClaim): number {
   return a.taskId.localeCompare(b.taskId) || a.claimId.localeCompare(b.claimId);
 }
 
+function normalizedPathHints(values: readonly string[] | undefined): string[] {
+  return sortedUnique((values ?? []).map(value => value.trim()).filter(Boolean));
+}
+
 /** Convert legacy task domains/touch/path hints into stable protocol claims. */
 export function deriveResourceClaims(tasks: readonly PlannerTask[]): ResourceClaim[] {
   const claims: ResourceClaim[] = [];
   for (const task of [...tasks].sort((a, b) => a.id.localeCompare(b.id))) {
     const domains = sortedUnique(task.domains ?? []);
-    const paths = sortedUnique([...(task.paths ?? []), ...(task.touch ?? [])]);
+    const filesAffected = normalizedPathHints(task.filesAffected);
+    const paths = sortedUnique([...normalizedPathHints(task.paths), ...normalizedPathHints(task.touch), ...filesAffected]);
     if (domains.length === 0 && paths.length === 0) continue;
     const seed = JSON.stringify({ taskId: task.id, domains, paths });
     claims.push({
@@ -157,32 +175,55 @@ export function deriveResourceClaims(tasks: readonly PlannerTask[]): ResourceCla
       domains,
       paths,
       mode: "write",
-      confidence: "low",
-      provenance: "inferred"
+      confidence: filesAffected.length > 0 ? "high" : "low",
+      provenance: filesAffected.length > 0 ? "filesAffected" : "inferred"
     });
   }
   return claims;
 }
 
 function normalizePath(value: string): string {
-  let path = value.replaceAll("\\", "/").replace(/^\.\//, "");
+  let path = value.trim().replaceAll("\\", "/").replace(/^\.\//, "");
   path = path.replace(/\/+/g, "/");
-  return path.length > 1 ? path.replace(/\/$/, "") : path;
+  return (path.length > 1 ? path.replace(/\/$/, "") : path).toLowerCase();
 }
 
-function staticPrefix(value: string): string {
-  const wildcard = value.search(/[?*\[]/);
-  return normalizePath(wildcard < 0 ? value : value.slice(0, wildcard)).replace(/\/$/, "");
+/**
+ * Static head of a pattern, plus whether the wildcard truncated it mid-segment.
+ * `src/**` ends on a `/` boundary (`src`, not partial); `src/foo*.ts` stops inside
+ * the filename (`src/foo`, partial) and therefore cannot be compared on `/` alone.
+ */
+function staticPrefix(value: string): { prefix: string; partial: boolean } {
+  const normalized = normalizePath(value);
+  const wildcard = normalized.search(/[?*\[]/);
+  if (wildcard < 0) return { prefix: normalized.replace(/\/$/, ""), partial: false };
+  const head = normalized.slice(0, wildcard);
+  return { prefix: head.replace(/\/$/, ""), partial: head.length > 0 && !head.endsWith("/") };
 }
 
+/**
+ * A path collision is exact, ancestor/descendant, or a conservative glob overlap.
+ * Glob matching compares each pattern's static prefix, so `src/**` and `src/a.ts`
+ * collide while disjoint prefixes do not. A prefix truncated mid-segment compares as
+ * a plain string prefix in either direction, so `src/foo*.ts` collides with
+ * `src/foobar.ts`; literal paths keep the `/` boundary, so `packages/store` stays
+ * disjoint from `packages/store-ui`. Leading-wildcard patterns conservatively collide
+ * with any path. Comparisons case-fold for macOS/Windows default filesystems.
+ * This deliberately favors safety over a full glob interpreter when deciding whether
+ * two writes share a wave.
+ */
 function pathOverlap(left: string, right: string): boolean {
   const a = normalizePath(left);
   const b = normalizePath(right);
   if (!a || !b) return false;
   if (a === b) return true;
-  const aPrefix = staticPrefix(a);
-  const bPrefix = staticPrefix(b);
-  if (aPrefix === bPrefix || aPrefix.startsWith(`${bPrefix}/`) || bPrefix.startsWith(`${aPrefix}/`)) return true;
+  const { prefix: aPrefix, partial: aPartial } = staticPrefix(a);
+  const { prefix: bPrefix, partial: bPartial } = staticPrefix(b);
+  if (!aPrefix || !bPrefix) return true;
+  if (aPrefix === bPrefix) return true;
+  if (aPartial || bPartial) {
+    if (aPrefix.startsWith(bPrefix) || bPrefix.startsWith(aPrefix)) return true;
+  } else if (aPrefix.startsWith(`${bPrefix}/`) || bPrefix.startsWith(`${aPrefix}/`)) return true;
   const aDir = a.endsWith("/**") || a.endsWith("/*") || a.endsWith("/");
   const bDir = b.endsWith("/**") || b.endsWith("/*") || b.endsWith("/");
   if (aDir && b.startsWith(`${a.slice(0, a.lastIndexOf("/"))}/`)) return true;
@@ -190,27 +231,72 @@ function pathOverlap(left: string, right: string): boolean {
   return false;
 }
 
-function claimCollision(left: ResourceClaim, right: ResourceClaim): {
+type ClaimOverlap = {
   domains: string[];
   paths: string[];
-} | null {
-  if (left.mode === "read" && right.mode === "read") return null;
-  const domains = sortedUnique(left.domains.filter(domain => right.domains.includes(domain)));
-  const paths = sortedUnique(
-    left.paths.flatMap(leftPath => right.paths.filter(rightPath => pathOverlap(leftPath, rightPath)).map(rightPath => `${normalizePath(leftPath)} ↔ ${normalizePath(rightPath)}`))
-  );
-  if (domains.length === 0 && paths.length === 0) return null;
-  return { domains, paths };
+};
+
+function domainsOverlap(left: ResourceClaim, right: ResourceClaim): string[] {
+  return sortedUnique(left.domains.filter(domain => right.domains.includes(domain)));
 }
 
-function pairCollision(taskAId: string, taskBId: string, claimsByTask: Map<string, ResourceClaim[]>): ClaimCollision | null {
+function pathsOverlap(left: ResourceClaim, right: ResourceClaim): string[] {
+  return sortedUnique(
+    left.paths.flatMap(leftPath => right.paths.filter(rightPath => pathOverlap(leftPath, rightPath)).map(rightPath => `${normalizePath(leftPath)} ↔ ${normalizePath(rightPath)}`))
+  );
+}
+
+/** A domain-only claim nobody declared: it exists only because a domain was inferred. */
+function isWeakDomainOnlyClaim(claim: ResourceClaim): boolean {
+  return claim.paths.length === 0 && claim.confidence === "low" && claim.provenance === "inferred";
+}
+
+/** A domain-only claim that was authored or is high-confidence, so it still binds. */
+function isStrongDomainOnlyClaim(claim: ResourceClaim): boolean {
+  return claim.paths.length === 0 && !isWeakDomainOnlyClaim(claim);
+}
+
+/**
+ * Paths are authoritative only when both claims carry paths: only a path
+ * overlap serializes. Otherwise domain evidence decides, and it binds only when
+ * at least one side is a strong domain-only claim (authored, or confidence above
+ * low). So a path-bearing claim beside a low-confidence inferred domain, and two
+ * such inferred domains, are advisory; an authored or high-confidence domain-only
+ * claim keeps serializing against anything sharing its domain.
+ */
+function claimCollision(left: ResourceClaim, right: ResourceClaim): ClaimOverlap | null {
+  if (left.mode === "read" && right.mode === "read") return null;
+  if (left.paths.length > 0 && right.paths.length > 0) {
+    const paths = pathsOverlap(left, right);
+    return paths.length > 0 ? { domains: [], paths } : null;
+  }
+  const domains = domainsOverlap(left, right);
+  if (domains.length === 0) return null;
+  if (!isStrongDomainOnlyClaim(left) && !isStrongDomainOnlyClaim(right)) return null;
+  return { domains, paths: [] };
+}
+
+function claimAdvisory(left: ResourceClaim, right: ResourceClaim): ClaimOverlap | null {
+  if (left.mode === "read" && right.mode === "read") return null;
+  if (claimCollision(left, right)) return null;
+  const domains = domainsOverlap(left, right);
+  return domains.length > 0 ? { domains, paths: [] } : null;
+}
+
+function pairOverlap<T extends ClaimCollision | ClaimAdvisory>(
+  taskAId: string,
+  taskBId: string,
+  claimsByTask: Map<string, ResourceClaim[]>,
+  overlap: (left: ResourceClaim, right: ResourceClaim) => ClaimOverlap | null,
+  reason: T["reason"]
+): T | null {
   const aClaims = claimsByTask.get(taskAId) ?? [];
   const bClaims = claimsByTask.get(taskBId) ?? [];
   const causes: Array<{ a: ResourceClaim; b: ResourceClaim; domains: string[]; paths: string[] }> = [];
   for (const a of aClaims) {
     for (const b of bClaims) {
-      const collision = claimCollision(a, b);
-      if (collision) causes.push({ a, b, ...collision });
+      const result = overlap(a, b);
+      if (result) causes.push({ a, b, ...result });
     }
   }
   if (causes.length === 0) return null;
@@ -242,8 +328,16 @@ function pairCollision(taskAId: string, taskBId: string, claimsByTask: Map<strin
     taskBClaimIds: sortedUnique(normalizedCauses.map(cause => cause.claimB.claimId)),
     domains: [...domains].sort(),
     paths: [...paths].sort(),
-    reason: "resource-claim-collision"
-  };
+    reason
+  } as T;
+}
+
+function pairCollision(taskAId: string, taskBId: string, claimsByTask: Map<string, ResourceClaim[]>): ClaimCollision | null {
+  return pairOverlap<ClaimCollision>(taskAId, taskBId, claimsByTask, claimCollision, "resource-claim-collision");
+}
+
+function pairAdvisory(taskAId: string, taskBId: string, claimsByTask: Map<string, ResourceClaim[]>): ClaimAdvisory | null {
+  return pairOverlap<ClaimAdvisory>(taskAId, taskBId, claimsByTask, claimAdvisory, "low-confidence-inferred-domain-overlap");
 }
 
 function gateBlockers(gates: readonly WorkflowGate[] | undefined, required: readonly string[] | undefined): WorkflowGate[] {
@@ -378,6 +472,7 @@ export function planExecution(input: PlannerInput): PlanReport {
 
   const waves: PlanWave[] = [];
   const serialized = new Map<string, ClaimCollision>();
+  const advisories = new Map<string, ClaimAdvisory>();
   const processed = new Set<string>();
   while (processed.size < runnable.size) {
     const ready = [...runnable].filter(id => !processed.has(id) && (indegree.get(id) ?? 0) === 0).sort();
@@ -392,9 +487,13 @@ export function planExecution(input: PlannerInput): PlanReport {
       let collision = false;
       for (const selectedId of selected) {
         const explanation = pairCollision(selectedId, id, claimsByTask);
-        if (!explanation) continue;
-        collision = true;
-        serialized.set(`${explanation.taskAId}:${explanation.taskBId}`, explanation);
+        if (explanation) {
+          collision = true;
+          serialized.set(`${explanation.taskAId}:${explanation.taskBId}`, explanation);
+        } else {
+          const advisory = pairAdvisory(selectedId, id, claimsByTask);
+          if (advisory) advisories.set(`${advisory.taskAId}:${advisory.taskBId}`, advisory);
+        }
       }
       if (collision) continue;
       selected.push(id);
@@ -424,6 +523,7 @@ export function planExecution(input: PlannerInput): PlanReport {
     waves,
     waveByTaskId,
     serializedPairs: [...serialized.values()].sort((a, b) => a.taskAId.localeCompare(b.taskAId) || a.taskBId.localeCompare(b.taskBId)),
+    advisories: [...advisories.values()].sort((a, b) => a.taskAId.localeCompare(b.taskAId) || a.taskBId.localeCompare(b.taskBId)),
     claims,
     graphTaskIds: [...graphIds].sort(),
     runnableTaskIds: [...runnable].sort(),

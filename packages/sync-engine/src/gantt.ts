@@ -46,6 +46,7 @@ export type GanttTaskInput = {
   due?: string | null;
   dependsOn?: readonly string[];
   domains?: readonly string[];
+  filesAffected?: readonly string[];
   workload?: string | null;
   estimatedEffort?: string | null;
   /** Missing on historic rows means legacy-human; no estimate is reinterpreted. */
@@ -162,6 +163,14 @@ export type GanttCollision = {
   paths: string[];
 };
 
+export type GanttAdvisory = {
+  taskAId: string;
+  taskBId: string;
+  domains: string[];
+  paths: string[];
+  reason: string;
+};
+
 export type GanttHistory = {
   source: HistorySource;
   tier: HistoryTier;
@@ -227,6 +236,8 @@ export type GanttDataset = {
     gateStatus?: string;
   }>;
   serializedPairs: Array<{ taskAId: string; taskBId: string; domains: string[]; paths: string[] }>;
+  /** Additive, capacity-dependent planner warnings; rendering remains opt-in. */
+  advisories?: GanttAdvisory[];
   claimViolations: Array<{ id: string; waveId: string; kind: string; taskAId: string; taskBId: string; path: string; detectedAt: string }>;
   policy: {
     scheduling: string;
@@ -369,7 +380,8 @@ export function buildGanttDataset(input: {
       status: task.status,
       type: task.type as PlannerTask['type'],
       parent: task.parentId ?? null,
-      domains: [...(task.domains ?? [])]
+      domains: [...(task.domains ?? [])],
+      filesAffected: [...(task.filesAffected ?? [])]
     })),
     dependencyEdges: input.dependencyEdges
   });
@@ -528,6 +540,13 @@ export function buildGanttDataset(input: {
       taskBId: pair.taskBId,
       domains: [...pair.domains],
       paths: [...pair.paths]
+    })),
+    advisories: (report.advisories ?? []).map(advisory => ({
+      taskAId: advisory.taskAId,
+      taskBId: advisory.taskBId,
+      domains: [...advisory.domains],
+      paths: [...advisory.paths],
+      reason: advisory.reason
     })),
     claimViolations: (input.claimViolations ?? []).map(violation => ({
       id: violation.id,

@@ -844,6 +844,7 @@ export function mapctxPlanCommand(options: MapctxOptions): void {
   try {
     const tasks = listTasks(handle.db);
     const edges = listDependencies(handle.db);
+    const detailsByTaskId = new Map(tasks.map(task => [task.taskId, getTaskDetail(handle.db, task.taskId)]));
     // dependencyEdges is the single source of truth here too; task.dependsOn is omitted (see
     // the TASKS.md fallback branch above and T-063).
     const report = planner.planExecution({
@@ -853,7 +854,10 @@ export function mapctxPlanCommand(options: MapctxOptions): void {
         status: task.planningState,
         type: task.type ?? undefined,
         parent: task.parentTaskId ?? null,
-        domains: task.domains
+        domains: task.domains,
+        // Store projections keep detail separately; pass its file evidence to
+        // planner so filesAffected can override broad inferred domains.
+        filesAffected: detailsByTaskId.get(task.taskId)?.filesAffected ?? []
       })),
       dependencyEdges: edges.map(edge => ({ fromTaskId: edge.fromTaskId, toTaskId: edge.toTaskId, kind: edge.kind }))
     });
@@ -914,6 +918,7 @@ export function mapctxGanttCommand(options: MapctxOptions): void {
   try {
     const tasks = listTasks(handle.db);
     const edges = listDependencies(handle.db);
+    const detailsByTaskId = new Map(tasks.map(task => [task.taskId, getTaskDetail(handle.db, task.taskId)]));
     // T-116: receipts invalidated by an accepted history correction are not
     // actuals. Original rows stay queryable in the store; the roadmap simply
     // stops displaying and calibrating on them.
@@ -930,9 +935,10 @@ export function mapctxGanttCommand(options: MapctxOptions): void {
         start: task.startDate ?? null,
         due: task.dueDate ?? null,
         domains: task.domains,
+        filesAffected: detailsByTaskId.get(task.taskId)?.filesAffected ?? [],
         workload: task.workload as string | null,
-        estimatedEffort: getTaskDetail(handle.db, task.taskId)?.estimatedEffort ?? null,
-        estimatedEffortSource: getTaskDetail(handle.db, task.taskId)?.estimatedEffortSource ?? "legacy-human",
+        estimatedEffort: detailsByTaskId.get(task.taskId)?.estimatedEffort ?? null,
+        estimatedEffortSource: detailsByTaskId.get(task.taskId)?.estimatedEffortSource ?? "legacy-human",
         estimateSnapshot: listEstimateSnapshots(handle.db, task.taskId).slice(-1)[0] ?? null,
         predictedStart: task.predictedStart ?? null,
         receipts: validReceiptsFor(task.taskId)
