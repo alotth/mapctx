@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 1/7
+  - subIssueProgress: 2/7
   - priority: high
   - workload: null
   - tags: []
@@ -2668,7 +2668,7 @@
 ### [T-125] R6 planner: filesAffected/paths prevalecem sobre dominio inferido nas waves
 
   - id: T-125
-  - status: review
+  - status: done
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -2679,7 +2679,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-09
   - externalId: null
   - updated: 2026-10-09
   - detail: ./tasks/T-125.md
@@ -2687,7 +2687,7 @@
 ### [T-126] R5 redacao auditavel de evidencia sensivel + lint [privacy] patterns
 
   - id: T-126
-  - status: doing
+  - status: review
   - type: feature
   - parent: E-017
   - subIssueProgress: null
