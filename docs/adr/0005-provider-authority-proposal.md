@@ -47,7 +47,7 @@ If the operator selects B, the resulting decision is:
    acceptance. Explicit approval evidence and receipt summaries may be posted
    as provider comments while the receipt itself remains a MapCtx record.
 5. TASKS.md generation, task-detail structured snapshots, store-to-provider
-   push, bidirectional sync, cutover/import/reconcile repair, and checkpoint
+   push, bidirectional sync, cutover/import/reconcile and mirror repair, and checkpoint
    export are retired once migration completes.
 6. Provider writes require a provider revision/ETag where available and a
    caller correlation ID. Unsupported provider capabilities, freshness, and
@@ -150,7 +150,10 @@ replacement, and 4,800 as retained MapCtx intelligence. That removal headline
 needs a durability correction: identity (159) and maintenance (115) protect the
 retained M event log; attestation (438) remains M if telemetry/history requires
 durable integrity evidence. The D range is therefore 1,848 to 2,286 store lines,
-with M correspondingly 5,074 to 5,512 lines. Core Markdown parsing (365) and
+with M correspondingly 5,074 to 5,512 lines. That range still counts
+`repair.ts` (308) as D, although part of it replays the retained M events; if
+it all stays M the ranges become D 1,540 to 1,978 and M 5,382 to 5,820 (split
+unmeasured, see the study). Core Markdown parsing (365) and
 task-detail handling (786) require separate retirement/redesign. Shared
 sync-engine UI source is apportioned between provider task surfaces and MapCtx
 overlays in the study; its full file sizes are not additive migration estimates.

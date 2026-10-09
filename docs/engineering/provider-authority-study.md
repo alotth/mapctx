@@ -48,13 +48,24 @@ store-authority machinery. That is too broad once an M event log remains.
 | --- | ---: | --- |
 | P — replace behind provider adapter/cache | 1,500 (17%) | tasks (640), acceptance (433), about 450 task/dependency/acceptance projection lines |
 | M — retain | 5,074 to 5,512 (57–62%) | original M set (4,800), plus identity (159) and maintenance (115); retain attestation (438) when telemetry/history needs independently durable integrity evidence |
-| D — retire | 1,848 to 2,286 (21–26%) | cutover, import, repair, export, reconcile, drift, snapshot validation; the high end retires attestation only if the telemetry-durability decision permits reconstruction |
+| D — retire | 1,848 to 2,286 (21–26%) | cutover, import, snapshot/mirror repair, export, reconcile, drift, snapshot validation; the high end retires attestation only if the telemetry-durability decision permits reconstruction. `repair.ts` (308) is counted as D here but is not purely mirror repair — see below |
 
 This is a decision-sensitive range, not an estimate error. Node identity and
 maintenance protect the retained local event log and are M in both cases.
 Attestation is M if retained telemetry/history needs byte-level witness
 integrity; otherwise it can be D. The OPEN telemetry-durability decision
 therefore fixes the final removal figure.
+
+`repair.ts` (308) is a split module, not a clean D. Its mirror/snapshot repair
+is D, but `repair.ts:75–159` also validates the journal, watermarks, and
+attestations and rebuilds the database by replaying every event, including the
+retained M events (claims, receipts, history). The line split inside the module
+was not measured. If the operator requires independent durability for M, the
+event-log validation and replay part stays M, or a defined substitute (provider
+comment reconstruction, or backup/restore) must replace it before the removal
+figure becomes a commitment. Bounding cases: all 308 lines D gives the ranges
+above; all 308 lines M gives D 1,540 to 1,978 and M 5,382 to 5,820 (P stays
+1,500, totals still 8,860). Measuring the split is a first-slice task.
 
 The associated agent-friction study found snapshot/version-control friction and
 acceptance ceremony account for 12 of 22 reports. Both become provider
@@ -286,6 +297,7 @@ interface TaskProvider {
 
   listCriteria(input: {
     item: ProviderItemRef
+    cursor?: string
   }): Promise<ProviderResult<Page<ProviderCriterion>>>
 
   setCriterionState(input: {
