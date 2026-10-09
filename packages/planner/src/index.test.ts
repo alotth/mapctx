@@ -135,9 +135,9 @@ test("task pair is not reported as both serialized and advisory (multi-claim: ov
     ],
     claims: [
       { claimId: "00000000-0000-5000-8000-000000000041", taskId: "T-A", domains: ["CODE"], paths: ["src/shared.ts"], mode: "write", confidence: "high", provenance: "filesAffected" },
-      { claimId: "00000000-0000-5000-8000-000000000043", taskId: "T-A", domains: ["DOCS"], paths: [], mode: "write", confidence: "low", provenance: "inferred" },
+      { claimId: "00000000-0000-5000-8000-000000000043", taskId: "T-A", domains: ["CODE"], paths: [], mode: "write", confidence: "low", provenance: "inferred" },
       { claimId: "00000000-0000-5000-8000-000000000042", taskId: "T-B", domains: ["CODE"], paths: ["src/shared.ts"], mode: "write", confidence: "high", provenance: "filesAffected" },
-      { claimId: "00000000-0000-5000-8000-000000000044", taskId: "T-B", domains: ["DOCS"], paths: [], mode: "write", confidence: "low", provenance: "inferred" }
+      { claimId: "00000000-0000-5000-8000-000000000044", taskId: "T-B", domains: ["CODE"], paths: [], mode: "write", confidence: "low", provenance: "inferred" }
     ]
   });
   assert.equal(report.serializedPairs.length, 1);
@@ -333,6 +333,30 @@ test("R2 guards: wildcard filesAffected overlaps serialize with exact cause path
     { a: "src/foo*.ts", b: "src/foobar.ts", cause: "src/foo*.ts ↔ src/foobar.ts" },
     { a: "src/file?.ts", b: "src/file1.ts", cause: "src/file?.ts ↔ src/file1.ts" },
     { a: "src/file[12].ts", b: "src/file1.ts", cause: "src/file[12].ts ↔ src/file1.ts" }
+  ];
+  for (const { a, b, cause } of cases) {
+    const report = planExecution({
+      tasks: [
+        { id: "T-A", status: "backlog", type: "task", domains: ["CODE"], filesAffected: [a] },
+        { id: "T-B", status: "backlog", type: "task", domains: ["CODE"], filesAffected: [b] }
+      ]
+    });
+    assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]], `${a} vs ${b}`);
+    assert.equal(report.serializedPairs.length, 1, `${a} vs ${b}`);
+    assert.deepEqual(report.serializedPairs[0].causes[0].paths, [cause], `${a} vs ${b}`);
+  }
+});
+
+test("T-132: brace, extglob, negation, and path-resolution overlaps serialize with exact cause path", () => {
+  const cases: Array<{ a: string; b: string; cause: string }> = [
+    { a: "{a,b}/x.ts", b: "a/x.ts", cause: "{a,b}/x.ts ↔ a/x.ts" },
+    { a: "src/{a,b}.ts", b: "src/a.ts", cause: "src/{a,b}.ts ↔ src/a.ts" },
+    { a: "@(a|b)/x.ts", b: "a/x.ts", cause: "@(a|b)/x.ts ↔ a/x.ts" },
+    { a: "src/@(a|b).ts", b: "src/a.ts", cause: "src/@(a|b).ts ↔ src/a.ts" },
+    { a: "!src/a.ts", b: "src/a.ts", cause: "!src/a.ts ↔ src/a.ts" },
+    { a: "/src/a.ts", b: "src/a.ts", cause: "src/a.ts ↔ src/a.ts" },
+    { a: "src/../src/a.ts", b: "src/a.ts", cause: "src/a.ts ↔ src/a.ts" },
+    { a: ".//src/a.ts", b: "src/a.ts", cause: "src/a.ts ↔ src/a.ts" }
   ];
   for (const { a, b, cause } of cases) {
     const report = planExecution({
