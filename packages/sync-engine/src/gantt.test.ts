@@ -37,6 +37,21 @@ test('Gantt planner waves and advisories match planExecution for filesAffected t
   ]);
 });
 
+test('Gantt wiring guard: overlapping filesAffected on store-mode tasks serializes with exact cause path (reviewer-found gap)', () => {
+  const tasks = [
+    { id: 'T-210', title: 'Writer A', status: 'ready', domains: ['CODE'], filesAffected: ['src/shared.ts'], receipts: [] },
+    { id: 'T-211', title: 'Writer B', status: 'ready', domains: ['CODE'], filesAffected: ['src/shared.ts'], receipts: [] }
+  ];
+  const plan = planExecution({
+    tasks: tasks.map(({ id, title, status, domains, filesAffected }) => ({ id, title, status, type: 'task', domains, filesAffected }))
+  });
+  const dataset = buildGanttDataset({ mode: 'store', tasks, dependencyEdges: [] });
+
+  assert.deepEqual(dataset.waves, plan.waves.map(wave => ({ wave: wave.wave, taskIds: wave.taskIds })));
+  assert.equal(dataset.serializedPairs.length, 1);
+  assert.deepEqual(dataset.serializedPairs[0].paths, ['src/shared.ts ↔ src/shared.ts']);
+});
+
 test('Gantt exposes measured agent, human, parked, and lead figures independently', () => {
   const measuredReceipt: RunReceipt = {
     ...receipt,
@@ -329,6 +344,31 @@ test('aligned plans and receipt-less done tasks are excluded from accuracy and d
   assert.equal(aligned?.actual?.plannedAccuracyEligible, false);
   assert.deepEqual(absent?.measurement, { status: 'no-measurement' });
   assert.equal(absent?.actual, null);
+});
+
+test('Gantt multi-claim: overlapping filesAffected pair serializes, shared-domain-only pair stays advisory, no key appears in both lists', () => {
+  const tasks = [
+    { id: 'T-220', title: 'Writer A', status: 'ready', domains: ['CODE'], filesAffected: ['src/shared.ts'], receipts: [] },
+    { id: 'T-221', title: 'Writer B', status: 'ready', domains: ['CODE'], filesAffected: ['src/shared.ts'], receipts: [] },
+    { id: 'T-222', title: 'Domain only A', status: 'ready', domains: ['DOCS'], receipts: [] },
+    { id: 'T-223', title: 'Domain only B', status: 'ready', domains: ['DOCS'], receipts: [] }
+  ];
+  const plan = planExecution({
+    tasks: tasks.map(({ id, title, status, domains, filesAffected }) => ({ id, title, status, type: 'task', domains, filesAffected }))
+  });
+  const dataset = buildGanttDataset({ mode: 'store', tasks, dependencyEdges: [] });
+
+  assert.deepEqual(dataset.waves, plan.waves.map(wave => ({ wave: wave.wave, taskIds: wave.taskIds })));
+  assert.deepEqual(dataset.serializedPairs, plan.serializedPairs.map(({ taskAId, taskBId, domains, paths }) => ({
+    taskAId, taskBId, domains, paths
+  })));
+  assert.deepEqual(dataset.advisories, plan.advisories?.map(({ taskAId, taskBId, domains, paths, reason }) => ({
+    taskAId, taskBId, domains, paths, reason
+  })));
+  assert.equal(dataset.serializedPairs.length, 1);
+  assert.equal((dataset.advisories ?? []).length, 1);
+  const serializedKeys = new Set(dataset.serializedPairs.map(pair => `${pair.taskAId}:${pair.taskBId}`));
+  assert.ok((dataset.advisories ?? []).every(pair => !serializedKeys.has(`${pair.taskAId}:${pair.taskBId}`)));
 });
 
 test('T-102 history tier rides the latest receipt and inferred backfills never calibrate', () => {

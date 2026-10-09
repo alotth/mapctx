@@ -188,16 +188,27 @@ function normalizePath(value: string): string {
   return (path.length > 1 ? path.replace(/\/$/, "") : path).toLowerCase();
 }
 
-function staticPrefix(value: string): string {
-  const wildcard = value.search(/[?*\[]/);
-  return normalizePath(wildcard < 0 ? value : value.slice(0, wildcard)).replace(/\/$/, "");
+/**
+ * Static head of a pattern, plus whether the wildcard truncated it mid-segment.
+ * `src/**` ends on a `/` boundary (`src`, not partial); `src/foo*.ts` stops inside
+ * the filename (`src/foo`, partial) and therefore cannot be compared on `/` alone.
+ */
+function staticPrefix(value: string): { prefix: string; partial: boolean } {
+  const normalized = normalizePath(value);
+  const wildcard = normalized.search(/[?*\[]/);
+  if (wildcard < 0) return { prefix: normalized.replace(/\/$/, ""), partial: false };
+  const head = normalized.slice(0, wildcard);
+  return { prefix: head.replace(/\/$/, ""), partial: head.length > 0 && !head.endsWith("/") };
 }
 
 /**
  * A path collision is exact, ancestor/descendant, or a conservative glob overlap.
  * Glob matching compares each pattern's static prefix, so `src/**` and `src/a.ts`
- * collide while disjoint prefixes do not. Leading-wildcard patterns conservatively
- * collide with any path. Comparisons case-fold for macOS/Windows default filesystems.
+ * collide while disjoint prefixes do not. A prefix truncated mid-segment compares as
+ * a plain string prefix in either direction, so `src/foo*.ts` collides with
+ * `src/foobar.ts`; literal paths keep the `/` boundary, so `packages/store` stays
+ * disjoint from `packages/store-ui`. Leading-wildcard patterns conservatively collide
+ * with any path. Comparisons case-fold for macOS/Windows default filesystems.
  * This deliberately favors safety over a full glob interpreter when deciding whether
  * two writes share a wave.
  */
@@ -206,10 +217,13 @@ function pathOverlap(left: string, right: string): boolean {
   const b = normalizePath(right);
   if (!a || !b) return false;
   if (a === b) return true;
-  const aPrefix = staticPrefix(a);
-  const bPrefix = staticPrefix(b);
+  const { prefix: aPrefix, partial: aPartial } = staticPrefix(a);
+  const { prefix: bPrefix, partial: bPartial } = staticPrefix(b);
   if (!aPrefix || !bPrefix) return true;
-  if (aPrefix === bPrefix || aPrefix.startsWith(`${bPrefix}/`) || bPrefix.startsWith(`${aPrefix}/`)) return true;
+  if (aPrefix === bPrefix) return true;
+  if (aPartial || bPartial) {
+    if (aPrefix.startsWith(bPrefix) || bPrefix.startsWith(aPrefix)) return true;
+  } else if (aPrefix.startsWith(`${bPrefix}/`) || bPrefix.startsWith(`${aPrefix}/`)) return true;
   const aDir = a.endsWith("/**") || a.endsWith("/*") || a.endsWith("/");
   const bDir = b.endsWith("/**") || b.endsWith("/*") || b.endsWith("/");
   if (aDir && b.startsWith(`${a.slice(0, a.lastIndexOf("/"))}/`)) return true;
@@ -232,15 +246,23 @@ function pathsOverlap(left: ResourceClaim, right: ResourceClaim): string[] {
   );
 }
 
-function isLowConfidenceInferredDomainClaim(claim: ResourceClaim): boolean {
+/** A domain-only claim nobody declared: it exists only because a domain was inferred. */
+function isWeakDomainOnlyClaim(claim: ResourceClaim): boolean {
   return claim.paths.length === 0 && claim.confidence === "low" && claim.provenance === "inferred";
+}
+
+/** A domain-only claim that was authored or is high-confidence, so it still binds. */
+function isStrongDomainOnlyClaim(claim: ResourceClaim): boolean {
+  return claim.paths.length === 0 && !isWeakDomainOnlyClaim(claim);
 }
 
 /**
  * Paths are authoritative only when both claims carry paths: only a path
- * overlap serializes. A path-bearing claim paired with a domain-only claim
- * falls back to domain evidence. Authored or higher-confidence domains
- * serialize; any low-confidence inferred domain overlap is advisory evidence.
+ * overlap serializes. Otherwise domain evidence decides, and it binds only when
+ * at least one side is a strong domain-only claim (authored, or confidence above
+ * low). So a path-bearing claim beside a low-confidence inferred domain, and two
+ * such inferred domains, are advisory; an authored or high-confidence domain-only
+ * claim keeps serializing against anything sharing its domain.
  */
 function claimCollision(left: ResourceClaim, right: ResourceClaim): ClaimOverlap | null {
   if (left.mode === "read" && right.mode === "read") return null;
@@ -249,7 +271,8 @@ function claimCollision(left: ResourceClaim, right: ResourceClaim): ClaimOverlap
     return paths.length > 0 ? { domains: [], paths } : null;
   }
   const domains = domainsOverlap(left, right);
-  if (domains.length === 0 || isLowConfidenceInferredDomainClaim(left) || isLowConfidenceInferredDomainClaim(right)) return null;
+  if (domains.length === 0) return null;
+  if (!isStrongDomainOnlyClaim(left) && !isStrongDomainOnlyClaim(right)) return null;
   return { domains, paths: [] };
 }
 
