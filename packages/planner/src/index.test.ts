@@ -63,6 +63,85 @@ test("overlapping filesAffected serializes and reports exact path pair", () => {
   assert.deepEqual(report.serializedPairs[0].causes[0].paths, ["src/shared.ts ↔ src/shared.ts"]);
 });
 
+test("path-bearing filesAffected and domain-only inferred sharing a domain is advisory", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", status: "backlog", type: "task", domains: ["CODE"], filesAffected: ["src/a.ts"] },
+      { id: "T-B", status: "backlog", type: "task", domains: ["CODE"] }
+    ]
+  });
+
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]]);
+  assert.deepEqual(report.serializedPairs, []);
+  assert.deepEqual(report.advisories?.map(({ taskAId, taskBId, domains }) => ({ taskAId, taskBId, domains })), [
+    { taskAId: "T-A", taskBId: "T-B", domains: ["CODE"] }
+  ]);
+});
+
+test("authored high-confidence domain-only claim serializes against path-bearing claim sharing domain", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", status: "backlog", type: "task" },
+      { id: "T-B", status: "backlog", type: "task" }
+    ],
+    claims: [
+      { claimId: "00000000-0000-5000-8000-000000000021", taskId: "T-A", domains: ["CODE"], paths: [], mode: "write", confidence: "high", provenance: "authored" },
+      claim("00000000-0000-5000-8000-000000000022", "T-B", ["src/a.ts"])
+    ]
+  });
+
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
+  assert.equal(report.serializedPairs.length, 1);
+  assert.deepEqual(report.serializedPairs[0].domains, ["CODE"]);
+  assert.deepEqual(report.serializedPairs[0].paths, []);
+  assert.deepEqual(report.advisories, []);
+});
+
+test("blank paths are ignored and case-folded paths collide", () => {
+  const blankPathReport = planExecution({
+    tasks: [
+      { id: "T-A", status: "backlog", type: "task", domains: ["CODE"], filesAffected: ["  "] },
+      { id: "T-B", status: "backlog", type: "task", domains: ["CODE"] }
+    ]
+  });
+  assert.deepEqual(blankPathReport.waves.map(wave => wave.taskIds), [["T-A", "T-B"]]);
+  assert.deepEqual(blankPathReport.serializedPairs, []);
+  const blankPathClaim = blankPathReport.claims.find(({ taskId }) => taskId === "T-A");
+  assert.deepEqual(blankPathClaim?.paths, []);
+  assert.equal(blankPathClaim?.provenance, "inferred");
+  assert.deepEqual(blankPathReport.advisories?.map(({ taskAId, taskBId }) => ({ taskAId, taskBId })), [
+    { taskAId: "T-A", taskBId: "T-B" }
+  ]);
+
+  const caseFoldedReport = planExecution({
+    tasks: [
+      { id: "T-A", status: "backlog", type: "task" },
+      { id: "T-B", status: "backlog", type: "task" }
+    ],
+    claims: [
+      claim("00000000-0000-5000-8000-000000000033", "T-A", ["src/A.ts"]),
+      claim("00000000-0000-5000-8000-000000000034", "T-B", ["src/a.ts"])
+    ]
+  });
+  assert.deepEqual(caseFoldedReport.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
+  assert.deepEqual(caseFoldedReport.serializedPairs[0].causes[0].paths, ["src/a.ts ↔ src/a.ts"]);
+});
+
+test("task pair is not reported as both serialized and advisory", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", status: "backlog", type: "task" },
+      { id: "T-B", status: "backlog", type: "task" }
+    ],
+    claims: [
+      { claimId: "00000000-0000-5000-8000-000000000041", taskId: "T-A", domains: ["CODE"], paths: [], mode: "write", confidence: "high", provenance: "authored" },
+      claim("00000000-0000-5000-8000-000000000042", "T-B", ["src/a.ts"])
+    ]
+  });
+  const serialized = new Set(report.serializedPairs.map(pair => `${pair.taskAId}:${pair.taskBId}`));
+  assert.ok(report.advisories?.every(pair => !serialized.has(`${pair.taskAId}:${pair.taskBId}`)));
+});
+
 test("low-confidence inferred domain overlap is advisory and stays in one wave", () => {
   const report = planExecution({
     tasks: [
@@ -78,20 +157,20 @@ test("low-confidence inferred domain overlap is advisory and stays in one wave",
   assert.equal(advisories[0].reason, "low-confidence-inferred-domain-overlap");
 });
 
-test("glob path prefix overlaps matching descendant", () => {
+test("leading glob path conservatively overlaps matching extension", () => {
   const report = planExecution({
     tasks: [
       { id: "T-A", status: "backlog", type: "task" },
       { id: "T-B", status: "backlog", type: "task" }
     ],
     claims: [
-      claim("00000000-0000-5000-8000-000000000011", "T-A", ["src/**"]),
+      claim("00000000-0000-5000-8000-000000000011", "T-A", ["**/*.ts"]),
       claim("00000000-0000-5000-8000-000000000012", "T-B", ["src/lib/a.ts"])
     ]
   });
 
   assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
-  assert.deepEqual(report.serializedPairs[0].causes[0].paths, ["src/** ↔ src/lib/a.ts"]);
+  assert.deepEqual(report.serializedPairs[0].causes[0].paths, ["**/*.ts ↔ src/lib/a.ts"]);
 });
 
 test("same board gives byte-identical output regardless of task input order", () => {

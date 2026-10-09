@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { planExecution } from '@mapctx/planner';
 import type { EstimateSnapshot, RunReceipt } from '@mapctx/protocol';
 import { buildGanttDataset } from './gantt';
 
@@ -15,6 +16,26 @@ const receipt: RunReceipt = {
   evidence: [],
   failure: null
 };
+
+test('Gantt planner waves and advisories match planExecution for filesAffected tasks', () => {
+  const tasks = [
+    { id: 'T-201', title: 'Path claim', status: 'ready', domains: ['CODE'], filesAffected: ['src/a.ts'], receipts: [] },
+    { id: 'T-202', title: 'Domain only', status: 'ready', domains: ['CODE'], receipts: [] }
+  ];
+  const plan = planExecution({
+    tasks: tasks.map(({ id, title, status, domains, filesAffected }) => ({ id, title, status, type: 'task', domains, filesAffected }))
+  });
+  const dataset = buildGanttDataset({ mode: 'store', tasks, dependencyEdges: [] });
+
+  assert.deepEqual(dataset.waves, plan.waves.map(wave => ({ wave: wave.wave, taskIds: wave.taskIds })));
+  assert.deepEqual(dataset.serializedPairs, []);
+  assert.deepEqual(dataset.advisories, plan.advisories?.map(({ taskAId, taskBId, domains, paths, reason }) => ({
+    taskAId, taskBId, domains, paths, reason
+  })));
+  assert.deepEqual(dataset.advisories?.map(({ taskAId, taskBId, domains }) => ({ taskAId, taskBId, domains })), [
+    { taskAId: 'T-201', taskBId: 'T-202', domains: ['CODE'] }
+  ]);
+});
 
 test('Gantt exposes measured agent, human, parked, and lead figures independently', () => {
   const measuredReceipt: RunReceipt = {

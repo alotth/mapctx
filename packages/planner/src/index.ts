@@ -91,7 +91,11 @@ export type PlanReport = {
   waves: PlanWave[];
   waveByTaskId: Record<string, number>;
   serializedPairs: ClaimCollision[];
-  /** Backward-compatible additive warning list; does not affect scheduling. */
+  /**
+   * Backward-compatible additive warnings; do not affect scheduling. Emitted
+   * only for pairs actually considered in a shared wave, so capacity changes
+   * which advisories are present.
+   */
   advisories?: ClaimAdvisory[];
   claims: ResourceClaim[];
   /** Non-terminal graph context; includes containers and active/blocked statuses. */
@@ -152,13 +156,17 @@ function claimSort(a: ResourceClaim, b: ResourceClaim): number {
   return a.taskId.localeCompare(b.taskId) || a.claimId.localeCompare(b.claimId);
 }
 
+function normalizedPathHints(values: readonly string[] | undefined): string[] {
+  return sortedUnique((values ?? []).map(value => value.trim()).filter(Boolean));
+}
+
 /** Convert legacy task domains/touch/path hints into stable protocol claims. */
 export function deriveResourceClaims(tasks: readonly PlannerTask[]): ResourceClaim[] {
   const claims: ResourceClaim[] = [];
   for (const task of [...tasks].sort((a, b) => a.id.localeCompare(b.id))) {
     const domains = sortedUnique(task.domains ?? []);
-    const filesAffected = sortedUnique(task.filesAffected ?? []);
-    const paths = sortedUnique([...(task.paths ?? []), ...(task.touch ?? []), ...filesAffected]);
+    const filesAffected = normalizedPathHints(task.filesAffected);
+    const paths = sortedUnique([...normalizedPathHints(task.paths), ...normalizedPathHints(task.touch), ...filesAffected]);
     if (domains.length === 0 && paths.length === 0) continue;
     const seed = JSON.stringify({ taskId: task.id, domains, paths });
     claims.push({
@@ -175,9 +183,9 @@ export function deriveResourceClaims(tasks: readonly PlannerTask[]): ResourceCla
 }
 
 function normalizePath(value: string): string {
-  let path = value.replaceAll("\\", "/").replace(/^\.\//, "");
+  let path = value.trim().replaceAll("\\", "/").replace(/^\.\//, "");
   path = path.replace(/\/+/g, "/");
-  return path.length > 1 ? path.replace(/\/$/, "") : path;
+  return (path.length > 1 ? path.replace(/\/$/, "") : path).toLowerCase();
 }
 
 function staticPrefix(value: string): string {
@@ -188,8 +196,10 @@ function staticPrefix(value: string): string {
 /**
  * A path collision is exact, ancestor/descendant, or a conservative glob overlap.
  * Glob matching compares each pattern's static prefix, so `src/**` and `src/a.ts`
- * collide while disjoint prefixes do not. This deliberately favors safety over a
- * full glob interpreter when deciding whether two writes share a wave.
+ * collide while disjoint prefixes do not. Leading-wildcard patterns conservatively
+ * collide with any path. Comparisons case-fold for macOS/Windows default filesystems.
+ * This deliberately favors safety over a full glob interpreter when deciding whether
+ * two writes share a wave.
  */
 function pathOverlap(left: string, right: string): boolean {
   const a = normalizePath(left);
@@ -198,6 +208,7 @@ function pathOverlap(left: string, right: string): boolean {
   if (a === b) return true;
   const aPrefix = staticPrefix(a);
   const bPrefix = staticPrefix(b);
+  if (!aPrefix || !bPrefix) return true;
   if (aPrefix === bPrefix || aPrefix.startsWith(`${bPrefix}/`) || bPrefix.startsWith(`${aPrefix}/`)) return true;
   const aDir = a.endsWith("/**") || a.endsWith("/*") || a.endsWith("/");
   const bDir = b.endsWith("/**") || b.endsWith("/*") || b.endsWith("/");
@@ -226,23 +237,25 @@ function isLowConfidenceInferredDomainClaim(claim: ResourceClaim): boolean {
 }
 
 /**
- * Paths are authoritative whenever either side supplies them: only a path
- * overlap serializes. Without paths, retain domain serialization for authored
- * or higher-confidence claims; two low-confidence inferred domain claims are
- * reported separately as advisory evidence instead.
+ * Paths are authoritative only when both claims carry paths: only a path
+ * overlap serializes. A path-bearing claim paired with a domain-only claim
+ * falls back to domain evidence. Authored or higher-confidence domains
+ * serialize; any low-confidence inferred domain overlap is advisory evidence.
  */
 function claimCollision(left: ResourceClaim, right: ResourceClaim): ClaimOverlap | null {
   if (left.mode === "read" && right.mode === "read") return null;
-  const paths = pathsOverlap(left, right);
-  if (left.paths.length > 0 || right.paths.length > 0) return paths.length > 0 ? { domains: [], paths } : null;
+  if (left.paths.length > 0 && right.paths.length > 0) {
+    const paths = pathsOverlap(left, right);
+    return paths.length > 0 ? { domains: [], paths } : null;
+  }
   const domains = domainsOverlap(left, right);
-  if (domains.length === 0 || (isLowConfidenceInferredDomainClaim(left) && isLowConfidenceInferredDomainClaim(right))) return null;
+  if (domains.length === 0 || isLowConfidenceInferredDomainClaim(left) || isLowConfidenceInferredDomainClaim(right)) return null;
   return { domains, paths: [] };
 }
 
 function claimAdvisory(left: ResourceClaim, right: ResourceClaim): ClaimOverlap | null {
   if (left.mode === "read" && right.mode === "read") return null;
-  if (!isLowConfidenceInferredDomainClaim(left) || !isLowConfidenceInferredDomainClaim(right)) return null;
+  if (claimCollision(left, right)) return null;
   const domains = domainsOverlap(left, right);
   return domains.length > 0 ? { domains, paths: [] } : null;
 }
@@ -454,9 +467,10 @@ export function planExecution(input: PlannerInput): PlanReport {
         if (explanation) {
           collision = true;
           serialized.set(`${explanation.taskAId}:${explanation.taskBId}`, explanation);
+        } else {
+          const advisory = pairAdvisory(selectedId, id, claimsByTask);
+          if (advisory) advisories.set(`${advisory.taskAId}:${advisory.taskBId}`, advisory);
         }
-        const advisory = pairAdvisory(selectedId, id, claimsByTask);
-        if (advisory) advisories.set(`${advisory.taskAId}:${advisory.taskBId}`, advisory);
       }
       if (collision) continue;
       selected.push(id);
