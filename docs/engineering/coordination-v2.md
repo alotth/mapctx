@@ -33,11 +33,15 @@ Measured in this repository's store, not estimated.
 
 **Cut-off: events with `occurred_at <= 2026-10-09T15:19:00Z`.** Every number
 in this section is pinned to that cut, and it has to be, because the store is
-live and this document's own execution writes to it. Re-measured at
-2026-10-09T20:19Z the same queries return 171 claims, 36 renewal events
-across 18 distinct claims, 15 expiries, 175 dispatch attempts, 112 receipts,
-and still zero run events — the shape of every finding holds, the integers
-moved. ADR 0005 quotes a different cut of the same store on the same day
+live and this document's own execution writes to it. Re-measured at the later
+cut `occurred_at <= 2026-10-09T20:19:00Z`, the same queries return 170
+claims, 36 renewal events across 18 distinct claims, 15 expiries, 174
+dispatch attempts, 112 receipts, and still zero run events — the shape of
+every finding holds, the integers moved. (An earlier draft reported 171/175
+against that stamp. Those two extra rows are this document's own attempt-4
+claim and dispatch, journaled at `20:19:31.830Z` — 31 seconds *after* the
+stated instant. A stamp whose whole purpose is to fix integers to a moment
+should not include rows from after that moment.) ADR 0005 quotes a different cut of the same store on the same day
 ("158 claims, 162 attempts, 104 receipts"); both are honest, neither was
 stamped, so the two documents read as contradicting each other. Hence the
 stamp.
@@ -159,12 +163,30 @@ lease as a `Easy` / `30m` task is the bug.
   stops saying `"substituted"`, i.e. the corrupted sample now looks *more*
   trustworthy than the honest one it replaced. That would poison precisely
   the receipt-duration calibration that the derived lease reads from, and
-  that §7 proposes to re-derive the lease factor from. A liveness signal must
-  not be mistaken for evidence of work: **`type='heartbeat'` is excluded from
-  `interiorEvents`**, so emitting heartbeats leaves the measurement exactly as
-  it was. `packages/forecast/src/duration.ts` therefore belongs to C4, with a
-  test asserting a receipt with heartbeats measures the same active time as
-  the identical receipt without them.
+  that §7 proposes to re-derive the lease factor from.
+
+  A liveness signal must not be mistaken for evidence of work — and the
+  exclusion has to be drawn around **every type this CLI can emit**, not
+  around the word "heartbeat". The collapse is a property of the cadence, not
+  of the type name: `--type progress` at the same ~20-minute spacing
+  reproduces the identical four-hour-measures-zero receipt, and an earlier
+  draft of this section excluded only `heartbeat` while proposing a CLI whose
+  own signature offers `heartbeat|progress`. So: **`interiorEvents` excludes
+  every run-event type `mapctx run event` can produce** (`heartbeat` and
+  `progress`). Work measurement keeps coming from `timeEvidence` — which
+  takes precedence over the event branch anyway (`duration.ts:153-197`) — and
+  from executor boundary events, neither of which this CLI writes.
+
+  Implementation note, because the filter has to live in the right place:
+  `durationMeasuresFromReceipt` currently takes `events?: readonly
+  Pick<RunEvent, "timestamp">[]` (`duration.ts:149`), which cannot see
+  `type`. Widening it to `Pick<RunEvent, "timestamp" | "type">` is part of
+  C4's work, and the filter belongs **inside** that function rather than at
+  its caller (`forecast/store.ts:55`) — the same reasoning C0 uses for
+  redacting at the source: a filter at one call site is a filter the next
+  call site will not have. `packages/forecast/src/duration.ts` is in C4's
+  `filesAffected`, and C4's tests assert parity with *and* without events for
+  both types, including `progress` spaced at 20 minutes.
 
   **Which lane does a heartbeat renew?** Today the question is vacuous —
   one claim per task, so dispatch → `taskId` → the claim is unambiguous.
@@ -174,15 +196,28 @@ lease as a `Easy` / `30m` task is the bug.
   §3 forbids when it says review must not be able to stall the work it
   reviews. Renewal must therefore resolve the claim by `(taskId, role)` taken
   from the dispatch's own `kind`. Since C4 lands before C5 in the plan, **C4
-  ships implement-only and says so**: it resolves the single claim, and its
-  tests assert that once `kind` exists a review heartbeat renews nothing
-  until C5 teaches the resolver about roles. The alternative — deferring
-  renewal-by-event until C5 — costs a wave for no benefit, because the
-  single-claim resolution is correct for every dispatch that exists before
-  C5. What is **not** acceptable is the earlier plan's silent version of
-  this, where C4 was written in a one-claim world and never revisited: the
-  run-event renewal path is now an explicit member of §3's role-aware
-  call-site list.
+  ships implement-only and says so**.
+
+  That is safe for a reason worth writing down, because it rests on a
+  library default rather than on anything this codebase asserts:
+  `dispatchSchema` is a plain `z.object` (`protocol/src/entities.ts:216-223`)
+  with no `.strict()` and no `.passthrough()` anywhere in the protocol
+  package, and Zod's default is to **drop** unknown keys. Before C5, a caller
+  passing `kind: "review"` has the field silently discarded — so no review
+  dispatch can exist, and C4's single-claim resolution is correct for every
+  dispatch that can exist in that window. The fragility is the flip side: a
+  future `.passthrough()` on `dispatchSchema` would void this argument with
+  no error anywhere, which is precisely why C5, not C4, owns the role-aware
+  resolver. It also means the test "a review heartbeat renews nothing" is
+  **not writable in C4** — there is no way to construct a review dispatch
+  yet — so it lives in C5's test row, while C4 asserts what C4 can:
+  single-claim resolution and refusal of an explicitly stale `--attempt`.
+
+  Deferring renewal-by-event entirely until C5 was the alternative; it costs
+  a wave for no benefit. What is **not** acceptable is the earlier plan's
+  silent version, where C4 was written in a one-claim world and never
+  revisited: the run-event renewal path is now an explicit member of §3's
+  role-aware call-site list.
 
   This path is intentionally secret-free, which is a trust decision, not an
   oversight: anyone who can reach the local CLI/store already has that
@@ -202,13 +237,13 @@ lease as a `Easy` / `30m` task is the bug.
   just renamed the same dependency. Simpler and honest instead: `task
   start`/`task claim` mint **two independent random tokens** at claim time,
   stored together in `resource_claim_projection` and in the `task.claimed`
-  payload — `leaseToken` (release, transfer, and renewal) as today, plus a new
+  payload — `leaseToken` (release and renewal) as today, plus a new
   `renewToken` (renewal only). `task renew --dispatch <id> --renew-token
   <token>` checks the presented token by constant-time equality — a
   comparison, not a recomputation, so there is no algorithm to pin down and no
   secret the verifier needs to fetch from anywhere but the one row it already
   owns. An orchestrator holding `renewToken` can keep the lane alive but
-  cannot `release` or transfer the claim, which still requires `leaseToken`.
+  cannot `release` the claim, which still requires `leaseToken`.
   Capability split by **possession**, not by a derivation that quietly
   re-requires the thing it was meant to avoid.
 
@@ -231,7 +266,24 @@ lease as a `Easy` / `30m` task is the bug.
   - `--dispatch <id>` is a **lookup, not the scope**: resolve dispatch →
     `taskId` → that task's live claim for the dispatch's own role (§3 makes
     role the disambiguator once review claims exist; before that there is
-    only one claim per task and the lookup is unambiguous);
+    only one claim per task and the lookup is unambiguous). **Role narrows
+    the lookup but does not guarantee uniqueness**, and the design should not
+    pretend otherwise: the new partial index constrains only
+    `exclusivity='exclusive'`, so two `shared`/`review` claims on one task
+    insert without violating anything — verified in a scratch database, and
+    §8.2 treats that multi-writer property as intended. Two concurrent
+    reviewers are not hypothetical in an epic whose history includes nine
+    review attempts on one task. Rather than silently picking one, **the
+    lookup refuses when it resolves more than one live claim** and says to
+    pass `--claim`, which is exactly what the preserved `task renew
+    --claim/--token` path is for. Refusing is better than the two
+    alternatives it was weighed against: a second partial unique index
+    (`UNIQUE(task_id) WHERE state='active' AND role='review'`) would outlaw
+    concurrent review by side effect, and persisting `dispatch_id` on the
+    claim row buys uniqueness only for claims that `task start` creates
+    (`start.ts:20-47`), leaving `task claim` ambiguous anyway. If concurrent
+    review later proves common enough that refusing is a nuisance, persisting
+    the edge is the upgrade path — it is additive to everything here;
   - `task renew --claim <id> --token <leaseToken>` **stays**, unchanged, and
     is the only renewal path for a claim that has no dispatch — which is
     exactly what `task claim` produces;
@@ -262,7 +314,7 @@ lease as a `Easy` / `30m` task is the bug.
   agent in this epic actually runs. `startTask` returns the refusal object
   untouched (`start.ts:35-36`), so nothing in between strips it. **Consequence
   today: any agent that runs `mapctx task start` against a task somebody else
-  holds is handed that holder's `leaseToken` — that is `release` and transfer
+  holds is handed that holder's `leaseToken` — that is `release` and renew
   authority over another agent's claim, printed on refusal.** An earlier draft
   of this document filed this as "output hygiene", cited only one of the two
   call sites, and parked the fix inside C3, third in a serialized chain. It is
@@ -309,7 +361,12 @@ lease as a `Easy` / `30m` task is the bug.
   row's unique-index entry and fail. So the fix is **two getters, not one**:
   `getActiveClaimForTask` (unfiltered — used only by the admission/reclaim
   path, which must see and expire the stale row before inserting) stays
-  exactly as it is; a new `getLiveActiveClaim` (expiry-filtered) is what
+  exactly as it is **for C1's purposes**, which is to say for as long as a
+  task has at most one active claim. That premise ends with §3: shared review
+  claims make this single-row getter return the wrong lane, so **C5 moves
+  admission off it and deletes it** (§3 spells out the failure and the
+  tests). C1 is not the task that touches it either way. A new
+  `getLiveActiveClaim` (expiry-filtered) is what
   `tasks.ts:76` uses, and what every display reader added later (C8) uses by
   default. The admission path's expiry-then-insert already happens atomically
   in one transaction — the new work is adding the filtered getter, pointing
@@ -320,7 +377,7 @@ lease as a `Easy` / `30m` task is the bug.
 ```mermaid
 flowchart LR
   S["task start<br/>(derives lease from workload + estimatedEffort)"]
-  S -->|leaseToken: release/transfer| EX[Executing agent]
+  S -->|"leaseToken: release + renew"| EX[Executing agent]
   S -->|renewToken: renew only| OR[Orchestrator]
   EX -->|"run event --type heartbeat<br/>(dispatchId, no secret)"| L[(Active claim)]
   OR -->|"task renew --dispatch"| L
@@ -351,19 +408,32 @@ task — admission-time expiry, not a background sweep, is what actually
 flips the row (see [T-108](#5-decision-4--the-fate-of-t-107-and-t-108) for
 the sweeper that forces that touch for tasks nobody re-claims on their own).
 
-**Compatibility break.** **None from the read-time fix** — and the earlier
-drafts' claim that there was one has to be withdrawn explicitly, because it
-was the sole justification for C1 carrying an approval marker. Both drafts
-said "a caller that today receives `active-claim-held` from an *expired*
-claim will start succeeding". No caller can receive that: `claims.ts:93` is
-the only producer of `active-claim-held` in the repository, and it is reached
-only *after* the expiry branch at `:81-90` has already converted an expired
-claim into a reclaim — with the projection updated inline in the same
-`BEGIN IMMEDIATE` (`store-handle.ts:222-250`). The refusal is unreachable for
-an expired lease in this commit, so nothing observable changes and C1 is an
-internal addition. The breaks that remain in this section are the ones from
-the renewal redesign and the redaction (C0): a caller parsing `leaseToken`
-out of a refusal payload will stop finding it, which is the point.
+**Compatibility break.** **Not the one the earlier drafts claimed**, and the
+withdrawal has to be explicit, because that claim was the sole justification
+for C1 carrying an approval marker. Both drafts said "a caller that today
+receives `active-claim-held` from an *expired* claim will start succeeding".
+No caller can receive that: `claims.ts:93` is the only producer of
+`active-claim-held` in the repository, and it is reached only *after* the
+expiry branch at `:81-90` has already converted an expired claim into a
+reclaim — with the projection updated inline in the same `BEGIN IMMEDIATE`
+(`store-handle.ts:222-250`). The refusal is unreachable for an expired lease
+in this commit.
+
+**C1 is still not invisible, though — the previous draft overcorrected to "no
+observable change".** Pointing `tasks.ts:76` at the filtered getter changes
+what reaches the journal: today a `move done`/`cancelled`/`archived` over a
+ghost claim journals a `task.claim-released` for a lease that expired days
+earlier (`tasks.ts:74-86`); afterwards it journals nothing. C1's own test row
+asserts exactly that. One fewer event in the journal **is** a change in the
+observable semantics of an existing event under this document's banner
+definition, even though the event it stops emitting was a fiction. So C1
+carries the approval marker after all — for the accurate reason instead of
+the withdrawn one — and the operator sees it as its own decision (D14)
+rather than discovering it inside a task labelled internal.
+
+The other breaks in this section come from the renewal redesign and the
+redaction (C0): a caller parsing `leaseToken` out of a refusal payload will
+stop finding it, which is the point.
 
 Longer default leases also mean a genuinely dead holder
 blocks for longer — which is precisely why 1C (liveness evidence) is designed
@@ -396,9 +466,11 @@ whom, or how many attempts it took.
 
 - `mapctx task start <id> --kind review` takes a **shared** claim and opens a
   **review** dispatch. It is never refused because an implement claim is held.
-- `implement` keeps the exclusive claim and the `requireActiveClaim` admission
-  it has today. A shared review claim never blocks implementation: review must
-  not be able to stall the work it reviews.
+- `implement` keeps the exclusive claim and the `requireActiveClaim` gate it
+  has today — though the gate's *lookup* has to change, not just its
+  predicate, or it reads the wrong lane (see the admission bullet below). A
+  shared review claim never blocks implementation: review must not be able to
+  stall the work it reviews.
 - A **review receipt does not drive the task's execution or planning state.**
   It records the review outcome against its own dispatch. `completed` on a
   review dispatch must not move planning to `review` and must not touch
@@ -414,9 +486,12 @@ whom, or how many attempts it took.
   the *implement* lane's `executionState` out from under a holder who is
   still working. Concretely: the claimed/released/expired appliers
   (`events.ts:237-269`), the dispatch applier (`events.ts:292-309`), dispatch
-  admission and the retry-admission reset (`dispatch.ts:78-103`), both
-  receipt-transition paths (`dispatch.ts:288-305`, `projections.ts:866-909`),
-  **and the run-event renewal path introduced in §2** — which the earlier
+  admission and the retry-admission reset (`dispatch.ts:69-103` — note the
+  range: an earlier draft said `:78-103`, which skips the
+  `requireActiveClaim` block at `:69-74`, the one place in that file that
+  actually reads "this task's active claim"), both receipt-transition paths
+  (`dispatch.ts:288-305`, `projections.ts:866-909`),
+  **and the run-event renewal path introduced in §2** — which an earlier
   draft omitted from this list while scheduling it (C4) to land a wave
   *before* roles exist, so it would have been written in a one-claim world
   and never revisited. All of them reason from "this task's active claim" as
@@ -432,6 +507,42 @@ whom, or how many attempts it took.
   shipping 2B/2C's schema and claim before the lifecycle guards would open the
   review lane before the thing it's supposed to not break is actually
   protected.
+- **Admission must stop using the single-row getter, and C5 is where it
+  does.** §2 settles that `getActiveClaimForTask` is not filtered by expiry
+  and keeps its admission callers — true, and safe, *only while a task has at
+  most one active claim*. The moment this decision ships, that premise is
+  gone, and the getter becomes actively dangerous: it is
+  `SELECT * FROM resource_claim_projection WHERE task_id = ? AND state =
+  'active'` consumed with `.get()` (`projections.ts:389-393`) — one row, **no
+  `ORDER BY`**. With an implement claim and a review claim both active, which
+  row comes back is whatever the query planner picks. Run against the
+  migrated schema, it is not arbitrary in a harmless way: the new partial
+  index no longer serves this query (it now requires
+  `exclusivity='exclusive'`), so the plan falls to
+  `idx_resource_claim_state_expiry(state, expires_at)` (`schema.ts:118`) and
+  `.get()` returns the **soonest-expiring** active row — typically the review
+  claim, since review leases are shorter. Reproduced in a scratch database
+  with the §3 migration applied: the getter returns the `shared`/`review`
+  row. Three guarantees break at once, each one this document states
+  elsewhere:
+  - `claims.ts:81-93` — an **implement** claim request sees the review claim,
+    finds it unexpired, and refuses with `active-claim-held`. Review blocks
+    implementation, which this section forbids two bullets above;
+  - `claims.ts:81-90` — if the review claim *is* expired, the implement
+    reclaim journals `task.claim-expired` **against the reviewer's claim**,
+    silently killing the review lane;
+  - `dispatch.ts:69-74` — `dispatch create` validates against the wrong lane.
+
+  So the correct statement is narrower than "unchanged": `getActiveClaimForTask`
+  is the **pre-C5 getter**. C1 leaves it alone (C1 ships into a one-claim
+  world and only adds `getLiveActiveClaim` beside it), and **C5 moves both
+  admission callers — `claims.ts:77` and `dispatch.ts:70` — onto the
+  role-aware exclusive lookup**, at which point the old getter has no
+  non-test caller left and is deleted in the same task. C5's tests must
+  include the exact shape that breaks it: an implement claim with a long
+  lease and a review claim with a *shorter* one, asserting that an implement
+  claim request is not refused, and that a reclaim's `task.claim-expired`
+  names the implement claim rather than the reviewer's.
 - `plan` gains a derived `review: { open, attempts, lastOutcome }` per task.
   Nothing is stored that a projection cannot rebuild.
 - **Forecast calibration stays implement-only.** `packages/forecast/src/
@@ -451,7 +562,7 @@ whom, or how many attempts it took.
 | Protocol | `dispatchSchema` gains `kind` (default `implement`); `Dispatch.v1.json` regenerated | **PENDING OPERATOR APPROVAL** |
 | Protocol | claim payloads gain `exclusivity` and `role` (absent = `exclusive`/`implement`) | **PENDING OPERATOR APPROVAL** |
 | Store | `dispatch_projection` `ADD COLUMN kind`; `resource_claim_projection` `ADD COLUMN exclusivity, role` — `NOT NULL DEFAULT` with a `CHECK` enum, which fills existing rows in the same statement; then drop and recreate `idx_resource_claim_active_task` **under the same name** with the `exclusivity='exclusive'` predicate (see migration below for why both the order and the name matter); `packages/store/src/types.ts:87-97` gains the new fields | **PENDING OPERATOR APPROVAL** |
-| Store | adds `listActiveClaims` and a role-aware exclusive lookup; **`getActiveClaimForTask` stays unchanged** (the earlier draft said it "splits into" new getters, contradicting §2 and C1, which both promise it is untouched — three plans for one function, now one); receipt admission, the lifecycle appliers listed above, and the run-event renewal path branch on `kind`/`role` | **PENDING OPERATOR APPROVAL** (semantics of `run.receipt-recorded` and of claim release/expiry) |
+| Store | adds `listActiveClaims` and a role-aware exclusive lookup; **both admission callers (`claims.ts:77`, `dispatch.ts:70`) move onto it and the single-row `getActiveClaimForTask` is deleted** once it has no caller — it cannot survive shared claims (see above); receipt admission, the lifecycle appliers listed above, and the run-event renewal path branch on `kind`/`role` | **PENDING OPERATOR APPROVAL** (semantics of `run.receipt-recorded` and of claim release/expiry) |
 | CLI | `task start --kind review`, `dispatch create --kind review`, review columns in `plan` | **PENDING OPERATOR APPROVAL** |
 
 **Data migration.** A nullable column here would be unsafe, and the previous
@@ -477,13 +588,26 @@ The executable order, also verified in a scratch database:
    backfill is unnecessary.
 2. `DROP INDEX` then `CREATE UNIQUE INDEX` for
    `idx_resource_claim_active_task` with the `exclusivity='exclusive'`
-   predicate — **reusing the exact same index name**, which is not cosmetic:
-   `schema.ts:117` executes `CREATE UNIQUE INDEX IF NOT EXISTS
-   idx_resource_claim_active_task … WHERE state = 'active'` on *every* store
-   open, and it is a harmless no-op only because that name already exists. A
-   differently-named new index would leave the old predicate being recreated
-   on the next open, enforcing the pre-migration invariant forever alongside
-   the new one.
+   predicate, **reusing the exact same index name** — keeping the name means
+   the old predicate cannot survive anywhere, since dropping and recreating
+   one name leaves exactly one definition.
+
+   A correction to an earlier draft's reasoning here, which was wrong in a
+   way worth naming rather than quietly deleting: it claimed `schema.ts:117`
+   re-executes `CREATE UNIQUE INDEX IF NOT EXISTS … WHERE state = 'active'`
+   on *every* store open, so a differently-named index would see the old
+   predicate recreated forever. That is not how this runner works. The DDL
+   lives in `MIGRATION_001_INITIAL` (`schema.ts:6`, registered as version 1
+   in `MIGRATIONS`, `schema.ts:244-245`), and `runMigrations` skips any
+   version already recorded in `schema_migrations` with a matching checksum
+   (`db.ts:34-43`); `openDatabaseReadOnly` runs no migrations at all. So
+   migration 001 executes **once per database**, and the recreation hazard
+   does not exist. The two real constraints are different ones: the change
+   must be a **new version appended to `MIGRATIONS`** — editing 001 in place
+   trips the checksum guard and refuses to open the store at all
+   (`db.ts:37-42`) — and **order within `MIGRATIONS` matters**, because on a
+   fresh database 001 still creates the index with the old predicate and the
+   new migration must run after it to swap it.
 
 The previous draft inverted 1 and 2 and put an `UPDATE … SET
 exclusivity='exclusive'` first — updating a column that the next step
@@ -499,7 +623,9 @@ not sit inside a unique index today. Replay must apply the same defaults
 `exclusive`/`implement`) so a database rebuilt from the event log matches one
 that was migrated in place. Tests: migrate a copy of a legacy store and
 assert the store opens, the index carries the new predicate under the old
-name, and no row holds a `NULL`.
+name, no row holds a `NULL`, a second `exclusive` claim on one task still
+fails `UNIQUE`, and a `shared` review claim alongside an active `exclusive`
+one is admitted.
 
 **Compatibility break.** None for readers that ignore unknown fields. One for
 writers: a `completed` review receipt no longer carries planning to `review`.
@@ -560,13 +686,13 @@ is evidence that it is happening here at scale.
   with no `--effort` after it is refused. The earlier `--slice
   "title:<effort>"` form is dropped because it has no unambiguous parse —
   task titles in this very board contain colons (`[T-124] R2 design:
-  renovacao de lease…`), so splitting on `:` is a guess. Three
+  renovacao de lease…`), so splitting on `:` is a guess. Four
   things the first draft left undefined, now pinned down:
   - **Effort is mandatory per slice, with no invented default.** Claim
     admission already refuses an executable task without a parseable
     `estimatedEffort` (`claims.ts:52-75`); `workload` class alone doesn't
     imply a duration, so `task split` surfaces that same refusal immediately
-    if a `--slice` omits `:<effort>`, rather than dividing or copying the
+    if a `--slice` has no `--effort` after it, rather than dividing or copying the
     parent's estimate and inventing a number nobody actually judged.
   - **Acceptance is optional at split time, like any other task.** It has no
     special default and needs none: a task is claimable without acceptance
@@ -687,6 +813,16 @@ backfill is contradicted in the audit trail rather than erased.
 **PENDING OPERATOR APPROVAL** — it writes two correction events to the shared
 store.
 
+**And the re-scope above needs an executor, which is not this document.**
+Three of the decisions in this section are planning changes to tasks other
+than T-124: keeping T-107 re-scoped, moving `bulk-updated-timestamp` to
+T-127, and dropping T-108's acceptance criterion about heartbeat-as-follow-up
+(which exists, is still `pending`, and is the question §2 answers). T-124
+cannot run `task update` or `task acceptance revise` against other tasks —
+and "**this document decides it**" above means it settles the *question*, not
+that it performs the edit. Tracked as **D13** in §10 so the action has an
+owner instead of living only in prose.
+
 ---
 
 ## 6. Proposed implementation tasks
@@ -696,12 +832,12 @@ creation; T-125…T-129 are taken by this epic's other lanes.
 
 | # | Title | `filesAffected` | Workload | Effort | Approval |
 | --- | --- | --- | --- | --- | --- |
-| **C0** | **Security: claim refusals stop carrying `leaseToken`** — redact at the source so no print site can leak it; covers `task claim` *and* `task start` | `packages/store/src/claims.ts`, `packages/store/src/types.ts`, `packages/sync-engine/src/mapctx-cli.ts` | Easy | 2 h | **PENDING OPERATOR APPROVAL** (removes a field from observable CLI output) |
-| C1 | Read-time lease truth: add `getLiveActiveClaim`, point `tasks.ts:76` at it; `getActiveClaimForTask` unchanged | `packages/store/src/projections.ts`, `packages/store/src/tasks.ts` | Easy | 4 h | internal addition; no observable change (see §2's withdrawn break) |
+| **C0** | **Security: claim refusals stop carrying `leaseToken`** — redact at the source so no print site can leak it; covers `task claim` *and* `task start` | `packages/store/src/claims.ts`, `packages/store/src/types.ts`, `packages/store/src/projections.ts` (where `rowToClaim`/`insertClaim` assemble the record, `:371`/`:405`), `packages/sync-engine/src/mapctx-cli.ts` | Easy | 2 h | **PENDING OPERATOR APPROVAL** (removes a field from observable CLI output) |
+| C1 | Read-time lease truth: add `getLiveActiveClaim`, point `tasks.ts:76` at it; `getActiveClaimForTask` left for C5 to retire | `packages/store/src/projections.ts`, `packages/store/src/tasks.ts` | Easy | 4 h | **PENDING OPERATOR APPROVAL** (stops journaling a fictitious `task.claim-released` on `move done` over a ghost — one fewer event, which is observable; D14) |
 | C2 | Lease duration derived from `workload`/`estimatedEffort`, `--lease` override, `[coordination]` config | `packages/store/src/claims.ts`, `packages/store/src/config.ts`, `packages/sync-engine/src/mapctx-cli.ts` | Normal | 5 h | **PENDING OPERATOR APPROVAL** |
 | C3 | `renewToken`: second independent capability scoped to `claimId`, equality-checked; `--dispatch` as lookup; `--claim/--token` kept | `packages/store/src/claims.ts`, `packages/store/src/schema.ts`, `packages/store/src/projections.ts`, `packages/store/src/types.ts`, `packages/sync-engine/src/mapctx-cli.ts` | Normal | 6 h | **PENDING OPERATOR APPROVAL** |
-| C4 | `mapctx run event` CLI (`--attempt`/`--sequence`); accepted events renew, stale/terminal ones do not; 24 h ceiling; heartbeats excluded from duration measurement; **implement-only until C5** | `packages/sync-engine/src/mapctx-cli.ts`, `packages/store/src/dispatch.ts`, `packages/store/src/claims.ts`, `packages/forecast/src/duration.ts` | Normal | 9 h | **PENDING OPERATOR APPROVAL** |
-| C5 | Dispatch `kind` + shared review claims: schema, migration, index swap, admission, and every kind/role-aware call site **including run-event renewal** (§3) | `packages/protocol/src/entities.ts`, `packages/protocol/schemas/Dispatch.v1.json`, `packages/store/src/schema.ts`, `claims.ts`, `dispatch.ts`, `start.ts`, `events.ts`, `projections.ts`, `types.ts`, `packages/sync-engine/src/mapctx-cli.ts` | Hard | 17 h | **PENDING OPERATOR APPROVAL** |
+| C4 | `mapctx run event` CLI (`--attempt`/`--sequence`); accepted events renew, stale/terminal ones do not; 24 h ceiling; heartbeats excluded from duration measurement; **implement-only until C5** | `packages/sync-engine/src/mapctx-cli.ts`, `packages/store/src/dispatch.ts`, `packages/store/src/claims.ts`, `packages/forecast/src/duration.ts` | Normal | 10 h | **PENDING OPERATOR APPROVAL** |
+| C5 | Dispatch `kind` + shared review claims: schema, migration, index swap, admission, and every kind/role-aware call site **including run-event renewal** (§3) | `packages/protocol/src/entities.ts`, `packages/protocol/schemas/Dispatch.v1.json`, `packages/store/src/schema.ts`, `claims.ts`, `dispatch.ts`, `start.ts`, `events.ts`, `projections.ts`, `types.ts`, `packages/sync-engine/src/mapctx-cli.ts` | Hard | 19 h | **PENDING OPERATOR APPROVAL** |
 | C6 | Review receipt admission (never drives planning/execution) + forecast calibration excludes `kind != 'implement'` | `packages/store/src/projections.ts`, `packages/store/src/dispatch.ts`, `packages/forecast/src/store.ts` | Normal | 8 h | **PENDING OPERATOR APPROVAL** |
 | C7 | `mapctx task split` (`--slice`/`--effort` pairs, optional acceptance, no auto-dispatch) + attempt-chain **warning only**, no calibration exclusion + normative `attempt` rule | `packages/sync-engine/src/mapctx-cli.ts`, `packages/store/src/tasks.ts`, `packages/store/src/dispatch.ts`, `rules/`, skills | Normal | 7 h | **PENDING OPERATOR APPROVAL** |
 | C8 | T-107 re-scoped: `plan --show-execution` with lane detail — the first read path that displays claims at all | `packages/sync-engine/src/mapctx-cli.ts`, `packages/store/src/projections.ts` | Normal | 5 h | **PENDING OPERATOR APPROVAL** |
@@ -717,27 +853,30 @@ stop making:
 | # | Key tests | CLI surface touched |
 | --- | --- | --- |
 | C0 | `task start` against a held task returns no token field; same for `task claim`; the refusal still carries `claimId`/`holder`/`expiresAt`; a regression test asserts no token-shaped value appears in either command's stdout | `--help` unchanged; output shape changes |
-| C1 | exact expiry boundary; reclaim with no sweeper involved; `move done` over an expired claim journals **no** `task.claim-released` | none (internal getter + one caller) |
+| C1 | exact expiry boundary; reclaim with no sweeper involved; `move done` over an expired claim journals **no** `task.claim-released` (the observable change behind C1's marker, D14) | none (internal getter + one caller) |
 | C2 | clamp boundaries (30 min / 8 h); `--lease` override precedence over config over derived default | `--help` for `task claim`/`task start` |
 | C3 | constant-time compare; `renewToken` renews, `leaseToken` still renews, neither releases without `leaseToken`; `--dispatch` lookup resolves the live claim; `task renew --claim/--token` still works for a claim with no dispatch; renewal refused once a receipt has landed | `--help` for `task renew` |
-| C4 | an explicit stale `--attempt` is refused; an event on a terminal attempt is journaled but does not renew; a duplicate is refused by the writer (asserting the existing `duplicate-run-event`, not a new rule); 24 h ceiling blocks renewal even with live heartbeats; **a receipt with heartbeats measures the same `activeTimeMs` as the identical receipt without them**; a review-dispatch heartbeat renews nothing | `--help` for new `run event` |
-| C5 | legacy-store migration opens successfully, index carries the new predicate **under the same name**, no row holds `NULL`; old writers omitting `kind`/`exclusivity`; full event-log replay matches the in-place migration; two-process contention for the exclusive slot; concurrent shared+exclusive admission; run-event renewal resolves lane by role | `--help` for `task start --kind` |
+| C4 | an explicit stale `--attempt` is refused; an event on a terminal attempt is journaled but does not renew; a duplicate is refused by the writer (asserting the existing `duplicate-run-event`, not a new rule); 24 h ceiling blocks renewal even with live heartbeats; **a receipt measures the same `activeTimeMs` with and without events, for `heartbeat` *and* for `progress` spaced at 20 min**; single-claim resolution. (The review-heartbeat case moved to C5 — it cannot be written here, since pre-C5 Zod drops `kind` and no review dispatch can be constructed) | `--help` for new `run event` |
+| C5 | legacy-store migration opens successfully, index carries the new predicate **under the same name**, no row holds `NULL`, a second `exclusive` claim still fails `UNIQUE`, a `shared` review claim is admitted beside an active `exclusive` one; old writers omitting `kind`/`exclusivity`; full event-log replay matches the in-place migration; two-process contention for the exclusive slot; **an implement claim request is not refused when a review claim with a shorter lease is active, and a reclaim's `task.claim-expired` names the implement claim, not the reviewer's**; the renewal lookup refuses rather than guesses when two live review claims match; a review-dispatch heartbeat renews nothing | `--help` for `task start --kind` |
 | C6 | shared review claim released/expired while implement claim stays active; both receipt orders; implementation fails while review is open; legacy (pre-`kind`) replay stays implement-only; forecast query excludes a seeded review receipt | none |
 | C7 | split refuses a slice missing `--effort`; `--slice`/`--effort` pairing survives a title containing a colon; split never creates a dispatch; attempt-chain warning fires at 4 without refusing **and without changing forecast population** | `--help` for `task split` |
 | C8 | lane detail matches a live shared-claim fixture; an expired claim is not displayed as active (the first point at which "0 ghosts on a read path" is measurable) | `--help` for `plan --show-execution` |
 | C9 | ghost detected pre-C1-fix state is not re-flagged post-fix as a false positive; a task nobody re-claims is swept, one that was re-claimed is not | `--help` for `stale scan` |
 | C10 | CAS port passes the same exclusivity suite as the SQL path, including multi-host race, expiry, and recovery — the tests ADR 0005 names as the precondition for accepting CAS at all | none (internal seam) |
 
-**Total ≈ 80 h** agent-active (74 h excluding the conditional C10, counting
-C11). Movement since the previous draft's 77 h: **+2 h** for the new C0,
-**+2 h** C4 (duration measurement, `--attempt`/`--sequence`, implement-only
-scoping), **+1 h** C5 (run-event lane resolution), **−1 h** C3 (redaction
-moved out to C0, token scope simplified to `claimId`), **−1 h** C7 (the
-calibration-exclusion wiring is dropped; only the warning remains). C1 keeps
-its 4 h but spends them differently — one real caller instead of an imagined
-set. For the record, the first draft's arithmetic was also wrong
-independently of any scope change: 63 h minus C10's 6 h is 57 h, not the
-"53 h" it stated.
+**Total ≈ 83 h** agent-active (77 h excluding the conditional C10, counting
+C11): 2+4+5+6+10+19+8+7+5+9+6+2.
+
+Movement across drafts, so the number is auditable rather than asserted:
+63 h (first draft, whose own arithmetic also mis-stated 63−6 as 53 h rather
+than 57 h) → 77 h → 80 h → **83 h** now. This round: **+1 h** C4 (the
+`progress`-type exclusion and the `Pick<RunEvent, "timestamp" | "type">`
+signature widening), **+2 h** C5 (moving both admission callers onto the
+role-aware lookup, retiring the single-row getter, and the lane-confusion
+tests). The previous round's movement was +2 h C0 (new), +2 h C4, +1 h C5,
+−1 h C3, −1 h C7. Estimates have gone up in every round, which is itself
+information: each review has found scope that the design implied but had not
+priced.
 
 **Suggested waves**, with the dependency this draft previously left
 ambiguous now resolved explicitly:
@@ -870,7 +1009,7 @@ CAS "commits to" a verifier, read it as the candidate's requirement.
    review claims make that record multi-writer, so CAS retries increase.
    Acceptable, because review claims are rare relative to implement claims.
 3. **Renewal must not require the renewing party to hold the release
-   capability.** `leaseToken` (release/transfer) and `renewToken` (renew-only)
+   capability.** `leaseToken` (release + renew) and `renewToken` (renew-only)
    are independent capabilities minted together at claim time and scoped to
    the **`claimId`** — not to `(dispatchId, attempt)`, which §2 explains the
    data model cannot express and which would break on every retry anyway.
@@ -885,11 +1024,11 @@ CAS "commits to" a verifier, read it as the candidate's requirement.
    true under Option B. What this design actually protects is (a) keeping
    `leaseToken` out of CLI output/logs beyond the one process that received
    it, and (b) keeping a `dispatchId` — not secret, visible to any
-   orchestrator — from being enough on its own to acquire release/transfer
+   orchestrator — from being enough on its own to acquire release
    rights. Concretely for a git-ref CAS backend: `leaseToken` is handed to the
    claiming process out-of-band (CLI stdout) and never committed to the ref;
-   the ref carries a hash of it (recomputed and compared for `release`/
-   `transfer`) plus the plain `renewToken` (meant to be read and compared, not
+   the ref carries a hash of it (recomputed and compared for `release`)
+   plus the plain `renewToken` (meant to be read and compared, not
    hidden). That is the "non-secret verifier" this design offers the CAS
    candidate, instead of the HMAC-over-a-secret idea §2 started with and then
    dropped. Note also the boundary §2 adds: the **clock** is trusted to the
@@ -906,7 +1045,7 @@ cut-off discipline §1 uses:
 | Metric | Today | Target |
 | --- | --- | --- |
 | Claims renewed at least once, as a share of **all** claims | 8% (13/162) | rising, with no cap worth naming — most claims are short and should never need a renewal, so this number is a floor on activity, not a goal in itself |
-| Claims renewed at least once, as a share of **claims whose work outlived one lease** | **not measurable today** — a claim carries no dispatch reference (§2, F2), so "this claim's work" cannot be joined to a receipt duration. It becomes measurable only once C3 lands the claim↔dispatch lookup | > 80% |
+| Claims that outlived one lease **and were renewed at least once** — using the claim's own lifetime (`claimedAt` to its release or expiry) rather than a receipt duration | measurable today from the claim rows alone, which is why the metric is framed this way: C3's `--dispatch` resolution is a **runtime** lookup and §2 adds no schema beyond `renew_token`, so there is no persisted claim↔dispatch edge and no historical join from a claim to a receipt. An earlier draft promised this became measurable "once C3 lands"; it does not, unless the edge is persisted (§2 weighs that and declines it) | > 80% |
 | Claims `active` with past `expiresAt` on a read path | 9 rows exist, but **no read path displays them today** (§2) | 0, measurable from C8 onward — the first display reader |
 | Dispatches with a `task.claim-expired` journaled while still open (no receipt landed yet) | not separately tracked today — the closest proxy is the 15-of-67 live receipts exceeding one lease span, which conflates renewed-and-fine with actually-gapped | ~0 — this is the metric that measures the defect (a real coordination gap during live execution) instead of the proxy (receipt duration vs. one lease), which has both false positives (continuously renewed long receipts) and false negatives (a short receipt that still had a mid-run expiry blip) |
 | `dispatch.attempted` with no receipt | 37% (62/166) | falling, and every remaining one visible in `stale scan` |
@@ -935,7 +1074,7 @@ existing event. Approving the design does not approve these individually.
 | D2 | `task.claimed` payload gains `renewToken`, scoped to `claimId` | §2 | (a) second random capability; (b) derive from `leaseToken`; (c) no split — `leaseToken` only | **(a).** (b) was this document's first answer and is withdrawn: verifying a derived token still requires reading the secret. (c) keeps orchestrators unable to renew, which is the original problem |
 | D3 | CLI: `--lease <duration>`; `task renew --dispatch/--renew-token`; new `mapctx run event`; `[coordination]` config block | §2 | (a) all of it; (b) `--lease` only, no event path; (c) event path only, fixed lease | **(a).** (b) leaves renewal manual; (c) leaves a `Hard`/`2d` task on a 30-minute lease |
 | D4 | 24 h absolute renewal ceiling, measured on the local clock | §2 | (a) 24 h; (b) another figure; (c) no ceiling, rely on the sweeper | **(a)**, with the clock caveat stated in §2 — evidence-based liveness with no ceiling renews a wedged agent forever |
-| D5 | `dispatchSchema` gains `kind`; claim payloads gain `exclusivity` and `role` | §3 | (a) both; (b) dispatch `kind` only; (c) neither — review stays outside MapCtx | **(a).** (b) makes the review lane invisible to lease accounting; (c) is today's status quo, in which the board cannot say a task was reviewed |
+| D5 | `dispatchSchema` gains `kind`; claim payloads gain `exclusivity` and `role` — **and, the operationally risky part, a migration over the live store: two `NOT NULL` columns with `CHECK` enums, plus dropping and recreating `idx_resource_claim_active_task`, the index that today guarantees one holder per task, under a new predicate.** C5 also moves claim admission onto a role-aware lookup and retires the single-row getter (§3), without which a review claim can refuse an implement claim | §3 | (a) all of it; (b) dispatch `kind` only; (c) neither — review stays outside MapCtx | **(a).** (b) makes the review lane invisible to lease accounting; (c) is today's status quo, in which the board cannot say a task was reviewed. Note that (a) is not a payload-only change: approving it approves the index swap, which is why the migration order and the same-name requirement are spelled out in §3 |
 | D6 | CLI: `task start --kind review`, `dispatch create --kind review`, review columns in `plan` | §3 | (a) ship with C5+C6 together; (b) ship earlier alongside C5 | **(a).** Exposing the lane before the receipt-admission guard lets a review receipt move the task's planning state |
 | D7 | CLI: `mapctx task split --slice <title> --effort <x>` | §4 | (a) paired flags; (b) `"title:effort"` in one argument; (c) no command, documentation only | **(a).** (b) has no unambiguous parse against titles containing colons. (c) was tried — the normative rule alone is what produced the slices-as-attempts pattern |
 | D8 | Attempt-chain warning at `attempt >= 4`, **without** forecast exclusion | §4 | (a) warning only; (b) warning plus permanent calibration exclusion; (c) neither | **(a).** (b) was this document's previous position and the measurement refutes it: the predicate catches 38 of 112 receipts, all `completed` review loops, including this document's own dispatch |
@@ -948,6 +1087,8 @@ existing event. Approving the design does not approve these individually.
 | D10 | Lease factor and cap (`estimatedEffort × 0.5`, clamp 30 min…8 h) | §2, §7 | (a) adopt as the starting point and re-derive after C4; (b) pick different numbers now; (c) keep the fixed 30 min | **(a).** The figures are an honest first guess; re-deriving them before C4's heartbeat exclusion would read the measurement artifact rather than the work |
 | D11 | Does a shared review claim expire on the implement schedule? | §7 | (a) same schedule; (b) longer; (c) no expiry for review claims | Open — this design has no evidence either way. An idle reviewer is less harmful than a stalled implementer, which argues against (a), but (c) accumulates ghosts in a lane the sweeper would then have to special-case |
 | D12 | **A0 or B** in ADR 0005, and whether Git-ref CAS is accepted at all | §8 | per ADR 0005; the first ADR accepted fixes the other | Not T-124's call, and this document no longer writes as if B had won. §8 holds under either; C10 stays out of wave until this lands |
+| D13 | **Execute §5's re-scope of T-107 and T-108**: move the `bulk-updated-timestamp` severity change from T-107 to T-127, and **revise T-108's acceptance** to drop criterion `a7e927fd` ("Heartbeat registrado como follow-up: os dados do scan decidem se varredor basta ou se precisa de heartbeat"), which exists and is `pending` — §2 of this document decides that question, so the criterion is now answered rather than outstanding | §5 | (a) execute both via `task update` and `task acceptance revise`; (b) leave T-108's criterion pending and let whoever implements T-108 discover it is already decided; (c) keep `bulk-updated-timestamp` in T-107 | **(a).** §5 says "this document decides it", but T-124 **cannot** execute it: these are planning changes to two other tasks, and acceptance revision in particular is an operator act. Flagged here precisely because the earlier drafts decided it in prose and left no one holding the action |
+| D14 | **Does C1's one-fewer-journal-event count as an observable change requiring approval?** After C1, `move done` over a ghost claim stops journaling a fictitious `task.claim-released` | §2, §6 | (a) yes — C1 carries the marker (current position); (b) no — the banner is amended to say that *removing* a provably false event is outside the definition | **(a)**, chosen as the conservative reading: the banner's test is "observable semantics of an existing event", and one fewer event meets it whether or not the event was a fiction. (b) is defensible and cheaper, but it means writing an exemption into the banner, and an exemption is the kind of thing that gets reused later for changes that deserve the marker |
 
 ### 10.3 What this document does *not* ask for
 
