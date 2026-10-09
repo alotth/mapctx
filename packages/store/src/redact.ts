@@ -40,12 +40,15 @@
  * pre-existing payload hash check. Redaction therefore adds no new way to
  * forge history; it only adds new ways to refuse.
  *
- * Only WHOLE-PAYLOAD hashes are preserved, never per-field ones. A sha256 of
- * a six-digit shift number is brute-forceable in milliseconds, so a field
- * hash would re-leak exactly what was removed. The original payload hash is
- * high-entropy (it covers ids, UUIDs and timestamps) and is a real integrity
- * witness: whoever holds the original payload can still prove it was that
- * payload.
+ * Only WHOLE-PAYLOAD hashes are preserved, never per-field ones. A hash of a
+ * low-entropy field permits direct enumeration of candidate values. The
+ * original payload hash is an integrity witness: whoever holds the original
+ * payload can still prove it was that payload. It is NOT a confidentiality
+ * guarantee. If every other payload field is known, an attacker can enumerate
+ * candidate secrets and compare whole-payload hashes too. Public UUIDs and
+ * timestamps are not secrets and add no protection in that case. This choice
+ * avoids publishing a separate per-field verifier; it does not guarantee
+ * irreversibility or resistance to enumeration.
  *
  * REPAIR / ATTESTATION INTERPLAY
  * Repair replays the journal, so it must tolerate redacted entries and still
