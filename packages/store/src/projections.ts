@@ -1378,6 +1378,8 @@ export function assertReceiptPlanningAdmission(planningState: string, outcome: s
 export type RedactionRecord = {
   eventNode: string;
   eventSequence: number;
+  /** The redaction event's logical clock: the chain's causal order. */
+  logicalClock: number;
   targetNode: string;
   targetSequence: number;
   fieldPaths: string[];
@@ -1393,6 +1395,7 @@ function rowToRedaction(row: Record<string, unknown>): RedactionRecord {
   return {
     eventNode: row.event_node as string,
     eventSequence: row.event_sequence as number,
+    logicalClock: row.logical_clock as number,
     targetNode: row.target_node as string,
     targetSequence: row.target_sequence as number,
     fieldPaths: JSON.parse(row.field_paths_json as string) as string[],
@@ -1413,10 +1416,11 @@ function rowToRedaction(row: Record<string, unknown>): RedactionRecord {
 export function insertRedaction(db: DatabaseSync, record: Omit<RedactionRecord, "eventNode" | "eventSequence">, revision: EventRevision): void {
   db.prepare(`
     INSERT INTO redaction_projection (
-      event_node, event_sequence, target_node, target_sequence, field_paths_json,
+      event_node, event_sequence, logical_clock, target_node, target_sequence, field_paths_json,
       requested_field_path, prior_payload_sha256, redacted_payload_sha256, reason, actor, redacted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(event_node, event_sequence) DO UPDATE SET
+      logical_clock = excluded.logical_clock,
       target_node = excluded.target_node,
       target_sequence = excluded.target_sequence,
       field_paths_json = excluded.field_paths_json,
@@ -1429,6 +1433,7 @@ export function insertRedaction(db: DatabaseSync, record: Omit<RedactionRecord, 
   `).run(
     revision.node,
     revision.sequence,
+    record.logicalClock,
     record.targetNode,
     record.targetSequence,
     JSON.stringify(record.fieldPaths),
@@ -1443,14 +1448,14 @@ export function insertRedaction(db: DatabaseSync, record: Omit<RedactionRecord, 
 
 export function listRedactions(db: DatabaseSync): RedactionRecord[] {
   const rows = db.prepare(
-    "SELECT * FROM redaction_projection ORDER BY target_node ASC, target_sequence ASC, event_sequence ASC"
+    "SELECT * FROM redaction_projection ORDER BY target_node ASC, target_sequence ASC, logical_clock ASC, event_node ASC, event_sequence ASC"
   ).all() as Record<string, unknown>[];
   return rows.map(rowToRedaction);
 }
 
 export function listRedactionsForTarget(db: DatabaseSync, targetNode: string, targetSequence: number): RedactionRecord[] {
   const rows = db.prepare(
-    "SELECT * FROM redaction_projection WHERE target_node = ? AND target_sequence = ? ORDER BY event_sequence ASC"
+    "SELECT * FROM redaction_projection WHERE target_node = ? AND target_sequence = ? ORDER BY logical_clock ASC, event_node ASC, event_sequence ASC"
   ).all(targetNode, targetSequence) as Record<string, unknown>[];
   return rows.map(rowToRedaction);
 }

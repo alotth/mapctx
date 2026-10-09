@@ -443,6 +443,7 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
       const payload = entry.payload as unknown as EvidenceRedactedPayload;
       const facts = redactionFactsOf(entry);
       insertRedaction(db, {
+        logicalClock: entry.logicalClock,
         targetNode: facts.target.nodeId,
         targetSequence: facts.target.sequence,
         fieldPaths: facts.fieldPaths,

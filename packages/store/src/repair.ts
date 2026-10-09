@@ -153,12 +153,23 @@ function repairStoreUnderLock(storeDir: string): RepairResult {
   // database is left untouched. Redactions whose event committed but whose
   // file rewrite never landed are completed here (forward recovery), and the
   // replacement entries are what gets projected.
-  const redactions = reconcilePendingRedactions(storeDir, allEntries.map(item => item.entry));
-  if (redactions.problems.length > 0) {
+  // T-126 review ALTA-1: attested nodes' entries come from event_log columns,
+  // which carry no `redactions[]`. Judging them by journal-entry expectations
+  // reported "declares 0 redaction marker(s)" and made an attested store
+  // unrepairable; they are adjudicated against the ledger instead.
+  const redactions = reconcilePendingRedactions(storeDir, allEntries.map(item => item.entry), {
+    dbOnlyNodes: new Set(attestations.keys())
+  });
+  // `unresolved` (target not readable at all) joins the gap report rather than
+  // being swallowed: a journal file that is simply gone is the named-gap case
+  // T-118 already owns, and repair must still refuse to rebuild around it.
+  // What changed is that this no longer ALSO blocks opening the store.
+  const redactionGaps = [...redactions.problems, ...redactions.unresolved];
+  if (redactionGaps.length > 0) {
     return {
       status: "gap",
       dbWasCorrupt,
-      gaps: redactions.problems.map(problem => ({ nodeId: problem.nodeId, sequence: problem.sequence, reason: problem.reason }))
+      gaps: redactionGaps.map(problem => ({ nodeId: problem.nodeId, sequence: problem.sequence, reason: problem.reason }))
     };
   }
   for (const rewritten of redactions.rewritten) {

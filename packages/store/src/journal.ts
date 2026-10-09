@@ -102,9 +102,15 @@ export function writeJournalEntrySync(storeDir: string, entry: EventLogEntry): s
  * (a crash either leaves the original or the redacted entry, never a torn
  * file).
  *
- * Caller must hold the maintenance lock: this is the only writer allowed to
- * replace a committed identity, and a concurrent reader must not observe the
- * swap half-done against an un-quiesced database.
+ * Callers do NOT hold the maintenance lock, and must not be read as doing so
+ * (review BAIXA-1 corrected the opposite claim here). What serializes this
+ * writer is narrower and already sufficient: the redaction's SQLite write
+ * transaction is the only thing that may MINT a pending rewrite, concurrent
+ * appenders can only add new sequences and never touch an older entry, the
+ * rename is atomic so no reader sees a torn file, and the rewrite is
+ * idempotent in its content -- a racing `store repair` healing the same
+ * pending redaction writes byte-identical bytes. See redact.ts ("Redaction
+ * does NOT take the maintenance lock") for the full ordering argument.
  *
  * Honest limit: rename unlinks the previous inode, so the plaintext bytes are
  * no longer addressable through the filesystem, but freed blocks, filesystem

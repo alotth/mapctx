@@ -428,11 +428,23 @@ ALTER TABLE export_checkpoint ADD COLUMN source_state_json TEXT;
     // holding the removed content. Field-level hashes are deliberately NOT
     // stored (a hash of a low-entropy identifier is brute-forceable).
     // Additive only -- never edit earlier migrations in place post-cutover.
+    //
+    // `logical_clock` is the redaction event's own clock: the chain over one
+    // target is ordered causally by it, as every other journal merge in this
+    // codebase is (review MEDIA-2). This migration is edited in place rather
+    // than followed by a 12th because version 11 ships with T-126 and has
+    // never been applied to any real store -- there is no deployed schema 11
+    // for a later migration to upgrade FROM, so adding the column here keeps
+    // the table definition in one piece instead of splitting one feature's
+    // ledger across two versions. It remains additive, idempotent and
+    // downgrade-safe: CREATE ... IF NOT EXISTS, and an older CLI that only
+    // knows versions <= 10 inspects only the versions it knows.
     version: 11,
     sql: `
 CREATE TABLE IF NOT EXISTS redaction_projection (
   event_node TEXT NOT NULL,
   event_sequence INTEGER NOT NULL,
+  logical_clock INTEGER NOT NULL,
   target_node TEXT NOT NULL,
   target_sequence INTEGER NOT NULL,
   field_paths_json TEXT NOT NULL,
@@ -444,7 +456,7 @@ CREATE TABLE IF NOT EXISTS redaction_projection (
   redacted_at TEXT NOT NULL,
   PRIMARY KEY (event_node, event_sequence)
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS idx_redaction_target ON redaction_projection(target_node, target_sequence, event_sequence);
+CREATE INDEX IF NOT EXISTS idx_redaction_target ON redaction_projection(target_node, target_sequence, logical_clock, event_sequence);
 `.trim()
   }
 ]

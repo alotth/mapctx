@@ -19,6 +19,13 @@
  * key); only the VALUE is destroyed, which is the right granularity: the key
  * is the audit label, the value is the identifier.
  *
+ * That makes a secret written INTO a key (`--evidence "shift-998877=ok"`)
+ * permanently uncurable here, so the prevention half has to carry it: the
+ * `[privacy]` lint scans keys too and says plainly that a key has no later
+ * remedy (privacy.ts, review MEDIA-3). Allowing key redaction would mean
+ * rewriting the shape of a committed record, not just destroying content, and
+ * that is a different instrument from this one.
+ *
  * WHO MAY REDACT
  * Any CLI actor, with `--reason` and `--actor` both required. Dry-run is the
  * default; `--commit` applies. There is no approval instrument in v1: the
@@ -57,6 +64,48 @@
  * byte-exact outside the database; redacting such a row would make every
  * later repair fail closed against its own attestation, so redaction REFUSES
  * on an attested node and says to re-attest instead.
+ *
+ * REFUSING IS NOT THE SAME AS BRICKING (review ALTA-1)
+ * The first cut of this module had one verdict for everything that did not
+ * line up: refuse the open. That made a recoverable condition terminal. If a
+ * redacted target's journal FILE later disappears -- lost machine, fresh
+ * clone, the exact history T-119 exists for -- then "target not in the
+ * journal" was reported as a verification failure, which threw on open, threw
+ * on every read through it, and left repair reporting a gap with no
+ * instrument to clear it. Fail-closed with no exit is not fail-closed, it is
+ * data loss with extra steps. So verification now separates two kinds:
+ *
+ *   problems   -- the entry and the audit record CONTRADICT each other
+ *                 (off-chain payload hash, forged or mismatched markers,
+ *                 broken chain). Tampering. Still fails closed, by name.
+ *   unresolved -- the entry is not THERE to adjudicate (journal file missing
+ *                 or corrupt, and the row is not attested DB-only). Nothing
+ *                 says the store is lying; something says it is incomplete.
+ *                 Surfaced through maintenanceNeeded()/an advisory, never
+ *                 thrown, so reads keep working and `store repair` and
+ *                 `store attest-orphan` stay reachable.
+ *
+ * And the recovery instrument now actually covers redacted history. An
+ * attested node's rows live only in event_log, which has no `redactions[]`
+ * column, so entries rebuilt from an attestation declare no markers. Judging
+ * those against journal-entry expectations produced "entry declares 0
+ * redaction marker(s)" -- the attestation was accepted and the store still
+ * would not open. For a DB-only target the journal-entry artifacts simply do
+ * not apply: the integrity question is whether its payload hash sits on the
+ * recorded chain (it must, and must be at the chain's END, since event_log is
+ * updated inside the redaction transaction), and the ledger itself carries
+ * the markers. Attestation is therefore the executable route from "redacted
+ * target, journal gone" to a healthy store, and attestation.ts enforces the
+ * matching half: it refuses to pin rows that disagree with the ledger's
+ * recorded redacted state, with a message naming repair, instead of minting
+ * an approval that the next open would reject.
+ *
+ * ORDERING THE CHAIN (review MEDIA-2)
+ * A target's redactions are ordered by `logicalClock`, as every other journal
+ * merge in this codebase is (repair.ts), with (nodeId, sequence) only as a
+ * tie-break. Node ids are random UUIDs: ordering by them is ordering by
+ * nothing, and a two-node chain whose second link happens to live on a
+ * lexicographically smaller node id was reported as broken.
  *
  * CRASH-SAFETY ORDERING
  * The existing discipline is journal-fsync-then-SQLite-COMMIT. Redaction
@@ -326,7 +375,10 @@ export function planRedaction(storeDir: string, options: { target: RedactionTarg
     previews.push({ fieldPath: leaf, preview: maskedPreview(text), length: text.length })
   }
   if (fieldPaths.length === 0) {
-    return { ok: false, reason: "nothing-to-redact", message: `Every string leaf under "${options.fieldPath}" is already redacted.` }
+    // Not "is already redacted": holding the sentinel is not proof that an
+    // audit record explains it (review BAIXA-2). `redact list` is the side
+    // that can cross-check the ledger, so it is what this points at.
+    return { ok: false, reason: "nothing-to-redact", message: `Every string leaf under "${options.fieldPath}" already holds the redaction sentinel; "mapctx redact list" shows whether an evidence.redacted event covers it.` }
   }
 
   const redactedPayload = applyRedactionToPayload(entry.payload, fieldPaths)
@@ -523,6 +575,8 @@ export type RedactionProblem = { nodeId: string; sequence: number; reason: strin
 
 export type RedactionEventFacts = {
   event: RedactionTarget;
+  /** The redaction event's own logical clock: the chain's causal order. */
+  logicalClock: number;
   target: RedactionTarget;
   fieldPaths: string[];
   requestedFieldPath: string;
@@ -556,6 +610,7 @@ export function redactionFactsOf(entry: EventLogEntry): RedactionEventFacts {
   }
   return {
     event: { nodeId: entry.nodeId, sequence: entry.sequence },
+    logicalClock: entry.logicalClock,
     target: { nodeId, sequence },
     fieldPaths: payload.fieldPaths as string[],
     requestedFieldPath: typeof payload.requestedFieldPath === "string" ? payload.requestedFieldPath : (payload.fieldPaths as string[])[0],
@@ -584,44 +639,78 @@ function markerFor(facts: RedactionEventFacts): RedactionMarker {
 }
 
 export type RedactionVerification = {
+  /**
+   * The entry and its audit record contradict each other: tampering. Callers
+   * fail closed on these.
+   */
   problems: RedactionProblem[];
+  /**
+   * The target could not be adjudicated because it is not readable and is not
+   * attested DB-only. Incomplete, not dishonest -- surfaced, never thrown, so
+   * the store stays open and repair/attestation stay reachable (ALTA-1).
+   */
+  unresolved: RedactionProblem[];
   /** Targets whose journal file still holds content a committed redaction removed. */
   pending: Array<{ current: EventLogEntry; redacted: EventLogEntry }>;
 };
+
+/**
+ * How the target's bytes reached us, which decides what may legitimately be
+ * expected of them. A journal entry carries `redactions[]` and can be
+ * rewritten forward; an event_log row on an attested DB-only node carries
+ * neither, and the ledger is its marker record.
+ */
+export type TargetProvenance =
+  | { kind: "journal"; entry: EventLogEntry }
+  | { kind: "db-only"; entry: EventLogEntry }
+  | { kind: "absent"; reason: string };
+
+function emptyVerification(): RedactionVerification {
+  return { problems: [], unresolved: [], pending: [] }
+}
+
+/** Chain order is causal order: logicalClock, then (nodeId, sequence) to break ties. */
+function sortChain(chain: RedactionEventFacts[]): void {
+  chain.sort((a, b) =>
+    a.logicalClock - b.logicalClock ||
+    a.event.nodeId.localeCompare(b.event.nodeId) ||
+    a.event.sequence - b.event.sequence)
+}
 
 /**
  * Adjudicates one target against every redaction recorded for it. Shared by
  * the exhaustive journal sweep (repair) and the ledger-driven check (open),
  * so both reach the same verdict from different evidence sources.
  */
-function verifyTargetChain(target: EventLogEntry | undefined, chain: RedactionEventFacts[]): RedactionVerification {
+function verifyTargetChain(provenance: TargetProvenance, chain: RedactionEventFacts[]): RedactionVerification {
   const problems: RedactionProblem[] = []
   const pending: RedactionVerification["pending"] = []
-  chain.sort((a, b) => a.event.nodeId.localeCompare(b.event.nodeId) || a.event.sequence - b.event.sequence)
+  sortChain(chain)
   const first = chain[0]
-  if (!target) {
+  if (provenance.kind === "absent") {
+    // Not a verdict against the store: the evidence is missing, so there is
+    // nothing to adjudicate. Surfaced for the operator, and deliberately NOT
+    // fatal -- the alternative was an unopenable, unrepairable store.
     return {
-      problems: [{
+      problems,
+      unresolved: [{
         nodeId: first.target.nodeId,
         sequence: first.target.sequence,
-        reason: `redaction event ${entryKey(first.event.nodeId, first.event.sequence)} names a target that is not in the journal`
+        reason: `redaction event ${entryKey(first.event.nodeId, first.event.sequence)} names a target that cannot be read (${provenance.reason}); the redaction cannot be verified until the entry is restored ("mapctx store repair"), or the node is attested as DB-only ("mapctx store attest-orphan")`
       }],
       pending
     }
   }
+  const target = provenance.entry
+
+  const refuse = (reason: string): RedactionVerification =>
+    ({ problems: [{ nodeId: target.nodeId, sequence: target.sequence, reason }], unresolved: [], pending: [] })
 
   // The chain must be continuous: every link starts where the previous one
   // ended, so no redaction can be dropped or reordered without detection.
   for (let index = 1; index < chain.length; index++) {
     if (chain[index].priorPayloadSha256 !== chain[index - 1].redactedPayloadSha256) {
-      return {
-        problems: [{
-          nodeId: target.nodeId,
-          sequence: target.sequence,
-          reason: `broken redaction chain: ${entryKey(chain[index].event.nodeId, chain[index].event.sequence)} starts from ${chain[index].priorPayloadSha256} but the previous redaction produced ${chain[index - 1].redactedPayloadSha256}`
-        }],
-        pending
-      }
+      return refuse(`broken redaction chain: ${entryKey(chain[index].event.nodeId, chain[index].event.sequence)} starts from ${chain[index].priorPayloadSha256} but the previous redaction produced ${chain[index - 1].redactedPayloadSha256}`)
     }
   }
 
@@ -630,30 +719,30 @@ function verifyTargetChain(target: EventLogEntry | undefined, chain: RedactionEv
   const states = [first.priorPayloadSha256, ...chain.map(link => link.redactedPayloadSha256)]
   const position = states.indexOf(target.payloadSha256)
   if (position === -1) {
-    return {
-      problems: [{
-        nodeId: target.nodeId,
-        sequence: target.sequence,
-        reason: `payload hash ${target.payloadSha256} matches neither the pre-redaction payload (${first.priorPayloadSha256}) nor any redacted state declared by its ${chain.length} redaction event(s); refusing a tampered entry`
-      }],
-      pending
+    return refuse(`payload hash ${target.payloadSha256} matches neither the pre-redaction payload (${first.priorPayloadSha256}) nor any redacted state declared by its ${chain.length} redaction event(s); refusing a tampered entry`)
+  }
+
+  if (provenance.kind === "db-only") {
+    // An attested DB-only row has no journal entry, so it carries no
+    // `redactions[]` and nothing can be rewritten forward: the ledger is its
+    // marker record and event_log is its content. The one thing that must
+    // hold is that the pinned bytes are the FINAL recorded state -- an
+    // attested row still holding a pre-redaction payload would preserve,
+    // inside the attestation file, exactly the content the audit record says
+    // was destroyed.
+    if (position !== chain.length) {
+      return refuse(`attested DB-only row holds state ${position} of ${chain.length} recorded redaction(s); its pinned payload still carries content an evidence.redacted event says was destroyed. Run "mapctx store repair" and re-attest the node from the repaired rows`)
     }
+    return emptyVerification()
   }
 
   const declared = target.redactions ?? []
   const expected = chain.slice(0, position).map(markerFor)
   if (canonicalJson(declared) !== canonicalJson(expected)) {
-    return {
-      problems: [{
-        nodeId: target.nodeId,
-        sequence: target.sequence,
-        reason: `entry declares ${declared.length} redaction marker(s) that do not match the ${expected.length} applied redaction event(s); refusing rather than guessing which side is authentic`
-      }],
-      pending
-    }
+    return refuse(`entry declares ${declared.length} redaction marker(s) that do not match the ${expected.length} applied redaction event(s); refusing rather than guessing which side is authentic`)
   }
 
-  if (position === chain.length) return { problems, pending } // fully applied
+  if (position === chain.length) return { problems, unresolved: [], pending } // fully applied
 
   // Committed redactions this file has not absorbed yet (the crash window
   // between COMMIT and the file rewrite): apply the remaining links forward.
@@ -668,21 +757,14 @@ function verifyTargetChain(target: EventLogEntry | undefined, chain: RedactionEv
       markers.push(markerFor(link))
     }
   } catch (error) {
-    return { problems: [{ nodeId: target.nodeId, sequence: target.sequence, reason: `cannot apply committed redaction: ${(error as Error).message}` }], pending }
+    return refuse(`cannot apply committed redaction: ${(error as Error).message}`)
   }
   const finalSha = payloadSha256(payload)
   if (finalSha !== chain[chain.length - 1].redactedPayloadSha256) {
-    return {
-      problems: [{
-        nodeId: target.nodeId,
-        sequence: target.sequence,
-        reason: `applying the committed redaction yields ${finalSha}, not the recorded ${chain[chain.length - 1].redactedPayloadSha256}; refusing a tampered entry`
-      }],
-      pending
-    }
+    return refuse(`applying the committed redaction yields ${finalSha}, not the recorded ${chain[chain.length - 1].redactedPayloadSha256}; refusing a tampered entry`)
   }
   pending.push({ current: target, redacted: { ...target, payload, payloadSha256: finalSha, redactions: markers } })
-  return { problems, pending }
+  return { problems, unresolved: [], pending }
 }
 
 /**
@@ -701,8 +783,12 @@ function verifyTargetChain(target: EventLogEntry | undefined, chain: RedactionEv
  *   is the "someone deleted content and forged the marker" case, and it is
  *   exactly what keeps redaction from becoming a tampering channel.
  */
-export function verifyRedactions(entries: readonly EventLogEntry[]): RedactionVerification {
+export function verifyRedactions(
+  entries: readonly EventLogEntry[],
+  options: { dbOnlyNodes?: ReadonlySet<string> } = {}
+): RedactionVerification {
   const problems: RedactionProblem[] = []
+  const unresolved: RedactionProblem[] = []
   const pending: RedactionVerification["pending"] = []
   const byKey = new Map<string, EventLogEntry>()
   for (const entry of entries) byKey.set(entryKey(entry.nodeId, entry.sequence), entry)
@@ -724,8 +810,13 @@ export function verifyRedactions(entries: readonly EventLogEntry[]): RedactionVe
   }
 
   for (const [key, chain] of chains) {
-    const outcome = verifyTargetChain(byKey.get(key), chain)
+    const entry = byKey.get(key)
+    const provenance: TargetProvenance = entry
+      ? { kind: options.dbOnlyNodes?.has(entry.nodeId) ? "db-only" : "journal", entry }
+      : { kind: "absent", reason: "no journal entry and no attested DB-only row" }
+    const outcome = verifyTargetChain(provenance, chain)
     problems.push(...outcome.problems)
+    unresolved.push(...outcome.unresolved)
     pending.push(...outcome.pending)
   }
 
@@ -739,7 +830,7 @@ export function verifyRedactions(entries: readonly EventLogEntry[]): RedactionVe
     })
   }
 
-  return { problems, pending }
+  return { problems, unresolved, pending }
 }
 
 /**
@@ -749,8 +840,12 @@ export function verifyRedactions(entries: readonly EventLogEntry[]): RedactionVe
  * returned, never healed: a tampered entry must reach the caller's refusal
  * path with its exact (nodeId, sequence).
  */
-export function reconcilePendingRedactions(storeDir: string, entries: readonly EventLogEntry[]): RedactionVerification & { rewritten: EventLogEntry[] } {
-  const verification = verifyRedactions(entries)
+export function reconcilePendingRedactions(
+  storeDir: string,
+  entries: readonly EventLogEntry[],
+  options: { dbOnlyNodes?: ReadonlySet<string> } = {}
+): RedactionVerification & { rewritten: EventLogEntry[] } {
+  const verification = verifyRedactions(entries, options)
   if (verification.problems.length > 0) return { ...verification, rewritten: [] }
   const rewritten: EventLogEntry[] = []
   for (const { redacted } of verification.pending) {
@@ -770,6 +865,7 @@ export function reconcilePendingRedactions(storeDir: string, entries: readonly E
  */
 export function verifyRedactionsFromLedger(storeDir: string, db: DatabaseSync): RedactionVerification {
   const problems: RedactionProblem[] = []
+  const unresolved: RedactionProblem[] = []
   const pending: RedactionVerification["pending"] = []
   const chains = new Map<string, RedactionEventFacts[]>()
   for (const record of listRedactions(db)) {
@@ -777,6 +873,7 @@ export function verifyRedactionsFromLedger(storeDir: string, db: DatabaseSync): 
     const chain = chains.get(key) ?? []
     chain.push({
       event: { nodeId: record.eventNode, sequence: record.eventSequence },
+      logicalClock: record.logicalClock,
       target: { nodeId: record.targetNode, sequence: record.targetSequence },
       fieldPaths: record.fieldPaths,
       requestedFieldPath: record.requestedFieldPath,
@@ -789,25 +886,105 @@ export function verifyRedactionsFromLedger(storeDir: string, db: DatabaseSync): 
     chains.set(key, chain)
   }
   for (const [, chain] of chains) {
-    const read = readJournalEntry(storeDir, chain[0].target.nodeId, chain[0].target.sequence)
+    const { nodeId, sequence } = chain[0].target
+    const read = readJournalEntry(storeDir, nodeId, sequence)
     if (read.status === "corrupt") {
-      problems.push({ nodeId: chain[0].target.nodeId, sequence: chain[0].target.sequence, reason: `redaction target is corrupt: ${read.reason}` })
+      // A file that exists and contradicts ITSELF is damage or tampering, not
+      // absence: it keeps failing closed exactly as before.
+      problems.push({ nodeId, sequence, reason: `redaction target is corrupt: ${read.reason}` })
       continue
     }
-    const outcome = verifyTargetChain(read.status === "ok" ? read.entry : undefined, chain)
+    let provenance: TargetProvenance
+    if (read.status === "ok") {
+      provenance = { kind: "journal", entry: read.entry }
+    } else {
+      // No journal file. An event_log row with an empty journal_path is an
+      // attested DB-only row (T-119) -- the database IS its storage, so it is
+      // adjudicated against the ledger instead of against journal artifacts.
+      const indexed = readIndexedEntry(db, nodeId, sequence)
+      provenance = indexed && indexed.journalPath === ""
+        ? { kind: "db-only", entry: indexed.entry }
+        : { kind: "absent", reason: "journal file is missing" }
+    }
+    const outcome = verifyTargetChain(provenance, chain)
     problems.push(...outcome.problems)
+    unresolved.push(...outcome.unresolved)
     pending.push(...outcome.pending)
   }
-  return { problems, pending }
+  return { problems, unresolved, pending }
 }
 
-export function reconcileRedactionsFromLedger(storeDir: string, db: DatabaseSync): RedactionVerification & { rewritten: number } {
+/**
+ * The indexed copy of one event, straight from event_log, with the
+ * `journal_path` that says whether a journal file is supposed to exist for it
+ * at all. Used only when the journal file is absent: for an attested DB-only
+ * node ("" path) the row is the authoritative content.
+ */
+function readIndexedEntry(db: DatabaseSync, nodeId: string, sequence: number): { entry: EventLogEntry; journalPath: string } | undefined {
+  const row = db.prepare(
+    `SELECT node_id, sequence, logical_clock, event_type, schema_version, occurred_at, actor,
+            causation_json, payload_json, payload_sha256, journal_path
+     FROM event_log WHERE node_id = ? AND sequence = ?`
+  ).get(nodeId, sequence) as {
+    node_id: string; sequence: number; logical_clock: number; event_type: string; schema_version: number;
+    occurred_at: string; actor: string; causation_json: string; payload_json: string; payload_sha256: string; journal_path: string;
+  } | undefined
+  if (!row) return undefined
+  try {
+    return {
+      journalPath: row.journal_path,
+      entry: {
+        nodeId: row.node_id,
+        sequence: row.sequence,
+        logicalClock: row.logical_clock,
+        eventType: row.event_type,
+        schemaVersion: row.schema_version,
+        occurredAt: row.occurred_at,
+        actor: row.actor,
+        causation: JSON.parse(row.causation_json) as EventLogEntry["causation"],
+        payload: JSON.parse(row.payload_json) as Record<string, unknown>,
+        payloadSha256: row.payload_sha256
+      }
+    }
+  } catch {
+    return undefined
+  }
+}
+
+export function reconcileRedactionsFromLedger(
+  storeDir: string,
+  db: DatabaseSync
+): RedactionVerification & { rewritten: number; reclaimed?: boolean; reclaimWarning?: string } {
   const verification = verifyRedactionsFromLedger(storeDir, db)
   if (verification.problems.length > 0) return { ...verification, rewritten: 0 }
   for (const { redacted } of verification.pending) {
     rewriteJournalEntrySync(storeDir, redacted)
   }
-  return { ...verification, rewritten: verification.pending.length }
+  if (verification.pending.length === 0) return { ...verification, rewritten: 0 }
+
+  // Review BAIXA-3: the live path reclaims the database pages after a
+  // redaction; a redaction FINISHED here (crash healed on open) must reclaim
+  // them too, or the one path that heals silently is also the one path that
+  // leaves the freed pages behind -- and maintenanceNeeded() goes quiet
+  // straight afterwards, so nothing would ever say so. Only on a real heal:
+  // VACUUM is expensive and this is the rare crash-recovery branch, not every
+  // open.
+  let reclaimed = true
+  let reclaimWarning: string | undefined
+  try {
+    db.exec("PRAGMA wal_checkpoint(TRUNCATE)")
+    db.exec("VACUUM")
+    db.exec("PRAGMA wal_checkpoint(TRUNCATE)")
+  } catch (error) {
+    reclaimed = false
+    reclaimWarning = `Completed ${verification.pending.length} pending redaction(s), but reclaiming the database pages failed: ${String(error)}. The plaintext may survive in free pages until "mapctx store repair" or a VACUUM runs.`
+  }
+  return {
+    ...verification,
+    rewritten: verification.pending.length,
+    reclaimed,
+    ...(reclaimWarning ? { reclaimWarning } : {})
+  }
 }
 
 // ---- discovery ----
@@ -820,8 +997,16 @@ export type RedactionCandidate = {
   actor: string;
   /** Leaf paths that still hold content. */
   redactableFieldPaths: string[];
-  /** Leaf paths already destroyed by an earlier redaction. */
+  /** Leaf paths already destroyed by an earlier redaction, per the ledger. */
   redactedFieldPaths: string[];
+  /**
+   * Leaf paths that merely HOLD the sentinel string with no redaction event
+   * covering them (review BAIXA-2): either a genuine value that collided with
+   * the sentinel, or someone making a field look sanitized. Integrity is
+   * unaffected -- verification never scans for the sentinel -- but discovery
+   * must not report an unexplained sentinel as an audited redaction.
+   */
+  unexplainedFieldPaths: string[];
   /** Task / dispatch / evidence the event belongs to, for operator orientation. */
   subject: string | null;
 };
@@ -839,6 +1024,17 @@ export function listRedactionCandidates(db: DatabaseSync, options: { taskId?: st
      ORDER BY node_id ASC, sequence ASC`
   ).all(...types) as Array<{ node_id: string; sequence: number; event_type: string; occurred_at: string; actor: string; payload_json: string }>
 
+  // Which leaves the AUDIT RECORD says were destroyed, per target. The
+  // sentinel in a payload is a consequence of a redaction, never evidence of
+  // one; only the ledger can say a field was audited.
+  const auditedByTarget = new Map<string, Set<string>>()
+  for (const record of listRedactions(db)) {
+    const key = entryKey(record.targetNode, record.targetSequence)
+    const audited = auditedByTarget.get(key) ?? new Set<string>()
+    for (const fieldPath of record.fieldPaths) audited.add(fieldPath)
+    auditedByTarget.set(key, audited)
+  }
+
   const candidates: RedactionCandidate[] = []
   for (const row of rows) {
     let payload: Record<string, unknown>
@@ -847,19 +1043,25 @@ export function listRedactionCandidates(db: DatabaseSync, options: { taskId?: st
     } catch {
       continue
     }
+    const audited = auditedByTarget.get(entryKey(row.node_id, row.sequence)) ?? new Set<string>()
     const redactable: string[] = []
     const redacted: string[] = []
+    const unexplained: string[] = []
     for (const root of REDACTABLE_ROOTS[row.event_type]) {
       const located = readPath(payload, root.split("."))
       if (!located.found) continue
       for (const leaf of stringLeafPaths(located.value, root)) {
         if (!leafIsRedactable(row.event_type, leaf)) continue
         const value = readPath(payload, leaf.split("."))
-        if (value.found && value.value === REDACTED_SENTINEL) redacted.push(leaf)
-        else redactable.push(leaf)
+        if (value.found && value.value === REDACTED_SENTINEL) {
+          if (audited.has(leaf)) redacted.push(leaf)
+          else unexplained.push(leaf)
+          continue
+        }
+        redactable.push(leaf)
       }
     }
-    if (redactable.length === 0 && redacted.length === 0) continue
+    if (redactable.length === 0 && redacted.length === 0 && unexplained.length === 0) continue
     const subject = subjectOf(row.event_type, payload)
     if (options.taskId && subject !== options.taskId) continue
     candidates.push({
@@ -870,6 +1072,7 @@ export function listRedactionCandidates(db: DatabaseSync, options: { taskId?: st
       actor: row.actor,
       redactableFieldPaths: redactable,
       redactedFieldPaths: redacted,
+      unexplainedFieldPaths: unexplained,
       subject
     })
   }

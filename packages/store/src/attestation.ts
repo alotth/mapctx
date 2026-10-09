@@ -169,11 +169,13 @@ export function draftNodeAttestation(storeDir: string, nodeId: string, options: 
 
   const db = new DatabaseSync(dbPath, { readOnly: true });
   let rows: AttestedRow[];
+  let redactionLedger: LedgerLink[];
   try {
     const integrity = db.prepare("PRAGMA integrity_check").get() as { integrity_check: string };
     if (integrity.integrity_check !== "ok") throw new Error(`Database integrity check failed: ${integrity.integrity_check}`);
     const raw = db.prepare("SELECT * FROM event_log WHERE node_id = ? ORDER BY sequence ASC").all(nodeId) as unknown as AttestedRow[];
     rows = raw;
+    redactionLedger = readRedactionLedgerFor(db, nodeId);
   } finally {
     db.close();
   }
@@ -186,6 +188,7 @@ export function draftNodeAttestation(storeDir: string, nodeId: string, options: 
     if (row.journal_path !== "") throw new Error(`Row ${nodeId}/${row.sequence} has journal_path "${row.journal_path}"; only journal-less rows (journal_path "") can be attested as DB-only.`);
     verifyRowPayloadHash(row);
   }
+  assertRowsMatchRedactionLedger(nodeId, rows, redactionLedger);
 
   // A watermark for this node is the approval witness this module itself
   // publishes (and then requires at repair time). It may pre-exist only as
@@ -218,6 +221,57 @@ export function draftNodeAttestation(storeDir: string, nodeId: string, options: 
     attestation,
     contentSha256: attestation.contentSha256
   };
+}
+
+/** One recorded redaction over a row of the node being attested. */
+type LedgerLink = { targetSequence: number; redactedPayloadSha256: string };
+
+/**
+ * The redactions recorded against this node's own rows, in causal order.
+ * Returns nothing when the store predates the T-126 ledger: an absent table
+ * is "no redactions", never an error on the attestation path.
+ */
+function readRedactionLedgerFor(db: DatabaseSync, nodeId: string): LedgerLink[] {
+  const table = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'redaction_projection'").get() as { name?: string } | undefined;
+  if (!table?.name) return [];
+  const rows = db.prepare(
+    `SELECT target_sequence, redacted_payload_sha256 FROM redaction_projection
+     WHERE target_node = ? ORDER BY logical_clock ASC, event_node ASC, event_sequence ASC`
+  ).all(nodeId) as Array<{ target_sequence: number; redacted_payload_sha256: string }>;
+  return rows.map(row => ({ targetSequence: row.target_sequence, redactedPayloadSha256: row.redacted_payload_sha256 }));
+}
+
+/**
+ * T-126 review ALTA-1, the symmetric half of the guard in redact.ts.
+ *
+ * `planRedaction` refuses to redact an attested node. The reverse order --
+ * redact, then attest -- has to be adjudicated here, and the answer is not a
+ * blanket refusal: attestation is the ONLY instrument this store has for a
+ * node whose journal is gone, so forbidding it for any node that was ever
+ * redacted would recreate the dead end the review found. What must never
+ * happen is pinning bytes that CONTRADICT the audit record: an attested row
+ * still holding a pre-redaction payload would preserve, in a durable file
+ * outside the database, exactly the content an evidence.redacted event says
+ * was destroyed. So the rule is byte-level and narrow: a pinned row that the
+ * ledger names as a redaction target must already hold that chain's final
+ * redacted payload. Otherwise refuse with the route out (repair, then
+ * re-draft) rather than minting an approval the next open would reject.
+ */
+function assertRowsMatchRedactionLedger(nodeId: string, rows: readonly AttestedRow[], ledger: readonly LedgerLink[]): void {
+  if (ledger.length === 0) return;
+  const finalState = new Map<number, string>();
+  const linkCount = new Map<number, number>();
+  for (const link of ledger) {
+    finalState.set(link.targetSequence, link.redactedPayloadSha256);
+    linkCount.set(link.targetSequence, (linkCount.get(link.targetSequence) ?? 0) + 1);
+  }
+  for (const row of rows) {
+    const expected = finalState.get(row.sequence);
+    if (expected === undefined || row.payload_sha256 === expected) continue;
+    throw new Error(
+      `Row ${nodeId}/${row.sequence} is the target of ${linkCount.get(row.sequence)} recorded redaction(s), but its payload hash (${row.payload_sha256}) is not the recorded redacted state (${expected}); attesting it would pin content the audit record says was destroyed. Run "mapctx store repair" first, then re-draft the attestation.`
+    );
+  }
 }
 
 /**

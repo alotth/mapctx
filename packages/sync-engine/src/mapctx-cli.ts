@@ -48,6 +48,7 @@ import {
   listRedactionCandidates,
   lintForPrivacy,
   REDACTABLE_ROOTS,
+  redactableRootFor,
   StoreHandle,
   queryTask,
   queryTaskFromMarkdown,
@@ -519,6 +520,11 @@ function openStoreOrFail(cwd: string, options: { mode?: 'write' | 'read' } = {})
       handle.close();
       throw new Error(`Store maintenance needed, refusing to read stale state: ${maintenance}`);
     }
+    // T-126 review ALTA-1: an unverifiable redaction (target entry missing)
+    // is reported, not refused. Blocking every read on it turned one lost
+    // journal file into a store nobody could even diagnose. Warnings go to
+    // stderr so `--json` stdout stays a clean document.
+    for (const advisory of handle.maintenanceAdvisory()) console.error(`Warning: ${advisory}`);
     return { toml, storeDir, handle };
   }
   return { toml, storeDir, handle: StoreHandle.open(storeDir) };
@@ -658,14 +664,34 @@ function storeAttestOrphanCommand(nodeId: string | undefined, options: MapctxOpt
  * stays a clean document, and they never change the exit status: a regex is a
  * guess, and a false positive must not be able to stop board work.
  */
-function warnPrivacy(operation: string, value: unknown, cwd = process.cwd()): void {
+function warnPrivacy(
+  operation: string,
+  value: unknown,
+  cwd = process.cwd(),
+  /**
+   * T-126 review MEDIA-1: the warning used to end with "or redact it after
+   * the fact" everywhere, and that advice was false at three of the four call
+   * sites -- `task.upserted` has no redactable root at all, and the receipt
+   * scan reported `evidence.0.uri` while redaction addresses
+   * `receipt.evidence.0.uri`. Teaching a cure that `mapctx redact` refuses is
+   * worse than saying nothing, because the operator writes the production
+   * value trusting it. So each site declares the event type it actually
+   * writes (absent = nothing redactable here) and the root path the payload
+   * will sit under, and the lint tailors the remedy from REDACTABLE_ROOTS.
+   */
+  wiring: { rootPath?: string; eventType?: string } = {}
+): void {
   let patterns: string[] | undefined;
   try {
     patterns = resolveMapctxToml(cwd)?.config.privacy?.patterns;
   } catch {
     return; // an unreadable config is the config loader's problem, not the lint's
   }
-  for (const warning of lintForPrivacy(operation, value, patterns).warnings) {
+  const eventType = wiring.eventType;
+  for (const warning of lintForPrivacy(operation, value, patterns, {
+    ...(wiring.rootPath ? { rootPath: wiring.rootPath } : {}),
+    ...(eventType ? { redactable: (fieldPath: string) => Boolean(redactableRootFor(eventType, fieldPath)) } : {})
+  }).warnings) {
     console.error(warning);
   }
 }
@@ -714,8 +740,16 @@ function redactCommand(options: MapctxOptions): void {
       actor: defaultActor(options.actor),
       commit: Boolean(options.commit)
     });
+    // Review BAIXA-4: a refusal used to be printed as a result on stdout AND
+    // raised as an error, so the same refusal left twice by two channels.
+    // stdout is the result channel; a refusal is not a result. The structured
+    // object still exists for machine consumers -- on stderr, next to the
+    // message -- and the exit code is what they check first.
+    if (!result.ok) {
+      if (options.json) process.stderr.write(`${JSON.stringify(result, null, 2)}\n`);
+      throw new Error(`Redaction refused: ${result.reason} -- ${result.message}`);
+    }
     print(result, options.json);
-    if (!result.ok) throw new Error(`Redaction refused: ${result.reason} -- ${result.message}`);
     if (!options.json && result.mode === 'dry-run') {
       console.log('');
       console.log(`Dry run: nothing was written to ${storeDir}. Re-run with --commit to destroy the content above.`);
@@ -1142,7 +1176,7 @@ export function dispatchReceiptCommand(dispatchId: string, options: MapctxOption
     const receipt = readReceiptPayload(options) as Parameters<typeof recordRunReceipt>[1];
     // T-126: receipts carry agent-authored evidence and failure text, the
     // other place production identifiers have leaked into the journal.
-    warnPrivacy(`dispatch receipt ${dispatchId}`, receipt, cwd);
+    warnPrivacy(`dispatch receipt ${dispatchId}`, receipt, cwd, { rootPath: 'receipt', eventType: 'run.receipt-recorded' });
     if (options.claudeTranscriptPath) {
       const activity: OtherSessionActivity[] = options.otherSessionActivityPath
         ? JSON.parse(fs.readFileSync(path.resolve(cwd, options.otherSessionActivityPath), 'utf8')) as OtherSessionActivity[]
@@ -1392,7 +1426,7 @@ export function taskAcceptanceCommand(action: string | undefined, taskId: string
       approveEvidence = parseEvidencePairs(options.evidencePairs);
       // T-126: approval evidence is the exact field R5 was found in. Warn
       // here, in the preflight, before any store handle exists.
-      warnPrivacy(`acceptance approve ${taskId}`, { evidence: approveEvidence }, cwd);
+      warnPrivacy(`acceptance approve ${taskId}`, { evidence: approveEvidence }, cwd, { eventType: 'acceptance.approved' });
     }
   } else if (action !== 'show') {
     throw new Error(`Unknown acceptance action: ${action}`);

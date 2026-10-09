@@ -130,6 +130,24 @@ export class StoreHandle {
     return null;
   }
 
+  /**
+   * T-126 review ALTA-1: conditions a reader must be TOLD about but must not
+   * be blocked by. maintenanceNeeded() is a refusal ("the state you would
+   * read is stale or contradicted"); this is a notice ("part of the audit
+   * record cannot be checked"). A redaction whose target entry is missing is
+   * the second kind: the rest of the store is perfectly readable, and
+   * refusing every query was what turned one lost journal file into an
+   * unusable store with no diagnostic path.
+   */
+  maintenanceAdvisory(): string[] {
+    try {
+      return verifyRedactionsFromLedger(this.storeDir, this.db).unresolved
+        .map(open => `redaction cannot be verified at ${open.nodeId}/${open.sequence}: ${open.reason}`);
+    } catch {
+      return []; // an unreadable ledger is already reported by maintenanceNeeded()
+    }
+  }
+
   close(): void {
     this.db.close();
   }
@@ -202,6 +220,15 @@ export class StoreHandle {
       const named = result.problems.map(problem => `${problem.nodeId}/${problem.sequence}: ${problem.reason}`).join("; ");
       throw new Error(`Refusing to open ${this.storeDir}: redaction verification failed -- ${named}`);
     }
+    // T-126 review ALTA-1: a redaction whose target cannot be READ (journal
+    // file gone, node not attested DB-only) is incomplete, not dishonest.
+    // Throwing here made the store unopenable AND unrepairable, so it is
+    // surfaced as a warning instead: the store opens, repair and
+    // attest-orphan stay reachable, and the condition is visible.
+    for (const open of result.unresolved) {
+      process.emitWarning(`Redaction cannot be verified at ${open.nodeId}/${open.sequence}: ${open.reason}`);
+    }
+    if (result.reclaimWarning) process.emitWarning(result.reclaimWarning);
   }
 
   /**
