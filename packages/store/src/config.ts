@@ -25,11 +25,22 @@ export type GithubBinding = {
   verified: boolean
 }
 
+/**
+ * T-126: optional sensitive-content patterns. Advisory only -- the lint that
+ * reads these warns and never blocks (see privacy.ts), so a malformed entry
+ * degrades to "one pattern skipped", never to an unusable board. Absent
+ * table, absent key and empty list all mean "lint disabled".
+ */
+export type PrivacyBinding = {
+  patterns: string[]
+}
+
 export type MapctxTomlConfig = {
   schemaVersion: 1
   projectId: string
   plansAuthority: PlansAuthority
   github?: GithubBinding
+  privacy?: PrivacyBinding
 }
 
 export type ResolvedMapctxToml = {
@@ -77,11 +88,31 @@ function assertValidConfig(value: unknown, sourcePath: string): MapctxTomlConfig
     };
   }
 
+  // The ONE structural rule that is worth refusing on: `patterns` must be a
+  // list of strings. Anything else is a misunderstanding of the key rather
+  // than a bad pattern, and silently reading it as "lint disabled" would hide
+  // a privacy control the operator believes is on. Individual patterns that
+  // do not compile stay non-fatal and are reported by the lint itself.
+  let privacy: PrivacyBinding | undefined;
+  if (raw.privacy !== undefined) {
+    const p = raw.privacy as Record<string, unknown>;
+    if (typeof p !== "object" || p === null || Array.isArray(p)) {
+      throw new Error(`Invalid ${MAPCTX_TOML_FILENAME} at ${sourcePath}: [privacy] must be a table.`);
+    }
+    if (p.patterns !== undefined) {
+      if (!Array.isArray(p.patterns) || !p.patterns.every(item => typeof item === "string")) {
+        throw new Error(`Invalid ${MAPCTX_TOML_FILENAME} at ${sourcePath}: [privacy] patterns must be an array of regex strings.`);
+      }
+    }
+    privacy = { patterns: (p.patterns as string[] | undefined) ?? [] };
+  }
+
   return {
     schemaVersion: 1,
     projectId: projectIdResult.data,
     plansAuthority: plansAuthorityResult.data,
-    github
+    github,
+    privacy
   };
 }
 
@@ -120,6 +151,9 @@ export function serializeMapctxToml(config: MapctxTomlConfig): string {
   };
   if (config.github) {
     table.github = config.github;
+  }
+  if (config.privacy) {
+    table.privacy = config.privacy;
   }
   return `${TOML.stringify(table)}\n`.replace(/\n\n+$/, "\n");
 }

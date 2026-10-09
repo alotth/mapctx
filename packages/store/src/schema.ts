@@ -418,5 +418,33 @@ CREATE TABLE IF NOT EXISTS acceptance_criterion_projection (
 CREATE INDEX IF NOT EXISTS idx_acceptance_criterion_task ON acceptance_criterion_projection(task_id, revision, position);
 ALTER TABLE export_checkpoint ADD COLUMN source_state_json TEXT;
 `.trim()
+  },
+  {
+    // T-126: auditable redaction of sensitive evidence. One row per applied
+    // redaction, keyed by the redaction event itself, naming the target event
+    // and the exact field paths whose CONTENT was destroyed. The row carries
+    // the preserved hash of the original payload plus the resulting hash, so
+    // repair can verify the chain target -> redacted state without ever
+    // holding the removed content. Field-level hashes are deliberately NOT
+    // stored (a hash of a low-entropy identifier is brute-forceable).
+    // Additive only -- never edit earlier migrations in place post-cutover.
+    version: 11,
+    sql: `
+CREATE TABLE IF NOT EXISTS redaction_projection (
+  event_node TEXT NOT NULL,
+  event_sequence INTEGER NOT NULL,
+  target_node TEXT NOT NULL,
+  target_sequence INTEGER NOT NULL,
+  field_paths_json TEXT NOT NULL,
+  requested_field_path TEXT NOT NULL,
+  prior_payload_sha256 TEXT NOT NULL,
+  redacted_payload_sha256 TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  redacted_at TEXT NOT NULL,
+  PRIMARY KEY (event_node, event_sequence)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_redaction_target ON redaction_projection(target_node, target_sequence, event_sequence);
+`.trim()
   }
 ]

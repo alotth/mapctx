@@ -44,6 +44,10 @@ import {
   attestationContentSha256,
   commitNodeAttestation,
   draftNodeAttestation,
+  redactEvidence,
+  listRedactionCandidates,
+  lintForPrivacy,
+  REDACTABLE_ROOTS,
   StoreHandle,
   queryTask,
   queryTaskFromMarkdown,
@@ -154,6 +158,10 @@ type MapctxOptions = SyncOptions & {
   expectRevision?: number;
   criterionId?: string;
   index?: number;
+  /** T-126 redact */
+  nodeId?: string;
+  sequence?: number;
+  field?: string;
 };
 
 function printHelp(): void {
@@ -178,6 +186,17 @@ function printHelp(): void {
   console.log('    Writes nothing. Re-run with --approve-hash <sha256-from-the-draft> to write');
   console.log('    node-attestations.json, which lets `mapctx store repair` replay those rows and');
   console.log('    treat the node\'s absent prefix as a declared fact instead of a gap.');
+  console.log('  mapctx redact list [--task T-123] [--json]');
+  console.log('    Lists events holding redactable evidence, without printing any value.');
+  console.log('  mapctx redact --sequence <n> --field <payload.path> --reason "<why>" [--node <nodeId>] [--actor name] [--commit] [--json]');
+  console.log('    Permanently destroys one evidence field\'s content in the journal, mapctx.db and');
+  console.log('    the projections derived from it, recording an auditable evidence.redacted event');
+  console.log('    (target, field paths, reason, actor, and the hash of the original payload).');
+  console.log('    Redactable: acceptance.approved evidence, run.receipt-recorded receipt.evidence,');
+  console.log('    history.evidence-recorded evidence.repoRoot/repoOrigin. Structural facts are not.');
+  console.log('    DRY RUN BY DEFAULT (read-only); --commit applies and cannot be undone.');
+  console.log('  [privacy] patterns = ["regex", ...] in mapctx.toml warns (never blocks) on');
+  console.log('    task create/update, acceptance approve --evidence and dispatch receipt.');
   console.log('  mapctx import --dry-run [--json] [--tasks-file path]');
   console.log('  mapctx import --commit [--json] [--tasks-file path] [--config path] [--actor name]');
   console.log('  mapctx export [--reason manual|wave-end|epic-end] [--json]');
@@ -380,6 +399,13 @@ function parseArgs(argv: string[]): {
     else if (a === '--emit-approval-template') options.emitApprovalPath = args[++i];
     else if (a === '--include-inferred') options.includeInferred = true;
     else if (a === '--target') options.target = args[++i];
+    else if (a === '--node') options.nodeId = args[++i];
+    else if (a === '--field') options.field = args[++i];
+    else if (a === '--sequence') {
+      const value = Number(args[++i]);
+      if (!Number.isInteger(value) || value < 1) throw new Error('--sequence must be a positive integer');
+      options.sequence = value;
+    }
     else if (a === '--because') options.correctionReason = args[++i];
     else if (a === '--limit') {
       const value = Number(args[++i]);
@@ -624,6 +650,82 @@ function storeAttestOrphanCommand(nodeId: string | undefined, options: MapctxOpt
   }
   const result = commitNodeAttestation(storeDir, nodeId, options.approveHash, draftOptions);
   print({ status: 'attested', nodeId, contentSha256: result.contentSha256, filePath: result.filePath, attestedAt: result.attestation.attestedAt, approvedBy: result.attestation.approvedBy }, options.json);
+}
+
+/**
+ * T-126: the `[privacy] patterns` lint, wired at the four write paths that
+ * accept operator/agent free text. Warnings go to STDERR so `--json` stdout
+ * stays a clean document, and they never change the exit status: a regex is a
+ * guess, and a false positive must not be able to stop board work.
+ */
+function warnPrivacy(operation: string, value: unknown, cwd = process.cwd()): void {
+  let patterns: string[] | undefined;
+  try {
+    patterns = resolveMapctxToml(cwd)?.config.privacy?.patterns;
+  } catch {
+    return; // an unreadable config is the config loader's problem, not the lint's
+  }
+  for (const warning of lintForPrivacy(operation, value, patterns).warnings) {
+    console.error(warning);
+  }
+}
+
+function redactListCommand(options: MapctxOptions): void {
+  const { handle } = openStoreOrFail(process.cwd(), { mode: 'read' });
+  try {
+    const candidates = listRedactionCandidates(handle.db, options.taskFilter ? { taskId: options.taskFilter } : {});
+    print({
+      ok: true,
+      count: candidates.length,
+      redactableRoots: REDACTABLE_ROOTS,
+      candidates
+    }, options.json);
+    if (!options.json && candidates.length > 0) {
+      console.log('');
+      console.log('Redact one with: mapctx redact --node <nodeId> --sequence <n> --field <path> --reason "<why>" --actor <name> [--commit]');
+    }
+  } finally {
+    handle.close();
+  }
+}
+
+/**
+ * `mapctx redact` -- dry-run by default, `--commit` to apply. Both --reason
+ * and --actor are required: an unexplained, unattributed destruction of
+ * evidence is not an audit record. The dry run opens the store read-only, so
+ * the default path provably cannot write.
+ */
+function redactCommand(options: MapctxOptions): void {
+  const reason = options.attestationReason ?? (typeof options.reason === 'string' ? options.reason : undefined);
+  if (options.sequence === undefined || !options.field) {
+    throw new Error('Usage: mapctx redact --sequence <n> --field <payload.path> --reason "<why>" [--node <nodeId>] [--actor <name>] [--commit] [--json]  |  mapctx redact list [--task T-123] [--json]');
+  }
+  if (!reason || !reason.trim()) {
+    throw new Error('mapctx redact requires --reason "<why>": redaction destroys evidence permanently and must say why.');
+  }
+  const cwd = process.cwd();
+  const { handle, storeDir } = openStoreOrFail(cwd, { mode: options.commit ? 'write' : 'read' });
+  try {
+    const target = { nodeId: options.nodeId ?? handle.nodeId, sequence: options.sequence };
+    const result = redactEvidence(handle, {
+      target,
+      fieldPath: options.field,
+      reason: reason.trim(),
+      actor: defaultActor(options.actor),
+      commit: Boolean(options.commit)
+    });
+    print(result, options.json);
+    if (!result.ok) throw new Error(`Redaction refused: ${result.reason} -- ${result.message}`);
+    if (!options.json && result.mode === 'dry-run') {
+      console.log('');
+      console.log(`Dry run: nothing was written to ${storeDir}. Re-run with --commit to destroy the content above.`);
+    }
+    if (result.mode === 'commit' && result.reclaimWarning) {
+      console.error(result.reclaimWarning);
+    }
+  } finally {
+    handle.close();
+  }
 }
 
 function importDryRunCliCommand(options: MapctxOptions): void {
@@ -1038,6 +1140,9 @@ export function dispatchReceiptCommand(dispatchId: string, options: MapctxOption
       return;
     }
     const receipt = readReceiptPayload(options) as Parameters<typeof recordRunReceipt>[1];
+    // T-126: receipts carry agent-authored evidence and failure text, the
+    // other place production identifiers have leaked into the journal.
+    warnPrivacy(`dispatch receipt ${dispatchId}`, receipt, cwd);
     if (options.claudeTranscriptPath) {
       const activity: OtherSessionActivity[] = options.otherSessionActivityPath
         ? JSON.parse(fs.readFileSync(path.resolve(cwd, options.otherSessionActivityPath), 'utf8')) as OtherSessionActivity[]
@@ -1146,6 +1251,15 @@ export function splitList(value?: string): string[] | undefined {
 export function taskCreateCommand(options: MapctxOptions): void {
   if (!options.title) throw new Error('task create requires --title "<title>"');
   const cwd = process.cwd();
+  // T-126: lint the operator-supplied text BEFORE the store is opened, so the
+  // warning is on screen whether or not the create itself succeeds.
+  warnPrivacy('task create', {
+    title: options.title,
+    summary: options.summary,
+    description: options.description,
+    tags: options.tags,
+    domains: options.domains
+  }, cwd);
   const { handle, tasksRoot } = requireStoreAuthority(cwd);
   try {
     const result = createTask(handle, {
@@ -1223,6 +1337,7 @@ export function taskUpdateCommand(taskId: string, options: MapctxOptions): void 
     }
   }
   const cwd = process.cwd();
+  warnPrivacy(`task update ${taskId}`, { patch, detail: detailPatch }, cwd);
   const { handle, tasksRoot } = requireStoreAuthority(cwd);
   try {
     const result = updateTask(handle, {
@@ -1275,6 +1390,9 @@ export function taskAcceptanceCommand(action: string | undefined, taskId: string
     // mutations, never after an approval landed (or after a migration).
     if (action === 'approve' && (options.evidencePairs ?? []).length > 0) {
       approveEvidence = parseEvidencePairs(options.evidencePairs);
+      // T-126: approval evidence is the exact field R5 was found in. Warn
+      // here, in the preflight, before any store handle exists.
+      warnPrivacy(`acceptance approve ${taskId}`, { evidence: approveEvidence }, cwd);
     }
   } else if (action !== 'show') {
     throw new Error(`Unknown acceptance action: ${action}`);
@@ -1607,6 +1725,12 @@ async function main(): Promise<void> {
     if (subcommand === 'repair') { storeRepairCommand(options); return; }
     if (subcommand === 'attest-orphan') { storeAttestOrphanCommand(positional[1], options); return; }
     throw new Error('Usage: mapctx store <init|repair|attest-orphan> [--json]');
+  }
+
+  if (command === 'redact') {
+    if (subcommand === 'list') { redactListCommand(options); return; }
+    redactCommand(options);
+    return;
   }
 
   if (command === 'import') {

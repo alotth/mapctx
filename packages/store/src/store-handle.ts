@@ -6,6 +6,7 @@ import { applyEventToProjections, assertNewEventAdmission } from "./events"
 import { bumpSequenceWatermark, createStoreMeta, readSequenceWatermark, readStoreMetaFile, withStoreMetaLock, writeStoreMetaFile, type StoreMeta } from "./identity"
 import { listJournalSequences, payloadSha256, readJournalEntry, writeJournalBatchSync, abortJournalBatchSync, type JournalPublicationError } from "./journal"
 import { assertNotUnderMaintenance } from "./maintenance"
+import { reconcileRedactionsFromLedger, verifyRedactionsFromLedger } from "./redact"
 
 export type AppendEventInput = {
   eventType: string;
@@ -69,6 +70,7 @@ export class StoreHandle {
     try {
       handle.reindexPendingJournal();
       handle.reconcileSequenceWatermark();
+      handle.reconcilePendingRedactions();
       return handle;
     } catch (error) { db.close(); throw error; }
   }
@@ -108,6 +110,22 @@ export class StoreHandle {
     const pending = listJournalSequences(this.storeDir, this.nodeId).filter(seq => seq > lastIndexed);
     if (pending.length > 0) {
       return `journal holds ${pending.length} unindexed entr${pending.length === 1 ? "y" : "ies"} (run "mapctx store repair" to materialize)`;
+    }
+    // T-126: a committed redaction whose journal rewrite has not landed yet
+    // is a condition a read must SURFACE, never heal -- a read-only handle
+    // would otherwise either write (forbidden) or serve content that is
+    // already officially destroyed, with no warning.
+    try {
+      const redactions = verifyRedactionsFromLedger(this.storeDir, this.db);
+      if (redactions.problems.length > 0) {
+        const first = redactions.problems[0];
+        return `redaction verification failed at ${first.nodeId}/${first.sequence}: ${first.reason}`;
+      }
+      if (redactions.pending.length > 0) {
+        return `${redactions.pending.length} committed redaction(s) are not yet applied to the journal (reopen for writing, or run "mapctx store repair", to complete them)`;
+      }
+    } catch (error) {
+      return `redaction ledger unreadable: ${String(error)}`;
     }
     return null;
   }
@@ -167,6 +185,23 @@ export class StoreHandle {
 
   private insertEventLogRow(entry: EventLogEntry): void {
     insertEventLogRow(this.db, entry);
+  }
+
+  /**
+   * T-126: completes any redaction whose event is committed but whose target
+   * journal file still holds the content -- the deliberate crash window
+   * between the redaction transaction and the in-place file rewrite (see
+   * redact.ts on ordering). Idempotent, and it refuses loudly: a target that
+   * hashes to neither its original nor any recorded redaction state is
+   * tampering, and an open must fail closed on it rather than serve a store
+   * whose journal and audit record disagree.
+   */
+  reconcilePendingRedactions(): void {
+    const result = reconcileRedactionsFromLedger(this.storeDir, this.db);
+    if (result.problems.length > 0) {
+      const named = result.problems.map(problem => `${problem.nodeId}/${problem.sequence}: ${problem.reason}`).join("; ");
+      throw new Error(`Refusing to open ${this.storeDir}: redaction verification failed -- ${named}`);
+    }
   }
 
   /**

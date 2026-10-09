@@ -89,6 +89,50 @@ export function writeJournalEntrySync(storeDir: string, entry: EventLogEntry): s
   return finalPath
 }
 
+/**
+ * T-126: replaces one already-published journal entry in place.
+ *
+ * Every other write path here is exclusive-publication by design (never
+ * replace an identity), because an event is an immutable historical fact.
+ * Redaction is the single sanctioned exception: the fact stays, one field's
+ * CONTENT is destroyed, and the replacement must leave no window in which
+ * the plaintext is still reachable. write-temp -> fsync -> rename over the
+ * target -> fsync the directory is the same durability ladder the append
+ * path uses; the rename is what makes the old content unreachable atomically
+ * (a crash either leaves the original or the redacted entry, never a torn
+ * file).
+ *
+ * Caller must hold the maintenance lock: this is the only writer allowed to
+ * replace a committed identity, and a concurrent reader must not observe the
+ * swap half-done against an un-quiesced database.
+ *
+ * Honest limit: rename unlinks the previous inode, so the plaintext bytes are
+ * no longer addressable through the filesystem, but freed blocks, filesystem
+ * snapshots and external backups are outside this function's reach. Redaction
+ * is an auditable store operation, not a media-sanitization guarantee.
+ */
+export function rewriteJournalEntrySync(storeDir: string, entry: EventLogEntry): string {
+  const finalPath = committedEntryPath(storeDir, entry.nodeId, entry.sequence)
+  if (!fs.existsSync(finalPath)) throw new Error(`Cannot rewrite missing journal entry: ${entry.nodeId}/${entry.sequence}`)
+  const dir = path.dirname(finalPath)
+  const tmpPath = `${finalPath}.redact-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const fd = fs.openSync(tmpPath, "wx")
+  try {
+    fs.writeSync(fd, canonicalJson(entry), null, "utf8")
+    fs.fsyncSync(fd)
+  } finally {
+    fs.closeSync(fd)
+  }
+  try {
+    fs.renameSync(tmpPath, finalPath)
+  } catch (error) {
+    fs.rmSync(tmpPath, { force: true })
+    throw error
+  }
+  syncDirectory(dir)
+  return finalPath
+}
+
 export type JournalReadResult =
   | { status: "ok"; entry: EventLogEntry }
   | { status: "missing"; sequence: number }

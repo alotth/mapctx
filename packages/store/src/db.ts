@@ -164,6 +164,7 @@ export function clearProjections(db: DatabaseSync): void {
     "history_correction_projection",
     "acceptance_revision_projection",
     "acceptance_criterion_projection",
+    "redaction_projection",
     "export_checkpoint"
   ];
   for (const table of tables) {

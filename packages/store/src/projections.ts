@@ -1372,3 +1372,85 @@ export function assertReceiptPlanningAdmission(planningState: string, outcome: s
   }
   assertTransition("planning", planningState, targetPlanning);
 }
+
+// ---- T-126 redaction ledger ----
+
+export type RedactionRecord = {
+  eventNode: string;
+  eventSequence: number;
+  targetNode: string;
+  targetSequence: number;
+  fieldPaths: string[];
+  requestedFieldPath: string;
+  priorPayloadSha256: string;
+  redactedPayloadSha256: string;
+  reason: string;
+  actor: string;
+  redactedAt: string;
+};
+
+function rowToRedaction(row: Record<string, unknown>): RedactionRecord {
+  return {
+    eventNode: row.event_node as string,
+    eventSequence: row.event_sequence as number,
+    targetNode: row.target_node as string,
+    targetSequence: row.target_sequence as number,
+    fieldPaths: JSON.parse(row.field_paths_json as string) as string[],
+    requestedFieldPath: row.requested_field_path as string,
+    priorPayloadSha256: row.prior_payload_sha256 as string,
+    redactedPayloadSha256: row.redacted_payload_sha256 as string,
+    reason: row.reason as string,
+    actor: row.actor as string,
+    redactedAt: row.redacted_at as string
+  };
+}
+
+/**
+ * Upsert, not insert: replay re-projects the same redaction event from the
+ * journal, and a redaction is identified by its own (node, sequence) -- so
+ * re-applying it must land the identical row rather than fail on the key.
+ */
+export function insertRedaction(db: DatabaseSync, record: Omit<RedactionRecord, "eventNode" | "eventSequence">, revision: EventRevision): void {
+  db.prepare(`
+    INSERT INTO redaction_projection (
+      event_node, event_sequence, target_node, target_sequence, field_paths_json,
+      requested_field_path, prior_payload_sha256, redacted_payload_sha256, reason, actor, redacted_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(event_node, event_sequence) DO UPDATE SET
+      target_node = excluded.target_node,
+      target_sequence = excluded.target_sequence,
+      field_paths_json = excluded.field_paths_json,
+      requested_field_path = excluded.requested_field_path,
+      prior_payload_sha256 = excluded.prior_payload_sha256,
+      redacted_payload_sha256 = excluded.redacted_payload_sha256,
+      reason = excluded.reason,
+      actor = excluded.actor,
+      redacted_at = excluded.redacted_at
+  `).run(
+    revision.node,
+    revision.sequence,
+    record.targetNode,
+    record.targetSequence,
+    JSON.stringify(record.fieldPaths),
+    record.requestedFieldPath,
+    record.priorPayloadSha256,
+    record.redactedPayloadSha256,
+    record.reason,
+    record.actor,
+    record.redactedAt
+  );
+}
+
+export function listRedactions(db: DatabaseSync): RedactionRecord[] {
+  const rows = db.prepare(
+    "SELECT * FROM redaction_projection ORDER BY target_node ASC, target_sequence ASC, event_sequence ASC"
+  ).all() as Record<string, unknown>[];
+  return rows.map(rowToRedaction);
+}
+
+export function listRedactionsForTarget(db: DatabaseSync, targetNode: string, targetSequence: number): RedactionRecord[] {
+  const rows = db.prepare(
+    "SELECT * FROM redaction_projection WHERE target_node = ? AND target_sequence = ? ORDER BY event_sequence ASC"
+  ).all(targetNode, targetSequence) as Record<string, unknown>[];
+  return rows.map(rowToRedaction);
+}

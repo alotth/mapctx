@@ -7,6 +7,7 @@ import { readStoreMetaFile } from "./identity"
 import { acquireMaintenanceLock, assertNotUnderMaintenance } from "./maintenance"
 import { listJournalNodeIds, listJournalSequences, readJournalEntry } from "./journal"
 import { attestedEntries, loadNodeAttestations, verifyAttestationAgainstDb, type NodeAttestation } from "./attestation"
+import { reconcilePendingRedactions } from "./redact"
 import { insertEventLogRow, StoreHandle } from "./store-handle"
 
 export type RepairGap = {
@@ -142,6 +143,28 @@ function repairStoreUnderLock(storeDir: string): RepairResult {
   const allEntries = ([] as ValidatedEntry[])
     .concat(...validatedByNode.values())
     .sort((a, b) => a.entry.logicalClock - b.entry.logicalClock || a.entry.nodeId.localeCompare(b.entry.nodeId) || a.entry.sequence - b.entry.sequence);
+
+  // T-126: redaction verification sits here -- after the journal is proven
+  // contiguous and self-consistent, before anything is projected. A redacted
+  // entry is accepted ONLY when a matching evidence.redacted event backs it;
+  // a target that hashes to neither its original nor any recorded redaction
+  // state, and an entry carrying markers no event explains, both fail closed
+  // through the same named-gap contract as any other journal anomaly -- the
+  // database is left untouched. Redactions whose event committed but whose
+  // file rewrite never landed are completed here (forward recovery), and the
+  // replacement entries are what gets projected.
+  const redactions = reconcilePendingRedactions(storeDir, allEntries.map(item => item.entry));
+  if (redactions.problems.length > 0) {
+    return {
+      status: "gap",
+      dbWasCorrupt,
+      gaps: redactions.problems.map(problem => ({ nodeId: problem.nodeId, sequence: problem.sequence, reason: problem.reason }))
+    };
+  }
+  for (const rewritten of redactions.rewritten) {
+    const index = allEntries.findIndex(item => item.entry.nodeId === rewritten.nodeId && item.entry.sequence === rewritten.sequence);
+    if (index >= 0) allEntries[index] = { ...allEntries[index], entry: rewritten, overrides: undefined };
+  }
 
   const tempDbPath = path.join(storeDir, `mapctx.db.rebuild-${process.pid}-${Date.now()}`);
   const tempDb = openDatabase(tempDbPath);
