@@ -2608,6 +2608,158 @@
   - updated: 2026-10-05
   - detail: ./tasks/T-122.md
 
+### [E-017] Atritos de agentes (out/2026) e estudo de autoridade do provider
+
+  - id: E-017
+  - status: backlog
+  - type: epic
+  - parent: null
+  - subIssueProgress: 1/7
+  - priority: high
+  - workload: null
+  - tags: []
+  - domains: [CLI, STORE, PLANNER, DOCS]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/E-017.md
+
+### [T-123] Estudo opcao B: impacto fora da store, ADR 0005 proposta e contrato TaskProvider
+
+  - id: T-123
+  - status: done
+  - type: task
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: high
+  - workload: Normal
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-10-09
+  - externalId: null
+  - updated: 2026-10-09
+  - detail: ./tasks/T-123.md
+
+### [T-124] R2 design: renovacao de lease por dispatch, review concorrente e fatias como subtasks
+
+  - id: T-124
+  - status: review
+  - type: task
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: high
+  - workload: Hard
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-09
+  - detail: ./tasks/T-124.md
+
+### [T-125] R6 planner: filesAffected/paths prevalecem sobre dominio inferido nas waves
+
+  - id: T-125
+  - status: review
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: high
+  - workload: Normal
+  - tags: []
+  - domains: [PLANNER]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-09
+  - detail: ./tasks/T-125.md
+
+### [T-126] R5 redacao auditavel de evidencia sensivel + lint [privacy] patterns
+
+  - id: T-126
+  - status: doing
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: high
+  - workload: Hard
+  - tags: []
+  - domains: [STORE, CLI]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-09
+  - detail: ./tasks/T-126.md
+
+### [T-127] P1 CLI: enums na ajuda, erros de update, externalLinks, validate --task/--baseline
+
+  - id: T-127
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: medium
+  - workload: Normal
+  - tags: []
+  - domains: [CLI]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-09
+  - detail: ./tasks/T-127.md
+
+### [T-128] R1 paliativo: task finish --no-snapshot e gate unico de done
+
+  - id: T-128
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: medium
+  - workload: Normal
+  - tags: []
+  - domains: [CLI]
+  - dependsOn: [T-127]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-09
+  - detail: ./tasks/T-128.md
+
+### [T-129] R3 paliativo: acceptance no create, approve em lote, revise --expect-title, import --task
+
+  - id: T-129
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: low
+  - workload: Normal
+  - tags: []
+  - domains: [STORE, CLI]
+  - dependsOn: [T-126, T-127]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-09
+  - detail: ./tasks/T-129.md
+
 ## Notes
 
 - 2026-05-29 cleanup: `TASKS.md` is the local source of truth; GitHub/Project sync validation and uncertain future workflows are paused until explicitly resumed.
