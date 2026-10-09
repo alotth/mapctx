@@ -23,10 +23,15 @@ MapCtx still has a distinct role: resource claims, dispatch attempts,
 run receipts, session attribution, privacy/redaction, scheduling, forecast,
 budget, and cost. These data are not interchangeable with an issue tracker.
 
-## Decision
+## Proposal
 
-Adopt, subject to this ADR being accepted, **Option B: provider authority plus
-a local MapCtx intelligence database**.
+This ADR remains an operator decision while its status is Proposed. It presents
+**Option B: provider authority plus a local MapCtx intelligence database** as a
+candidate, alongside the lower-cost A0 alternative below. B is preferred only
+if provider-native planning and collaboration are worth its adapter, binding,
+and availability costs; this ADR does not settle that trade-off in advance.
+
+If the operator selects B, the resulting decision is:
 
 1. A selected TaskProvider is the single canonical source for task-planning
    fields: task identity, title/body/summary, status, type, parent,
@@ -44,15 +49,38 @@ a local MapCtx intelligence database**.
 5. TASKS.md generation, task-detail structured snapshots, store-to-provider
    push, bidirectional sync, cutover/import/reconcile repair, and checkpoint
    export are retired once migration completes.
-6. Provider writes require a provider revision/ETag where available and an
-   idempotency key. Unsupported provider capabilities fail visibly; no
-   adapter silently stores the planning field locally.
+6. Provider writes require a provider revision/ETag where available and a
+   caller correlation ID. Unsupported provider capabilities, freshness, and
+   partial data fail or surface visibly; no adapter silently stores a planning
+   field locally.
 
-The contract in the linked study is intentionally narrow: listItems,
-getDependencies, setField, addComment, and timeline. Claims and receipts are
-not TaskProvider methods.
+The linked contract covers live reads, item creation, typed field writes,
+dependency add/remove, criterion state, close/reopen, comments, and timeline.
+Claims and receipts are intentionally not TaskProvider methods.
 
 ## Alternatives considered
+
+### A0. Store authority, snapshots retired
+
+Keep the current local store as planning authority, but stop regenerating
+TASKS.md and structured tasks/*.md blocks. Description prose either moves into
+the store or remains plain Git prose with no structured task block. This is not
+N-way synchronisation: provider systems are optional projections or links, not
+co-authorities.
+
+- **Advantages:** removes R1 snapshot/version-control friction (5 of 22
+  reports), avoids a provider adapter and the one-time migration of 136 items,
+  and removes most mirror/sync machinery: checkpoint.ts (281), store export
+  (232), drift (130), reconcile (211), sync.ts (927), and push-store.ts
+  (503), about 2,284 currently counted lines before shared/core slices.
+- **Costs:** R3 acceptance ceremony remains (7 reports), planning still happens
+  through MapCtx's store/CLI rather than the team's live provider, and a local
+  canonical store still needs task-authority schema, migration, and
+  collaboration operations.
+- **Decision:** credible low-cost alternative, not a foil. Choose it when
+  eliminating generated-file churn is the goal and provider-native planning is
+  not. B remains preferable only when removing both R1 and R3, and using the
+  provider as the shared planning surface, justifies its added cost.
 
 ### A. Local database authority plus N-way synchronisation
 
@@ -64,9 +92,9 @@ sync.
   capability-loss policy, repair, drift detection, and migration logic.
   Status, dependencies, acceptance, comments, and user edits still have two
   possible authorities.
-- **Decision:** rejected. It scales the duplicate-authority causes identified
-  in the friction study and preserves the 29% authority-maintenance code
-  measured in the store study.
+- **Decision:** not recommended unless simultaneous multi-provider writes are
+  an explicit product requirement. It scales duplicate-authority conflicts and
+  is materially more complex than A0.
 
 ### B. Provider authority plus local intelligence database
 
@@ -77,7 +105,7 @@ Provider owns planning; MapCtx owns delivery intelligence.
   and forecasting data.
 - **Costs:** provider adapters, capability mapping, rate-limit handling, and
   an explicit offline/local-provider decision are required.
-- **Decision:** proposed.
+- **Decision:** candidate; operator decision remains open against A0.
 
 ### C. GitHub only
 
@@ -89,8 +117,8 @@ provider abstraction.
 - **Costs:** hard vendor lock-in, no Linear/Jira path, no deliberate
   offline/solo mode, and no stable boundary for the non-GitHub product cases
   that the task model already anticipates.
-- **Decision:** rejected. GitHub is the first implementation, not the
-  architecture boundary.
+- **Decision:** not selected as the architecture baseline. GitHub is the first
+  implementation, not the permanent boundary.
 
 ## Consequences
 
@@ -117,10 +145,17 @@ provider abstraction.
 
 ### Migration size
 
-The store study estimates about 2,560 production lines to remove, 1,500 to
-replace behind a provider adapter/cache, and 4,800 to retain as MapCtx
-intelligence. Outside the store, sync-engine has roughly 10,000 affected
-source lines including workspace assets. Data migration is one-time:
+The original store map counted 2,560 lines as removable, 1,500 as adapter/cache
+replacement, and 4,800 as retained MapCtx intelligence. That removal headline
+needs a durability correction: identity (159) and maintenance (115) protect the
+retained M event log; attestation (438) remains M if telemetry/history requires
+durable integrity evidence. The D range is therefore 1,848 to 2,286 store lines,
+with M correspondingly 5,074 to 5,512 lines. Core Markdown parsing (365) and
+task-detail handling (786) require separate retirement/redesign. Shared
+sync-engine UI source is apportioned between provider task surfaces and MapCtx
+overlays in the study; its full file sizes are not additive migration estimates.
+
+Data migration is one-time:
 
 | Planning data | Volume | Target |
 | --- | ---: | --- |
@@ -128,6 +163,7 @@ source lines including workspace assets. Data migration is one-time:
 | Dependencies | about 122 unique edges | Provider relations |
 | Acceptance criteria | 510 | Task lists or sub-issues |
 | Audit approvals | 16 with evidence | Provider comments |
+| Retained M references | 136 bindings; 158 claims, 162 attempts, 104 receipts, 42 history records | Provider-ID binding and re-key/join migration before store planning writes stop |
 
 Migration should begin with a read-only GitHub provider feeding existing
 MapCtx plan/forecast views. After capability and identity validation, import
@@ -135,14 +171,19 @@ the planning graph once, verify provider state, disable store planning writes,
 and then remove snapshot/sync machinery. Do not run a permanent N-way sync or
 accept a store fallback after the cutover.
 
+The first slice must also prove the dependency mapping. No current MapCtx or
+Orca GitHub code reads GitHub issue dependencies, so the inferred 122-edge
+mapping is not yet a reference implementation. It must verify relation reads
+and add/remove semantics before a one-to-one blocked-by claim is accepted.
+
 ## Risks and mitigations
 
 | Risk | Mitigation / decision needed |
 | --- | --- |
 | Provider rate limits, pagination, and partial outages | Page explicitly, cache reads only with freshness metadata, batch field fetches, honour provider retry hints, and surface incomplete datasets to plan/board callers. |
 | Offline operation | Do not queue invisible local planning edits. Either work read-only while offline or select an explicitly configured local provider. |
-| Non-atomic external field changes | Use provider revision/ETag preconditions and idempotency keys. Return conflict context for a user/provider retry. |
-| Atomic executor claim across machines | Do not overload task status as a lock. Investigate a protected remote Git-ref compare-and-swap record per project/task: read expected OID, write claim payload to a new object, then update/push only if the expected ref still matches. This is a candidate design, not an accepted concurrency guarantee; it needs a multi-host race test and expiry/recovery policy. |
+| Non-atomic external field changes | Use provider revision/ETag preconditions, caller correlation, and read-after-write verification. GitHub clientMutationId is only correlation, not durable de-duplication; return conflict context for a user/provider retry. |
+| Atomic executor claim across machines | Do not overload task status as a lock. Candidate: a protected remote Git-ref compare-and-swap record per project/task—read expected OID, write claim payload to a new object, update/push only if the expected ref still matches. This is not an accepted concurrency guarantee; it needs multi-host race, expiry, and recovery tests. The decision remains OPEN and must align with T-124 section 8.2; whichever ADR is accepted first fixes the other proposal. |
 | Provider lacks a field or relation | Make capability mapping explicit in project configuration. Block or degrade the affected feature visibly; never encode an untracked local substitute. |
 | Local intelligence DB loss | Define which M events require durable backup/journaling and which can be reconstructed from provider timeline plus receipts. |
 | Historical ADR confusion | Preserve ADR 0003 and 0004 unchanged as history. If this proposal is accepted, add their supersession note rather than rewriting their recorded decisions. |
@@ -167,6 +208,8 @@ accept a store fallback after the cutover.
 ## Status transition
 
 While Proposed, ADR 0003 and ADR 0004 remain the active authority decision.
-Accepting this ADR must include a dated migration plan, provider capability
-matrix, one-project read-only validation, and a durable decision for each OPEN
-question above before store-authority code is removed.
+The operator must choose A0 or B explicitly. Accepting B must include a dated
+migration plan, provider capability matrix, one-project read-only validation,
+and a durable decision for each OPEN question above before store-authority code
+is removed. Selecting A0 must instead specify the no-snapshot boundary and the
+remaining store-authority/acceptance improvements.
