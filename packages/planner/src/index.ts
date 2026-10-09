@@ -182,10 +182,38 @@ export function deriveResourceClaims(tasks: readonly PlannerTask[]): ResourceCla
   return claims;
 }
 
+/**
+ * Reduce a declared path to one comparable form by walking its segments: separators
+ * fold, `.` and empty segments drop, `..` pops, and a leading `/` disappears. So
+ * `/src/a.ts`, `src/../src/a.ts`, `.//src/a.ts` and `src\a.ts` all become `src/a.ts`.
+ * Case folds for macOS/Windows default filesystems.
+ */
 function normalizePath(value: string): string {
-  let path = value.trim().replaceAll("\\", "/").replace(/^\.\//, "");
-  path = path.replace(/\/+/g, "/");
-  return (path.length > 1 ? path.replace(/\/$/, "") : path).toLowerCase();
+  const segments: string[] = [];
+  for (const segment of value.trim().replaceAll("\\", "/").split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") {
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  return segments.join("/").toLowerCase();
+}
+
+/**
+ * Index of the first glob construct, or -1. Beyond `?`, `*` and `[`, this counts
+ * brace lists (`{a,b}`) and extglob groups, backing up over the `?*+@!` that
+ * introduces `@(a|b)`, plus a leading `!` negation. Those shapes are not matched,
+ * only detected: detecting them truncates the static prefix instead of comparing
+ * the pattern literally, which is the difference between a conservative collision
+ * and a missed one.
+ */
+function wildcardIndex(path: string): number {
+  if (path.startsWith("!")) return 0;
+  const found = path.search(/[?*[{(]/);
+  if (found > 0 && path[found] === "(" && "?*+@!".includes(path[found - 1])) return found - 1;
+  return found;
 }
 
 /**
@@ -195,8 +223,8 @@ function normalizePath(value: string): string {
  */
 function staticPrefix(value: string): { prefix: string; partial: boolean } {
   const normalized = normalizePath(value);
-  const wildcard = normalized.search(/[?*\[]/);
-  if (wildcard < 0) return { prefix: normalized.replace(/\/$/, ""), partial: false };
+  const wildcard = wildcardIndex(normalized);
+  if (wildcard < 0) return { prefix: normalized, partial: false };
   const head = normalized.slice(0, wildcard);
   return { prefix: head.replace(/\/$/, ""), partial: head.length > 0 && !head.endsWith("/") };
 }
@@ -207,15 +235,19 @@ function staticPrefix(value: string): { prefix: string; partial: boolean } {
  * collide while disjoint prefixes do not. A prefix truncated mid-segment compares as
  * a plain string prefix in either direction, so `src/foo*.ts` collides with
  * `src/foobar.ts`; literal paths keep the `/` boundary, so `packages/store` stays
- * disjoint from `packages/store-ui`. Leading-wildcard patterns conservatively collide
- * with any path. Comparisons case-fold for macOS/Windows default filesystems.
- * This deliberately favors safety over a full glob interpreter when deciding whether
- * two writes share a wave.
+ * disjoint from `packages/store-ui`. Leading-wildcard patterns — including brace
+ * lists, extglob groups and `!` negation, which this does not try to match —
+ * conservatively collide with any path. Comparisons case-fold for macOS/Windows
+ * default filesystems. This deliberately favors safety over a full glob interpreter
+ * when deciding whether two writes share a wave.
  */
 function pathOverlap(left: string, right: string): boolean {
+  if (!left.trim() || !right.trim()) return false;
   const a = normalizePath(left);
   const b = normalizePath(right);
-  if (!a || !b) return false;
+  // A declared path that normalizes away entirely (`/`, `..`) locates nothing, so it
+  // is unknown rather than empty and collides like a leading wildcard.
+  if (!a || !b) return true;
   if (a === b) return true;
   const { prefix: aPrefix, partial: aPartial } = staticPrefix(a);
   const { prefix: bPrefix, partial: bPartial } = staticPrefix(b);
@@ -263,6 +295,10 @@ function isStrongDomainOnlyClaim(claim: ResourceClaim): boolean {
  * low). So a path-bearing claim beside a low-confidence inferred domain, and two
  * such inferred domains, are advisory; an authored or high-confidence domain-only
  * claim keeps serializing against anything sharing its domain.
+ *
+ * One strong domain-only claim therefore defeats path precedence for the whole task
+ * pair: a caller that attaches an authored domain claim beside its path claims gives
+ * up path-based parallelism for that task, which is intentional and conservative.
  */
 function claimCollision(left: ResourceClaim, right: ResourceClaim): ClaimOverlap | null {
   if (left.mode === "read" && right.mode === "read") return null;
