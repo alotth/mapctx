@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 6/10
+  - subIssueProgress: 7/10
   - priority: high
   - workload: null
   - tags: []
@@ -2706,7 +2706,7 @@
 ### [T-127] P1 CLI: enums na ajuda, erros de update, externalLinks, validate --task/--baseline
 
   - id: T-127
-  - status: review
+  - status: done
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -2717,7 +2717,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-10
   - externalId: null
   - updated: 2026-10-10
   - detail: ./tasks/T-127.md
