@@ -201,9 +201,18 @@ const ENUM_HELP: Array<[string, string]> = [
 function printEnumHelp(): void {
   console.log('');
   console.log('Enumerated values:');
-  const width = Math.max(...ENUM_HELP.map(([flag]) => flag.length));
+  // Column width comes from the labels that FIT it, so one long label does not
+  // push every value 90 columns to the right; the long ones get their own line.
+  const COLUMN_LIMIT = 38;
+  const fitting = ENUM_HELP.map(([flag]) => flag.length).filter(length => length <= COLUMN_LIMIT);
+  const width = fitting.length > 0 ? Math.max(...fitting) : COLUMN_LIMIT;
   for (const [flag, values] of ENUM_HELP) {
-    console.log(`  ${flag.padEnd(width)}  ${values}`);
+    if (flag.length > width) {
+      console.log(`  ${flag}`);
+      console.log(`  ${' '.repeat(width)}  ${values}`);
+    } else {
+      console.log(`  ${flag.padEnd(width)}  ${values}`);
+    }
   }
   console.log('');
   console.log('Prose vs. generated state:');
@@ -930,6 +939,16 @@ function resolveValidateGate(cwd: string, options: MapctxOptions): {
   baseline?: ValidationBaselineFile;
   writeBaselinePath?: string;
 } {
+  // `--flag value` parsing takes the next token unconditionally, so a flag
+  // written without its value swallows the one after it. For an ordinary
+  // option that is a visible mistake; for a GATE it is the dangerous kind,
+  // because `mapctx validate --task --json` would quietly filter on the
+  // literal "--json", match nothing and exit 0 on a failing board.
+  for (const [flag, value] of [['--task', options.taskFilter], ['--baseline', options.baselinePath], ['--write-baseline', options.writeBaselinePath]] as const) {
+    if (value !== undefined && (value.trim() === '' || value.startsWith('-'))) {
+      throw new Error(`${flag} is missing its value (got ${JSON.stringify(value)}).`);
+    }
+  }
   if (options.baselinePath && options.writeBaselinePath) {
     throw new Error('--baseline and --write-baseline are mutually exclusive: one reads accepted issues, the other records the current ones.');
   }
