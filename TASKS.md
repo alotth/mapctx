@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 8/10
+  - subIssueProgress: 8/11
   - priority: high
   - workload: null
   - tags: []
@@ -2816,6 +2816,25 @@
   - externalId: null
   - updated: 2026-10-10
   - detail: ./tasks/T-132.md
+
+### [T-133] Planner: deduplicar a detecção de violações de claim e guardar o sentinela
+
+  - id: T-133
+  - status: backlog
+  - type: chore
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: [T-131]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-10
+  - detail: ./tasks/T-133.md
 
 ## Notes
 
