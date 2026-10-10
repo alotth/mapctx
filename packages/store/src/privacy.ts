@@ -81,7 +81,14 @@ export type PrivacyFinding = {
 /** Why a scan stopped early. Findings already collected are still reported. */
 export type PrivacyScanAbort = {
   afterMs: number;
-  /** The pattern being evaluated when the budget ran out, when known. */
+  /** The budget that was in force, so the warning can name it. */
+  budgetMs: number;
+  /**
+   * The pattern being evaluated when the budget ran out, or -1 when the scan
+   * never got as far as a pattern (review BAIXA-6: a non-positive budget used
+   * to be reported as the nonexistent `patterns[-1] /(unknown)/`, blaming a
+   * pattern for the caller's budget).
+   */
   patternIndex: number;
   pattern: string;
 };
@@ -186,6 +193,10 @@ function matchWithinBudget(
   sources: readonly string[],
   budgetMs: number
 ): { matches: RawMatch[]; abortedAtPattern?: number; afterMs: number } {
+  // A non-positive or non-finite budget cannot scan anything, and `vm` would
+  // reject it as an out-of-range timeout. Report it as what it is instead of
+  // letting it surface as a pattern's fault (review BAIXA-6).
+  if (!Number.isFinite(budgetMs) || budgetMs <= 0) return { matches: [], abortedAtPattern: -1, afterMs: 0 }
   const matches: RawMatch[] = []
   const progress = { pattern: -1, completed: false }
   const context = vm.createContext({
@@ -239,13 +250,14 @@ export function scanForPrivacyPatterns(
     }
   })
   if (outcome.abortedAtPattern === undefined) return { findings }
-  const culprit = compiled.regexes[outcome.abortedAtPattern]
+  const culprit = outcome.abortedAtPattern >= 0 ? compiled.regexes[outcome.abortedAtPattern] : undefined
   return {
     findings,
     aborted: {
       afterMs: outcome.afterMs,
+      budgetMs,
       patternIndex: culprit?.index ?? -1,
-      pattern: culprit?.source ?? "(unknown)"
+      pattern: culprit?.source ?? ""
     }
   }
 }
@@ -292,7 +304,14 @@ export function formatPrivacyWarnings(
     }
     lines.push(`${where} Not blocked. This field is NOT redactable afterwards (mapctx redact covers acceptance evidence, receipt evidence URIs and history repo paths only): remove it before writing.`)
   }
-  if (scan.aborted) {
+  if (scan.aborted && scan.aborted.patternIndex < 0) {
+    // No pattern was reached at all, so none of them is to blame: the budget
+    // itself was unusable (review BAIXA-6).
+    lines.push(
+      `privacy: lint aborted after ${scan.aborted.afterMs}ms without evaluating any pattern -- the ${scan.aborted.budgetMs}ms budget is too small to scan anything, so no field was checked. ` +
+      `Raise it (default ${PRIVACY_LINT_BUDGET_MS}ms). ${operation} was NOT blocked.`
+    )
+  } else if (scan.aborted) {
     lines.push(
       `privacy: lint aborted after ${scan.aborted.afterMs}ms; [privacy] patterns[${scan.aborted.patternIndex}] /${scan.aborted.pattern}/ is too expensive to evaluate -- simplify it ` +
       `(nested quantifiers like (a+)+ backtrack exponentially). Fields after it were not scanned. ${operation} was NOT blocked.`
