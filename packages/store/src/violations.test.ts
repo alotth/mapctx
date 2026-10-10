@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { recordClaimViolations } from "./violations";
+import { detectClaimViolations, recordClaimViolations } from "./violations";
 import { recordDispatchAttempt, recordRunReceipt } from "./dispatch";
 import { listClaimViolations } from "./projections";
+import { redactEvidence, REDACTED_SENTINEL, type RedactionTarget } from "./redact";
 import { StoreHandle } from "./store-handle";
 import { cleanupDir, mkTmpDir } from "./__test-helpers__";
 
@@ -14,6 +15,22 @@ function seed(handle: StoreHandle, taskId: string): void {
 function dispatchAndReceipt(handle: StoreHandle, taskId: string, dispatchId: string, changedFiles: string[], outcome: "completed" | "failed" = "completed"): void {
   assert.equal(recordDispatchAttempt(handle, { dispatchId, taskId, executorKind: "test", attempt: 1, contextHash: "h", status: "claimed", actor: "test" }).ok, true);
   assert.equal(recordRunReceipt(handle, { schemaVersion: 1, dispatchId, attempt: 1, outcome, startedAt: "2026-08-17T10:00:00.000Z", endedAt: "2026-08-17T10:01:00.000Z", changedFiles, usageEvents: [], evidence: [], failure: outcome === "failed" ? { category: "executor-error", message: "x", retryable: true } : null }, "test").ok, true);
+}
+function wavePlan() {
+  return { waves: [{ waveId: uuid("3"), dispatches: [
+    { waveId: uuid("3"), dispatchId: uuid("1"), attempt: 1, taskId: "T-001" },
+    { waveId: uuid("3"), dispatchId: uuid("2"), attempt: 1, taskId: "T-002" }
+  ] }], claims: [], detectedAt: "2026-08-17T10:02:00.000Z" };
+}
+function receiptTarget(handle: StoreHandle, dispatchId: string): RedactionTarget {
+  const row = handle.db.prepare("SELECT node_id, sequence FROM event_log WHERE event_type = 'run.receipt-recorded' AND payload_json LIKE ? ORDER BY sequence")
+    .get(`%${dispatchId}%`) as { node_id: string; sequence: number };
+  return { nodeId: row.node_id, sequence: row.sequence };
+}
+function redactField(handle: StoreHandle, target: RedactionTarget, fieldPath: string) {
+  const result = redactEvidence(handle, { target, fieldPath, reason: "T-131 attempt 2 fixture", actor: "dpo", commit: true });
+  assert.ok(result.ok, JSON.stringify(result));
+  return result;
 }
 
 test("wave violation persists, queries, survives reopen, and is idempotent", () => {
@@ -63,4 +80,93 @@ test("failed terminal receipt also suppresses the whole wave", () => {
     assert.equal(listClaimViolations(handle.db).length, 0);
     handle.close();
   } finally { cleanupDir(dir); }
+});
+
+// ---- T-131 review ALTO-2: redaction must never fabricate a collision, and
+// a collision lost to redaction must be DECLARED, not silently returned as
+// "no violations". ----
+
+test("ALTO-2a: two receipts redacted to disjoint (now-sentinel) paths never fabricate a collision", () => {
+  const dir = mkTmpDir("mapctx-store-violations-alto2a-");
+  try {
+    const handle = StoreHandle.open(dir);
+    seed(handle, "T-001"); seed(handle, "T-002");
+    dispatchAndReceipt(handle, "T-001", uuid("1"), ["src/alpha.ts"]);
+    dispatchAndReceipt(handle, "T-002", uuid("2"), ["src/beta.ts"]);
+    redactField(handle, receiptTarget(handle, uuid("1")), "receipt.changedFiles");
+    redactField(handle, receiptTarget(handle, uuid("2")), "receipt.changedFiles");
+
+    const result = detectClaimViolations(handle, wavePlan());
+    assert.deepEqual(result.violations, [], "a sentinel must never be treated as overlapping another sentinel");
+    assert.equal(handle.db.prepare("SELECT COUNT(*) c FROM event_log WHERE event_type = 'claim-violation.detected'").get()!.c, 0);
+    assert.ok(listClaimViolations(handle.db).every(v => v.path !== REDACTED_SENTINEL));
+    assert.equal(result.incompleteDetection.length, 2, JSON.stringify(result.incompleteDetection));
+    for (const incomplete of result.incompleteDetection) {
+      assert.equal(incomplete.redactedPaths, 1);
+      assert.equal(incomplete.totalPaths, 1);
+    }
+    handle.close();
+  } finally { cleanupDir(dir); }
+});
+
+test("ALTO-2b: a real collision lost to whole-root redaction is reported as incomplete, never as a clean bill of health", async () => {
+  // Control: the collision is found and detection reports nothing incomplete.
+  const controlDir = mkTmpDir("mapctx-store-violations-alto2b-control-");
+  try {
+    const control = StoreHandle.open(controlDir);
+    seed(control, "T-001"); seed(control, "T-002");
+    dispatchAndReceipt(control, "T-001", uuid("1"), ["src/secret-path.ts", "src/shared.ts"]);
+    dispatchAndReceipt(control, "T-002", uuid("2"), ["src/shared.ts"]);
+    const found = detectClaimViolations(control, wavePlan());
+    assert.equal(found.violations.length, 1);
+    assert.equal(found.violations[0].path, "src/shared.ts");
+    assert.deepEqual(found.incompleteDetection, []);
+    control.close();
+  } finally { cleanupDir(controlDir); }
+
+  // Treatment: redact the whole receipt root before detection runs. The real
+  // collision on the unredacted sibling is now unfindable -- inherent, since
+  // the paths are actually gone -- but that loss must be DECLARED.
+  const treatedDir = mkTmpDir("mapctx-store-violations-alto2b-treated-");
+  try {
+    const treated = StoreHandle.open(treatedDir);
+    seed(treated, "T-001"); seed(treated, "T-002");
+    dispatchAndReceipt(treated, "T-001", uuid("1"), ["src/secret-path.ts", "src/shared.ts"]);
+    dispatchAndReceipt(treated, "T-002", uuid("2"), ["src/shared.ts"]);
+    redactField(treated, receiptTarget(treated, uuid("1")), "receipt.changedFiles");
+    const result = detectClaimViolations(treated, wavePlan());
+    assert.deepEqual(result.violations, [], "the collision cannot be seen any more -- that part is inherent");
+    assert.equal(result.incompleteDetection.length, 1, JSON.stringify(result.incompleteDetection));
+    assert.equal(result.incompleteDetection[0].taskId, "T-001");
+    assert.equal(result.incompleteDetection[0].redactedPaths, 2);
+    assert.equal(result.incompleteDetection[0].totalPaths, 2);
+
+    const warnings: string[] = [];
+    const onWarning = (w: Error) => warnings.push(String(w.message));
+    process.on("warning", onWarning);
+    recordClaimViolations(treated, wavePlan());
+    await new Promise(resolve => setImmediate(resolve));
+    process.off("warning", onWarning);
+    assert.ok(warnings.some(w => /INCOMPLETE/.test(w) && /cannot tell/.test(w)), JSON.stringify(warnings));
+    assert.ok(!warnings.join("|").includes("secret-path"), "the process warning must never echo a redacted path");
+    treated.close();
+  } finally { cleanupDir(treatedDir); }
+
+  // Element-level redaction keeps the untouched sibling comparable: the real
+  // collision survives, and the partial blindness is still declared.
+  const elementDir = mkTmpDir("mapctx-store-violations-alto2b-element-");
+  try {
+    const element = StoreHandle.open(elementDir);
+    seed(element, "T-001"); seed(element, "T-002");
+    dispatchAndReceipt(element, "T-001", uuid("1"), ["src/secret-path.ts", "src/shared.ts"]);
+    dispatchAndReceipt(element, "T-002", uuid("2"), ["src/shared.ts"]);
+    redactField(element, receiptTarget(element, uuid("1")), "receipt.changedFiles.0");
+    const result = detectClaimViolations(element, wavePlan());
+    assert.equal(result.violations.length, 1);
+    assert.equal(result.violations[0].path, "src/shared.ts");
+    assert.equal(result.incompleteDetection.length, 1);
+    assert.equal(result.incompleteDetection[0].redactedPaths, 1);
+    assert.equal(result.incompleteDetection[0].totalPaths, 2);
+    element.close();
+  } finally { cleanupDir(elementDir); }
 });

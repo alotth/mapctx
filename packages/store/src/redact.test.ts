@@ -4,18 +4,19 @@ import * as fs from "fs"
 import * as path from "path"
 import { createHash } from "node:crypto"
 import { DatabaseSync } from "node:sqlite"
-import { canonicalJson, runEventSchema, runReceiptSchema, type EventLogEntry, type RunEvent } from "@mapctx/protocol"
+import { canonicalJson, claimViolationSchema, runEventSchema, runReceiptSchema, type EventLogEntry, type RunEvent } from "@mapctx/protocol"
 import { commitNodeAttestation, draftNodeAttestation, loadNodeAttestations } from "./attestation"
 import { claimTask } from "./claims"
-import { recordDispatchAttempt, recordRunEvent } from "./dispatch"
+import { recordDispatchAttempt, recordRunEvent, recordRunReceipt } from "./dispatch"
 import { journalEntryPath, payloadSha256, readJournalEntry } from "./journal"
-import { getAcceptance, getRunEvent, getRunReceipt, listHistoryEvidence, listRedactions } from "./projections"
+import { getAcceptance, getRunEvent, getRunReceipt, listClaimViolations, listHistoryEvidence, listRedactions } from "./projections"
 import {
   isRedactableFieldPath, listRedactionCandidates, reconcileRedactionsFromLedger, redactEvidence, REDACTED_SENTINEL,
-  verifyRedactions, verifyRedactionsFromLedger, type RedactionCommitResult, type RedactionTarget
+  REDACTABLE_ROOTS, verifyRedactions, verifyRedactionsFromLedger, type RedactionCommitResult, type RedactionTarget
 } from "./redact"
 import { repairStore } from "./repair"
 import { StoreHandle } from "./store-handle"
+import { recordClaimViolations } from "./violations"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
 
 const SECRET = "cust-ctx-9f31a778421-production"
@@ -107,6 +108,11 @@ function files(dir: string): Record<string, Buffer> {
 function assertAbsent(dir: string, secret = SECRET): void {
   const hits = Object.entries(files(dir)).filter(([, bytes]) => bytes.includes(Buffer.from(secret))).map(([name]) => name);
   assert.deepEqual(hits, [], "plaintext survived in store files");
+}
+
+function assertPresent(dir: string, secret: string): void {
+  const hits = Object.entries(files(dir)).filter(([, bytes]) => bytes.includes(Buffer.from(secret))).map(([name]) => name);
+  assert.ok(hits.length > 0, "expected the plaintext to still be present at this point");
 }
 
 function snapshot(dir: string): Record<string, string> {
@@ -1009,4 +1015,154 @@ test("a malformed attestation file surfaces as a named read failure in the advis
   assert.equal(ro.maintenanceNeeded(), null, "an unreadable attestation file must not brick the open");
   assert.ok(!advisory.join("|").includes(SECRET));
   f.close();
+});
+
+// ---- T-131 attempt 2 (review ALTO-1): receipt.changedFiles has a CONSUMER
+// the T-131 design did not consider -- T-061 claim-violation detection
+// derives a third copy of the path into claim-violation.detected. Redacting
+// the receipts must not leave that copy behind, and must tell the operator
+// about it both on dry-run and on commit. ----
+
+function seedTwoTasks(handle: StoreHandle): void {
+  handle.appendEvent({
+    eventType: "project.initialized", actor: "test",
+    payload: { projectId: "p1", boardTitle: "T", workDomains: [], notesMarkdown: "", plansAuthority: "markdown" }
+  });
+  for (const taskId of ["T-001", "T-002"]) {
+    handle.appendEvent({
+      eventType: "task.upserted", actor: "test",
+      payload: { task: {
+        taskId, positionKey: Number(taskId.slice(-1)), title: taskId, planningState: "in-progress", executionState: "unclaimed",
+        tags: [], domains: [], externalLinks: [], assignees: []
+      } }
+    });
+  }
+}
+
+function dispatchAndReceipt(handle: StoreHandle, taskId: string, dispatchId: string, changedFiles: string[]): void {
+  assert.ok(recordDispatchAttempt(handle, { dispatchId, taskId, executorKind: "test", attempt: 1, contextHash: "h", status: "claimed", actor: "test" }).ok);
+  assert.ok(recordRunReceipt(handle, {
+    schemaVersion: 1, dispatchId, attempt: 1, outcome: "completed", startedAt: AT, endedAt: "2026-10-10T06:01:00.000Z",
+    changedFiles, usageEvents: [], evidence: [], failure: null
+  }, "test").ok);
+}
+
+function violationWavePlan(waveId: string, dispatchA: string, dispatchB: string): {
+  waves: { waveId: string; dispatches: { waveId: string; dispatchId: string; attempt: number; taskId: string }[] }[];
+  claims: never[]; detectedAt: string;
+} {
+  return {
+    waves: [{ waveId, dispatches: [
+      { waveId, dispatchId: dispatchA, attempt: 1, taskId: "T-001" },
+      { waveId, dispatchId: dispatchB, attempt: 1, taskId: "T-002" }
+    ] }],
+    claims: [], detectedAt: AT
+  };
+}
+
+function receiptTarget(handle: StoreHandle, dispatchId: string): RedactionTarget {
+  const row = handle.db.prepare("SELECT node_id, sequence FROM event_log WHERE event_type = 'run.receipt-recorded' AND payload_json LIKE ? ORDER BY sequence")
+    .get(`%${dispatchId}%`) as { node_id: string; sequence: number };
+  return { nodeId: row.node_id, sequence: row.sequence };
+}
+
+test("ALTO-1: redacting both receipts' changedFiles does not reach the derived claim-violation.detected copy; the advisory finishes the job", t => {
+  const f = fixture(t);
+  seedTwoTasks(f.handle);
+  const dispatchA = "11111111-0000-5000-8000-000000000001";
+  const dispatchB = "11111111-0000-5000-8000-000000000002";
+  const waveId = "11111111-0000-5000-8000-000000000003";
+  const SECRET_PATH = "src/acme-bank-prod/shift-998877.ts";
+  dispatchAndReceipt(f.handle, "T-001", dispatchA, ["src/common.ts", SECRET_PATH]);
+  dispatchAndReceipt(f.handle, "T-002", dispatchB, ["src/common.ts", SECRET_PATH]);
+  const detected = recordClaimViolations(f.handle, violationWavePlan(waveId, dispatchA, dispatchB));
+  assert.equal(detected.length, 2, JSON.stringify(detected.map(v => v.path)));
+  assert.ok(detected.some(v => v.path === SECRET_PATH));
+
+  const t1 = receiptTarget(f.handle, dispatchA);
+  const dry = redactEvidence(f.handle, { target: t1, fieldPath: "receipt.changedFiles", reason: "LGPD T-131", actor: "dpo", commit: false });
+  assert.ok(dry.ok);
+  assert.ok(dry.mode === "dry-run");
+  // Both of T-001's paths collided, so detection wrote TWO derived copies;
+  // redacting the whole root destroys both sources, so both are reported.
+  assert.equal(dry.derivedCopies.length, 2, JSON.stringify(dry.derivedCopies));
+  assert.ok(dry.derivedCopies.every(c => c.eventType === "claim-violation.detected" && c.fieldPath === "violation.path"));
+  assert.ok(dry.advisories.some(a => /claim-violation\.detected event\(s\) hold a DERIVED copy/.test(a) && /--field violation\.path/.test(a)), JSON.stringify(dry.advisories));
+  assert.ok(dry.advisories.some(a => /INCOMPLETE/.test(a) && /T-061/.test(a)), JSON.stringify(dry.advisories));
+  assert.ok(!JSON.stringify(dry).includes(SECRET_PATH) && !JSON.stringify(dry).includes("acme-bank"), "the advisory must never echo the path");
+
+  const r1 = redactEvidence(f.handle, { target: t1, fieldPath: "receipt.changedFiles", reason: "LGPD T-131", actor: "dpo", commit: true });
+  const r2 = redactEvidence(f.handle, { target: receiptTarget(f.handle, dispatchB), fieldPath: "receipt.changedFiles", reason: "LGPD T-131", actor: "dpo", commit: true });
+  assert.ok(r1.ok && r2.ok);
+  assert.ok(r1.ok && r1.mode === "commit");
+  assert.ok(r1.derivedCopies.length === 2 && r1.advisories.length >= 2, JSON.stringify(r1.advisories));
+  // Before the derived redaction, the plaintext genuinely is still there --
+  // this is the bug the review found: the receipts report success while a
+  // third copy of the path survives.
+  assertPresent(f.dir, SECRET_PATH);
+
+  const offered = listRedactionCandidates(f.handle.db).filter(c => c.eventType === "claim-violation.detected");
+  assert.equal(offered.length, 2, JSON.stringify(offered));
+  assert.ok(offered.every(c => c.redactableFieldPaths.includes("violation.path")));
+  assert.ok(!JSON.stringify(offered).includes(SECRET_PATH));
+  assert.ok(listRedactionCandidates(f.handle.db, { taskId: "T-002" }).some(c => c.eventType === "claim-violation.detected"), "--task must find a violation under EITHER party");
+
+  // Finish the job the advisory described: every derived copy, not just the
+  // one that happened to be listed first.
+  assert.ok(r1.ok && r1.mode === "commit");
+  const applied = r1.derivedCopies.map(derived =>
+    redactEvidence(f.handle, { target: { nodeId: derived.nodeId, sequence: derived.sequence }, fieldPath: "violation.path", reason: "LGPD T-131", actor: "dpo", commit: true }));
+  assert.ok(applied.every(result => result.ok === true), JSON.stringify(applied.map(result => result.ok ? "ok" : result.reason)));
+  assertAbsent(f.dir, SECRET_PATH);
+  assert.equal(f.handle.db.prepare("SELECT COUNT(*) c FROM claim_violation_projection WHERE path = ?").get(SECRET_PATH)!.c, 0);
+
+  // Redacting the whole root destroyed BOTH source paths on each receipt, so
+  // both derived rows are sentinel now. The rows still exist with their
+  // structure intact and each still parses as a ClaimViolation.
+  const rows = listClaimViolations(f.handle.db);
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    assert.equal(row.path, REDACTED_SENTINEL);
+    assert.equal(row.kind, "collision");
+    assert.equal(row.taskAId, "T-001");
+    assert.equal(row.taskBId, "T-002");
+    assert.ok(claimViolationSchema.safeParse(row).success, JSON.stringify(row));
+  }
+  f.close();
+  assert.equal(repairStore(f.dir).status, "ok");
+  f.open();
+  assertAbsent(f.dir, SECRET_PATH);
+  f.close();
+});
+
+// ---- T-131 attempt 2: post-redaction schema guard. The allowlists were
+// structural with no runtime anchor; a future root that would break its own
+// schema must be refused at commit time, not merely by convention. ----
+
+test("a redaction that would leave its payload invalid against its own published schema is refused, named, and applies nothing", t => {
+  const f = fixture(t);
+  seedTwoTasks(f.handle);
+  const dispatchA = "22222222-0000-5000-8000-000000000001";
+  dispatchAndReceipt(f.handle, "T-001", dispatchA, ["src/x.ts"]);
+  const target = receiptTarget(f.handle, dispatchA);
+
+  // A synthetic future root whose redaction WOULD break the receipt schema:
+  // runOutcomeSchema is a closed enum, so sentinel-ing it invalidates the
+  // RunReceipt. Restored in `finally` regardless of outcome.
+  const roots = REDACTABLE_ROOTS["run.receipt-recorded"] as unknown as string[];
+  roots.push("receipt.outcome");
+  try {
+    const result = redactEvidence(f.handle, { target, fieldPath: "receipt.outcome", reason: "x", actor: "dpo", commit: true });
+    assert.ok(!result.ok);
+    assert.equal(result.reason, "schema-invalid");
+    assert.match(result.message, /invalid against its own schema/);
+    assert.equal(f.handle.db.prepare("SELECT COUNT(*) c FROM event_log WHERE event_type = 'evidence.redacted'").get()!.c, 0);
+  } finally {
+    roots.pop();
+  }
+
+  // The legitimate roots still commit after the guard refuses the synthetic one.
+  const legit = redactEvidence(f.handle, { target, fieldPath: "receipt.changedFiles", reason: "x", actor: "dpo", commit: true });
+  assert.ok(legit.ok);
+  assert.ok(legit.mode === "commit");
 });

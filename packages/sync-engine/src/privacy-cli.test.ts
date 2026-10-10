@@ -173,6 +173,51 @@ test("privacy CLI dispatch receipt warns on failure.message and changedFiles; ca
   }
 });
 
+// BAIXA-1 (reviewer's explicit ask): a pattern that fires on receipt.failure.category
+// -- a closed enum, structural, never redactable -- must warn "NOT redactable
+// afterwards" and must NOT promise "redact it after the fact". This is the one
+// case the main cross-test above cannot exercise, because its configured
+// pattern never matches "executor-error" or "failed". Its own isolated golden
+// repo + [privacy] config is needed to make that pattern fire.
+test("privacy CLI dispatch receipt: a pattern matching receipt.failure.category says NOT redactable, never promises a cure", t => {
+  const f = setupGoldenRepo();
+  t.after(() => { f.restoreEnv(); cleanupDir(f.repoDir); cleanupDir(f.mapctxHome); });
+  const cli = (args: string[]) => spawnSync(process.execPath, [CLI_PATH, ...args], {
+    cwd: f.repoDir, encoding: "utf8", env: { ...process.env, MAPCTX_HOME: f.mapctxHome }
+  });
+  const success = (args: string[]) => {
+    const result = cli([...args, "--json"]);
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  success(["import", "--commit", "--actor", "test"]);
+  fs.appendFileSync(path.join(f.repoDir, "mapctx.toml"), "\n[privacy]\npatterns = ['executor-error']\n");
+
+  success(["task", "update", "T-101", "--set", "workload=Normal", "--actor", "test"]);
+  success(["task", "claim", "T-101", "--actor", "test"]);
+  const dispatch = success(["dispatch", "create", "T-101", "--actor", "test"]);
+  const receipt = {
+    schemaVersion: 1, dispatchId: dispatch.dispatchId, attempt: 1, outcome: "failed",
+    startedAt: "2026-10-09T10:00:00.000Z", endedAt: "2026-10-09T10:05:00.000Z",
+    changedFiles: ["src/x.ts"], usageEvents: [], evidence: [],
+    failure: { category: "executor-error", message: "benign failure, nothing sensitive here", retryable: true }
+  };
+  fs.writeFileSync(path.join(f.repoDir, "receipt.json"), JSON.stringify(receipt));
+  const result = cli(["dispatch", "receipt", dispatch.dispatchId, "--receipt", "receipt.json", "--actor", "test", "--json"]);
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, String(result.stderr));
+  const stderr = String(result.stderr);
+  assert.match(stderr, /field "receipt\.failure\.category"/, stderr);
+  assert.match(stderr, /NOT redactable afterwards/);
+  assert.ok(!stderr.includes("redact it after the fact"), stderr);
+
+  const candidates = success(["redact", "list", "--json"]).candidates as Array<{ eventType: string; redactableFieldPaths: string[] }>;
+  const receiptCandidate = candidates.find(c => c.eventType === "run.receipt-recorded");
+  assert.ok(receiptCandidate, JSON.stringify(candidates));
+  assert.ok(!receiptCandidate!.redactableFieldPaths.includes("receipt.failure.category"), JSON.stringify(receiptCandidate));
+});
+
 test("privacy CLI task create/update warn that the field is NOT redactable afterwards and never promise a cure", t => {
   const f = fixture(t);
   const createResult = f.cli(["task", "create", "--title", `Handle ${SECRET}`, "--summary", "fixture", "--actor", "test", "--json"]);
