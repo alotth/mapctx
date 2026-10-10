@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 10/12
+  - subIssueProgress: 11/12
   - priority: high
   - workload: null
   - tags: []
@@ -2744,7 +2744,7 @@
 ### [T-129] R3 paliativo: acceptance no create, approve em lote, revise --expect-title, import --task
 
   - id: T-129
-  - status: backlog
+  - status: done
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -2755,9 +2755,9 @@
   - dependsOn: [T-126, T-127]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-10
   - externalId: null
-  - updated: 2026-10-09
+  - updated: 2026-10-10
   - detail: ./tasks/T-129.md
 
 ### [T-130] T-126 hardening: ramo db-only exige atestação e recomputa hash (MÉDIA-4/5/6)
@@ -2877,7 +2877,7 @@
 ### [T-135] Spike: ler GitHub Projects e escrever campos derivados num Project de teste
 
   - id: T-135
-  - status: doing
+  - status: review
   - type: task
   - parent: E-018
   - subIssueProgress: null
