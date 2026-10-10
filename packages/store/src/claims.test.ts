@@ -2,7 +2,8 @@ import assert from "node:assert/strict"
 import * as fs from "fs"
 import * as path from "path"
 import test from "node:test"
-import { claimTask, releaseClaim, renewClaim } from "./claims"
+import { claimTask, disclosableClaim, releaseClaim, renewClaim } from "./claims"
+import { startTask } from "./start"
 import { recordDispatchAttempt, recordRunReceipt } from "./dispatch"
 import { moveTask } from "./tasks"
 import { approveAcceptanceCriterion, reviseAcceptance } from "./acceptance"
@@ -440,6 +441,77 @@ test("R11: completed execution is not reset when planning moves to done", () => 
     assert.equal(after?.executionState, "completed", "closing the review loop must not erase the completed execution (R11: no completed -> unclaimed reset)");
   } finally {
     handle.close();
+    cleanupDir(dir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T-134 (C0/D1): a refused claim must never disclose the holder's leaseToken
+// -- the bearer credential for renew/release -- while staying actionable
+// (claimId, holder, expiresAt survive). disclosableClaim() is the one strip
+// point; this pins both direct callers (claimTask, startTask) and the shape
+// it produces.
+// ---------------------------------------------------------------------------
+
+test("claimTask refuses a second claim with activeClaim lacking leaseToken but carrying claimId/holder/expiresAt; the first claimer still gets its own token", () => {
+  const dir = mkTmpDir("mapctx-store-claims-redaction-claim-");
+  try {
+    const handle = StoreHandle.open(dir);
+    seedOneTask(handle);
+
+    const first = claimTask(handle, { taskId: "T-001", actor: "agent-1", holder: { pid: 1, host: "a" } });
+    assert.equal(first.ok, true);
+    if (!first.ok) return;
+    assert.match(first.claim.leaseToken, /^[0-9a-f]+$/, "the holder itself gets the real token");
+
+    const second = claimTask(handle, { taskId: "T-001", actor: "agent-2", holder: { pid: 2, host: "b" } });
+    assert.equal(second.ok, false);
+    if (second.ok) return;
+    assert.equal(second.reason, "active-claim-held");
+    assert.ok(second.activeClaim, JSON.stringify(second));
+    const disclosed = second.activeClaim!;
+    assert.equal((disclosed as unknown as { leaseToken?: unknown }).leaseToken, undefined, "leaseToken must never appear on a refusal's activeClaim");
+    assert.deepEqual(Object.keys(disclosed).sort(), ["claimId", "claimedAt", "eventNode", "eventSequence", "expiresAt", "holder", "state", "taskId"].sort());
+    assert.equal(disclosed.claimId, first.claim.claimId);
+    assert.deepEqual(disclosed.holder, { pid: 1, host: "a" });
+    assert.equal(disclosed.expiresAt, first.claim.expiresAt);
+    assert.equal(disclosed.state, "active");
+  } finally {
+    cleanupDir(dir);
+  }
+});
+
+test("startTask's refusal activeClaim is redacted too, by construction (start.ts forwards claimTask's refusal unchanged)", () => {
+  const dir = mkTmpDir("mapctx-store-claims-redaction-start-");
+  try {
+    const handle = StoreHandle.open(dir);
+    seedOneTask(handle);
+    const first = startTask(handle, { taskId: "T-001", actor: "agent-1", holder: { pid: 1 } });
+    assert.equal(first.ok, true);
+
+    const second = startTask(handle, { taskId: "T-001", actor: "agent-2", holder: { pid: 2 } });
+    assert.equal(second.ok, false);
+    if (second.ok) return;
+    assert.equal(second.reason, "active-claim-held");
+    assert.ok(second.activeClaim);
+    assert.equal((second.activeClaim as unknown as { leaseToken?: unknown }).leaseToken, undefined);
+  } finally {
+    cleanupDir(dir);
+  }
+});
+
+test("disclosableClaim() returns exactly the 8 allowlisted keys and never leaseToken, called directly", () => {
+  const dir = mkTmpDir("mapctx-store-claims-redaction-direct-");
+  try {
+    const handle = StoreHandle.open(dir);
+    seedOneTask(handle);
+    const claimed = claimTask(handle, { taskId: "T-001", actor: "agent-1", holder: { pid: 1 } });
+    assert.equal(claimed.ok, true);
+    if (!claimed.ok) return;
+    const disclosed = disclosableClaim(claimed.claim);
+    assert.deepEqual(Object.keys(disclosed).sort(), ["claimId", "claimedAt", "eventNode", "eventSequence", "expiresAt", "holder", "state", "taskId"].sort());
+    assert.equal((disclosed as unknown as { leaseToken?: unknown }).leaseToken, undefined);
+  } finally {
     cleanupDir(dir);
   }
 });
