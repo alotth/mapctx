@@ -35,6 +35,17 @@ function normalizePath(value: string): string {
  * sentinel as incomparable kills that at the root, and
  * `redactedChangedFileCount` below is what keeps the resulting blind spot
  * declared instead of silent.
+ *
+ * DELIBERATELY REDUNDANT, and measured as such. The same invariant -- never
+ * journal a claim derived from redacted evidence -- is enforced three times:
+ * here at the comparison, at the serialized-pair decision, and by the
+ * sentinel filter in the emission loop. No single one of the three is
+ * individually load-bearing, so removing only this guard changes nothing
+ * observable and no test fails (verified by mutation). The protection is the
+ * SET: remove two and the fabricated violation returns immediately, which is
+ * what the tests pin. Do not delete one of them because a mutation shows it
+ * "dead" -- each is dead only while its siblings live, and they guard
+ * different routes into the same append.
  */
 function isRedactedPath(value: string): boolean {
   return value === REDACTED_SENTINEL;
@@ -171,7 +182,20 @@ export function detectClaimViolations(store: StoreHandle, plan: ClaimViolationPl
     for (const pair of plan.serializedPairs ?? []) {
       const left = byTask.get(pair.taskAId)?.receipt;
       const right = byTask.get(pair.taskBId)?.receipt;
-      if (!left || !right || actualIntersection(left, right).length > 0) continue;
+      if (!left || !right) continue;
+      // An "overbroad" violation asserts the two tasks did NOT actually
+      // conflict, so serializing them was unnecessary. That claim rests on
+      // seeing both receipts' files. With a redacted path on either side,
+      // non-intersection cannot be established -- and emitting anyway
+      // fabricates the INVERSE of the ALTO-2a false positive: two tasks that
+      // really did collide get a permanent record saying they did not.
+      // (Measured: before the sentinel became incomparable this route was
+      // accidentally safe, because the two sentinels "intersected" and the
+      // pair was skipped. Making them incomparable turned that accident into
+      // a fabrication, so the condition is now explicit.) The blindness is
+      // already reported through incompleteDetection.
+      if (redactedChangedFileCount(left) > 0 || redactedChangedFileCount(right) > 0) continue;
+      if (actualIntersection(left, right).length > 0) continue;
       const waveId = byTask.get(pair.taskAId)?.waveId ?? plan.waves[0]?.waveId;
       if (!waveId) continue;
       // A caller-supplied path can also be a redacted one; a violation whose
