@@ -63,6 +63,12 @@ import {
   listDependencies,
   listTasks,
   validateStoreRegime,
+  applyValidationGate,
+  buildValidationBaseline,
+  parseValidationBaseline,
+  type ValidationBaselineFile,
+  type ValidationGateIssue,
+  type ValidationGateResult,
   checkStoreSnapshots,
   planAcceptanceImport,
   commitAcceptanceImport,
@@ -75,12 +81,13 @@ import {
   type MapctxTomlConfig
 } from '@mapctx/store';
 import { finishTask, publishCheckpoint } from './checkpoint';
-import { getValidationReport, validateCommand } from './board-tools';
+import { getValidationReport, printValidationReport } from './board-tools';
 import { historyCorrectCommand, historyReconstructCommand, historyScanCommand } from './history-cli';
 import { loadConfigOptionalForBoard } from './config';
 import { accountAddCommand, accountBindCommand, accountListCommand, budgetHistoryCommand, budgetSetCommand, budgetStatusCommand, planPeriodRecordCommand } from './budget-cli';
 import { buildGanttDataset, type GanttHistoryDate } from './gantt';
 import { extractClaudeIntervals, type OtherSessionActivity, type Workload } from '@mapctx/forecast';
+import { planningStateSchema, prioritySchema, specModeSchema, taskTypeSchema, workloadSchema } from '@mapctx/protocol';
 import { pushStoreCommand } from './push-store';
 import { SyncOptions } from './types';
 import { detectWorkspaceModel, deriveSubIssueProgress, toWorkspaceTaskView, toWorkspaceTaskViewFromStoreRecord } from './board-view';
@@ -163,7 +170,55 @@ type MapctxOptions = SyncOptions & {
   nodeId?: string;
   sequence?: number;
   field?: string;
+  /** T-127 validate gate */
+  baselinePath?: string;
+  writeBaselinePath?: string;
 };
+
+/**
+ * T-127 (R4): the enumerated values, read off the protocol schemas rather than
+ * retyped, so the help can never drift from what the validators accept. The
+ * reported friction was `--workload Medium` being refused by a help text that
+ * never said what the four legal values are.
+ */
+const ENUM_HELP: Array<[string, string]> = [
+  ['--workload', workloadSchema.options.join('|')],
+  ['--priority', prioritySchema.options.join('|')],
+  ['--type', taskTypeSchema.options.join('|')],
+  ['--status (board spelling)', 'backlog|ready-for-do|doing|review|done|paused|cancelled|archived'],
+  ['--status (canonical)', planningStateSchema.options.join('|')],
+  ['--set specMode', specModeSchema.options.join('|')],
+  ['--set waitReason / --wait-reason', 'review|decision|parked|blocked-external (or null to clear)'],
+  ['--effort, --set detail.estimatedEffort', 'positive m|h|d|w duration (90m, 6h, 1d, 2w); agent ACTIVE time, 1d=8h, 1w=40h'],
+  ['--set predictedStart', 'null, or JSON {"start":"YYYY-MM-DD","method":"manual|heuristic|model","confidence":"low|medium|high"}'],
+  ['--executor', 'free text naming the runner (traycer, claude, codex, ...)'],
+  ['--reason (export)', 'manual|wave-end|epic-end'],
+  ['list values (--tags, --domains, --depends-on, --blocking, --task, --set of a list field)',
+    'bare `a,b,c` or a JSON array `["a","b"]` -- `[a,b]` is refused, never stored with the brackets'],
+  ['--set externalLinks', 'list of URIs; each needs a scheme (https://... or provider:entity:id)']
+];
+
+function printEnumHelp(): void {
+  console.log('');
+  console.log('Enumerated values:');
+  const width = Math.max(...ENUM_HELP.map(([flag]) => flag.length));
+  for (const [flag, values] of ENUM_HELP) {
+    console.log(`  ${flag.padEnd(width)}  ${values}`);
+  }
+  console.log('');
+  console.log('Prose vs. generated state:');
+  console.log('  Under plansAuthority=store, TASKS.md and the structured field blocks of');
+  console.log('  tasks/<ID>.md are GENERATED snapshots: never hand-edit them, change them through');
+  console.log('  this CLI and repair drift with `mapctx reconcile <task-id>`.');
+  console.log('  The `description:` block of tasks/<ID>.md is the exception: it is Git-authored');
+  console.log('  prose, owned by the repository and never by the store. `task create --description`');
+  console.log('  / `--description-file` seeds it once; after that you edit tasks/<ID>.md in Git and');
+  console.log('  commit. There is no `--set description`, and `mapctx task update` cannot touch it.');
+  console.log('  Everything written through this CLI lands in an append-only event log: keep');
+  console.log('  secrets, tokens and personal data out of titles, summaries, descriptions,');
+  console.log('  evidence and receipts. Declare `[privacy] patterns` in mapctx.toml to get warned,');
+  console.log('  and see `mapctx redact` for destroying a value that already landed.');
+}
 
 function printHelp(): void {
   console.log('mapctx CLI');
@@ -201,8 +256,16 @@ function printHelp(): void {
   console.log('  mapctx import --dry-run [--json] [--tasks-file path]');
   console.log('  mapctx import --commit [--json] [--tasks-file path] [--config path] [--actor name]');
   console.log('  mapctx export [--reason manual|wave-end|epic-end] [--json]');
-  console.log('  mapctx validate [--json] [--snapshots]');
+  console.log('  mapctx validate [--json] [--snapshots] [--task T-1,T-2] [--baseline <file> | --write-baseline <file>]');
   console.log('    Under store authority, default checks canonical store only. --snapshots explicitly checks local mirrors; failure returns non-zero.');
+  console.log('    --task keeps only the issues attributed to those tasks; board-scoped issues');
+  console.log('    (dependency cycles, missing work domains) carry no task id, so they are counted');
+  console.log('    and reported as excluded rather than silently dropped.');
+  console.log('    --baseline <file> accepts the issues recorded in that file: they stop counting,');
+  console.log('    so only an issue the board did NOT already have fails the gate. Baseline entries');
+  console.log('    that no longer match anything are reported as stale.');
+  console.log('    --write-baseline <file> records the issues of the current run (honouring --task)');
+  console.log('    and exits 0 without gating. --snapshots findings are never baselined.');
   console.log('  mapctx acceptance import [--commit] [--json]');
   console.log('    Dry-run by default; --commit imports observed checkboxes atomically, pins source bytes, skips existing revisions.');
   console.log('  mapctx task acceptance <show|revise|approve|unapprove> <task-id> [--from-file path] [--expect-revision n] [--criterion-id id|--index n] [--evidence key=value ...]');
@@ -231,12 +294,15 @@ function printHelp(): void {
   console.log('  mapctx task renew <task-id> --claim id --token token [--json] [--actor name]');
   console.log('  mapctx task release <task-id> --claim id --token token [--json] [--actor name]');
   console.log('  mapctx task create --title "<title>" [--id T-###] [--type epic|feature|task|bug|chore] [--parent id] [--status planning-state]');
-  console.log('    [--priority p] [--workload w] [--tags a,b] [--domains d,e] [--depends-on a,b] [--blocking x,y]');
+  console.log('    [--priority high|medium|low] [--workload Easy|Normal|Hard|Extreme] [--tags a,b] [--domains d,e]');
+  console.log('    [--depends-on a,b] [--blocking x,y]');
   console.log('    [--start date] [--due date] [--role r] [--impact i] [--effort e] [--summary s]');
   console.log('    `--effort` is agent active time: 1d=8 active hours, 1w=40 active hours. Executable tasks without workload or effort are warned and cannot be claimed.');
   console.log('    (--description text | --description-file path) [--json] [--actor name]');
   console.log('    Auto-assigns the next free id for the type prefix (E for epic, T otherwise). The');
-  console.log('    description prose goes into the new detail file and stays Git-authored.');
+  console.log('    description prose goes into the new detail file and stays Git-authored from then');
+  console.log('    on: edit tasks/<ID>.md in Git and commit it, never through `task update`.');
+  console.log('    See "Enumerated values" below for every enum and the list syntax.');
   console.log('  mapctx task move <task-id> --status <planning-state> [--json] [--actor name]');
   console.log('    Legal transition under store authority (backlog|ready-for-do|doing|review|done|paused|cancelled|archived,');
   console.log('    or canonical backlog|ready|in-progress|review|done|paused|cancelled|archived). done stamps completedOn and');
@@ -248,10 +314,15 @@ function printHelp(): void {
   console.log('    Reopens a done, cancelled, or archived task for review, clears completedOn, and records an audit event. Publish mirrors at an explicit checkpoint.');
   console.log('  mapctx task update <task-id> [--set key=value ...] [--depends-on a,b] [--blocking x,y] [--json] [--actor name]');
   console.log('    Whitelisted fields only (title,type,parentTaskId,priority,workload,tags,domains,startDate,dueDate,');
-  console.log('    externalId,specMode,assignees,iteration,milestone; detail.* for role,impact,estimatedEffort,');
-  console.log('    filesAffected,testsRequired,summary,prerequisites,blocking; waitReason=review|decision|parked|blocked-external).');
+  console.log('    predictedStart,externalId,externalLinks,specMode,assignees,iteration,milestone; detail.* for');
+  console.log('    role,impact,estimatedEffort,filesAffected,testsRequired,summary,prerequisites,blocking;');
+  console.log('    waitReason=review|decision|parked|blocked-external as a shorthand for detail.waitReason).');
+  console.log('    List fields take `--set detail.filesAffected=a,b` or `--set detail.filesAffected=["a","b"]`;');
+  console.log('    `[a,b]` is refused with the correct syntax instead of storing the brackets. `=null` clears.');
+  console.log('    --set externalLinks=https://…,github:issue:42 validates every entry as a URI.');
   console.log('    --depends-on/--blocking replace both');
   console.log('    the dependency edges and the detail prerequisites/blocking so the two surfaces never diverge.');
+  console.log('    The Git-authored `description:` prose of tasks/<ID>.md is NOT patchable here.');
   console.log('  mapctx dispatch create <task-id> [--dispatch-id id] [--status claimed|running] (default claimed) [--executor kind] [--context-hash hash] [--json] [--actor name]');
   console.log('    New dispatch (fresh id, attempt 1) or --dispatch-id to append attempt max+1 to an existing one.');
   console.log('    Prints the dispatchId/attempt to feed `mapctx dispatch receipt`.');
@@ -293,6 +364,7 @@ function printHelp(): void {
   console.log('  mapctx history reconstruct [--json] [--task T-1,T-2]');
   console.log('    Rebuilds the approved history view after corrections, tiering tasks');
   console.log('    measured / inferred / declared / synthetic / no-history.');
+  printEnumHelp();
 }
 
 function print(value: unknown, json?: boolean): void {
@@ -301,6 +373,42 @@ function print(value: unknown, json?: boolean): void {
     return;
   }
   console.log(JSON.stringify(value, null, 2));
+}
+
+/**
+ * T-127: a refused command used to print its structured refusal to STDOUT and
+ * then exit non-zero, so a caller piping `--json` stdout into a parser read a
+ * refusal as if it were a result. Carrying the payload on the error instead
+ * keeps stdout a success-only channel: the single error document -- payload
+ * included -- is written to stderr by the top-level handler, exactly once.
+ *
+ * Message stays first and unchanged, because existing callers match on it.
+ */
+export class CliRefusal extends Error {
+  constructor(message: string, readonly payload: unknown) {
+    super(message);
+    this.name = 'CliRefusal';
+  }
+}
+
+function refuse(payload: unknown, message: string): never {
+  throw new CliRefusal(message, payload);
+}
+
+/**
+ * Writes the one error document for a failed run, entirely on stderr: the
+ * structured refusal payload when there is one (the shape T-126 established
+ * for `redact`), otherwise -- under `--json` -- a minimal `{ok:false,error}`
+ * envelope so `2>` always captures something parseable. The human `Error:`
+ * line always comes last, so a reader scanning the tail still sees the
+ * sentence and a parser can split on it.
+ */
+export function writeCliError(error: unknown, json: boolean): void {
+  const message = error instanceof Error ? error.message : String(error);
+  const payload = error instanceof CliRefusal ? error.payload : undefined;
+  if (payload !== undefined) process.stderr.write(`${JSON.stringify(payload, null, 2)}\n`);
+  else if (json) process.stderr.write(`${JSON.stringify({ ok: false, error: message }, null, 2)}\n`);
+  console.error(`Error: ${message}`);
 }
 
 function parseArgs(argv: string[]): {
@@ -407,6 +515,8 @@ function parseArgs(argv: string[]): {
       if (!Number.isInteger(value) || value < 1) throw new Error('--sequence must be a positive integer');
       options.sequence = value;
     }
+    else if (a === '--baseline') options.baselinePath = args[++i];
+    else if (a === '--write-baseline') options.writeBaselinePath = args[++i];
     else if (a === '--because') options.correctionReason = args[++i];
     else if (a === '--limit') {
       const value = Number(args[++i]);
@@ -587,6 +697,10 @@ function storeRepairCommand(options: MapctxOptions): void {
   }
   const storeDir = resolveProjectStoreDir(toml.config.projectId);
   const result = repairStore(storeDir);
+  // A gap report is the deliverable of this command, not a refusal of it: the
+  // diagnosis (which node, which sequence, the named remedy) stays on stdout
+  // and the non-zero exit is the gate. T-127 moved REFUSALS to stderr, not
+  // the reports whose whole value is the document they print.
   print(result, options.json);
   if (result.status === 'gap') {
     throw new Error(`Repair aborted: ${result.gaps.length} journal gap(s) found. mapctx.db was left untouched.`);
@@ -744,11 +858,9 @@ function redactCommand(options: MapctxOptions): void {
     // raised as an error, so the same refusal left twice by two channels.
     // stdout is the result channel; a refusal is not a result. The structured
     // object still exists for machine consumers -- on stderr, next to the
-    // message -- and the exit code is what they check first.
-    if (!result.ok) {
-      if (options.json) process.stderr.write(`${JSON.stringify(result, null, 2)}\n`);
-      throw new Error(`Redaction refused: ${result.reason} -- ${result.message}`);
-    }
+    // message -- and the exit code is what they check first. T-127 generalized
+    // this to every refusing command through CliRefusal.
+    if (!result.ok) refuse(result, `Redaction refused: ${result.reason} -- ${result.message}`);
     print(result, options.json);
     if (!options.json && result.mode === 'dry-run') {
       console.log('');
@@ -770,6 +882,9 @@ function importDryRunCliCommand(options: MapctxOptions): void {
     cwd,
     legacyConfigPath: options.configPath ? path.resolve(cwd, options.configPath) : undefined
   });
+  // Same as `store repair`: a dry-run plan is a report, so the plan stays on
+  // stdout even when it fails the gate -- the errors it lists are what the
+  // caller came for.
   print(result, options.json);
   if (result.plan.errors > 0) {
     throw new Error(`Import validation failed with ${result.plan.errors} error(s).`);
@@ -798,20 +913,95 @@ function exportCliCommand(options: MapctxOptions): void {
   try {
     const reason = options.reason ?? 'manual';
     const result = publishCheckpoint(handle, tasksRoot, { reason, actor: defaultActor(options.actor) });
+    if (!result.ok) refuse(result, `Checkpoint failed at ${result.stage}: ${result.error}`);
     print(result, options.json);
-    if (!result.ok) throw new Error(`Checkpoint failed at ${result.stage}: ${result.error}`);
   } finally {
     handle.close();
+  }
+}
+
+/**
+ * T-127 (R7): resolves `--task` / `--baseline` / `--write-baseline` into the
+ * selectors `applyValidationGate` takes. Both refusals happen before any
+ * validation runs, so a typo in the flags never costs a full board read.
+ */
+function resolveValidateGate(cwd: string, options: MapctxOptions): {
+  tasks?: string[];
+  baseline?: ValidationBaselineFile;
+  writeBaselinePath?: string;
+} {
+  if (options.baselinePath && options.writeBaselinePath) {
+    throw new Error('--baseline and --write-baseline are mutually exclusive: one reads accepted issues, the other records the current ones.');
+  }
+  const tasks = options.taskFilter ? parseListInput('--task', options.taskFilter) : undefined;
+  if (tasks && tasks.length === 0) {
+    throw new Error('--task needs at least one task id.');
+  }
+  let baseline: ValidationBaselineFile | undefined;
+  if (options.baselinePath) {
+    const baselineFile = path.resolve(cwd, options.baselinePath);
+    if (!fs.existsSync(baselineFile)) {
+      throw new Error(`Baseline file not found: ${baselineFile}. Record one with \`mapctx validate --write-baseline ${options.baselinePath}\`.`);
+    }
+    baseline = parseValidationBaseline(fs.readFileSync(baselineFile, 'utf8'));
+  }
+  return {
+    ...(tasks ? { tasks } : {}),
+    ...(baseline ? { baseline } : {}),
+    ...(options.writeBaselinePath ? { writeBaselinePath: path.resolve(cwd, options.writeBaselinePath) } : {})
+  };
+}
+
+function writeValidateBaseline(filePath: string, issues: ValidationGateIssue[], json?: boolean): void {
+  const baseline = buildValidationBaseline(issues);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
+  if (json) print({ wroteBaseline: filePath, issues: baseline.issues.length, schemaVersion: baseline.schemaVersion }, true);
+  else console.log(`Wrote baseline with ${baseline.issues.length} accepted issue(s): ${filePath}`);
+}
+
+/** Shared `--task`/`--baseline` reporting lines, identical in both regimes. */
+function printGateSummary(gate: Pick<ValidationGateResult<ValidationGateIssue>, 'taskFilter' | 'filteredOutByTask' | 'boardScopedExcluded' | 'baselined' | 'staleBaseline'>): void {
+  if (gate.taskFilter) {
+    console.log(`Task filter: ${gate.taskFilter.join(', ')} (${gate.filteredOutByTask} issue(s) on other tasks, ${gate.boardScopedExcluded} board-scoped issue(s) not shown)`);
+  }
+  if (gate.baselined > 0) console.log(`Baselined: ${gate.baselined} pre-existing issue(s) accepted`);
+  for (const stale of gate.staleBaseline) {
+    console.log(`- [stale-baseline] ${stale.code}${stale.taskId ? ` ${stale.taskId}` : ''}: no longer reported; drop it from the baseline.`);
   }
 }
 
 export function mapctxValidateCliCommand(options: MapctxOptions): void {
   const cwd = process.cwd();
   const toml = resolveMapctxToml(cwd);
+  const gateOptions = resolveValidateGate(cwd, options);
   if (toml?.config.plansAuthority === 'store') {
     // Operational validation reads only identity config and read-only store.
     // Local snapshots are opened only when the caller explicitly asks.
-    const store = validateStoreRegime(cwd);
+    const rawStore = validateStoreRegime(cwd);
+    // T-127: the gate narrows WHICH issues count, never which checks run. The
+    // canonical and semantic reports keep their own identities (and their own
+    // recomputed counts) so the printed shape stays the one consumers read.
+    const gated = rawStore.status === 'store-authority'
+      ? (() => {
+          const canonical = applyValidationGate(rawStore.canonical.issues, gateOptions);
+          const semantic = applyValidationGate(rawStore.semantic.issues, gateOptions);
+          const combined = applyValidationGate([...rawStore.canonical.issues, ...rawStore.semantic.issues], gateOptions);
+          return { canonical, semantic, combined };
+        })()
+      : null;
+    if (gateOptions.writeBaselinePath) {
+      if (!gated) throw new Error(`Cannot record a baseline: store validation returned "${rawStore.status}".`);
+      writeValidateBaseline(gateOptions.writeBaselinePath, gated.combined.issues, options.json);
+      return;
+    }
+    const store = gated && rawStore.status === 'store-authority'
+      ? {
+          ...rawStore,
+          canonical: { ...rawStore.canonical, errors: gated.canonical.errors, warnings: gated.canonical.warnings, issues: gated.canonical.issues },
+          semantic: { errors: gated.semantic.errors, warnings: gated.semantic.warnings, issues: gated.semantic.issues }
+        }
+      : rawStore;
     let snapshots: unknown;
     let snapshotFailed = false;
     if (options.snapshots) {
@@ -830,13 +1020,30 @@ export function mapctxValidateCliCommand(options: MapctxOptions): void {
       snapshotFailed ||= drift.status !== 'store-authority' || drift.drift.hasDrift;
       snapshots = { status: snapshotFailed ? 'failed' : 'passed', structural, drift };
     }
-    if (options.json) print({ store, ...(options.snapshots ? { snapshots } : {}) }, true);
-    else {
+    const gateApplied = Boolean(gateOptions.tasks || gateOptions.baseline);
+    if (options.json) {
+      print({
+        store,
+        ...(options.snapshots ? { snapshots } : {}),
+        ...(gateApplied && gated
+          ? {
+              gate: {
+                taskFilter: gated.combined.taskFilter,
+                filteredOutByTask: gated.combined.filteredOutByTask,
+                boardScopedExcluded: gated.combined.boardScopedExcluded,
+                baselined: gated.combined.baselined,
+                staleBaseline: gated.combined.staleBaseline
+              }
+            }
+          : {})
+      }, true);
+    } else {
       console.log(`Store validation: ${store.status}`);
       if (store.status === 'store-authority') {
         console.log(`Canonical: ${store.canonical.errors ? 'FAIL' : 'PASS'} (${store.canonical.errors} errors, ${store.canonical.warnings} warnings)`);
         console.log(`Store semantics: ${store.semantic.errors ? 'FAIL' : 'PASS'} (${store.semantic.errors} errors, ${store.semantic.warnings} warnings)`);
         for (const issue of [...store.canonical.issues, ...store.semantic.issues]) console.log(`- [${issue.severity}] ${issue.code}${issue.taskId ? ` ${issue.taskId}` : ''}: ${issue.message}`);
+        if (gated) printGateSummary(gated.combined);
       } else if (store.status === 'maintenance-needed') console.log(`Store needs maintenance: ${store.maintenanceNeeded}`);
       else if (store.status === 'not-materialized') console.log(`Store not materialized at ${store.storeDir}. Run \`mapctx store init\`.`);
       if (options.snapshots) console.log(`Snapshot inspection: ${snapshotFailed ? 'FAIL' : 'PASS'}`);
@@ -848,19 +1055,44 @@ export function mapctxValidateCliCommand(options: MapctxOptions): void {
   }
 
   // Markdown authority remains compatible: structural validation is the
-  // operational source and no store snapshot mode is needed.
+  // operational source and no store snapshot mode is needed. T-127: the same
+  // gate applies here, because the markdown structural report emits the same
+  // {severity, code, message, taskId?} issues.
+  const gateApplied = Boolean(gateOptions.tasks || gateOptions.baseline);
   let validation: ReturnType<typeof getValidationReport> | null = null;
   let structuralError: Error | null = null;
   try {
-    if (options.json) validation = getValidationReport(options);
-    else validateCommand(options);
+    // The gate has to recount, so the report is always obtained as data and
+    // printed here once the selectors have been applied.
+    validation = getValidationReport(options);
   } catch (error) { structuralError = error instanceof Error ? error : new Error(String(error)); }
+  const gate = validation ? applyValidationGate(validation.issues, gateOptions) : null;
+  if (gateOptions.writeBaselinePath) {
+    if (!validation || !gate) throw new Error(`Cannot record a baseline: ${structuralError?.message ?? 'board resolution failed.'}`);
+    writeValidateBaseline(gateOptions.writeBaselinePath, gate.issues, options.json);
+    return;
+  }
+  const report = validation && gate
+    ? { ...validation, errors: gate.errors, warnings: gate.warnings, issues: gate.issues }
+    : null;
   const store = validateStoreRegime(cwd);
   if (options.json) {
-    if (validation) print({ ...validation, store }, true);
-    else print({ error: 'board-resolution-failed', message: structuralError?.message ?? 'Board resolution failed.', tasksFilePath: options.tasksFileOverride ? path.resolve(cwd, options.tasksFileOverride) : null, store }, true);
+    if (report) {
+      print({
+        ...report,
+        store,
+        ...(gateApplied && gate
+          ? { gate: { taskFilter: gate.taskFilter, filteredOutByTask: gate.filteredOutByTask, boardScopedExcluded: gate.boardScopedExcluded, baselined: gate.baselined, staleBaseline: gate.staleBaseline } }
+          : {})
+      }, true);
+    } else {
+      print({ error: 'board-resolution-failed', message: structuralError?.message ?? 'Board resolution failed.', tasksFilePath: options.tasksFileOverride ? path.resolve(cwd, options.tasksFileOverride) : null, store }, true);
+    }
+  } else if (report) {
+    printValidationReport(report, false);
+    if (gate) printGateSummary(gate);
   }
-  if (structuralError || (validation && validation.errors > 0)) throw new Error('mapctx validate failed.');
+  if (structuralError || (report && report.errors > 0)) throw new Error('mapctx validate failed.');
 }
 
 export function taskClaimCommand(taskId: string, options: MapctxOptions): void {
@@ -869,8 +1101,8 @@ export function taskClaimCommand(taskId: string, options: MapctxOptions): void {
   try {
     const holder = options.holder ? (JSON.parse(options.holder) as Record<string, unknown>) : { pid: process.pid, host: os.hostname() };
     const result = claimTask(handle, { taskId, actor: defaultActor(options.actor), holder });
+    if (!result.ok) refuse(result, `Claim failed: ${result.reason}`);
     print(result, options.json);
-    if (!result.ok) throw new Error(`Claim failed: ${result.reason}`);
   } finally {
     handle.close();
   }
@@ -1137,8 +1369,8 @@ function taskRenewCommand(taskId: string, options: MapctxOptions): void {
   const { handle } = openStoreOrFail(cwd);
   try {
     const result = renewClaim(handle, { taskId, claimId: options.claimId, leaseToken: options.leaseToken, actor: defaultActor(options.actor) });
+    if (!result.ok) refuse(result, `Renew failed: ${result.reason}`);
     print(result, options.json);
-    if (!result.ok) throw new Error(`Renew failed: ${result.reason}`);
   } finally {
     handle.close();
   }
@@ -1150,8 +1382,8 @@ function taskReleaseCommand(taskId: string, options: MapctxOptions): void {
   const { handle } = openStoreOrFail(cwd);
   try {
     const result = releaseClaim(handle, { taskId, claimId: options.claimId, leaseToken: options.leaseToken, actor: defaultActor(options.actor) });
+    if (!result.ok) refuse(result, `Release failed: ${result.reason}`);
     print(result, options.json);
-    if (!result.ok) throw new Error(`Release failed: ${result.reason}`);
   } finally {
     handle.close();
   }
@@ -1206,8 +1438,8 @@ export function dispatchReceiptCommand(dispatchId: string, options: MapctxOption
     // so the canonical files must follow in the same operation -- exactly like
     // claim/move do. An export failure is reported DISTINCTLY: the receipt is
     // already accepted and persisted, so callers must not blindly retry.
+    if (!result.ok) refuse(result, `Receipt rejected: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
     print(result, options.json);
-    if (!result.ok) throw new Error(`Receipt rejected: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
   } finally {
     handle.close();
   }
@@ -1228,12 +1460,50 @@ function requireStoreAuthority(cwd: string): { toml: { config: MapctxTomlConfig;
   return { toml, handle, tasksRoot: toml.dir };
 }
 
-function parseSetValue(field: string, raw: string): unknown {
-  if (raw === 'null') return null;
-  const arrayFields = new Set(['tags', 'domains', 'assignees', 'filesAffected', 'testsRequired', 'prerequisites', 'blocking']);
-  if (arrayFields.has(field)) {
-    return raw.trim() === '' ? [] : raw.split(',').map(v => v.trim()).filter(Boolean);
+const LIST_SET_FIELDS = new Set(['tags', 'domains', 'assignees', 'externalLinks', 'filesAffected', 'testsRequired', 'prerequisites', 'blocking']);
+
+const LIST_SYNTAX_HELP = 'use `a,b,c` (bare, comma-separated) or a JSON array like `["a","b"]`';
+
+/**
+ * T-127: list-valued inputs used to be comma-split unconditionally, so
+ * `--set detail.filesAffected=[a,b]` -- the shape every agent reaches for --
+ * was accepted in silence and stored `["[a", "b]"]`, brackets and quotes
+ * welded onto the values. That actually corrupted T-126's filesAffected on
+ * this board and hid a real file overlap from the planner.
+ *
+ * Now there are exactly two accepted spellings and no silent third one:
+ * a bare comma list, or a JSON array of strings. Anything bracket-shaped must
+ * be valid JSON, and an element that is wholly wrapped in quotes is refused
+ * rather than stored with the quotes as part of the value. Refusals name the
+ * correct syntax, because an agent that guessed once will guess again.
+ */
+export function parseListInput(label: string, raw: string): string[] {
+  const trimmed = raw.trim();
+  if (trimmed === '') return [];
+  if (trimmed.startsWith('[') || trimmed.endsWith(']')) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      throw new Error(`${label} looks like an array but is not valid JSON: ${raw}. To pass a list, ${LIST_SYNTAX_HELP}.`);
+    }
+    if (!Array.isArray(parsed) || parsed.some(item => typeof item !== 'string')) {
+      throw new Error(`${label} JSON must be an array of strings, got: ${raw}. To pass a list, ${LIST_SYNTAX_HELP}.`);
+    }
+    return (parsed as string[]).map(item => item.trim()).filter(Boolean);
   }
+  return trimmed.split(',').map(value => {
+    const item = value.trim();
+    if (item.length >= 2 && (item.startsWith('"') || item.startsWith("'")) && item.endsWith(item[0])) {
+      throw new Error(`${label} element ${item} is wrapped in quotes; bare comma lists are not quoted. To pass a list, ${LIST_SYNTAX_HELP}.`);
+    }
+    return item;
+  }).filter(Boolean);
+}
+
+function parseSetValue(field: string, raw: string, key = field): unknown {
+  if (raw === 'null') return null;
+  if (LIST_SET_FIELDS.has(field)) return parseListInput(`--set ${key}`, raw);
   return raw;
 }
 
@@ -1243,10 +1513,7 @@ export function taskMoveCommand(taskId: string, options: MapctxOptions): void {
   const { handle } = requireStoreAuthority(cwd);
   try {
     const result = moveTask(handle, { taskId, to: toPlanningState(options.status), actor: defaultActor(options.actor) });
-    if (!result.ok) {
-      print(result, options.json);
-      throw new Error(`Move refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
-    }
+    if (!result.ok) refuse(result, `Move refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
     print(result, options.json);
   } finally {
     handle.close();
@@ -1266,19 +1533,22 @@ export function taskReopenCommand(taskId: string, options: MapctxOptions): void 
       to: target,
       actor: defaultActor(options.actor)
     });
-    if (!result.ok) {
-      print(result, options.json);
-      throw new Error(`Reopen refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
-    }
+    if (!result.ok) refuse(result, `Reopen refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
     print(result, options.json);
   } finally {
     handle.close();
   }
 }
 
-export function splitList(value?: string): string[] | undefined {
+/**
+ * T-127: `--tags`, `--domains`, `--depends-on` and `--blocking` take the same
+ * two spellings as `--set`, and refuse a bracketed or quoted guess instead of
+ * welding the punctuation onto the values. `label` names the flag so the
+ * refusal says which argument to retype.
+ */
+export function splitList(value?: string, label = 'list value'): string[] | undefined {
   if (value === undefined) return undefined;
-  return value.trim() === '' ? [] : value.split(',').map(v => v.trim()).filter(Boolean);
+  return parseListInput(label, value);
 }
 
 /**
@@ -1300,6 +1570,12 @@ export function taskCreateCommand(options: MapctxOptions): void {
     tags: options.tags,
     domains: options.domains
   }, cwd);
+  // Parsed before the writable open, like task update: a bracketed list is a
+  // syntax refusal, never a schema migration followed by a refusal.
+  const tags = splitList(options.tags, '--tags') ?? [];
+  const domains = splitList(options.domains, '--domains') ?? [];
+  const dependsOn = splitList(options.dependsOn, '--depends-on');
+  const blocking = splitList(options.blocking, '--blocking');
   const { handle, tasksRoot } = requireStoreAuthority(cwd);
   try {
     const result = createTask(handle, {
@@ -1310,10 +1586,10 @@ export function taskCreateCommand(options: MapctxOptions): void {
       status: options.status ? toPlanningState(options.status) : undefined,
       priority: options.priority ?? null,
       workload: options.workload ?? null,
-      tags: splitList(options.tags) ?? [],
-      domains: splitList(options.domains) ?? [],
-      dependsOn: splitList(options.dependsOn),
-      blocking: splitList(options.blocking),
+      tags,
+      domains,
+      dependsOn,
+      blocking,
       startDate: options.start ?? null,
       dueDate: options.due ?? null,
       detail: {
@@ -1325,10 +1601,7 @@ export function taskCreateCommand(options: MapctxOptions): void {
       },
       actor: defaultActor(options.actor)
     });
-    if (!result.ok) {
-      print(result, options.json);
-      throw new Error(`Create refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
-    }
+    if (!result.ok) refuse(result, `Create refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
 
     const description = options.description ?? (options.descriptionFile ? fs.readFileSync(path.resolve(cwd, options.descriptionFile), 'utf8') : undefined);
     const detailPath = path.resolve(cwd, result.detailPath);
@@ -1371,11 +1644,16 @@ export function taskUpdateCommand(taskId: string, options: MapctxOptions): void 
         }
       }
     } else if (key.startsWith('detail.')) {
-      detailPatch[key.slice('detail.'.length)] = parseSetValue(key.slice('detail.'.length), raw);
+      detailPatch[key.slice('detail.'.length)] = parseSetValue(key.slice('detail.'.length), raw, key);
     } else {
       patch[key] = parseSetValue(key, raw);
     }
   }
+  // Edge lists are parsed here, with the --set pairs, so a bad list syntax
+  // refuses before the writable store handle exists (it migrates schemas and
+  // replays journals on open).
+  const dependsOn = splitList(options.dependsOn, '--depends-on');
+  const blocking = splitList(options.blocking, '--blocking');
   const cwd = process.cwd();
   warnPrivacy(`task update ${taskId}`, { patch, detail: detailPatch }, cwd);
   const { handle, tasksRoot } = requireStoreAuthority(cwd);
@@ -1384,17 +1662,38 @@ export function taskUpdateCommand(taskId: string, options: MapctxOptions): void 
       taskId,
       patch: Object.keys(patch).length > 0 ? patch as never : undefined,
       detailPatch: Object.keys(detailPatch).length > 0 ? detailPatch as never : undefined,
-      dependsOn: options.dependsOn !== undefined ? (options.dependsOn.trim() === '' ? [] : options.dependsOn.split(',').map(v => v.trim()).filter(Boolean)) : undefined,
-      blocking: options.blocking !== undefined ? (options.blocking.trim() === '' ? [] : options.blocking.split(',').map(v => v.trim()).filter(Boolean)) : undefined,
+      dependsOn,
+      blocking,
       actor: defaultActor(options.actor)
     });
-    if (!result.ok) {
-      print(result, options.json);
-      throw new Error(`Update refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
-    }
+    if (!result.ok) refuse(result, `Update refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
     print({ taskId, ...result }, options.json);
   } finally {
     handle.close();
+  }
+}
+
+/**
+ * T-127 (R4 item 6): a missing `--expect-revision` used to refuse without
+ * saying what to pass, so the agent had to go run `acceptance show` and come
+ * back. The number is one read-only lookup away, so the refusal carries it --
+ * and the whole hint is best-effort: a store that cannot be read read-only
+ * (absent, pre-cutover, mid-maintenance) must still produce the plain refusal,
+ * never a second, unrelated error.
+ */
+function currentRevisionHint(cwd: string, taskId: string): string {
+  try {
+    const { handle } = openStoreOrFail(cwd, { mode: 'read' });
+    try {
+      const acceptance = getAcceptance(handle.db, taskId);
+      return acceptance
+        ? ` The store currently holds revision ${acceptance.revision} for ${taskId}: pass --expect-revision ${acceptance.revision}.`
+        : ` No acceptance revision exists for ${taskId} yet: pass --expect-revision 0.`;
+    } finally {
+      handle.close();
+    }
+  } catch {
+    return '';
   }
 }
 
@@ -1411,14 +1710,18 @@ export function taskAcceptanceCommand(action: string | undefined, taskId: string
   let approveEvidence: Record<string, string> | undefined;
   if (action === 'revise') {
     if (!options.fromFile) throw new Error('acceptance revise requires --from-file <detail.md>');
-    if (options.expectRevision === undefined) throw new Error('acceptance revise requires --expect-revision <current-revision> (use 0 when no revision exists)');
+    if (options.expectRevision === undefined) {
+      throw new Error(`acceptance revise requires --expect-revision <current-revision> (use 0 when no revision exists).${currentRevisionHint(cwd, taskId)}`);
+    }
     const source = fs.readFileSync(path.resolve(cwd, options.fromFile), 'utf8');
     const parsed = parseAcceptanceRead(source);
     if (parsed.condition === 'absent') throw new Error('Source has no ## Acceptance section; use a file with explicit checklist criteria.');
     expectRevision = options.expectRevision;
     reviseArgs = { condition: parsed.condition, texts: parsed.condition === 'criteria' ? parsed.items.map(item => item.text) : [] };
   } else if (action === 'approve' || action === 'unapprove') {
-    if (options.expectRevision === undefined) throw new Error(`acceptance ${action} requires --expect-revision <current-revision>`);
+    if (options.expectRevision === undefined) {
+      throw new Error(`acceptance ${action} requires --expect-revision <current-revision>.${currentRevisionHint(cwd, taskId)}`);
+    }
     if (options.criterionId === undefined && options.index === undefined) throw new Error(`acceptance ${action} requires --criterion-id <id> or --index <zero-based-index>`);
     // Evidence belongs to approvals only; refusing it on unapprove keeps
     // the CLI from silently dropping caller input (review: CLI evidence gap).
@@ -1454,8 +1757,8 @@ export function taskAcceptanceCommand(action: string | undefined, taskId: string
         actor: defaultActor(options.actor),
         expectRevision: expectRevision!
       });
+      if (!result.ok) refuse(result, result.message);
       print(result, options.json);
-      if (!result.ok) throw new Error(result.message);
       return;
     }
     if (action === 'approve' || action === 'unapprove') {
@@ -1471,8 +1774,8 @@ export function taskAcceptanceCommand(action: string | undefined, taskId: string
         ...(approveEvidence ? { evidence: approveEvidence } : {})
       };
       const result = action === 'approve' ? approveAcceptanceCriterion(handle, args) : unapproveAcceptanceCriterion(handle, args);
+      if (!result.ok) refuse(result, result.message);
       print(result, options.json);
-      if (!result.ok) throw new Error(result.message);
       return;
     }
     throw new Error(`Unknown acceptance action: ${action}`);
@@ -1484,11 +1787,11 @@ export function taskFinishCommand(taskId: string, options: MapctxOptions): void 
   const { handle, tasksRoot } = requireStoreAuthority(cwd);
   try {
     const result = finishTask(handle, tasksRoot, { taskId, actor: defaultActor(options.actor) });
-    print(result, options.json);
     if (!result.ok) {
       const reason = result.stage === 'move' ? result.move.reason : `checkpoint-${result.checkpoint.stage}`;
-      throw new Error(`Finish ${result.stage} failed: ${reason}`);
+      refuse(result, `Finish ${result.stage} failed: ${reason}`);
     }
+    print(result, options.json);
   } finally { handle.close(); }
 }
 
@@ -1508,10 +1811,7 @@ export function taskStartCommand(taskId: string, options: MapctxOptions): void {
       contextHash: options.contextHash,
       status
     });
-    if (!result.ok) {
-      print(result, options.json);
-      throw new Error(`Start refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
-    }
+    if (!result.ok) refuse(result, `Start refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
     print({
       ...result,
       taskId,
@@ -1567,10 +1867,7 @@ export function dispatchCreateCommand(taskId: string, options: MapctxOptions): v
         status
       }
     }, defaultActor(options.actor), true);
-    if (!result.ok) {
-      print(result, options.json);
-      throw new Error(`Dispatch refused: ${result.reason}`);
-    }
+    if (!result.ok) refuse(result, `Dispatch refused: ${result.reason}`);
     print({
       ok: true,
       dispatchId,
@@ -1796,8 +2093,8 @@ async function main(): Promise<void> {
         print({ mode: 'dry-run', ...planAcceptanceImport(handle.db, resolveMapctxToml(process.cwd())?.dir ?? process.cwd()) }, options.json);
       } else {
         const result = commitAcceptanceImport(handle, resolveMapctxToml(process.cwd())?.dir ?? process.cwd(), { actor: defaultActor(options.actor) });
+        if (!result.ok) refuse(result, result.message);
         print(result, options.json);
-        if (!result.ok) throw new Error(result.message);
       }
     } finally { handle.close(); }
     return;
@@ -1942,8 +2239,10 @@ async function main(): Promise<void> {
 
 if (require.main === module) {
   main().catch(error => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`Error: ${message}`);
+    // T-127: stdout carries results only. Errors -- including the structured
+    // refusal payload a CliRefusal carries -- leave on stderr, once, as JSON
+    // when the caller asked for --json.
+    writeCliError(error, process.argv.includes('--json'));
     process.exit(1);
   });
 }

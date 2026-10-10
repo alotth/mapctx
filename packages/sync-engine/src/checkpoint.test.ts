@@ -187,8 +187,14 @@ test('T-121 public export CLI refuses both trailing-evidence reassociation repro
       });
 
       assert.notEqual(run.status, 0, `${repro.name}: public export must refuse`);
-      const result = JSON.parse(run.stdout) as { ok: boolean; stage?: string; error?: string; publishedFiles?: string[] };
-      assert.equal(result.ok, false, `${repro.name}: ${run.stdout}`);
+      // T-127: a refusal is not a result, so stdout stays empty and the
+      // structured payload is the first document on stderr, ahead of the
+      // human `Error:` line.
+      assert.equal(run.stdout.trim(), '', `${repro.name}: stdout is the result channel`);
+      const errorBoundary = run.stderr.indexOf('\nError:');
+      assert.ok(errorBoundary > 0, `${repro.name}: ${run.stderr}`);
+      const result = JSON.parse(run.stderr.slice(0, errorBoundary)) as { ok: boolean; stage?: string; error?: string; publishedFiles?: string[] };
+      assert.equal(result.ok, false, `${repro.name}: ${run.stderr}`);
       assert.equal(result.stage, 'build', `${repro.name}: refusal must precede publication`);
       assert.match(result.error ?? '', /acceptance-render-refused/);
       assert.deepEqual(result.publishedFiles, [], `${repro.name}: no files reported as published`);
