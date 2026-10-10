@@ -80,7 +80,7 @@ import {
   checkTaskAcceptance,
   type MapctxTomlConfig
 } from '@mapctx/store';
-import { CHECKPOINT_REASONS, finishTask, publishCheckpoint, type CheckpointReason } from './checkpoint';
+import { CHECKPOINT_REASONS, finishTask, publishCheckpoint, type CheckpointReason, type FinishSnapshotMode } from './checkpoint';
 import { getValidationReport, printValidationReport } from './board-tools';
 import { historyCorrectCommand, historyReconstructCommand, historyScanCommand } from './history-cli';
 import { loadConfigOptionalForBoard } from './config';
@@ -173,6 +173,8 @@ type MapctxOptions = SyncOptions & {
   /** T-127 validate gate */
   baselinePath?: string;
   writeBaselinePath?: string;
+  /** T-128 finish snapshot mode */
+  snapshot?: FinishSnapshotMode;
 };
 
 /**
@@ -252,6 +254,10 @@ function printEnumHelp(): void {
   console.log('  `mapctx import --dry-run`, `mapctx store repair`.');
   console.log('');
   console.log('Flag values:');
+  console.log('  An UNKNOWN --flag is now an error instead of being silently ignored (0.4.0,');
+  console.log('  unreleased): `--no-snapshots` used to be dropped, which turned a close into a');
+  console.log('  publishing one. A boolean flag written with a value keeps T-127 behaviour and is');
+  console.log('  ignored, except `--no-snapshot=...`, which is refused for the same reason.');
   console.log('  A flag written without its value is refused instead of swallowing the next');
   console.log('  argument. Only a token that is itself one of this CLI\'s flags counts as');
   console.log('  missing, so `--title "--foo is a flag"` and `--summary "- item"` pass. To pass');
@@ -284,17 +290,42 @@ export const VALUE_FLAGS: ReadonlySet<string> = new Set([
   '--limit', '--minutes', '--node', '--note', '--opencode-db', '--other-session-activity',
   '--parent', '--parked-threshold-ms', '--plan-name', '--priority', '--query', '--reason',
   '--reason-file', '--receipt', '--repo', '--review-threshold-ms', '--role', '--seats',
-  '--sequence', '--set', '--start', '--status', '--summary', '--tags', '--target', '--task',
+  '--sequence', '--set', '--snapshot', '--start', '--status', '--summary', '--tags', '--target', '--task',
   '--tasks-file', '--time-zone', '--title', '--token', '--type', '--wait-reason', '--workload',
   '--write-baseline'
 ]);
 
 export const BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
   '--accept', '--commit', '--discard', '--dry-run', '--help', '--include-inferred', '--json',
-  '--project', '--read', '--remove', '--snapshots', '-h'
+  '--no-snapshot', '--project', '--read', '--remove', '--snapshots', '-h'
 ]);
 
-export const KNOWN_FLAGS: ReadonlySet<string> = new Set([...VALUE_FLAGS, ...BOOLEAN_FLAGS]);
+/**
+ * Flags of `mapctx workspace` / `workspace:add`, which are parsed by
+ * `parseWorkspaceServerArgs` rather than by the chain below -- but `parseArgs`
+ * still sees the whole argv first, so the unknown-flag rule has to know them
+ * or it would reject a legitimate invocation. `scripts/verify-sync-engine-
+ * package.mjs` (the `pack:smoke` CI step, which is NOT part of `npm test`)
+ * runs `mapctx workspace --no-open --port <n>`, so this is load-bearing.
+ */
+export const WORKSPACE_FLAGS: ReadonlySet<string> = new Set([
+  '--add', '--host', '--no-open', '--open', '--org', '--org-name', '--org-path', '--port',
+  '--registry', '--target'
+]);
+
+export const KNOWN_FLAGS: ReadonlySet<string> = new Set([...VALUE_FLAGS, ...BOOLEAN_FLAGS, ...WORKSPACE_FLAGS]);
+
+/**
+ * Flags where a stray `=value` must be an error rather than be ignored.
+ *
+ * T-127 decided that inline values do not apply to boolean flags, so
+ * `--json=true` is accepted and ignored (and a test pins that). For most
+ * booleans the mistake is self-revealing -- you asked for JSON and got human
+ * text. `--no-snapshot` is the one where silence costs something: being
+ * ignored means the command rewrites every mirror in a shared checkout, which
+ * is the exact harm the flag exists to prevent (review F1).
+ */
+const VALUE_REJECTING_FLAGS: ReadonlySet<string> = new Set(['--no-snapshot']);
 
 function printHelp(): void {
   console.log('mapctx CLI');
@@ -346,8 +377,25 @@ function printHelp(): void {
   console.log('  mapctx acceptance import [--commit] [--json]');
   console.log('    Dry-run by default; --commit imports observed checkboxes atomically, pins source bytes, skips existing revisions.');
   console.log('  mapctx task acceptance <show|revise|approve|unapprove> <task-id> [--from-file path] [--expect-revision n] [--criterion-id id|--index n] [--evidence key=value ...]');
-  console.log('  mapctx task finish <task-id> [--json]');
-  console.log('    Moves through canonical done gate, then publishes final checkpoint; retry after checkpoint failure is safe.');
+  console.log('  mapctx task finish <task-id> [--no-snapshot | --snapshot none|full] [--json]');
+  console.log('    Moves through the canonical done gate (every current store Acceptance criterion');
+  console.log('    approved), then publishes the final checkpoint; retry after a checkpoint failure');
+  console.log('    is safe. --no-snapshot applies the SAME gate and stops there: no TASKS.md, no');
+  console.log('    tasks/*.md, no checkpoint event -- for a shared checkout where regenerating every');
+  console.log('    mirror would mix generated files into someone else\'s WIP. Publish later with');
+  console.log('    `mapctx export` or a plain `mapctx task finish`.');
+  console.log('    DURABILITY: the store lives in ~/.mapctx/projects/<id>/, outside the repo and');
+  console.log('    untracked. The committed TASKS.md/tasks/*.md checkpoint is what `mapctx store');
+  console.log('    init` recovers from, so every --no-snapshot close widens the window in which a');
+  console.log('    lost store loses that closure. The window is NOT per task: a checkpoint carries');
+  console.log('    the filesHash of the whole mirror set, so one later `mapctx export` (or one');
+  console.log('    default `finish`) captures every skipped task at once. Publish at wave-end or');
+  console.log('    epic-end, and commit it.');
+  console.log('    --snapshot none is the same as --no-snapshot; --snapshot task is refused by name.');
+  console.log('    Both only affect `task finish`; on any other command they parse and do nothing.');
+  console.log('    `task move --status done` enforces the same acceptance gate and refuses with the');
+  console.log('    same message; `finish` is the command to prefer, because it also re-verifies the');
+  console.log('    gate when the task is already done and reports the checkpoint it published.');
   console.log('  mapctx task show <task-id> [--json]');
   console.log('  mapctx task context <task-id> --budget <n> [--json]');
   console.log('  mapctx task search --query "<text>" [--status <planning-state>] [--limit n] [--json]');
@@ -381,6 +429,11 @@ function printHelp(): void {
   console.log('    on: edit tasks/<ID>.md in Git and commit it, never through `task update`.');
   console.log('    See "Enumerated values" below for every enum and the list syntax.');
   console.log('  mapctx task move <task-id> --status <planning-state> [--json] [--actor name]');
+  console.log('    For a task not yet done, `--status done` is the same gate as `task finish');
+  console.log('    --no-snapshot`: shared code, identical refusal, neither regenerates mirrors.');
+  console.log('    They diverge once the task IS done -- `done` is terminal with no self-edge, so');
+  console.log('    `move --status done` then refuses `illegal-transition`, while `finish`');
+  console.log('    re-verifies the gate and succeeds without moving.');
   console.log('    Legal transition under store authority (backlog|ready-for-do|doing|review|done|paused|cancelled|archived,');
   console.log('    or canonical backlog|ready|in-progress|review|done|paused|cancelled|archived). done stamps completedOn and');
   console.log('    releases any active claim; done also requires every current store Acceptance criterion to be approved.');
@@ -560,6 +613,20 @@ function parseArgs(argv: string[]): {
     else if (a === '--commit') options.commit = true;
     else if (a === '--json') options.json = true;
     else if (a === '--snapshots') options.snapshots = true;
+    else if (a === '--no-snapshot') options.snapshot = 'none';
+    else if (a === '--snapshot') {
+      // Review F1: `--snapshot=none` was one of four spellings that silently
+      // published. It is a validated alias now, and any other value is
+      // refused by name instead of being dropped.
+      const value = valueFor(a);
+      if (value === 'none') options.snapshot = 'none';
+      else if (value === 'full') options.snapshot = 'full';
+      else if (value === 'task') {
+        throw new Error('--snapshot=task is not supported: a checkpoint carries the filesHash of the WHOLE mirror set, so publishing one task\'s file and journaling it as a checkpoint would misstate what was materialized. Use --no-snapshot and then `mapctx export` when the working tree is yours to rewrite.');
+      } else {
+        throw new Error(`--snapshot must be none or full; got ${JSON.stringify(value)}. --no-snapshot is the same as --snapshot=none.`);
+      }
+    }
     else if (a === '--from-file') options.fromFile = valueFor(a);
     else if (a === '--criterion-id') options.criterionId = valueFor(a);
     else if (a === '--index') {
@@ -676,6 +743,23 @@ function parseArgs(argv: string[]): {
       }
     } else if (!a.startsWith('-')) {
       positional.push(a);
+    } else if (a.startsWith('--') && a !== '--') {
+      // Review F1 (HIGH): this loop used to end WITHOUT an else, so any
+      // unrecognized `-...` token was dropped in silence. That turned four
+      // plausible spellings of --no-snapshot -- `--no-snapshots` (one char
+      // from the real `--snapshots`), `--snapshot=none`, `--snapshot none`,
+      // `--no-snapshot=true` -- into a publishing finish that rewrote every
+      // mirror into a shared checkout, exit 0, no warning: precisely the harm
+      // the flag exists to prevent.
+      //
+      // Matching on the BASE name keeps T-127's decision that an inline value
+      // does not apply to a boolean flag, so `--json=true` stays accepted and
+      // ignored exactly as its test asserts.
+      const base = a.split('=')[0];
+      if (!KNOWN_FLAGS.has(base)) throw new Error(`Unknown flag: ${base}`);
+      if (a.includes('=') && VALUE_REJECTING_FLAGS.has(base)) {
+        throw new Error(`${base} takes no value. Use ${base} on its own, or --snapshot=none.`);
+      }
     }
   }
 
@@ -1756,13 +1840,48 @@ function parseSetValue(field: string, raw: string, key = field): unknown {
   return raw;
 }
 
+/**
+ * T-128 (R1): the ONE piece of closing advice, appended by both closing paths.
+ *
+ * The acceptance gate itself was never duplicated -- `moveTask` and
+ * `finishTask` both call `checkTaskAcceptance`, so `task move --status done`
+ * and `task finish` already refused with a byte-identical message (verified
+ * against a disposable store before this change). What was missing is that
+ * neither refusal told the reader which command actually closes a task, which
+ * is how agents ended up picking a path by guesswork. The advice lives here,
+ * once, rather than inside the store message, so `mapctx validate`'s
+ * `completion-acceptance-incomplete` issue stays a plain statement of fact.
+ */
+function closingAdvice(taskId: string, reason: string): string {
+  if (reason !== 'acceptance-incomplete') return '';
+  return ` Once every criterion is approved, close it with \`mapctx task finish ${taskId}\``
+    + ` (add --no-snapshot to apply the same gate without regenerating TASKS.md and tasks/*.md).`;
+}
+
+/**
+ * Review F5: closing a task revokes whatever claim is active on it, which is
+ * pre-existing `moveTask` semantics and identical on both closing paths. It
+ * was silent, though, and `--no-snapshot` is pitched exactly at a worktree
+ * shared with other agents -- the one setting where revoking somebody else's
+ * lease matters. Stderr, so it never disturbs the `--json` stdout document,
+ * and advisory: the release already happened and is journaled.
+ */
+function warnForeignClaimRelease(releasedClaimId: string | undefined, actor: string, taskId: string): void {
+  if (!releasedClaimId) return;
+  console.error(`Warning: closing ${taskId} released the active claim ${releasedClaimId}.`
+    + ` If that lease was not yours (${actor}), another agent was holding this task and has just lost it.`);
+}
+
 export function taskMoveCommand(taskId: string, options: MapctxOptions): void {
   if (!options.status) throw new Error('task move requires --status <planning-state>');
   const cwd = process.cwd();
   const { handle } = requireStoreAuthority(cwd);
   try {
     const result = moveTask(handle, { taskId, to: toPlanningState(options.status), actor: defaultActor(options.actor) });
-    if (!result.ok) refuse(result, `Move refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
+    if (!result.ok) {
+      refuse(result, `Move refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}${closingAdvice(taskId, result.reason)}`);
+    }
+    warnForeignClaimRelease(result.releasedClaimId, defaultActor(options.actor), taskId);
     print(result, options.json);
   } finally {
     handle.close();
@@ -2035,7 +2154,7 @@ export function taskFinishCommand(taskId: string, options: MapctxOptions): void 
   const cwd = process.cwd();
   const { handle, tasksRoot } = requireStoreAuthority(cwd);
   try {
-    const result = finishTask(handle, tasksRoot, { taskId, actor: defaultActor(options.actor) });
+    const result = finishTask(handle, tasksRoot, { taskId, actor: defaultActor(options.actor), snapshot: options.snapshot });
     if (!result.ok) {
       // Review B11: A9's premise -- "the `Error:` sentence already carries the
       // reason and the message" -- held for move/update/acceptance/export but
@@ -2045,10 +2164,23 @@ export function taskFinishCommand(taskId: string, options: MapctxOptions): void 
       // sentence now, so `--json` is not required to diagnose a failed finish.
       const detail = result.stage === 'move'
         ? `${result.move.reason}${result.move.message ? ` -- ${result.move.message}` : ''}`
+          // T-128: the same closing advice `task move --status done` gives, so
+          // the two paths stay indistinguishable when the gate is what failed.
+          + closingAdvice(taskId, result.move.reason)
         : `checkpoint-${result.checkpoint.stage}${result.checkpoint.error ? ` -- ${result.checkpoint.error}` : ''}`
-          + ` (planning move ${result.move.performed ? `applied ${result.move.from} -> ${result.move.to}` : 'not applied'})`;
+          + ` (planning move ${result.move.performed ? `applied ${result.move.from} -> ${result.move.to}` : 'not applied'})`
+          // Review F2: this advice used to be appended to EVERY checkpoint
+          // failure, but the `precondition` stage fires precisely when the
+          // planning state is NOT done any more -- somebody reopened or moved
+          // the task inside the publication gap. Telling that operator the
+          // task is "already closed" and to re-run with --no-snapshot would
+          // re-close a task that was deliberately reopened.
+          + (result.checkpoint.stage === 'precondition'
+            ? ` The task is NOT closed: it changed under the publication lock, so nothing was published. Re-read it with \`mapctx task show\` before deciding -- do not re-run blindly.`
+            : ` The planning state is already closed; re-run with --no-snapshot to finish without regenerating the mirrors, or \`mapctx export\` once the working tree is ready.`);
       refuse(result, `Finish ${result.stage} failed: ${detail}`);
     }
+    warnForeignClaimRelease(result.move.releasedClaimId, defaultActor(options.actor), taskId);
     print(result, options.json);
   } finally { handle.close(); }
 }

@@ -67,6 +67,26 @@
 
 ## mapctx CLI — [0.4.0] (Unreleased)
 
+### Breaking (public contract): an unknown flag is an error
+
+`parseArgs` used to drop any unrecognized `--flag` in silence. That made four
+plausible spellings of the new `--no-snapshot` — `--no-snapshots` (one
+character from the existing `--snapshots`), `--snapshot=none`,
+`--snapshot none`, `--no-snapshot=true` — close the task **and rewrite every
+mirror**, exit 0, no warning: the exact harm the flag exists to prevent.
+
+An unknown `--flag` now exits non-zero with `Unknown flag: --x`. Matching is on
+the base name before `=`, so a boolean flag written with a value keeps its
+0.4.0 behaviour (`--json=true` is still accepted and ignored) — except
+`--no-snapshot=...`, which is refused, because for that flag silence costs a
+rewritten working tree. `--snapshot` is a validated value flag accepting
+`none` or `full`.
+
+Migration: a typo that used to be ignored now fails. Nothing in this
+repository passed an unknown flag; `mapctx workspace`'s flags are parsed by a
+separate parser and are explicitly registered, so `mapctx workspace --no-open
+--port <n>` (used by the `pack:smoke` CI step) keeps working.
+
 ### Breaking (public contract): refusals leave on stderr
 
 A refused `mapctx` command no longer prints its structured refusal to stdout.
@@ -111,6 +131,19 @@ depended on the old channel.
   value that merely looks flag-ish (`--title "--foo is a flag"`) still works
 * **feature:** `--flag=value` is accepted for value-taking flags, which is how
   you pass a value that is itself a flag name (`--query=--json`)
+* **feature:** `mapctx task finish <id> --no-snapshot` (or `--snapshot none`)
+  applies the canonical done gate without regenerating TASKS.md or tasks/*.md
+  and without journaling a checkpoint — for a shared checkout where rewriting
+  every mirror would mix generated files into uncommitted work. The default
+  still publishes; the success result carries
+  `snapshot: "published" | "skipped"` and omits `checkpoint` when skipped.
+  It is a durability trade: the committed checkpoint is what `mapctx store init`
+  recovers from, so publish with `mapctx export` at wave-end or epic-end — one
+  export captures every previously skipped task, because a checkpoint carries
+  the filesHash of the whole mirror set. `--snapshot task` is refused by name
+* **fix:** an acceptance refusal from either closing path (`task finish` and
+  `task move --status done`, which have always shared the gate) now names the
+  command that closes a task and mentions `--no-snapshot`
 * **fix:** `externalLinks` refuses userinfo credentials (`https://user:pass@...`),
   caps each link at 2048 characters, and matches the `scheme:word:rest` provider
   form case-insensitively
