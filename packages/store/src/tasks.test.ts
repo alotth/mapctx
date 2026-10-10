@@ -539,3 +539,65 @@ test("completed receipt on a task that was never claimed is rejected with the re
     cleanupDir(repoDir);
   }
 });
+
+// ---------------------------------------------------------------------------
+// T-127: externalLinks patching + unknown-field message groups.
+// ---------------------------------------------------------------------------
+
+test("T-127 externalLinks accepts https:// and provider:entity:id URIs, clears with null, and rejects malformed entries", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const applied = updateTask(handle, {
+      taskId: "T-101",
+      patch: { externalLinks: ["https://github.com/o/r/issues/1", "github:issue:42"] },
+      actor: "test"
+    });
+    assert.equal(applied.ok, true, JSON.stringify(applied));
+    assert.deepEqual(getTask(handle.db, "T-101")?.externalLinks, ["https://github.com/o/r/issues/1", "github:issue:42"]);
+
+    const cleared = updateTask(handle, { taskId: "T-101", patch: { externalLinks: null as never }, actor: "test" });
+    assert.equal(cleared.ok, true);
+    assert.deepEqual(getTask(handle.db, "T-101")?.externalLinks, [], "null normalizes to [] before journaling");
+
+    for (const bad of ["foo/bar", "https://has space.example/x", ""]) {
+      const refused = updateTask(handle, { taskId: "T-101", patch: { externalLinks: [bad] }, actor: "test" });
+      assert.equal(refused.ok, false, `expected refusal for ${JSON.stringify(bad)}`);
+      if (!refused.ok) assert.equal(refused.reason, "invalid-external-links");
+      assert.deepEqual(getTask(handle.db, "T-101")?.externalLinks, [], "a refused patch must not land");
+    }
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-127 unknown-field refusal names both field groups and redirects a field used on the wrong side", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const wrongSide = updateTask(handle, { taskId: "T-101", patch: { filesAffected: ["a", "b"] } as never, actor: "test" });
+    assert.equal(wrongSide.ok, false);
+    if (!wrongSide.ok) {
+      assert.equal(wrongSide.reason, "unknown-field");
+      assert.match(wrongSide.message ?? "", /detail field|detail\.filesAffected/);
+      assert.match(wrongSide.message ?? "", /--set detail\.filesAffected=/);
+      assert.match(wrongSide.message ?? "", /Detail fields \(prefix each with `detail\.`\):/);
+      assert.match(wrongSide.message ?? "", /Task fields:/);
+    }
+
+    const otherWrongSide = updateTask(handle, { taskId: "T-101", detailPatch: { title: "x" } as never, actor: "test" });
+    assert.equal(otherWrongSide.ok, false);
+    if (!otherWrongSide.ok) {
+      assert.match(otherWrongSide.message ?? "", /It is a task field: use `--set title=\.\.\.` without the `detail\.` prefix\./);
+    }
+
+    const noField = updateTask(handle, { taskId: "T-101", patch: { nope: 1 } as never, actor: "test" });
+    assert.equal(noField.ok, false);
+    if (!noField.ok) {
+      assert.match(noField.message ?? "", /Task fields:/);
+      assert.match(noField.message ?? "", /Detail fields/);
+      assert.match(noField.message ?? "", /waitReason/);
+      assert.match(noField.message ?? "", /Git-authored `description:` block/);
+    }
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});

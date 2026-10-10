@@ -7,7 +7,11 @@ import * as path from "path"
 import { DatabaseSync } from "node:sqlite"
 import { importCommit } from "./cutover"
 import { resolveProjectStoreDir } from "./config"
-import { validateCanonicalStore, validateStoreRegime } from "./validate"
+import {
+  validateCanonicalStore, validateStoreRegime,
+  applyValidationGate, buildValidationBaseline, parseValidationBaseline, validationIssueFingerprint,
+  VALIDATION_BASELINE_SCHEMA_VERSION, type ValidationGateIssue
+} from "./validate"
 import { createTask, updateTask } from "./tasks"
 import { StoreHandle } from "./store-handle"
 import { cleanupDir, setupGoldenRepo } from "./__test-helpers__"
@@ -251,4 +255,87 @@ test("N3: external-id-format and empty-work-domains warnings port DB-only at war
   } finally {
     fixture.close()
   }
+})
+
+// ---------------------------------------------------------------------------
+// T-127 (R7): pure applyValidationGate / baseline helpers.
+// ---------------------------------------------------------------------------
+
+function issue(partial: Partial<ValidationGateIssue> & Pick<ValidationGateIssue, "code" | "message">): ValidationGateIssue {
+  return { severity: "error", taskId: undefined, ...partial }
+}
+
+test("validationIssueFingerprint distinguishes same code+taskId with a different message, and is stable otherwise", () => {
+  const a = issue({ code: "invalid-domain", taskId: "T-1", message: "Unknown domain key: FOO" })
+  const b = issue({ code: "invalid-domain", taskId: "T-1", message: "Unknown domain key: BAR" })
+  const aAgain = issue({ code: "invalid-domain", taskId: "T-1", message: "Unknown domain key: FOO" })
+  assert.notEqual(validationIssueFingerprint(a), validationIssueFingerprint(b))
+  assert.equal(validationIssueFingerprint(a), validationIssueFingerprint(aAgain))
+})
+
+test("applyValidationGate --task keeps only matching-task issues, counts others as filteredOutByTask, and excludes board-scoped issues without failing", () => {
+  const issues: ValidationGateIssue[] = [
+    issue({ code: "invalid-domain", taskId: "T-1", message: "m1" }),
+    issue({ code: "invalid-domain", taskId: "T-2", message: "m2" }),
+    issue({ code: "dependency-cycle", message: "board cycle" }), // no taskId
+    issue({ code: "empty-work-domains", severity: "warning", message: "no domains" }) // no taskId
+  ]
+  const gated = applyValidationGate(issues, { tasks: ["T-1"] })
+  assert.deepEqual(gated.issues.map(i => i.code), ["invalid-domain"])
+  assert.equal(gated.errors, 1)
+  assert.equal(gated.filteredOutByTask, 1)
+  assert.equal(gated.boardScopedExcluded, 2)
+  assert.deepEqual(gated.taskFilter, ["T-1"])
+  assert.equal(gated.baselined, 0)
+})
+
+test("buildValidationBaseline is deterministic under input reordering and deduplicates identical issues", () => {
+  const i1 = issue({ code: "invalid-domain", taskId: "T-1", message: "m1" })
+  const i2 = issue({ code: "invalid-domain", taskId: "T-2", message: "m2" })
+  const dup = issue({ code: "invalid-domain", taskId: "T-1", message: "m1" })
+  const forward = buildValidationBaseline([i1, i2])
+  const backward = buildValidationBaseline([i2, i1])
+  const withDup = buildValidationBaseline([i1, dup, i2])
+  assert.deepEqual(forward, backward)
+  assert.equal(withDup.issues.length, 2, "duplicate issue collapses to one baseline entry")
+  assert.equal(forward.schemaVersion, VALIDATION_BASELINE_SCHEMA_VERSION)
+})
+
+test("applyValidationGate --baseline accepts recorded issues (baselined), fails a new one, and reports a non-matching entry as stale", () => {
+  const existing = issue({ code: "invalid-domain", taskId: "T-1", message: "m1" })
+  const baseline = buildValidationBaseline([existing])
+  const newIssue = issue({ code: "invalid-domain", taskId: "T-2", message: "a new problem" })
+  const gated = applyValidationGate([existing, newIssue], { baseline })
+  assert.equal(gated.baselined, 1)
+  assert.deepEqual(gated.issues.map(i => i.message), ["a new problem"], "only the unrecorded issue fails the gate")
+  assert.equal(gated.errors, 1)
+  assert.equal(gated.staleBaseline.length, 0)
+
+  const staleRun = applyValidationGate([newIssue], { baseline })
+  assert.equal(staleRun.staleBaseline.length, 1, "the baselined entry absent from this run is reported as stale")
+  assert.equal(staleRun.staleBaseline[0].fingerprint, baseline.issues[0].fingerprint)
+  assert.equal(staleRun.errors, 1, "stale baseline entries never fail the gate")
+})
+
+test("applyValidationGate intersects --task before --baseline, so staleBaseline is reported against the narrowed scope", () => {
+  const t1 = issue({ code: "invalid-domain", taskId: "T-1", message: "m1" })
+  const t2 = issue({ code: "invalid-domain", taskId: "T-2", message: "m2" })
+  const baseline = buildValidationBaseline([t1, t2])
+  // Only T-1 is in scope; T-2's baseline entry is unreachable and reported stale.
+  const gated = applyValidationGate([t1], { tasks: ["T-1"], baseline })
+  assert.equal(gated.baselined, 1)
+  assert.equal(gated.issues.length, 0)
+  assert.equal(gated.staleBaseline.length, 1)
+  assert.equal(gated.staleBaseline[0].taskId, "T-2")
+})
+
+test("parseValidationBaseline round-trips buildValidationBaseline's JSON and rejects malformed input", () => {
+  const baseline = buildValidationBaseline([issue({ code: "invalid-domain", taskId: "T-1", message: "m1" })])
+  const serialized = JSON.stringify(baseline)
+  assert.deepEqual(parseValidationBaseline(serialized), baseline)
+
+  assert.throws(() => parseValidationBaseline("not json"), /not valid JSON/)
+  assert.throws(() => parseValidationBaseline(JSON.stringify({ schemaVersion: 999, issues: [] })), /Unsupported baseline schemaVersion/)
+  assert.throws(() => parseValidationBaseline(JSON.stringify({ schemaVersion: VALIDATION_BASELINE_SCHEMA_VERSION })), /missing the `issues` array/)
+  assert.throws(() => parseValidationBaseline(JSON.stringify({ schemaVersion: VALIDATION_BASELINE_SCHEMA_VERSION, issues: [{ code: "x" }] })), /no fingerprint/)
 })
