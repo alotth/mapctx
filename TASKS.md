@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 8/11
+  - subIssueProgress: 9/11
   - priority: high
   - workload: null
   - tags: []
@@ -2782,7 +2782,7 @@
 ### [T-131] Redação de receipt.failure, changedFiles e payloads de run event
 
   - id: T-131
-  - status: review
+  - status: done
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -2793,7 +2793,7 @@
   - dependsOn: [T-126]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-10
   - externalId: null
   - updated: 2026-10-10
   - detail: ./tasks/T-131.md
