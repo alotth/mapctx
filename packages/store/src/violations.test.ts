@@ -331,7 +331,10 @@ test("MÉDIA-1: redacting violation.path warns about its source receipts and sur
     assert.ok(dry.ok);
     assert.ok(dry.mode === "dry-run");
     assert.ok(dry.advisories.some(a => /DERIVED from 2 receipt\(s\) that still hold it/.test(a) && /--field receipt\.changedFiles/.test(a)), JSON.stringify(dry.advisories));
-    assert.ok(dry.advisories.some(a => /will NOT re-create this violation/.test(a)), JSON.stringify(dry.advisories));
+    // Review ALTO-4: the unconditional "will NOT re-create" promise was only
+    // true for an identical detectedAt; the wording now names what the
+    // lookup actually guarantees, including the fresh-timestamp default.
+    assert.ok(dry.advisories.some(a => /will not re-create this violation/.test(a) && /fresh timestamp/.test(a)), JSON.stringify(dry.advisories));
     assert.ok(!JSON.stringify(dry).includes("acme-bank"));
 
     redactField(handle, vtarget, "violation.path");
@@ -370,4 +373,194 @@ test("MÉDIA-3: no exported function name is shared between @mapctx/store and @m
   const shared = storeNames.filter(name => plannerNames.includes(name) && typeof storeIndex[name] === "function");
   const mismatched = shared.filter(name => storeIndex[name] !== plannerIndex[name]);
   assert.deepEqual(mismatched, [], `these function names are exported by both packages with different identities: ${JSON.stringify(mismatched)}`);
+});
+
+// ---- T-131 attempt 4, review ALTO-4 (self-found): switching semanticExists
+// to the violation id in attempt 3 fixed MÉDIA-1 but broke idempotence,
+// because makeViolation hashes `detectedAt` into the id and `detectedAt`
+// defaults to `new Date()`. semanticExists now recognises an already-recorded
+// violation under three identities: the id, the semantic tuple
+// (waveId/kind/taskAId/taskBId/path), and the id recomputed against the
+// STORED row's own detectedAt -- the third clause is what covers the
+// COMBINED case (redacted AND re-detected with a fresh timestamp) that the
+// first two miss individually. ----
+
+function violationIdForTest(fields: { waveId: string; kind: string; taskAId: string; taskBId: string; path: string; detectedAt: string; source: string }): string {
+  // Reproduces violationIdFor's exact key order and seed format, independent
+  // of the source, so a future key reorder (which would orphan every row
+  // already recorded) is caught by comparison rather than by sharing code.
+  const ordered = {
+    waveId: fields.waveId, kind: fields.kind, taskAId: fields.taskAId, taskBId: fields.taskBId,
+    path: fields.path, detectedAt: fields.detectedAt, source: fields.source
+  };
+  const { createHash } = require("node:crypto") as typeof import("node:crypto");
+  const hex = createHash("sha256").update(`mapctx:claim-violation:${JSON.stringify(ordered)}`).digest("hex").slice(0, 32).split("");
+  hex[12] = "5";
+  hex[16] = ((Number.parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
+  return [hex.slice(0, 8).join(""), hex.slice(8, 12).join(""), hex.slice(12, 16).join(""), hex.slice(16, 20).join(""), hex.slice(20).join("")].join("-");
+}
+
+function violationTarget(handle: StoreHandle): RedactionTarget {
+  const row = handle.db.prepare("SELECT node_id, sequence FROM event_log WHERE event_type = 'claim-violation.detected'").get() as { node_id: string; sequence: number };
+  return { nodeId: row.node_id, sequence: row.sequence };
+}
+
+// (f) id stability: the formula must match byte for byte, or a future key
+// reorder in violationIdFor silently orphans every row already recorded.
+test("(f) violation id derivation matches the documented key order byte for byte", () => {
+  const dir = mkTmpDir("mapctx-store-violations-alto4-idstable-");
+  try {
+    const SECRET = "src/acme-bank-prod/shift-998877.ts";
+    const handle = StoreHandle.open(dir);
+    seed(handle, "T-001"); seed(handle, "T-002");
+    dispatchAndReceipt(handle, "T-001", uuid("1"), [SECRET]);
+    dispatchAndReceipt(handle, "T-002", uuid("2"), [SECRET]);
+    const detectedAt = "2026-10-10T07:02:00.000Z";
+    const emitted = recordClaimViolations(handle, { ...wavePlan(), detectedAt });
+    assert.equal(emitted.length, 1);
+    const expected = violationIdForTest({ waveId: uuid("3"), kind: "collision", taskAId: "T-001", taskBId: "T-002", path: SECRET, detectedAt, source: "derived-from-receipts" });
+    assert.equal(emitted[0].id, expected, `emitted ${emitted[0].id} vs recomputed ${expected}`);
+    handle.close();
+  } finally { cleanupDir(dir); }
+});
+
+// (a) ALTO-4 repro 1: idempotence on the DEFAULT path, where detectedAt is
+// left out and therefore differs between runs -- this is the case the
+// original id-only fix broke.
+test("(a) recordClaimViolations is idempotent across two calls with no detectedAt (default = fresh timestamp each time)", () => {
+  const dir = mkTmpDir("mapctx-store-violations-alto4-idempotent-");
+  try {
+    const SECRET = "src/acme-bank-prod/shift-998877.ts";
+    const handle = StoreHandle.open(dir);
+    seed(handle, "T-001"); seed(handle, "T-002");
+    dispatchAndReceipt(handle, "T-001", uuid("1"), [SECRET]);
+    dispatchAndReceipt(handle, "T-002", uuid("2"), [SECRET]);
+    const { detectedAt, ...planWithoutDetectedAt } = wavePlan();
+    void detectedAt;
+    const run1 = recordClaimViolations(handle, planWithoutDetectedAt);
+    const run2 = recordClaimViolations(handle, planWithoutDetectedAt);
+    assert.equal(run1.length, 1);
+    assert.equal(run2.length, 0, "a second call with a fresh default timestamp must not duplicate the first");
+    assert.equal(handle.db.prepare("SELECT COUNT(*) c FROM event_log WHERE event_type = 'claim-violation.detected'").get()!.c, 1);
+    assert.equal(listClaimViolations(handle.db).length, 1);
+    handle.close();
+  } finally { cleanupDir(dir); }
+});
+
+// (b) + (c) ALTO-4 repro 2: MÉDIA-1 under same / different / default
+// (fresh, i.e. the COMBINED redacted-plus-fresh-timestamp case) detectedAt.
+for (const [label, first, second] of [
+  ["same detectedAt", "2026-10-10T07:02:00.000Z", "2026-10-10T07:02:00.000Z"],
+  ["different detectedAt", "2026-10-10T07:02:00.000Z", "2026-10-10T09:30:00.000Z"],
+  ["(c) the COMBINED case: redacted AND re-detected with a fresh default timestamp", "2026-10-10T07:02:00.000Z", undefined]
+] as const) {
+  test(`(b) MÉDIA-1 holds with ${label}`, () => {
+    const dir = mkTmpDir(`mapctx-store-violations-alto4-media1-${label.replace(/[^a-z0-9]+/gi, "-")}-`);
+    try {
+      const SECRET = "src/acme-bank-prod/shift-998877.ts";
+      const handle = StoreHandle.open(dir);
+      seed(handle, "T-001"); seed(handle, "T-002");
+      dispatchAndReceipt(handle, "T-001", uuid("1"), [SECRET]);
+      dispatchAndReceipt(handle, "T-002", uuid("2"), [SECRET]);
+      recordClaimViolations(handle, { ...wavePlan(), detectedAt: first });
+      redactField(handle, violationTarget(handle), "violation.path");
+      const before = bytesContaining(dir, "acme-bank").length;
+      const secondPlan = second === undefined
+        ? (() => { const { detectedAt, ...rest } = wavePlan(); void detectedAt; return rest; })()
+        : { ...wavePlan(), detectedAt: second };
+      const redetected = recordClaimViolations(handle, secondPlan);
+      const rows = listClaimViolations(handle.db).map(v => v.path);
+      assert.deepEqual(redetected, [], `re-detection must emit nothing; got ${JSON.stringify(redetected.map(v => v.path))}`);
+      assert.equal(rows.length, 1, JSON.stringify(rows));
+      assert.equal(rows[0], REDACTED_SENTINEL);
+      assert.equal(bytesContaining(dir, "acme-bank").length, before, "plaintext must not come back");
+      handle.close();
+    } finally { cleanupDir(dir); }
+  });
+}
+
+// (e) non-suppression, block C: a DIFFERENT path between the same pair must
+// still be recorded even after the OTHER violation on that pair is redacted
+// -- the sentinel-path row and the innocent-path row must coexist, with no
+// duplicate, and no row anywhere carries the secret back.
+test("(e-1) a different path between the same pair coexists with a redacted sibling, no duplicate, no secret resurfacing", () => {
+  const dir = mkTmpDir("mapctx-store-violations-alto4-coexist-");
+  try {
+    const SECRET = "src/acme-bank-prod/shift-998877.ts";
+    const handle = StoreHandle.open(dir);
+    seed(handle, "T-001"); seed(handle, "T-002");
+    dispatchAndReceipt(handle, "T-001", uuid("1"), [SECRET, "src/other.ts"]);
+    dispatchAndReceipt(handle, "T-002", uuid("2"), [SECRET, "src/other.ts"]);
+    recordClaimViolations(handle, { ...wavePlan(), detectedAt: "2026-10-10T07:02:00.000Z" });
+    assert.equal(listClaimViolations(handle.db).length, 2);
+
+    const rows = handle.db.prepare("SELECT node_id, sequence, payload_json FROM event_log WHERE event_type = 'claim-violation.detected'")
+      .all() as Array<{ node_id: string; sequence: number; payload_json: string }>;
+    const secretRow = rows.find(row => (JSON.parse(row.payload_json) as { violation: { path: string } }).violation.path === SECRET);
+    assert.ok(secretRow);
+    redactField(handle, { nodeId: secretRow!.node_id, sequence: secretRow!.sequence }, "violation.path");
+
+    const after = recordClaimViolations(handle, { ...wavePlan(), detectedAt: "2026-10-10T08:00:00.000Z" });
+    assert.deepEqual(after, [], "the innocent violation is already recorded; a fresh run must add nothing");
+    const paths = listClaimViolations(handle.db).map(v => v.path).sort();
+    assert.equal(paths.length, 2, JSON.stringify(paths));
+    assert.ok(paths.includes("src/other.ts"));
+    assert.ok(paths.includes(REDACTED_SENTINEL));
+    assert.ok(listClaimViolations(handle.db).every(v => v.path !== SECRET), "no violation row must carry the secret back");
+    handle.close();
+  } finally { cleanupDir(dir); }
+});
+
+// (e) non-suppression, block D: a genuinely NEW collision between the same
+// pair of tasks (a later wave, a different shared file) must still be
+// recorded. If semanticExists over-matched on the pair alone, this would be
+// incorrectly suppressed -- that is exactly the false negative the fix must
+// not introduce.
+test("(e-2) a genuinely new collision between the same pair of tasks is still recorded, not suppressed", () => {
+  const dir = mkTmpDir("mapctx-store-violations-alto4-newcollision-");
+  try {
+    const SECRET = "src/acme-bank-prod/shift-998877.ts";
+    const handle = StoreHandle.open(dir);
+    seed(handle, "T-001"); seed(handle, "T-002");
+    dispatchAndReceipt(handle, "T-001", uuid("1"), [SECRET]);
+    dispatchAndReceipt(handle, "T-002", uuid("2"), [SECRET]);
+    recordClaimViolations(handle, { ...wavePlan(), detectedAt: "2026-10-10T07:02:00.000Z" });
+    redactField(handle, violationTarget(handle), "violation.path");
+
+    dispatchAndReceipt(handle, "T-001", uuid("4"), ["src/brand-new.ts"]);
+    dispatchAndReceipt(handle, "T-002", uuid("5"), ["src/brand-new.ts"]);
+    const fresh = recordClaimViolations(handle, {
+      waves: [{ waveId: uuid("3"), dispatches: [
+        { waveId: uuid("3"), dispatchId: uuid("4"), attempt: 1, taskId: "T-001" },
+        { waveId: uuid("3"), dispatchId: uuid("5"), attempt: 1, taskId: "T-002" }
+      ] }], claims: [], detectedAt: "2026-10-10T10:00:00.000Z"
+    });
+    assert.equal(fresh.length, 1, JSON.stringify(fresh.map(v => v.path)));
+    assert.equal(fresh[0].path, "src/brand-new.ts");
+    handle.close();
+  } finally { cleanupDir(dir); }
+});
+
+// (d) the reverse advisory must state only what the lookup actually
+// guarantees -- not the unconditional (and wrong) ALTO-3-style promise.
+test("(d) the reverse advisory names all three identities and the fresh-timestamp case, drops the old unconditional promise", () => {
+  const dir = mkTmpDir("mapctx-store-violations-alto4-advisory-");
+  try {
+    const SECRET = "src/acme-bank-prod/shift-998877.ts";
+    const handle = StoreHandle.open(dir);
+    seed(handle, "T-001"); seed(handle, "T-002");
+    dispatchAndReceipt(handle, "T-001", uuid("1"), [SECRET]);
+    dispatchAndReceipt(handle, "T-002", uuid("2"), [SECRET]);
+    recordClaimViolations(handle, { ...wavePlan(), detectedAt: "2026-10-10T07:02:00.000Z" });
+    const dry = redactEvidence(handle, { target: violationTarget(handle), fieldPath: "violation.path", reason: "LGPD", actor: "dpo", commit: false });
+    assert.ok(dry.ok);
+    assert.ok(dry.mode === "dry-run");
+    const promise = dry.advisories.find(a => /later detection run/.test(a));
+    assert.ok(promise, JSON.stringify(dry.advisories));
+    assert.ok(!/unchanged by redaction, so the redacted row keeps satisfying it/.test(promise!), promise);
+    assert.match(promise!, /recomputed against this row's own detectedAt/);
+    assert.match(promise!, /fresh timestamp/);
+    assert.ok(!JSON.stringify(dry).includes("acme-bank"));
+    handle.close();
+  } finally { cleanupDir(dir); }
 });
