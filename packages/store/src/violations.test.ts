@@ -170,3 +170,71 @@ test("ALTO-2b: a real collision lost to whole-root redaction is reported as inco
     element.close();
   } finally { cleanupDir(elementDir); }
 });
+
+// ---- T-131 attempt 3 (self-found, 1ddfb7b): the `serializedPairs` route
+// INVERTS the ALTO-2a class. An "overbroad" violation asserts the two tasks
+// did NOT actually conflict (serializing them was unnecessary); that claim
+// rests on actually seeing both receipts' files, so it cannot be established
+// from a redacted receipt. Before `pathsOverlap` made the sentinel
+// incomparable, a redacted pair's shared sentinel accidentally "intersected"
+// and suppressed the overbroad violation; making it incomparable turned that
+// accident into a fabrication -- two tasks that genuinely collided got a
+// permanent journaled claim that they did not, carrying the REAL path (not
+// even sentinel-filtered, since it comes from the plan's declared paths). ----
+
+test("serializedPairs: a real collision redacted on one side must not fabricate an 'overbroad' (did-not-conflict) violation", () => {
+  const SHARED_PATH = "src/acme-prod/secret.ts";
+  const plan = (waveId: string, a: string, b: string) => ({
+    waves: [{ waveId, dispatches: [
+      { waveId, dispatchId: a, attempt: 1, taskId: "T-001" },
+      { waveId, dispatchId: b, attempt: 1, taskId: "T-002" }
+    ] }],
+    claims: [],
+    serializedPairs: [{ taskAId: "T-001", taskBId: "T-002", paths: [SHARED_PATH] }],
+    detectedAt: "2026-08-17T10:02:00.000Z"
+  });
+
+  // Control: no redaction, the two tasks really did collide on SHARED_PATH.
+  // The wave-collision loop correctly reports the real collision; the
+  // serializedPairs route correctly suppresses the "overbroad" claim because
+  // actualIntersection sees the real overlap.
+  const controlDir = mkTmpDir("mapctx-store-violations-overbroad-control-");
+  try {
+    const control = StoreHandle.open(controlDir);
+    seed(control, "T-001"); seed(control, "T-002");
+    dispatchAndReceipt(control, "T-001", uuid("1"), [SHARED_PATH]);
+    dispatchAndReceipt(control, "T-002", uuid("2"), [SHARED_PATH]);
+    const result = detectClaimViolations(control, plan(uuid("3"), uuid("1"), uuid("2")));
+    assert.equal(result.violations.length, 1, JSON.stringify(result.violations));
+    assert.equal(result.violations[0].kind, "collision");
+    assert.equal(result.violations[0].path, SHARED_PATH);
+    assert.ok(!result.violations.some(v => v.kind === "overbroad"), "the real collision correctly suppresses the overbroad claim");
+    assert.deepEqual(result.incompleteDetection, []);
+    control.close();
+  } finally { cleanupDir(controlDir); }
+
+  // Treatment: redact T-001's receipt.changedFiles BEFORE detection runs.
+  // Non-intersection can no longer be established, so the pair must be
+  // skipped -- never emitted as "overbroad" -- and the blindness must be
+  // declared via incompleteDetection instead.
+  const treatedDir = mkTmpDir("mapctx-store-violations-overbroad-treated-");
+  try {
+    const treated = StoreHandle.open(treatedDir);
+    seed(treated, "T-001"); seed(treated, "T-002");
+    dispatchAndReceipt(treated, "T-001", uuid("1"), [SHARED_PATH]);
+    dispatchAndReceipt(treated, "T-002", uuid("2"), [SHARED_PATH]);
+    redactField(treated, receiptTarget(treated, uuid("1")), "receipt.changedFiles");
+    const result = detectClaimViolations(treated, plan(uuid("3"), uuid("1"), uuid("2")));
+    assert.deepEqual(result.violations.filter(v => v.kind === "overbroad"), [],
+      "redacting one side must never produce a permanent claim that two colliding tasks did not conflict");
+    assert.equal(
+      treated.db.prepare("SELECT COUNT(*) c FROM event_log WHERE event_type = 'claim-violation.detected'").get()!.c, 0,
+      "nothing fabricated must reach the journal"
+    );
+    assert.equal(result.incompleteDetection.length, 1, JSON.stringify(result.incompleteDetection));
+    assert.equal(result.incompleteDetection[0].taskId, "T-001");
+    assert.equal(result.incompleteDetection[0].redactedPaths, 1);
+    assert.equal(result.incompleteDetection[0].totalPaths, 1);
+    treated.close();
+  } finally { cleanupDir(treatedDir); }
+});
