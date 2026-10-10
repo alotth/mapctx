@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 7/10
+  - subIssueProgress: 8/10
   - priority: high
   - workload: null
   - tags: []
@@ -2725,7 +2725,7 @@
 ### [T-128] R1 paliativo: task finish --no-snapshot e gate unico de done
 
   - id: T-128
-  - status: backlog
+  - status: done
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -2736,9 +2736,9 @@
   - dependsOn: [T-127]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-10
   - externalId: null
-  - updated: 2026-10-09
+  - updated: 2026-10-10
   - detail: ./tasks/T-128.md
 
 ### [T-129] R3 paliativo: acceptance no create, approve em lote, revise --expect-title, import --task
@@ -2782,7 +2782,7 @@
 ### [T-131] Redação de receipt.failure, changedFiles e payloads de run event
 
   - id: T-131
-  - status: backlog
+  - status: review
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -2795,7 +2795,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-09
+  - updated: 2026-10-10
   - detail: ./tasks/T-131.md
 
 ### [T-132] Planner: globs com chaves/extglob/negação e normalização de paths
