@@ -118,8 +118,11 @@ stderr — it does not mean the command produced nothing.
 ### Flags need their values (T-127)
 
 A flag written without its value is refused instead of consuming the next argument. `--actor --json`
-used to journal an event attributed to the actor `"--json"` in an append-only log; it now fails. A
-value that starts with a single dash (`--summary "- item"`) still works.
+used to journal an event attributed to the actor `"--json"` in an append-only log; it now fails.
+
+The test is pertinence, not shape: only a token that IS one of this CLI's flags counts as a missing
+value. So `--summary "- item"`, `--title "--foo is a flag"` and `--because "--x"` all pass. To pass a
+value that genuinely IS a flag name, use `--flag=value` (`--query=--json`).
 
 ### List-valued fields (T-127)
 
@@ -137,7 +140,9 @@ overlap from the planner. `=null` clears a list.
 
 A value is only read as an array when it both opens and closes with a bracket, so a path that merely
 contains or ends with one (`app/[locale]`, `pages/[slug]`) stores normally in the bare spelling. A
-single value that itself looks like an array needs the JSON spelling: `--set 'tags=["[a,b]"]'`.
+single value that itself looks like an array needs the JSON spelling: `--set 'tags=["[locale]"]'`.
+(`["[a,b]"]` is NOT a way out of `[a,b]`: that element contains a comma, which the next rule refuses.
+If you meant two items, write them bare: `a,b`.)
 
 Two things no element may contain, in either spelling, because the generated snapshots join lists
 with `,` and split on it — the resulting drift does not converge:
@@ -146,12 +151,18 @@ with `,` and split on it — the resulting drift does not converge:
   the paths separately;
 - a `{...}` **group split across a comma** (`src/{a,b}.ts` in the bare spelling) — same remedy.
 
-`externalLinks` is patchable the same way; each entry must be `https://host/...` (http is accepted
-too) or `provider:entity:id`. `javascript:`, `data:`, `file:`, `vbscript:` and `blob:` are refused —
-these values become versioned content and external refs.
+`externalLinks` is patchable the same way; each entry must be `https://host/...` (http accepted too,
+**without** `user:password`) or any `scheme:word:rest` triple, matched case-insensitively. That second
+form is a SHAPE, not a list of known providers — an unknown provider is recorded as `other`, so a
+mistyped scheme passes. `javascript:`, `data:`, `file:`, `vbscript:` and `blob:` are refused, and each
+link is capped at 2048 characters: these values become versioned content and external refs.
+
+For a URL whose query legitimately contains a comma, percent-encode it (`?b=1%2C2`) — a glob is the
+remedy for a path, not for a URL.
 
 Run `mapctx --help` for the full enum table (workload, priority, type, status, specMode, waitReason,
-effort format) read straight off the protocol schemas.
+effort format), with the rows read straight off the protocol schemas marked `*` and the unmarked ones
+maintained by hand.
 
 ### Gating a run with `validate` (T-127)
 

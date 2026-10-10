@@ -278,7 +278,21 @@ function unknownFieldMessage(field: string, side: "task" | "detail"): string {
  * The `provider:entity:id` form the importer already derives external refs
  * from (import.ts externalRefFromId). The id tail may itself contain colons.
  */
-const PROVIDER_REF_RE = /^[a-z][a-z0-9-]*:[A-Za-z0-9_-]+:.+$/;
+/**
+ * Review B6: matched case-insensitively, like the http(s) scheme already was.
+ * `HTTPS://x/a` was accepted while `GitHub:issue:42` was refused, and nothing
+ * documented the asymmetry.
+ *
+ * Review B7: this is deliberately a SHAPE, not a closed provider list --
+ * `scheme:word:rest` -- which matches what the importer does with an unknown
+ * provider (`externalRefFromId` maps it to "other"). The help and the skill
+ * say so explicitly now, so a mistyped scheme is a documented pass-through
+ * rather than a silent surprise.
+ */
+const PROVIDER_REF_RE = /^[a-z][a-z0-9-]*:[A-Za-z0-9_-]+:.+$/i;
+
+/** Review B7: links are versioned content; 5 KB of URL was storable. */
+const MAX_EXTERNAL_LINK_LENGTH = 2048;
 
 /**
  * Schemes that must never be stored, even spelled as a three-part ref
@@ -309,6 +323,9 @@ function invalidExternalLink(value: unknown): string | null {
   // guards programmatic callers of updateTask.
   if (trimmed !== value) return `externalLinks entry has surrounding whitespace: ${JSON.stringify(value)}`;
   if (/\s/.test(trimmed)) return `externalLinks entry contains whitespace: ${JSON.stringify(value)}`;
+  if (trimmed.length > MAX_EXTERNAL_LINK_LENGTH) {
+    return `externalLinks entry is ${trimmed.length} characters; the limit is ${MAX_EXTERNAL_LINK_LENGTH}. These links are versioned content, not a place for a payload.`;
+  }
   const scheme = /^([A-Za-z][A-Za-z0-9+.\-]*):/.exec(trimmed)?.[1];
   if (!scheme) return `externalLinks entry needs an explicit URI scheme (${shape}): ${JSON.stringify(value)}`;
   if (FORBIDDEN_LINK_SCHEMES.has(scheme.toLowerCase())) {
@@ -322,6 +339,12 @@ function invalidExternalLink(value: unknown): string | null {
       return `externalLinks entry is not a parseable URL: ${JSON.stringify(value)}`;
     }
     if (!url.hostname) return `externalLinks entry has no host: ${JSON.stringify(value)}`;
+    // Review B5: credentials in a link would become versioned content in
+    // TASKS.md and the `uri` of an ExternalRefRecord -- in a CLI whose own
+    // help asks you to keep secrets out of the append-only log.
+    if (url.username || url.password) {
+      return `externalLinks entry carries userinfo credentials: ${JSON.stringify(value.replace(/\/\/[^@/]*@/, "//***@"))}. Strip the user:password and use a token out of band.`;
+    }
     return null;
   }
   if (PROVIDER_REF_RE.test(trimmed) && !trimmed.includes("//")) return null;
@@ -598,7 +621,8 @@ export type CreateTaskResult =
         | "invalid-workload"
         | "invalid-estimated-effort"
         | "invalid-wait-reason"
-        | "state-not-exportable";
+        | "state-not-exportable"
+        | "comma-in-list-element";
       message?: string;
       taskId?: string;
     };
@@ -631,6 +655,16 @@ export function createTask(store: StoreHandle, options: CreateTaskOptions): Crea
   }
 
   const requested = options.detail ?? {};
+  // Review B2: `createTask` is a caller too, and the invariant was stated as
+  // absolute while only `updateTask` enforced it -- the reviewer reproduced
+  // the non-convergent drift through `createTask({tags:['a,b']})`. The CLI
+  // cannot reach it (parseListInput refuses both spellings on `task create`),
+  // but @mapctx/store is a published package and createTask is exported.
+  const createCommaProblem =
+    commaInListElement(SNAPSHOT_LIST_TASK_FIELDS, { tags: options.tags, domains: options.domains, assignees: undefined, externalLinks: undefined })
+    ?? commaInListElement(SNAPSHOT_LIST_DETAIL_FIELDS, requested as unknown as Record<string, unknown>)
+    ?? commaInListElement(["dependsOn", "blocking"], { dependsOn: options.dependsOn, blocking: options.blocking });
+  if (createCommaProblem) return { ok: false, reason: "comma-in-list-element", message: createCommaProblem };
   const normalizedWorkload = options.workload?.trim() ?? "";
   if (normalizedWorkload && !workloadSchema.safeParse(normalizedWorkload).success) {
     return {

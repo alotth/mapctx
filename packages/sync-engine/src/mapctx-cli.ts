@@ -250,7 +250,51 @@ function printEnumHelp(): void {
   console.log('  Gate REPORTS are the exception and still print to stdout even when they exit');
   console.log('  non-zero, because the document is what you asked for: `mapctx validate`,');
   console.log('  `mapctx import --dry-run`, `mapctx store repair`.');
+  console.log('');
+  console.log('Flag values:');
+  console.log('  A flag written without its value is refused instead of swallowing the next');
+  console.log('  argument. Only a token that is itself one of this CLI\'s flags counts as');
+  console.log('  missing, so `--title "--foo is a flag"` and `--summary "- item"` pass. To pass');
+  console.log('  a value that IS a flag name, use `--flag=value`, e.g. `--query=--json`.');
 }
+
+/**
+ * Every flag the argument parser recognizes, split by whether it consumes a
+ * value. Review B8: the first version of the missing-value check tested the
+ * SHAPE of the next token (`/^--[A-Za-z]/`), which made a legitimate value
+ * that merely starts with `--` impossible to pass -- and since there was no
+ * `--flag=value` syntax either, there was no escape at all. `--title "--foo
+ * is a flag"` used to work and stopped working.
+ *
+ * The test is pertinence now, not shape: only a token that IS one of these
+ * flags counts as a missing value. `--actor --json` is still caught; `--title
+ * "--foo is a flag"` passes again.
+ *
+ * `mapctx-cli.test.ts` asserts these two sets cover every `a === '--flag'`
+ * literal in `parseArgs`, so adding a flag without listing it here fails the
+ * suite instead of silently weakening the check.
+ */
+export const VALUE_FLAGS: ReadonlySet<string> = new Set([
+  '--account', '--actor', '--amount', '--approve', '--approve-hash', '--baseline', '--because',
+  '--blocking', '--budget', '--claim', '--claude-dir', '--claude-transcript', '--codex-sessions',
+  '--config', '--context-hash', '--criterion-id', '--currency', '--depends-on', '--description',
+  '--description-file', '--dispatch-id', '--domains', '--due', '--effort',
+  '--emit-approval-template', '--end', '--evidence', '--executor', '--expect-revision', '--field',
+  '--file', '--from-file', '--holder', '--id', '--idle-threshold-ms', '--impact', '--index',
+  '--limit', '--minutes', '--node', '--note', '--opencode-db', '--other-session-activity',
+  '--parent', '--parked-threshold-ms', '--plan-name', '--priority', '--query', '--reason',
+  '--reason-file', '--receipt', '--repo', '--review-threshold-ms', '--role', '--seats',
+  '--sequence', '--set', '--start', '--status', '--summary', '--tags', '--target', '--task',
+  '--tasks-file', '--time-zone', '--title', '--token', '--type', '--wait-reason', '--workload',
+  '--write-baseline'
+]);
+
+export const BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
+  '--accept', '--commit', '--discard', '--dry-run', '--help', '--include-inferred', '--json',
+  '--project', '--read', '--remove', '--snapshots', '-h'
+]);
+
+export const KNOWN_FLAGS: ReadonlySet<string> = new Set([...VALUE_FLAGS, ...BOOLEAN_FLAGS]);
 
 function printHelp(): void {
   console.log('mapctx CLI');
@@ -466,23 +510,45 @@ function parseArgs(argv: string[]): {
   let i = 0;
 
   /**
+   * `--flag=value` for value-taking flags (review B8). Rewritten up front into
+   * the flag token plus a side table, so the 70 `valueFor` call sites and the
+   * flag chain below stay exactly as they are. Boolean flags are left alone,
+   * so `--json=true` is not silently reinterpreted, and `--set key=value` is
+   * untouched because the `=` there belongs to the value, not the flag.
+   */
+  const inlineValues = new Map<number, string>();
+  for (let index = 0; index < args.length; index++) {
+    const match = /^(--[A-Za-z][A-Za-z0-9-]*)=([\s\S]*)$/.exec(args[index]);
+    if (match && VALUE_FLAGS.has(match[1])) {
+      args[index] = match[1];
+      inlineValues.set(index, match[2]);
+    }
+  }
+
+  /**
    * Review A5: every value-taking flag used to do a bare `args[++i]`, so a
    * flag written without its value silently swallowed the next one. The
    * measured damage was not cosmetic: `--actor --json` journaled an event
    * attributed to the actor "--json" in an append-only log, `--title --json`
    * created a task called "--json", and `--tags --json` stored that list.
-   * T-127 first fixed this for the three `validate` gate flags; the check
-   * belongs here instead, once, for the whole class.
    *
-   * Only a `--word` token is treated as a missing value. A single dash is
-   * left alone on purpose, so `--summary "- item"`, a negative number and the
-   * bare `--` terminator all still pass through as values.
+   * Review B8: the check tests PERTINENCE, not shape. Only a token that is
+   * actually one of this CLI's flags counts as a missing value, so a value
+   * that merely looks flag-ish -- `--title "--foo is a flag"`, `--summary
+   * "--no-snapshot x"`, `--because "--x"` -- passes, as it did before. A
+   * single dash was never affected: `--summary "- item"` and negative numbers
+   * pass, and so does the bare `--` terminator.
+   *
+   * For the remaining narrow case -- a legitimate value that IS one of these
+   * flags, e.g. `--query "--json"` -- `--flag=value` is accepted below.
    */
   const valueFor = (flag: string): string => {
+    const inlined = inlineValues.get(i);
+    if (inlined !== undefined) return inlined;
     const next = args[++i];
     if (next === undefined) throw new Error(`${flag} is missing its value.`);
-    if (/^--[A-Za-z]/.test(next)) {
-      throw new Error(`${flag} is missing its value (got ${JSON.stringify(next)}, which is another flag).`);
+    if (KNOWN_FLAGS.has(next)) {
+      throw new Error(`${flag} is missing its value (got ${JSON.stringify(next)}, which is another flag). To pass a value that is itself a flag name, write ${flag}=${next}.`);
     }
     return next;
   };
@@ -1029,9 +1095,19 @@ function writeValidateBaseline(filePath: string, issues: ValidationGateIssue[], 
   // Temp + rename (review A12): two concurrent runs writing the same baseline
   // must not leave a truncated file behind, and the repo writes every durable
   // artifact this way.
+  // Review B12: a write that throws part-way (full disk, permissions) used to
+  // leave the temp file behind, so the cleanup is unconditional.
   const tempPath = `${filePath}.${process.pid}.tmp`;
-  fs.writeFileSync(tempPath, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
-  fs.renameSync(tempPath, filePath);
+  let renamed = false;
+  try {
+    fs.writeFileSync(tempPath, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
+    fs.renameSync(tempPath, filePath);
+    renamed = true;
+  } finally {
+    if (!renamed) {
+      try { fs.unlinkSync(tempPath); } catch { /* nothing to clean up */ }
+    }
+  }
   if (json) print({ wroteBaseline: filePath, issues: baseline.issues.length, schemaVersion: baseline.schemaVersion }, true);
   else console.log(`Wrote baseline with ${baseline.issues.length} accepted issue(s): ${filePath}`);
 }
@@ -1613,6 +1689,10 @@ function unbalancedDelimiter(element: string): string | null {
 export function parseListInput(label: string, raw: string): string[] {
   const trimmed = raw.trim();
   if (trimmed === '') return [];
+  // Review B3: for a URL the remedy is percent-encoding, not a glob.
+  const commaHelp = label.includes('externalLinks')
+    ? `${COMMA_IN_ELEMENT_HELP} For a URL, percent-encode the comma as \`%2C\`.`
+    : COMMA_IN_ELEMENT_HELP;
   // BOTH ends, not either (review A1): `endsWith(']')` alone rejected every
   // path that merely ends in a bracket -- `app/[locale]`, `pages/[slug]`,
   // `src/routes/[id]` -- which are the most common `filesAffected` entries in
@@ -1623,24 +1703,40 @@ export function parseListInput(label: string, raw: string): string[] {
     try {
       parsed = JSON.parse(trimmed);
     } catch {
-      throw new Error(`${label} is bracketed like an array but is not valid JSON: ${raw}. To pass a list, ${LIST_SYNTAX_HELP}. A single value that itself contains brackets needs the JSON spelling, e.g. ${JSON.stringify([trimmed])}.`);
+      // Review B1: the JSON hint is only reachable advice when the value has
+      // no comma. For `[a,b]` -- the canonical mistake this task exists to
+      // catch -- `["[a,b]"]` would hit the comma rule next, so suggesting it
+      // sent the reader into a second refusal.
+      const hint = trimmed.includes(',')
+        ? ` If you meant a two-item list, write them bare: \`${trimmed.slice(1, -1)}\`. A single element containing a comma cannot be stored at all: ${commaHelp}`
+        : ` A single value that itself contains brackets needs the JSON spelling, e.g. ${JSON.stringify([trimmed])}.`;
+      throw new Error(`${label} is bracketed like an array but is not valid JSON: ${raw}. To pass a list, ${LIST_SYNTAX_HELP}.${hint}`);
     }
     if (!Array.isArray(parsed) || parsed.some(item => typeof item !== 'string')) {
       throw new Error(`${label} JSON must be an array of strings, got: ${raw}. To pass a list, ${LIST_SYNTAX_HELP}.`);
     }
     return (parsed as string[]).map(item => item.trim()).filter(Boolean).map(item => {
-      if (item.includes(',')) throw new Error(`${label} element ${JSON.stringify(item)} contains a comma: ${COMMA_IN_ELEMENT_HELP}`);
+      if (item.includes(',')) throw new Error(`${label} element ${JSON.stringify(item)} contains a comma: ${commaHelp}`);
       return item;
     });
   }
-  return trimmed.split(',').map(value => {
+  const parts = trimmed.split(',');
+  // Review B4: the unbalanced-delimiter rule exists to catch a `{a,b}` group
+  // cut in half by the comma split. With no comma there was no split, so a
+  // one-element input must not be told that one happened -- `a{b`, `a)b`, `}`
+  // and `]` are legal POSIX names that stored fine before, and the JSON
+  // spelling still takes them.
+  const wasSplit = parts.length > 1;
+  return parts.map(value => {
     const item = value.trim();
     if (item.length >= 2 && (item.startsWith('"') || item.startsWith("'")) && item.endsWith(item[0])) {
       throw new Error(`${label} element ${item} is wrapped in quotes; bare comma lists are not quoted. To pass a list, ${LIST_SYNTAX_HELP}.`);
     }
     const unbalanced = unbalancedDelimiter(item);
     if (unbalanced !== null) {
-      throw new Error(`${label} element ${JSON.stringify(item)} has an unbalanced \`${unbalanced}\`, so a group was split across a comma: ${COMMA_IN_ELEMENT_HELP} A single value that itself contains a comma is not storable at all.`);
+      throw new Error(wasSplit
+        ? `${label} element ${JSON.stringify(item)} has an unbalanced \`${unbalanced}\`, so a group was split across a comma: ${commaHelp}`
+        : `${label} value ${JSON.stringify(item)} has an unbalanced \`${unbalanced}\`. If that is the literal value you want, use the JSON spelling: ${JSON.stringify([item])}.`);
     }
     return item;
   }).filter(Boolean);
@@ -1933,8 +2029,17 @@ export function taskFinishCommand(taskId: string, options: MapctxOptions): void 
   try {
     const result = finishTask(handle, tasksRoot, { taskId, actor: defaultActor(options.actor) });
     if (!result.ok) {
-      const reason = result.stage === 'move' ? result.move.reason : `checkpoint-${result.checkpoint.stage}`;
-      refuse(result, `Finish ${result.stage} failed: ${reason}`);
+      // Review B11: A9's premise -- "the `Error:` sentence already carries the
+      // reason and the message" -- held for move/update/acceptance/export but
+      // not here: this message was only `Finish <stage> failed: <reason>`, so
+      // in human mode (where the payload is no longer printed) the detail that
+      // says WHICH criterion or WHICH stage blocked was lost. It is in the
+      // sentence now, so `--json` is not required to diagnose a failed finish.
+      const detail = result.stage === 'move'
+        ? `${result.move.reason}${result.move.message ? ` -- ${result.move.message}` : ''}`
+        : `checkpoint-${result.checkpoint.stage}${result.checkpoint.error ? ` -- ${result.checkpoint.error}` : ''}`
+          + ` (planning move ${result.move.performed ? `applied ${result.move.from} -> ${result.move.to}` : 'not applied'})`;
+      refuse(result, `Finish ${result.stage} failed: ${detail}`);
     }
     print(result, options.json);
   } finally { handle.close(); }

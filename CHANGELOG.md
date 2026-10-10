@@ -107,7 +107,13 @@ depended on the old channel.
   `detail.*` field groups and redirects a field used on the wrong side
 * **fix:** a flag written without its value is refused instead of swallowing the
   next argument (`--actor --json` used to journal an event attributed to
-  `"--json"` in the append-only log)
+  `"--json"` in the append-only log). The test is pertinence, not shape, so a
+  value that merely looks flag-ish (`--title "--foo is a flag"`) still works
+* **feature:** `--flag=value` is accepted for value-taking flags, which is how
+  you pass a value that is itself a flag name (`--query=--json`)
+* **fix:** `externalLinks` refuses userinfo credentials (`https://user:pass@...`),
+  caps each link at 2048 characters, and matches the `scheme:word:rest` provider
+  form case-insensitively
 * **fix:** a missing `--expect-revision` refusal reports the revision the store
   currently holds
 * **fix:** list elements may not contain a comma, and a `{...}` group split
