@@ -267,9 +267,10 @@ function printHelp(): void {
   console.log('  mapctx export [--reason manual|wave-end|epic-end] [--json]');
   console.log('  mapctx validate [--json] [--snapshots] [--task T-1,T-2] [--baseline <file> | --write-baseline <file>]');
   console.log('    Under store authority, default checks canonical store only. --snapshots explicitly checks local mirrors; failure returns non-zero.');
-  console.log('    --task keeps only the issues attributed to those tasks; board-scoped issues');
-  console.log('    (dependency cycles, missing work domains) carry no task id, so they are counted');
-  console.log('    and reported as excluded rather than silently dropped.');
+  console.log('    --task keeps only the issues attributed to those tasks. Board-scoped issues');
+  console.log('    (dependency cycles, missing work domains) carry no task id, so a task filter');
+  console.log('    cannot own them: they are counted as excluded, and any board-scoped ERROR is');
+  console.log('    additionally warned about on stderr, because --task filters and --baseline gates.');
   console.log('    --baseline <file> accepts the issues recorded in that file: they stop counting,');
   console.log('    so only an issue the board did NOT already have fails the gate. Baseline entries');
   console.log('    that no longer match anything are reported as stale.');
@@ -980,13 +981,26 @@ function writeValidateBaseline(filePath: string, issues: ValidationGateIssue[], 
 }
 
 /** Shared `--task`/`--baseline` reporting lines, identical in both regimes. */
-function printGateSummary(gate: Pick<ValidationGateResult<ValidationGateIssue>, 'taskFilter' | 'filteredOutByTask' | 'boardScopedExcluded' | 'baselined' | 'staleBaseline'>): void {
+function printGateSummary(gate: Pick<ValidationGateResult<ValidationGateIssue>, 'taskFilter' | 'filteredOutByTask' | 'boardScopedExcluded' | 'boardScopedErrors' | 'baselined' | 'staleBaseline'>): void {
   if (gate.taskFilter) {
     console.log(`Task filter: ${gate.taskFilter.join(', ')} (${gate.filteredOutByTask} issue(s) on other tasks, ${gate.boardScopedExcluded} board-scoped issue(s) not shown)`);
   }
   if (gate.baselined > 0) console.log(`Baselined: ${gate.baselined} pre-existing issue(s) accepted`);
   for (const stale of gate.staleBaseline) {
     console.log(`- [stale-baseline] ${stale.code}${stale.taskId ? ` ${stale.taskId}` : ''}: no longer reported; drop it from the baseline.`);
+  }
+}
+
+/**
+ * A task-scoped run can exit 0 while the board carries an error nobody can
+ * attribute to a task. That is the documented division of labour (`--task`
+ * filters, `--baseline` gates), but it must never be quiet. The warning goes
+ * to stderr, so it survives `--json` without touching the stdout document,
+ * and it is emitted in both output modes.
+ */
+function warnBoardScopedErrors(gate: Pick<ValidationGateResult<ValidationGateIssue>, 'boardScopedErrors'>): void {
+  for (const issue of gate.boardScopedErrors) {
+    console.error(`Warning: board-scoped error not covered by --task: [${issue.severity}] ${issue.code}: ${issue.message}`);
   }
 }
 
@@ -1050,19 +1064,21 @@ export function mapctxValidateCliCommand(options: MapctxOptions): void {
                 taskFilter: gated.combined.taskFilter,
                 filteredOutByTask: gated.combined.filteredOutByTask,
                 boardScopedExcluded: gated.combined.boardScopedExcluded,
+                boardScopedErrors: gated.combined.boardScopedErrors,
                 baselined: gated.combined.baselined,
                 staleBaseline: gated.combined.staleBaseline
               }
             }
           : {})
       }, true);
+      if (gated) warnBoardScopedErrors(gated.combined);
     } else {
       console.log(`Store validation: ${store.status}`);
       if (store.status === 'store-authority') {
         console.log(`Canonical: ${store.canonical.errors ? 'FAIL' : 'PASS'} (${store.canonical.errors} errors, ${store.canonical.warnings} warnings)`);
         console.log(`Store semantics: ${store.semantic.errors ? 'FAIL' : 'PASS'} (${store.semantic.errors} errors, ${store.semantic.warnings} warnings)`);
         for (const issue of [...store.canonical.issues, ...store.semantic.issues]) console.log(`- [${issue.severity}] ${issue.code}${issue.taskId ? ` ${issue.taskId}` : ''}: ${issue.message}`);
-        if (gated) printGateSummary(gated.combined);
+        if (gated) { printGateSummary(gated.combined); warnBoardScopedErrors(gated.combined); }
       } else if (store.status === 'maintenance-needed') console.log(`Store needs maintenance: ${store.maintenanceNeeded}`);
       else if (store.status === 'not-materialized') console.log(`Store not materialized at ${store.storeDir}. Run \`mapctx store init\`.`);
       if (options.snapshots) console.log(`Snapshot inspection: ${snapshotFailed ? 'FAIL' : 'PASS'}`);
@@ -1101,15 +1117,16 @@ export function mapctxValidateCliCommand(options: MapctxOptions): void {
         ...report,
         store,
         ...(gateApplied && gate
-          ? { gate: { taskFilter: gate.taskFilter, filteredOutByTask: gate.filteredOutByTask, boardScopedExcluded: gate.boardScopedExcluded, baselined: gate.baselined, staleBaseline: gate.staleBaseline } }
+          ? { gate: { taskFilter: gate.taskFilter, filteredOutByTask: gate.filteredOutByTask, boardScopedExcluded: gate.boardScopedExcluded, boardScopedErrors: gate.boardScopedErrors, baselined: gate.baselined, staleBaseline: gate.staleBaseline } }
           : {})
       }, true);
+      if (gate) warnBoardScopedErrors(gate);
     } else {
       print({ error: 'board-resolution-failed', message: structuralError?.message ?? 'Board resolution failed.', tasksFilePath: options.tasksFileOverride ? path.resolve(cwd, options.tasksFileOverride) : null, store }, true);
     }
   } else if (report) {
     printValidationReport(report, false);
-    if (gate) printGateSummary(gate);
+    if (gate) { printGateSummary(gate); warnBoardScopedErrors(gate); }
   }
   if (structuralError || (report && report.errors > 0)) throw new Error('mapctx validate failed.');
 }

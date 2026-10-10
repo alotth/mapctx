@@ -126,9 +126,17 @@ mapctx validate --write-baseline .mapctx-baseline.json   # record what the board
 mapctx validate --baseline .mapctx-baseline.json --json  # fails only on a NEW issue
 ```
 
-Baselined issues stop counting; entries that match nothing are reported as stale. Board-scoped issues
-(dependency cycles, missing work domains) carry no task id, so `--task` reports them as excluded
-instead of dropping them silently. `--snapshots` findings are never baselined.
+Baselined issues stop counting; entries that match nothing are reported as stale.
+
+`--task` filters, `--baseline` gates. Board-scoped issues (dependency cycles, missing work domains)
+carry no task id, so a task filter cannot own them: they are counted as excluded, and a board-scoped
+**error** is additionally warned about on stderr so a task-scoped run never exits 0 in silence over
+something unattributable. `--snapshots` findings are never baselined. A gate flag written without its
+value is refused rather than swallowing the next argument.
+
+Baseline identity includes the issue **message**, not just code + taskId, so the same code on the same
+task with a different detail is a different issue. The cost is that a reworded validator message
+invalidates the baselines that recorded it — reported as stale, never silently honoured.
 
 ### Difficulty discovered mid-flight
 

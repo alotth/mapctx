@@ -425,6 +425,14 @@ export type ValidationGateResult<TIssue extends ValidationGateIssue> = {
    * reported separately so a task-scoped gate never hides them in silence.
    */
   boardScopedExcluded: number
+  /**
+   * The excluded board-scoped issues that are ERRORS. `--task` is a filter,
+   * and `--baseline` is the gate, so these legitimately stop counting -- but
+   * an exit code of 0 while the board carries an unattributable error is
+   * exactly the kind of quiet pass this feature exists to prevent, so the
+   * caller is told about them explicitly.
+   */
+  boardScopedErrors: ValidationGateIssue[]
   /** Issues present and accepted by the baseline. */
   baselined: number
   /** Baseline entries that match nothing in the current run. */
@@ -449,10 +457,15 @@ export function applyValidationGate<TIssue extends ValidationGateIssue>(
 
   let filteredOutByTask = 0
   let boardScopedExcluded = 0
+  const boardScopedErrors: ValidationGateIssue[] = []
   const inScope: TIssue[] = []
   for (const issue of issues) {
     if (!wanted) { inScope.push(issue); continue }
-    if (issue.taskId === undefined || issue.taskId === null) { boardScopedExcluded += 1; continue }
+    if (issue.taskId === undefined || issue.taskId === null) {
+      boardScopedExcluded += 1
+      if (issue.severity === "error") boardScopedErrors.push(issue)
+      continue
+    }
     if (!wanted.has(issue.taskId)) { filteredOutByTask += 1; continue }
     inScope.push(issue)
   }
@@ -479,6 +492,7 @@ export function applyValidationGate<TIssue extends ValidationGateIssue>(
     taskFilter,
     filteredOutByTask,
     boardScopedExcluded,
+    boardScopedErrors,
     baselined,
     staleBaseline
   }
