@@ -80,7 +80,7 @@ import {
   checkTaskAcceptance,
   type MapctxTomlConfig
 } from '@mapctx/store';
-import { finishTask, publishCheckpoint } from './checkpoint';
+import { CHECKPOINT_REASONS, finishTask, publishCheckpoint, type CheckpointReason } from './checkpoint';
 import { getValidationReport, printValidationReport } from './board-tools';
 import { historyCorrectCommand, historyReconstructCommand, historyScanCommand } from './history-cli';
 import { loadConfigOptionalForBoard } from './config';
@@ -99,7 +99,7 @@ type MapctxOptions = SyncOptions & {
   claimId?: string;
   leaseToken?: string;
   holder?: string;
-  reason?: 'manual' | 'wave-end' | 'epic-end' | 'task-end';
+  reason?: CheckpointReason;
   reconcileMode?: 'accept' | 'discard';
   receiptPath?: string;
   claudeTranscriptPath?: string;
@@ -176,26 +176,32 @@ type MapctxOptions = SyncOptions & {
 };
 
 /**
- * T-127 (R4): the enumerated values, read off the protocol schemas rather than
- * retyped, so the help can never drift from what the validators accept. The
- * reported friction was `--workload Medium` being refused by a help text that
- * never said what the four legal values are.
+ * T-127 (R4): the enumerated values. The reported friction was `--workload
+ * Medium` being refused by a help text that never said what the four legal
+ * values are.
+ *
+ * Rows marked `schema: true` are read off the protocol schema the validators
+ * use, so they cannot drift. The rest have no schema to read and are written
+ * by hand -- review A13 caught exactly that kind of drift here (`--reason`
+ * was missing `task-end`), so the distinction is printed, not assumed.
  */
-const ENUM_HELP: Array<[string, string]> = [
-  ['--workload', workloadSchema.options.join('|')],
-  ['--priority', prioritySchema.options.join('|')],
-  ['--type', taskTypeSchema.options.join('|')],
-  ['--status (board spelling)', 'backlog|ready-for-do|doing|review|done|paused|cancelled|archived'],
-  ['--status (canonical)', planningStateSchema.options.join('|')],
-  ['--set specMode', specModeSchema.options.join('|')],
-  ['--set waitReason / --wait-reason', 'review|decision|parked|blocked-external (or null to clear)'],
-  ['--effort, --set detail.estimatedEffort', 'positive m|h|d|w duration (90m, 6h, 1d, 2w); agent ACTIVE time, 1d=8h, 1w=40h'],
-  ['--set predictedStart', 'null, or JSON {"start":"YYYY-MM-DD","method":"manual|heuristic|model","confidence":"low|medium|high"}'],
-  ['--executor', 'free text naming the runner (traycer, claude, codex, ...)'],
-  ['--reason (export)', 'manual|wave-end|epic-end'],
-  ['list values (--tags, --domains, --depends-on, --blocking, --task, --set of a list field)',
-    'bare `a,b,c` or a JSON array `["a","b"]` -- `[a,b]` is refused, never stored with the brackets'],
-  ['--set externalLinks', 'list of URIs; each needs a scheme (https://... or provider:entity:id)']
+const ENUM_HELP: Array<{ flag: string; values: string; schema?: true }> = [
+  { flag: '--workload', values: workloadSchema.options.join('|'), schema: true },
+  { flag: '--priority', values: prioritySchema.options.join('|'), schema: true },
+  { flag: '--type', values: taskTypeSchema.options.join('|'), schema: true },
+  { flag: '--status (canonical)', values: planningStateSchema.options.join('|'), schema: true },
+  { flag: '--set specMode', values: specModeSchema.options.join('|'), schema: true },
+  { flag: '--status (board spelling)', values: 'backlog|ready-for-do|doing|review|done|paused|cancelled|archived' },
+  { flag: '--set waitReason / --wait-reason', values: 'review|decision|parked|blocked-external (or null to clear)' },
+  { flag: '--effort, --set detail.estimatedEffort', values: 'positive m|h|d|w duration (90m, 6h, 1d, 2w); agent ACTIVE time, 1d=8h, 1w=40h' },
+  { flag: '--set predictedStart', values: 'null, or JSON {"start":"YYYY-MM-DD","method":"manual|heuristic|model","confidence":"low|medium|high"}' },
+  { flag: '--executor', values: 'free text naming the runner (traycer, claude, codex, ...)' },
+  { flag: '--reason (export)', values: CHECKPOINT_REASONS.join('|'), schema: true },
+  {
+    flag: 'list values (--tags, --domains, --depends-on, --blocking, --task, --set of a list field)',
+    values: 'bare `a,b,c` or a JSON array `["a","b"]`. `[a,b]` is refused; a value that itself contains brackets needs the JSON spelling; no element may contain a comma or a split `{...}` group (the snapshots cannot represent it)'
+  },
+  { flag: '--set externalLinks', values: 'list of URIs: https://host/... (http too), or provider:entity:id. javascript/data/file/vbscript/blob are refused' }
 ];
 
 function printEnumHelp(): void {
@@ -204,16 +210,20 @@ function printEnumHelp(): void {
   // Column width comes from the labels that FIT it, so one long label does not
   // push every value 90 columns to the right; the long ones get their own line.
   const COLUMN_LIMIT = 38;
-  const fitting = ENUM_HELP.map(([flag]) => flag.length).filter(length => length <= COLUMN_LIMIT);
+  const fitting = ENUM_HELP.map(entry => entry.flag.length).filter(length => length <= COLUMN_LIMIT);
   const width = fitting.length > 0 ? Math.max(...fitting) : COLUMN_LIMIT;
-  for (const [flag, values] of ENUM_HELP) {
-    if (flag.length > width) {
-      console.log(`  ${flag}`);
+  for (const { flag, values, schema } of ENUM_HELP) {
+    const marked = schema ? `${flag} *` : flag;
+    if (marked.length > width) {
+      console.log(`  ${marked}`);
       console.log(`  ${' '.repeat(width)}  ${values}`);
     } else {
-      console.log(`  ${flag.padEnd(width)}  ${values}`);
+      console.log(`  ${marked.padEnd(width)}  ${values}`);
     }
   }
+  console.log('');
+  console.log('  * read straight off the schema the validators use, so it cannot drift. Unmarked');
+  console.log('    rows have no schema to read and are maintained by hand.');
   console.log('');
   console.log('Prose vs. generated state:');
   console.log('  Under plansAuthority=store, TASKS.md and the structured field blocks of');
@@ -227,6 +237,19 @@ function printEnumHelp(): void {
   console.log('  secrets, tokens and personal data out of titles, summaries, descriptions,');
   console.log('  evidence and receipts. Declare `[privacy] patterns` in mapctx.toml to get warned,');
   console.log('  and see `mapctx redact` for destroying a value that already landed.');
+  console.log('');
+  console.log('Output channels (changed in 0.4.0):');
+  console.log('  stdout carries RESULTS only. A refused command -- task move/update/create/start/');
+  console.log('  claim/renew/release, dispatch create/receipt, acceptance revise/approve/unapprove,');
+  console.log('  acceptance import --commit, redact, export, task finish -- exits non-zero and');
+  console.log('  leaves stdout EMPTY. With --json its structured refusal is the first line of');
+  console.log('  stderr, as one line of compact JSON, followed by the human `Error: ...` line;');
+  console.log('  read stderr\'s first line, or split it on the "\\nError:" boundary. Without --json');
+  console.log('  only the `Error:` line is printed, so a holder\'s lease token is not sprayed');
+  console.log('  across a terminal.');
+  console.log('  Gate REPORTS are the exception and still print to stdout even when they exit');
+  console.log('  non-zero, because the document is what you asked for: `mapctx validate`,');
+  console.log('  `mapctx import --dry-run`, `mapctx store repair`.');
 }
 
 function printHelp(): void {
@@ -406,18 +429,24 @@ function refuse(payload: unknown, message: string): never {
 }
 
 /**
- * Writes the one error document for a failed run, entirely on stderr: the
- * structured refusal payload when there is one (the shape T-126 established
- * for `redact`), otherwise -- under `--json` -- a minimal `{ok:false,error}`
- * envelope so `2>` always captures something parseable. The human `Error:`
- * line always comes last, so a reader scanning the tail still sees the
- * sentence and a parser can split on it.
+ * Writes the one error document for a failed run, entirely on stderr.
+ *
+ * Under `--json`: exactly one line of compact JSON -- the structured refusal
+ * payload when there is one, otherwise a minimal `{ok:false,error}` envelope
+ * so `2>` always captures something parseable -- followed by the human
+ * `Error:` line. A consumer reads the FIRST LINE of stderr; it does not have
+ * to find the `\nError:` boundary (review A10), though that boundary still
+ * works and is documented in `mapctx --help`.
+ *
+ * Without `--json` only the `Error:` sentence is printed. It already carries
+ * the reason and the message, and this keeps T-126's condition: a refusal
+ * payload can embed a holder's `leaseToken` (T-124 C0), so a human-mode run
+ * should not spray it across the terminal.
  */
 export function writeCliError(error: unknown, json: boolean): void {
   const message = error instanceof Error ? error.message : String(error);
   const payload = error instanceof CliRefusal ? error.payload : undefined;
-  if (payload !== undefined) process.stderr.write(`${JSON.stringify(payload, null, 2)}\n`);
-  else if (json) process.stderr.write(`${JSON.stringify({ ok: false, error: message }, null, 2)}\n`);
+  if (json) process.stderr.write(`${JSON.stringify(payload ?? { ok: false, error: message })}\n`);
   console.error(`Error: ${message}`);
 }
 
@@ -433,123 +462,147 @@ function parseArgs(argv: string[]): {
   const options: MapctxOptions = {};
   const positional: string[] = [];
   let help = false;
+  // Declared out here so `valueFor` below can advance the same counter.
+  let i = 0;
 
-  for (let i = 0; i < args.length; i++) {
+  /**
+   * Review A5: every value-taking flag used to do a bare `args[++i]`, so a
+   * flag written without its value silently swallowed the next one. The
+   * measured damage was not cosmetic: `--actor --json` journaled an event
+   * attributed to the actor "--json" in an append-only log, `--title --json`
+   * created a task called "--json", and `--tags --json` stored that list.
+   * T-127 first fixed this for the three `validate` gate flags; the check
+   * belongs here instead, once, for the whole class.
+   *
+   * Only a `--word` token is treated as a missing value. A single dash is
+   * left alone on purpose, so `--summary "- item"`, a negative number and the
+   * bare `--` terminator all still pass through as values.
+   */
+  const valueFor = (flag: string): string => {
+    const next = args[++i];
+    if (next === undefined) throw new Error(`${flag} is missing its value.`);
+    if (/^--[A-Za-z]/.test(next)) {
+      throw new Error(`${flag} is missing its value (got ${JSON.stringify(next)}, which is another flag).`);
+    }
+    return next;
+  };
+
+  for (; i < args.length; i++) {
     const a = args[i];
     if (a === '--help' || a === '-h') help = true;
     else if (a === '--dry-run') options.dryRun = true;
     else if (a === '--commit') options.commit = true;
     else if (a === '--json') options.json = true;
     else if (a === '--snapshots') options.snapshots = true;
-    else if (a === '--from-file') options.fromFile = args[++i];
-    else if (a === '--criterion-id') options.criterionId = args[++i];
+    else if (a === '--from-file') options.fromFile = valueFor(a);
+    else if (a === '--criterion-id') options.criterionId = valueFor(a);
     else if (a === '--index') {
-      const value = Number(args[++i]);
+      const value = Number(valueFor(a));
       if (!Number.isInteger(value) || value < 0) throw new Error('--index must be a non-negative integer');
       options.index = value;
     }
     else if (a === '--expect-revision') {
-      const value = Number(args[++i]);
+      const value = Number(valueFor(a));
       if (!Number.isInteger(value) || value < 0) throw new Error('--expect-revision must be a non-negative integer');
       options.expectRevision = value;
     }
     else if (a === '--accept') options.reconcileMode = 'accept';
     else if (a === '--discard') options.reconcileMode = 'discard';
-    else if (a === '--config') options.configPath = args[++i];
-    else if (a === '--tasks-file') options.tasksFileOverride = args[++i];
-    else if (a === '--actor') options.actor = args[++i];
-    else if (a === '--claim') options.claimId = args[++i];
-    else if (a === '--token') options.leaseToken = args[++i];
-    else if (a === '--holder') options.holder = args[++i];
-    else if (a === '--receipt' || a === '--file') options.receiptPath = args[++i];
-    else if (a === '--claude-transcript') options.claudeTranscriptPath = args[++i];
-    else if (a === '--other-session-activity') options.otherSessionActivityPath = args[++i];
-    else if (a === '--idle-threshold-ms') options.idleThresholdMs = Number(args[++i]);
-    else if (a === '--review-threshold-ms') options.reviewThresholdMs = Number(args[++i]);
-    else if (a === '--parked-threshold-ms') options.parkedThresholdMs = Number(args[++i]);
-    else if (a === '--time-zone') options.timeZone = args[++i];
+    else if (a === '--config') options.configPath = valueFor(a);
+    else if (a === '--tasks-file') options.tasksFileOverride = valueFor(a);
+    else if (a === '--actor') options.actor = valueFor(a);
+    else if (a === '--claim') options.claimId = valueFor(a);
+    else if (a === '--token') options.leaseToken = valueFor(a);
+    else if (a === '--holder') options.holder = valueFor(a);
+    else if (a === '--receipt' || a === '--file') options.receiptPath = valueFor(a);
+    else if (a === '--claude-transcript') options.claudeTranscriptPath = valueFor(a);
+    else if (a === '--other-session-activity') options.otherSessionActivityPath = valueFor(a);
+    else if (a === '--idle-threshold-ms') options.idleThresholdMs = Number(valueFor(a));
+    else if (a === '--review-threshold-ms') options.reviewThresholdMs = Number(valueFor(a));
+    else if (a === '--parked-threshold-ms') options.parkedThresholdMs = Number(valueFor(a));
+    else if (a === '--time-zone') options.timeZone = valueFor(a);
     else if (a === '--read') options.readReceipt = true;
-    else if (a === '--status') options.status = args[++i];
-    else if (a === '--set') (options.setPairs ??= []).push(args[++i]);
-    else if (a === '--depends-on') options.dependsOn = args[++i];
-    else if (a === '--blocking') options.blocking = args[++i];
-    else if (a === '--dispatch-id') options.dispatchId = args[++i];
-    else if (a === '--id') options.id = args[++i];
-    else if (a === '--executor') options.executor = args[++i];
-    else if (a === '--context-hash') options.contextHash = args[++i];
-    else if (a === '--title') options.title = args[++i];
-    else if (a === '--type') options.type = args[++i];
-    else if (a === '--parent') options.parent = args[++i];
-    else if (a === '--priority') options.priority = args[++i];
-    else if (a === '--workload') options.workload = args[++i];
-    else if (a === '--tags') options.tags = args[++i];
-    else if (a === '--domains') options.domains = args[++i];
-    else if (a === '--start') options.start = args[++i];
-    else if (a === '--due') options.due = args[++i];
-    else if (a === '--role') options.role = args[++i];
-    else if (a === '--impact') options.impact = args[++i];
-    else if (a === '--effort') options.effort = args[++i];
-    else if (a === '--summary') options.summary = args[++i];
-    else if (a === '--description') options.description = args[++i];
-    else if (a === '--description-file') options.descriptionFile = args[++i];
-    else if (a === '--currency') options.currency = args[++i];
-    else if (a === '--amount') options.amount = args[++i];
+    else if (a === '--status') options.status = valueFor(a);
+    else if (a === '--set') (options.setPairs ??= []).push(valueFor(a));
+    else if (a === '--depends-on') options.dependsOn = valueFor(a);
+    else if (a === '--blocking') options.blocking = valueFor(a);
+    else if (a === '--dispatch-id') options.dispatchId = valueFor(a);
+    else if (a === '--id') options.id = valueFor(a);
+    else if (a === '--executor') options.executor = valueFor(a);
+    else if (a === '--context-hash') options.contextHash = valueFor(a);
+    else if (a === '--title') options.title = valueFor(a);
+    else if (a === '--type') options.type = valueFor(a);
+    else if (a === '--parent') options.parent = valueFor(a);
+    else if (a === '--priority') options.priority = valueFor(a);
+    else if (a === '--workload') options.workload = valueFor(a);
+    else if (a === '--tags') options.tags = valueFor(a);
+    else if (a === '--domains') options.domains = valueFor(a);
+    else if (a === '--start') options.start = valueFor(a);
+    else if (a === '--due') options.due = valueFor(a);
+    else if (a === '--role') options.role = valueFor(a);
+    else if (a === '--impact') options.impact = valueFor(a);
+    else if (a === '--effort') options.effort = valueFor(a);
+    else if (a === '--summary') options.summary = valueFor(a);
+    else if (a === '--description') options.description = valueFor(a);
+    else if (a === '--description-file') options.descriptionFile = valueFor(a);
+    else if (a === '--currency') options.currency = valueFor(a);
+    else if (a === '--amount') options.amount = valueFor(a);
     else if (a === '--minutes') {
-      const value = Number(args[++i]);
+      const value = Number(valueFor(a));
       if (!Number.isInteger(value) || value < 1) throw new Error('--minutes must be a positive integer');
       options.minutes = value;
     }
-    else if (a === '--note') options.note = args[++i];
-    else if (a === '--query') options.query = args[++i];
-    else if (a === '--codex-sessions') options.codexSessions = args[++i];
-    else if (a === '--opencode-db') options.opencodeDb = args[++i];
-    else if (a === '--claude-dir') options.claudeDir = args[++i];
-    else if (a === '--repo') options.repo = args[++i];
-    else if (a === '--task') options.taskFilter = args[++i];
-    else if (a === '--approve') options.approvePath = args[++i];
-    else if (a === '--approve-hash') options.approveHash = args[++i];
+    else if (a === '--note') options.note = valueFor(a);
+    else if (a === '--query') options.query = valueFor(a);
+    else if (a === '--codex-sessions') options.codexSessions = valueFor(a);
+    else if (a === '--opencode-db') options.opencodeDb = valueFor(a);
+    else if (a === '--claude-dir') options.claudeDir = valueFor(a);
+    else if (a === '--repo') options.repo = valueFor(a);
+    else if (a === '--task') options.taskFilter = valueFor(a);
+    else if (a === '--approve') options.approvePath = valueFor(a);
+    else if (a === '--approve-hash') options.approveHash = valueFor(a);
     else if (a === '--reason') {
-      const value = args[++i];
-      if (value === 'manual' || value === 'wave-end' || value === 'epic-end' || value === 'task-end') options.reason = value;
+      const value = valueFor(a);
+      if ((CHECKPOINT_REASONS as readonly string[]).includes(value)) options.reason = value as CheckpointReason;
       else options.attestationReason = value;
     }
-    else if (a === '--reason-file') options.attestationReasonFile = args[++i];
-    else if (a === '--evidence') (options.evidencePairs ??= []).push(args[++i]);
-    else if (a === '--emit-approval-template') options.emitApprovalPath = args[++i];
+    else if (a === '--reason-file') options.attestationReasonFile = valueFor(a);
+    else if (a === '--evidence') (options.evidencePairs ??= []).push(valueFor(a));
+    else if (a === '--emit-approval-template') options.emitApprovalPath = valueFor(a);
     else if (a === '--include-inferred') options.includeInferred = true;
-    else if (a === '--target') options.target = args[++i];
-    else if (a === '--node') options.nodeId = args[++i];
-    else if (a === '--field') options.field = args[++i];
+    else if (a === '--target') options.target = valueFor(a);
+    else if (a === '--node') options.nodeId = valueFor(a);
+    else if (a === '--field') options.field = valueFor(a);
     else if (a === '--sequence') {
-      const value = Number(args[++i]);
+      const value = Number(valueFor(a));
       if (!Number.isInteger(value) || value < 1) throw new Error('--sequence must be a positive integer');
       options.sequence = value;
     }
-    else if (a === '--baseline') options.baselinePath = args[++i];
-    else if (a === '--write-baseline') options.writeBaselinePath = args[++i];
-    else if (a === '--because') options.correctionReason = args[++i];
+    else if (a === '--baseline') options.baselinePath = valueFor(a);
+    else if (a === '--write-baseline') options.writeBaselinePath = valueFor(a);
+    else if (a === '--because') options.correctionReason = valueFor(a);
     else if (a === '--limit') {
-      const value = Number(args[++i]);
+      const value = Number(valueFor(a));
       if (!Number.isInteger(value) || value < 1) throw new Error('--limit must be a positive integer');
       options.limit = value;
     }
-    else if (a === '--account') options.account = args[++i];
-    else if (a === '--plan-name') options.planName = args[++i];
+    else if (a === '--account') options.account = valueFor(a);
+    else if (a === '--plan-name') options.planName = valueFor(a);
     else if (a === '--seats') {
-      const value = Number(args[++i]);
+      const value = Number(valueFor(a));
       if (!Number.isInteger(value) || value < 1) throw new Error('--seats must be a positive integer');
       options.seats = value;
     }
-    else if (a === '--end') options.end = args[++i];
+    else if (a === '--end') options.end = valueFor(a);
     else if (a === '--project') options.project = true;
     else if (a === '--remove') options.remove = true;
     else if (a === '--budget') {
-      const value = Number(args[++i]);
+      const value = Number(valueFor(a));
       if (!Number.isInteger(value) || value < 1) throw new Error('--budget must be a positive integer');
       options.budget = value;
     }
     else if (a === '--wait-reason') {
-      const value = args[++i];
+      const value = valueFor(a);
       if (value === 'review' || value === 'decision' || value === 'parked' || value === 'blocked-external' || value === 'null' || value === '') {
         options.waitReason = value === 'null' || value === '' ? undefined : value as "review" | "decision" | "parked" | "blocked-external";
       } else {
@@ -940,15 +993,13 @@ function resolveValidateGate(cwd: string, options: MapctxOptions): {
   baseline?: ValidationBaselineFile;
   writeBaselinePath?: string;
 } {
-  // `--flag value` parsing takes the next token unconditionally, so a flag
-  // written without its value swallows the one after it. For an ordinary
-  // option that is a visible mistake; for a GATE it is the dangerous kind,
-  // because `mapctx validate --task --json` would quietly filter on the
-  // literal "--json", match nothing and exit 0 on a failing board.
+  // A flag written without its value is refused in parseArgs now (review A5),
+  // for every value-taking flag rather than only these three. What is left
+  // here is the blank case, which parseArgs cannot distinguish from a caller
+  // deliberately passing an empty string: for a gate, an empty filter must
+  // never read as "match nothing, exit 0".
   for (const [flag, value] of [['--task', options.taskFilter], ['--baseline', options.baselinePath], ['--write-baseline', options.writeBaselinePath]] as const) {
-    if (value !== undefined && (value.trim() === '' || value.startsWith('-'))) {
-      throw new Error(`${flag} is missing its value (got ${JSON.stringify(value)}).`);
-    }
+    if (value !== undefined && value.trim() === '') throw new Error(`${flag} is missing its value.`);
   }
   if (options.baselinePath && options.writeBaselinePath) {
     throw new Error('--baseline and --write-baseline are mutually exclusive: one reads accepted issues, the other records the current ones.');
@@ -975,7 +1026,12 @@ function resolveValidateGate(cwd: string, options: MapctxOptions): {
 function writeValidateBaseline(filePath: string, issues: ValidationGateIssue[], json?: boolean): void {
   const baseline = buildValidationBaseline(issues);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
+  // Temp + rename (review A12): two concurrent runs writing the same baseline
+  // must not leave a truncated file behind, and the repo writes every durable
+  // artifact this way.
+  const tempPath = `${filePath}.${process.pid}.tmp`;
+  fs.writeFileSync(tempPath, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
+  fs.renameSync(tempPath, filePath);
   if (json) print({ wroteBaseline: filePath, issues: baseline.issues.length, schemaVersion: baseline.schemaVersion }, true);
   else console.log(`Wrote baseline with ${baseline.issues.length} accepted issue(s): ${filePath}`);
 }
@@ -987,7 +1043,10 @@ function printGateSummary(gate: Pick<ValidationGateResult<ValidationGateIssue>, 
   }
   if (gate.baselined > 0) console.log(`Baselined: ${gate.baselined} pre-existing issue(s) accepted`);
   for (const stale of gate.staleBaseline) {
-    console.log(`- [stale-baseline] ${stale.code}${stale.taskId ? ` ${stale.taskId}` : ''}: no longer reported; drop it from the baseline.`);
+    const advice = stale.cause === 'out-of-scope'
+      ? 'excluded by --task, not gone; keep it in the baseline.'
+      : 'no longer reported; drop it from the baseline.';
+    console.log(`- [stale-baseline] ${stale.code}${stale.taskId ? ` ${stale.taskId}` : ''}: ${advice}`);
   }
 }
 
@@ -1501,6 +1560,44 @@ const LIST_SET_FIELDS = new Set(['tags', 'domains', 'assignees', 'externalLinks'
 const LIST_SYNTAX_HELP = 'use `a,b,c` (bare, comma-separated) or a JSON array like `["a","b"]`';
 
 /**
+ * A comma inside a list ELEMENT is unrepresentable, whichever spelling put it
+ * there (review A2). The generated snapshots join lists with ", " and parse
+ * them by splitting on "," (core markdown `toArrayString`/`parseArray`,
+ * store `export.ts`), so `["src/{a,b}.ts"]` round-trips as TWO entries. Before
+ * T-127 the comma was the only separator, so such an element was unreachable;
+ * the JSON spelling made it reachable in every list field, and the resulting
+ * drift does not converge -- `reconcile --accept` would write the split value
+ * back into the store.
+ */
+const COMMA_IN_ELEMENT_HELP =
+  'a comma inside a list element is not representable in the generated snapshots '
+  + '(they join with "," and split on it). Use a comma-free glob like `src/*.ts`, '
+  + 'or list the paths separately.';
+
+/** Brackets/braces/parens that must stay balanced within one element. */
+const DELIMITER_PAIRS: Array<[string, string]> = [['[', ']'], ['{', '}'], ['(', ')']];
+
+/**
+ * Review A3: `src/{a,b}.ts` used to be comma-split in silence into `src/{a`
+ * and `b}.ts` -- the same silent corruption T-127 closes for brackets, in the
+ * same field, and exactly the brace pattern T-132 taught the planner to
+ * expand. An element left with an unbalanced delimiter after the split is a
+ * group that was cut in half, so it is refused instead of stored broken.
+ */
+function unbalancedDelimiter(element: string): string | null {
+  for (const [open, close] of DELIMITER_PAIRS) {
+    let depth = 0;
+    for (const char of element) {
+      if (char === open) depth += 1;
+      else if (char === close) depth -= 1;
+      if (depth < 0) return close;
+    }
+    if (depth > 0) return open;
+  }
+  return null;
+}
+
+/**
  * T-127: list-valued inputs used to be comma-split unconditionally, so
  * `--set detail.filesAffected=[a,b]` -- the shape every agent reaches for --
  * was accepted in silence and stored `["[a", "b]"]`, brackets and quotes
@@ -1516,22 +1613,34 @@ const LIST_SYNTAX_HELP = 'use `a,b,c` (bare, comma-separated) or a JSON array li
 export function parseListInput(label: string, raw: string): string[] {
   const trimmed = raw.trim();
   if (trimmed === '') return [];
-  if (trimmed.startsWith('[') || trimmed.endsWith(']')) {
+  // BOTH ends, not either (review A1): `endsWith(']')` alone rejected every
+  // path that merely ends in a bracket -- `app/[locale]`, `pages/[slug]`,
+  // `src/routes/[id]` -- which are the most common `filesAffected` entries in
+  // a web project and stored fine before T-127. Only a value that opens AND
+  // closes like an array is read as one.
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
     let parsed: unknown;
     try {
       parsed = JSON.parse(trimmed);
     } catch {
-      throw new Error(`${label} looks like an array but is not valid JSON: ${raw}. To pass a list, ${LIST_SYNTAX_HELP}.`);
+      throw new Error(`${label} is bracketed like an array but is not valid JSON: ${raw}. To pass a list, ${LIST_SYNTAX_HELP}. A single value that itself contains brackets needs the JSON spelling, e.g. ${JSON.stringify([trimmed])}.`);
     }
     if (!Array.isArray(parsed) || parsed.some(item => typeof item !== 'string')) {
       throw new Error(`${label} JSON must be an array of strings, got: ${raw}. To pass a list, ${LIST_SYNTAX_HELP}.`);
     }
-    return (parsed as string[]).map(item => item.trim()).filter(Boolean);
+    return (parsed as string[]).map(item => item.trim()).filter(Boolean).map(item => {
+      if (item.includes(',')) throw new Error(`${label} element ${JSON.stringify(item)} contains a comma: ${COMMA_IN_ELEMENT_HELP}`);
+      return item;
+    });
   }
   return trimmed.split(',').map(value => {
     const item = value.trim();
     if (item.length >= 2 && (item.startsWith('"') || item.startsWith("'")) && item.endsWith(item[0])) {
       throw new Error(`${label} element ${item} is wrapped in quotes; bare comma lists are not quoted. To pass a list, ${LIST_SYNTAX_HELP}.`);
+    }
+    const unbalanced = unbalancedDelimiter(item);
+    if (unbalanced !== null) {
+      throw new Error(`${label} element ${JSON.stringify(item)} has an unbalanced \`${unbalanced}\`, so a group was split across a comma: ${COMMA_IN_ELEMENT_HELP} A single value that itself contains a comma is not storable at all.`);
     }
     return item;
   }).filter(Boolean);

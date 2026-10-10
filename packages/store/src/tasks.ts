@@ -274,28 +274,58 @@ function unknownFieldMessage(field: string, side: "task" | "detail"): string {
     + ` Prose lives in the Git-authored \`description:\` block of tasks/<ID>.md and is never patchable here.`;
 }
 
-const URI_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.\-]*:/;
+/**
+ * The `provider:entity:id` form the importer already derives external refs
+ * from (import.ts externalRefFromId). The id tail may itself contain colons.
+ */
+const PROVIDER_REF_RE = /^[a-z][a-z0-9-]*:[A-Za-z0-9_-]+:.+$/;
+
+/**
+ * Schemes that must never be stored, even spelled as a three-part ref
+ * (`javascript:a:b` matches the provider shape). `externalLinks` becomes
+ * versioned content in TASKS.md and an `ExternalRefRecord` with the raw value
+ * as its `uri`; nothing renders it today, so this is not a live XSS, but the
+ * value is clickable the moment anything does. Review A4.
+ */
+const FORBIDDEN_LINK_SCHEMES = new Set(["javascript", "data", "file", "vbscript", "blob"]);
 
 /**
  * T-127: `externalLinks` became CLI-patchable, so the store is the gate that
- * keeps the column holding URIs. Every entry must be a non-blank, whitespace-
- * free string carrying an explicit scheme and parsing as a URI -- which admits
- * both `https://github.com/o/r/issues/1` and the `provider:entity:id` form the
- * importer already derives external refs from (import.ts externalRefFromId).
+ * keeps the column holding URIs.
+ *
+ * Review A4: the first version only required *a* scheme plus `new URL()` not
+ * throwing, which admits every opaque URL -- `javascript:alert(1)`,
+ * `file:///etc/passwd`, `data:text/html,<script>` all parse. The help and the
+ * skill promise "https://… or provider:entity:id", so that promise is now the
+ * actual rule: an allowlisted http(s) URL with a host, or the three-part
+ * provider ref, and never a dangerous scheme.
  */
 function invalidExternalLink(value: unknown): string | null {
+  const shape = "expected https://host/... (http is also accepted) or provider:entity:id";
   if (typeof value !== "string") return `every externalLinks entry must be a string; got ${JSON.stringify(value)}`;
   const trimmed = value.trim();
   if (trimmed === "") return "externalLinks entries cannot be blank";
+  // Unreachable from the CLI, which trims each element in both spellings; it
+  // guards programmatic callers of updateTask.
   if (trimmed !== value) return `externalLinks entry has surrounding whitespace: ${JSON.stringify(value)}`;
   if (/\s/.test(trimmed)) return `externalLinks entry contains whitespace: ${JSON.stringify(value)}`;
-  if (!URI_SCHEME_RE.test(trimmed)) return `externalLinks entry needs an explicit URI scheme (https://… or provider:entity:id): ${JSON.stringify(value)}`;
-  try {
-    new URL(trimmed);
-  } catch {
-    return `externalLinks entry is not a parseable URI: ${JSON.stringify(value)}`;
+  const scheme = /^([A-Za-z][A-Za-z0-9+.\-]*):/.exec(trimmed)?.[1];
+  if (!scheme) return `externalLinks entry needs an explicit URI scheme (${shape}): ${JSON.stringify(value)}`;
+  if (FORBIDDEN_LINK_SCHEMES.has(scheme.toLowerCase())) {
+    return `externalLinks entry uses the forbidden scheme "${scheme}": ${JSON.stringify(value)}. These links become versioned content and external refs, so only ${shape} is accepted.`;
   }
-  return null;
+  if (scheme.toLowerCase() === "http" || scheme.toLowerCase() === "https") {
+    let url: URL;
+    try {
+      url = new URL(trimmed);
+    } catch {
+      return `externalLinks entry is not a parseable URL: ${JSON.stringify(value)}`;
+    }
+    if (!url.hostname) return `externalLinks entry has no host: ${JSON.stringify(value)}`;
+    return null;
+  }
+  if (PROVIDER_REF_RE.test(trimmed) && !trimmed.includes("//")) return null;
+  return `externalLinks entry is not an accepted URI (${shape}): ${JSON.stringify(value)}`;
 }
 
 export type UpdateTaskOptions = {

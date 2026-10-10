@@ -64,3 +64,52 @@
 ### Chore
 
 * **chore:** shorten command name to "Kanban"
+
+## mapctx CLI — [0.4.0] (Unreleased)
+
+### Breaking (public contract): refusals leave on stderr
+
+A refused `mapctx` command no longer prints its structured refusal to stdout.
+It exits non-zero and leaves **stdout empty**; with `--json` the refusal is the
+**first line of stderr** as one line of compact JSON, followed by the human
+`Error: ...` line. Without `--json` only the `Error:` line is printed, so a
+holder's lease token is not sprayed across a terminal.
+
+Affected: `task move/update/create/start/claim/renew/release`,
+`dispatch create`, `dispatch receipt`, `task acceptance revise/approve/unapprove`,
+`acceptance import --commit`, `redact`, `export`, `task finish`.
+
+**Gate reports are unchanged** and still print to stdout even when they exit
+non-zero, because the document is the deliverable: `mapctx validate`,
+`mapctx import --dry-run`, `mapctx store repair`.
+
+Migration: read stderr's first line (or split stderr on `"\nError:"`) instead
+of stdout. Check the exit code first, as before. No consumer in this repository
+depended on the old channel.
+
+### Features
+
+* **feature:** `mapctx --help` prints an "Enumerated values" table for every
+  enumerated flag, with the schema-derived rows marked, plus sections on prose
+  ownership and output channels
+* **feature:** `mapctx validate --task <id,...>` filters issues by task,
+  `--baseline <file>` fails only on an issue the board did not already have, and
+  `--write-baseline <file>` records the current run
+* **feature:** `externalLinks` is editable through `mapctx task update --set`,
+  validated as `https://host/...` (http too) or `provider:entity:id`
+* **feature:** list-valued `--set` fields and `--tags`/`--domains`/`--depends-on`/
+  `--blocking` accept a bare comma list or a JSON array, and refuse a bracketed
+  guess instead of storing the brackets as part of the values
+
+### Fixes
+
+* **fix:** the `task update` unknown-field refusal names both the task and the
+  `detail.*` field groups and redirects a field used on the wrong side
+* **fix:** a flag written without its value is refused instead of swallowing the
+  next argument (`--actor --json` used to journal an event attributed to
+  `"--json"` in the append-only log)
+* **fix:** a missing `--expect-revision` refusal reports the revision the store
+  currently holds
+* **fix:** list elements may not contain a comma, and a `{...}` group split
+  across a comma is refused: the generated snapshots cannot represent either,
+  and the resulting drift did not converge

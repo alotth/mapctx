@@ -3,7 +3,14 @@ import * as fs from "fs"
 import * as path from "path"
 import { buildExport, checkTaskAcceptance, moveTask, type StoreHandle } from "@mapctx/store"
 
-export type CheckpointReason = "manual" | "wave-end" | "epic-end" | "task-end"
+/**
+ * Single source for the reason values, so the CLI parser and `mapctx --help`
+ * read the same list instead of each retyping it (review A13 found the help
+ * listing three of the four).
+ */
+export const CHECKPOINT_REASONS = ["manual", "wave-end", "epic-end", "task-end"] as const
+
+export type CheckpointReason = typeof CHECKPOINT_REASONS[number]
 
 export type CheckpointCursor = { node: string; sequence: number }
 

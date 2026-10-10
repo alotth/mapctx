@@ -435,8 +435,13 @@ export type ValidationGateResult<TIssue extends ValidationGateIssue> = {
   boardScopedErrors: ValidationGateIssue[]
   /** Issues present and accepted by the baseline. */
   baselined: number
-  /** Baseline entries that match nothing in the current run. */
-  staleBaseline: ValidationBaselineEntry[]
+  /**
+   * Baseline entries that matched no reported issue, each with WHY (review
+   * A11): `not-reported` means the board no longer has it and it can be
+   * dropped; `out-of-scope` means `--task` excluded the issue it covers, so
+   * it is still valid for the whole board and must NOT be dropped.
+   */
+  staleBaseline: Array<ValidationBaselineEntry & { cause: "not-reported" | "out-of-scope" }>
 }
 
 /**
@@ -483,7 +488,16 @@ export function applyValidationGate<TIssue extends ValidationGateIssue>(
     }
     kept.push(issue)
   }
-  const staleBaseline = (options.baseline?.issues ?? []).filter(entry => !matched.has(entry.fingerprint))
+  // An entry that matched nothing in scope may still describe an issue the
+  // task filter excluded, so the two causes are told apart against the FULL
+  // issue list before any advice is given.
+  const allFingerprints = new Set(issues.map(issue => validationIssueFingerprint(issue)))
+  const staleBaseline = (options.baseline?.issues ?? [])
+    .filter(entry => !matched.has(entry.fingerprint))
+    .map(entry => ({
+      ...entry,
+      cause: allFingerprints.has(entry.fingerprint) ? ("out-of-scope" as const) : ("not-reported" as const)
+    }))
 
   return {
     issues: kept,

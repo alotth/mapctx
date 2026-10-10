@@ -97,6 +97,30 @@ personal data out of titles, summaries, descriptions, acceptance evidence and re
 `[privacy] patterns` in `mapctx.toml` to be warned at the write paths, and use `mapctx redact` when a
 value has already landed.
 
+### Reading CLI output: stdout is results only (T-127)
+
+Every command in this skill is run with `--json` and its result read back, so the channel matters:
+
+- **A refusal is not a result.** A refused command exits non-zero and leaves **stdout empty**. With
+  `--json` the structured refusal is the **first line of stderr**, as one line of compact JSON,
+  followed by the human `Error: ...` line. Read stderr's first line, or split stderr on `"\nError:"`.
+  Without `--json` only the `Error:` line is printed.
+- Affected: `task move/update/create/start/claim/renew/release`, `dispatch create`,
+  `dispatch receipt`, `task acceptance revise/approve/unapprove`, `acceptance import --commit`,
+  `redact`, `export`, `task finish`.
+- **Gate reports are the exception** and still print to stdout even when they exit non-zero, because
+  the document is what you asked for: `mapctx validate`, `mapctx import --dry-run`,
+  `mapctx store repair`.
+
+Check the exit code first, as always. An empty stdout after a non-zero exit means the refusal is on
+stderr — it does not mean the command produced nothing.
+
+### Flags need their values (T-127)
+
+A flag written without its value is refused instead of consuming the next argument. `--actor --json`
+used to journal an event attributed to the actor `"--json"` in an append-only log; it now fails. A
+value that starts with a single dash (`--summary "- item"`) still works.
+
 ### List-valued fields (T-127)
 
 `--set` of a list field, and `--tags` / `--domains` / `--depends-on` / `--blocking`, take exactly two
@@ -109,8 +133,22 @@ mapctx task update T-127 --set 'detail.filesAffected=["packages/store/src/tasks.
 
 A bracketed guess like `[a,b]` is **refused with the correct syntax**. It used to be accepted in
 silence and stored `["[a", "b]"]`, which corrupted `filesAffected` on this board and hid a real file
-overlap from the planner. `=null` clears a list. `externalLinks` is patchable the same way and every
-entry is validated as a URI (`https://…` or `provider:entity:id`).
+overlap from the planner. `=null` clears a list.
+
+A value is only read as an array when it both opens and closes with a bracket, so a path that merely
+contains or ends with one (`app/[locale]`, `pages/[slug]`) stores normally in the bare spelling. A
+single value that itself looks like an array needs the JSON spelling: `--set 'tags=["[a,b]"]'`.
+
+Two things no element may contain, in either spelling, because the generated snapshots join lists
+with `,` and split on it — the resulting drift does not converge:
+
+- a **comma** inside one element (`["src/{a,b}.ts"]`) — use a comma-free glob (`src/*.ts`) or list
+  the paths separately;
+- a `{...}` **group split across a comma** (`src/{a,b}.ts` in the bare spelling) — same remedy.
+
+`externalLinks` is patchable the same way; each entry must be `https://host/...` (http is accepted
+too) or `provider:entity:id`. `javascript:`, `data:`, `file:`, `vbscript:` and `blob:` are refused —
+these values become versioned content and external refs.
 
 Run `mapctx --help` for the full enum table (workload, priority, type, status, specMode, waitReason,
 effort format) read straight off the protocol schemas.
