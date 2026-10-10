@@ -328,6 +328,43 @@ function invalidExternalLink(value: unknown): string | null {
   return `externalLinks entry is not an accepted URI (${shape}): ${JSON.stringify(value)}`;
 }
 
+/** List-valued fields whose elements end up in a comma-joined snapshot line. */
+const SNAPSHOT_LIST_TASK_FIELDS = ["tags", "domains", "assignees", "externalLinks"] as const;
+const SNAPSHOT_LIST_DETAIL_FIELDS = ["filesAffected", "testsRequired", "prerequisites", "blocking"] as const;
+
+/**
+ * Review A2, pushed down from the CLI to the store so EVERY caller is covered.
+ *
+ * `buildExport` renders these fields as `[a, b, c]` and `parseArray` reads
+ * them back by splitting on ",". An element containing a comma therefore does
+ * not survive the round trip: the store holds one value, the regenerated
+ * snapshot parses as two, and the drift does not converge because
+ * `reconcile --accept` would write the split value back into the store.
+ *
+ * Worth noting, because it looks like a contradiction and is not: for such a
+ * state `checkStoreSnapshots` reports no drift while `reconcile`'s differ
+ * reports drift. They ask different questions -- `checkDrift` byte-compares
+ * the mirror against a fresh regeneration (which matches, the store wrote it),
+ * while the reconcile differ compares PARSED mirror values against store
+ * values (which differ). Neither is wrong; the defect was that `export` could
+ * emit a line that does not parse back to its own input. Refusing the comma
+ * here makes that unreachable, so the two can no longer disagree.
+ */
+function commaInListElement(fields: readonly string[], patch: Record<string, unknown> | undefined): string | null {
+  for (const field of fields) {
+    const value = patch?.[field];
+    if (!Array.isArray(value)) continue;
+    for (const element of value) {
+      if (typeof element === "string" && element.includes(",")) {
+        return `${field} element ${JSON.stringify(element)} contains a comma, which the generated snapshots cannot represent:`
+          + ` they render the list as "[a, b]" and read it back by splitting on ",", so this value would round-trip as two entries.`
+          + ` Use a comma-free value (a glob like \`src/*.ts\`) or separate entries.`;
+      }
+    }
+  }
+  return null;
+}
+
 export type UpdateTaskOptions = {
   taskId: string;
   patch?: Partial<TaskRecord>;
@@ -344,7 +381,7 @@ export type UpdateTaskResult =
   | { ok: true; applied: { fields: string[]; detailFields: string[]; edges: boolean } }
   | {
       ok: false;
-      reason: "unknown-task" | "no-changes" | "unknown-field" | "unknown-dependency" | "invalid-workload" | "invalid-estimated-effort" | "invalid-wait-reason" | "invalid-predicted-start" | "invalid-external-links";
+      reason: "unknown-task" | "no-changes" | "unknown-field" | "unknown-dependency" | "invalid-workload" | "invalid-estimated-effort" | "invalid-wait-reason" | "invalid-predicted-start" | "invalid-external-links" | "comma-in-list-element";
       to: string;
       message?: string;
     };
@@ -373,6 +410,9 @@ export function updateTask(store: StoreHandle, options: UpdateTaskOptions): Upda
       message: `workload must be one of ${workloadSchema.options.join("|")}; got "${suppliedWorkload}"`
     };
   }
+  const commaProblem = commaInListElement(SNAPSHOT_LIST_TASK_FIELDS, options.patch as Record<string, unknown> | undefined)
+    ?? commaInListElement(SNAPSHOT_LIST_DETAIL_FIELDS, options.detailPatch as Record<string, unknown> | undefined);
+  if (commaProblem) return { ok: false, reason: "comma-in-list-element", to, message: commaProblem };
   // T-127: validated before the write transaction opens, like every other
   // enum/format gate here -- a malformed link must never reach the journal.
   // `null` clears the list; anything else must be an array of URIs.
