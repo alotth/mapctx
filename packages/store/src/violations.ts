@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ClaimViolation, ResourceClaim, RunReceipt } from "@mapctx/protocol";
 import { getDispatchAttempt, getRunReceipt, listClaimViolations } from "./projections";
+import { normalizePath } from "./paths";
 import { REDACTED_SENTINEL } from "./redact";
 import type { StoreHandle } from "./store-handle";
 
@@ -17,11 +18,6 @@ export type ClaimViolationPlan = {
   claims?: readonly ResourceClaim[];
   detectedAt?: string;
 };
-
-function normalizePath(value: string): string {
-  const path = value.replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/+/g, "/");
-  return path.length > 1 ? path.replace(/\/$/, "") : path;
-}
 
 /**
  * T-131 review ALTO-2: a redacted path is NOT COMPARABLE, so it overlaps
@@ -90,14 +86,21 @@ function makeViolation(fields: Omit<ClaimViolation, "id">): ClaimViolation {
   return { ...fields, id: stableUuid(`mapctx:claim-violation:${JSON.stringify(fields)}`) };
 }
 
+/**
+ * Whether this exact violation is already recorded.
+ *
+ * Matched by ID, not by the field tuple (review MEDIA-1). The id is a
+ * stableUuid over the ORIGINAL fields and redaction does not change it, so a
+ * row whose `path` has since been redacted still answers "already recorded".
+ * Matching on `path` instead meant a redacted row stopped being found, the
+ * next detection run appended a BRAND NEW event carrying the real path, and
+ * the projection ended up with both rows -- redacting the derived copy was
+ * silently undone by the next wave. `insertClaimViolation` already keys its
+ * ON CONFLICT on the id alone, which is what proves the id is the stable
+ * identity here.
+ */
 function semanticExists(store: StoreHandle, violation: ClaimViolation): boolean {
-  return listClaimViolations(store.db, {
-    waveId: violation.waveId,
-    kind: violation.kind,
-    taskAId: violation.taskAId,
-    taskBId: violation.taskBId,
-    path: violation.path
-  }).length > 0;
+  return listClaimViolations(store.db, { id: violation.id }).length > 0;
 }
 
 /** How much of one receipt's changed-file list is no longer comparable. */
@@ -137,7 +140,7 @@ function redactedChangedFileCount(receipt: RunReceipt): number {
  * than returned as a clean bill of health, because "no violations" and "could
  * not look" are different answers and only one of them is safe to act on.
  */
-export function detectClaimViolations(store: StoreHandle, plan: ClaimViolationPlan, actor = "planner"): ClaimViolationDetectionResult {
+export function detectClaimViolationsWithCoverage(store: StoreHandle, plan: ClaimViolationPlan, actor = "planner"): ClaimViolationDetectionResult {
   const detectedAt = plan.detectedAt ?? new Date().toISOString();
   const incompleteDetection: IncompleteDetection[] = [];
   const violations = store.runInWriteTransaction(append => {
@@ -229,14 +232,19 @@ export function detectClaimViolations(store: StoreHandle, plan: ClaimViolationPl
  * The published signature: the violations alone. Kept array-returning so
  * existing callers and the two aliases below are untouched; incomplete
  * detection is still impossible to miss, because it is raised as a process
- * warning here. Callers that need it as data use detectClaimViolations.
+ * warning here. Callers that need it as data use
+ * detectClaimViolationsWithCoverage -- named that way, and not
+ * `detectClaimViolations`, because @mapctx/planner already publishes a
+ * function by that name with a different signature and WITHOUT the sentinel
+ * guards (review MEDIA-3). Two packages exporting one name with two safety
+ * levels is how a future caller ends up on the unguarded one by accident.
  */
 export function recordClaimViolations(store: StoreHandle, plan: ClaimViolationPlan, actor = "planner"): ClaimViolation[] {
-  const result = detectClaimViolations(store, plan, actor);
+  const result = detectClaimViolationsWithCoverage(store, plan, actor);
   for (const incomplete of result.incompleteDetection) {
     process.emitWarning(
       `claim-violation detection over ${incomplete.taskId} (${incomplete.dispatchId}/${incomplete.attempt}) is INCOMPLETE: ${incomplete.redactedPaths} of ${incomplete.totalPaths} changed-file path(s) are redacted and cannot be compared. ` +
-      `${result.violations.length === 0 ? "An empty result here means \"cannot tell\", not \"no collision\"." : "Violations found may be a subset."} Use detectClaimViolations for this as data.`
+      `${result.violations.length === 0 ? "An empty result here means \"cannot tell\", not \"no collision\"." : "Violations found may be a subset."} Use detectClaimViolationsWithCoverage for this as data.`
     );
   }
   return result.violations;

@@ -198,6 +198,7 @@ import { canonicalJson, claimViolationSchema, runEventSchema, runReceiptSchema }
 import type { EventLogEntry, RedactionMarker } from "@mapctx/protocol"
 import { loadNodeAttestations, verifyRowPayloadHash } from "./attestation"
 import { payloadSha256, readJournalEntry, rewriteJournalEntrySync } from "./journal"
+import { normalizePath } from "./paths"
 import { listRedactions } from "./projections"
 // Type-only: store-handle imports reconcilePendingRedactions from here, so a
 // value import would close a runtime require cycle. redactEvidence takes an
@@ -254,6 +255,16 @@ export const REDACTABLE_ROOTS: Readonly<Record<string, readonly string[]>> = {
 const DERIVED_COPY_WARNINGS: Readonly<Record<string, readonly string[]>> = {
   "run.receipt-recorded": ["receipt.changedFiles"]
 }
+
+/**
+ * The other end of the same derivation: the event type that HOLDS a derived
+ * copy, so redacting it can point back at the sources that still hold the
+ * original (review MEDIA-1). Kept as its own constant rather than inverting
+ * DERIVED_COPY_WARNINGS at runtime, because the two directions carry
+ * different advice -- forward says "finish the job", reverse says "the source
+ * is still there and detection will not undo this".
+ */
+const REDACTED_SOURCE_OF_DERIVED = "claim-violation.detected"
 
 /**
  * Within a redactable root, which LEAF NAMES may actually be destroyed.
@@ -663,6 +674,13 @@ function stillHolds(storedJson: string | null | undefined, expected: unknown): b
  * against, so there is nothing to call for them -- their structural
  * allowlists stay the only guard, which is why a new root on those two still
  * needs a test.
+ *
+ * Precise about what "nothing was applied" means here: the refusal happens
+ * inside the write transaction, which has already opened and reindexed any
+ * pending journal entries, so `mapctx.db` BYTES can differ afterwards. The
+ * logical state is untouched -- no redaction event, no projection change, no
+ * journal rewrite -- and that is what the message claims. Byte identity is
+ * only promised for the dry run, which opens the store read-only.
  */
 function redactedPayloadSchemaProblem(eventType: string, redacted: Record<string, unknown>): string | undefined {
   const guards: Record<string, () => { success: boolean; error?: { issues: unknown } }> = {
@@ -680,10 +698,36 @@ function redactedPayloadSchemaProblem(eventType: string, redacted: Record<string
 // ---- commit ----
 
 /**
+ * Receipt events whose `changedFiles` still holds `path`, compared through
+ * normalizePath on both sides for the same reason as the forward direction.
+ * Reported by (node, sequence); the value never leaves.
+ */
+function receiptEventsHolding(db: DatabaseSync, path: string): Array<{ nodeId: string; sequence: number }> {
+  const wanted = new Set([path, normalizePath(path)])
+  const rows = db.prepare(
+    "SELECT node_id, sequence, payload_json FROM event_log WHERE event_type = 'run.receipt-recorded' ORDER BY node_id ASC, sequence ASC"
+  ).all() as Array<{ node_id: string; sequence: number; payload_json: string }>
+  const found: Array<{ nodeId: string; sequence: number }> = []
+  for (const row of rows) {
+    let changedFiles: unknown
+    try {
+      const payload = JSON.parse(row.payload_json) as { receipt?: { changedFiles?: unknown }; changedFiles?: unknown }
+      changedFiles = payload.receipt?.changedFiles ?? payload.changedFiles
+    } catch {
+      continue
+    }
+    if (!Array.isArray(changedFiles)) continue
+    if (!changedFiles.some(item => typeof item === "string" && (wanted.has(item) || wanted.has(normalizePath(item))))) continue
+    found.push({ nodeId: row.node_id, sequence: row.sequence })
+  }
+  return found
+}
+
+/**
  * What this redaction does NOT reach, and what it costs, as lines the CLI
  * prints and the JSON carries. Built from the ORIGINAL payload, so it can
- * find the derived copies -- and it never includes a value (review ALTO-1 and
- * ALTO-2).
+ * find the derived copies -- and it never includes a value (review ALTO-1,
+ * ALTO-2, ALTO-3 and MEDIA-1).
  */
 function redactionAdvisories(
   db: DatabaseSync,
@@ -692,6 +736,26 @@ function redactionAdvisories(
 ): { advisories: string[]; derivedCopies: DerivedCopy[] } {
   const advisories: string[] = []
   const derivedCopies: DerivedCopy[] = []
+
+  // Review MEDIA-1, the REVERSE direction: redacting the derived copy while
+  // the source receipt still holds the path. That used to produce no advisory
+  // at all, and the operator had every reason to think the path was gone.
+  if (plan.target.eventType === REDACTED_SOURCE_OF_DERIVED && plan.fieldPaths.some(field => field === "violation.path")) {
+    const located = readPath(originalPayload, ["violation", "path"])
+    const original = located.found && typeof located.value === "string" ? located.value : undefined
+    if (original !== undefined) {
+      const sources = receiptEventsHolding(db, original)
+      advisories.push(
+        sources.length > 0
+          ? `This path was DERIVED from ${sources.length} receipt(s) that still hold it in receipt.changedFiles; this redaction does not reach them. Finish the job: ${sources.map(source => `mapctx redact --node ${source.nodeId} --sequence ${source.sequence} --field receipt.changedFiles --reason "..." --commit`).join(" ; ")}`
+          : "No receipt in this store still holds this path in receipt.changedFiles, so there is no remaining source copy to redact."
+      )
+      advisories.push(
+        "A later detection run will NOT re-create this violation: semanticExists matches by violation id, which is derived from the ORIGINAL fields and is unchanged by redaction, so the redacted row keeps satisfying it."
+      )
+    }
+  }
+
   const derivedRoots = DERIVED_COPY_WARNINGS[plan.target.eventType] ?? []
   const touched = derivedRoots.filter(root => plan.fieldPaths.some(field => field === root || field.startsWith(`${root}.`)))
   if (touched.length === 0) return { advisories, derivedCopies }
@@ -709,12 +773,27 @@ function redactionAdvisories(
   // ALTO-1: the copies that already exist. Matched on the ORIGINAL values, so
   // this finds them before they are destroyed here; reported by (node,
   // sequence) so the job can be finished, never by value.
+  //
+  // Review ALTO-3: compared through normalizePath on BOTH sides. Detection
+  // stores every path normalized, so comparing a receipt's raw
+  // `./src/x.ts` against the stored `src/x.ts` matched nothing -- the
+  // advisory then named only the innocent neighbour, the operator ran exactly
+  // the command it printed, and the secret survived with no warning left. An
+  // advisory that points at the wrong copy is worse than no advisory, because
+  // it buys confidence. Both forms are kept so a path that needs no
+  // normalization still matches byte-for-byte.
   const originalValues = new Set<string>()
   for (const fieldPath of plan.fieldPaths) {
     const located = readPath(originalPayload, fieldPath.split("."))
-    if (located.found && typeof located.value === "string") originalValues.add(located.value)
+    if (located.found && typeof located.value === "string") {
+      originalValues.add(located.value)
+      originalValues.add(normalizePath(located.value))
+    }
   }
   if (originalValues.size === 0) return { advisories, derivedCopies }
+  // O(n) over this event type on every changedFiles redaction: there is no
+  // index on event_type, and at board scale (tens of violations) it does not
+  // matter. If it ever does, the redaction ledger is the place to add one.
   const rows = db.prepare(
     "SELECT node_id, sequence, payload_json FROM event_log WHERE event_type = 'claim-violation.detected' ORDER BY node_id ASC, sequence ASC"
   ).all() as Array<{ node_id: string; sequence: number; payload_json: string }>
@@ -725,7 +804,8 @@ function redactionAdvisories(
     } catch {
       continue
     }
-    if (typeof violationPath !== "string" || !originalValues.has(violationPath)) continue
+    if (typeof violationPath !== "string") continue
+    if (!originalValues.has(violationPath) && !originalValues.has(normalizePath(violationPath))) continue
     derivedCopies.push({ nodeId: row.node_id, sequence: row.sequence, eventType: "claim-violation.detected", fieldPath: "violation.path" })
   }
   if (derivedCopies.length > 0) {
