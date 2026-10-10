@@ -98,16 +98,20 @@ function titleMatches(storedTitle: string, expectTitle: string): boolean {
  * bidi controls, line/paragraph separators, the invisible math operators and
  * BOM. Two titles differing only by these RENDER identically.
  */
-const INVISIBLE_CHARS_SOURCE = "[\\u00ad\\u200b-\\u200f\\u2028\\u2029\\u202a-\\u202e\\u2060-\\u2064\\ufeff]"
-/** For `replace`: global. */
-const INVISIBLE_CHARS = new RegExp(INVISIBLE_CHARS_SOURCE, "g")
 /**
- * For `test`: NOT global. A `/g` regex carries `lastIndex` across calls, so
- * testing one character at a time returns true, false, true... for a run of
- * identical invisible characters -- which would hide exactly the input this
- * code exists to reveal.
+ * Characters that occupy no visual space: soft hyphen, the zero-width and
+ * bidi controls, line/paragraph separators, the invisible math operators and
+ * BOM. Two titles differing only by these RENDER identically.
+ *
+ * Used with `replace`, so the `g` flag is correct here. Nothing calls `.test()`
+ * on it: a `/g` regex carries `lastIndex` between calls, which made a
+ * character-by-character test return true, false, true... across a run of
+ * identical invisible characters. `reveal` below uses the Unicode-category
+ * test instead, which covers every member of this set (verified) and is not
+ * stateful -- so the hazard is gone by construction rather than by a second
+ * regex happening to mask it.
  */
-const IS_INVISIBLE_CHAR = new RegExp(INVISIBLE_CHARS_SOURCE)
+const INVISIBLE_CHARS = /[\u00ad\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064\ufeff]/g
 
 /**
  * The form two titles share when they look the same on screen: compatibility
@@ -143,8 +147,9 @@ function titleMismatchDetail(storedTitle: string, expectTitle: string): string {
   // Escape ONLY what cannot be seen: an accented letter renders fine and
   // escaping it buries the character that actually differs. Built by hand
   // rather than via JSON.stringify, which would double the backslashes.
+  // One test, not two. A space is in Zs and renders, so it is excluded.
   const reveal = (value: string) => `"${[...value.trim()]
-    .map(char => (IS_INVISIBLE_CHAR.test(char) || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Zs}]/u.test(char) && char !== " "
+    .map(char => (char !== " " && /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Zs}]/u.test(char)
       ? `\\u{${char.codePointAt(0)!.toString(16)}}`
       : char))
     .join("")}"`
