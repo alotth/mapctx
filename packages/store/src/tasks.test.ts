@@ -6,7 +6,7 @@ import * as path from "path"
 import { importCommit } from "./cutover"
 import { createTask, moveTask, reopenTask, updateTask } from "./tasks"
 import { approveAcceptanceCriterion, reviseAcceptance } from "./acceptance"
-import { getTask, getTaskDetail, listDependencies, getActiveClaimForTask } from "./projections"
+import { getAcceptance, getTask, getTaskDetail, listDependencies, getActiveClaimForTask } from "./projections"
 import { claimTask, releaseClaim } from "./claims"
 import { StoreHandle } from "./store-handle"
 import { buildExport } from "./export"
@@ -756,6 +756,64 @@ test("T-127 review B7: a 2048-character link is accepted, 2049 is refused citing
       const shapeAccepted = updateTask(handle, { taskId: "T-101", patch: { externalLinks: [shape] }, actor: "test" });
       assert.equal(shapeAccepted.ok, true, `expected ${shape} to be accepted by design: ${JSON.stringify(shapeAccepted)}`);
     }
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T-129 criterion 0: createTask with `acceptance` records both events
+// atomically (same write transaction as task.upserted).
+// ---------------------------------------------------------------------------
+
+test("T-129 createTask with acceptance records revision 1 in the same transaction: acceptanceRevision in the result, criteria pending in order via acceptance show", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const created = createTask(handle, {
+      title: "Atomic acceptance",
+      acceptance: { condition: "criteria", texts: ["First criterion", "Second criterion"] },
+      actor: "test"
+    });
+    assert.equal(created.ok, true, JSON.stringify(created));
+    if (!created.ok) return;
+    assert.equal(created.acceptanceRevision, 1);
+
+    const acceptance = getAcceptance(handle.db, created.taskId);
+    assert.ok(acceptance);
+    assert.equal(acceptance!.revision, 1);
+    assert.deepEqual(acceptance!.criteria.map(c => c.text), ["First criterion", "Second criterion"]);
+    assert.ok(acceptance!.criteria.every(c => c.state === "pending"));
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-129 createTask without acceptance reports acceptanceRevision: null", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const created = createTask(handle, { title: "No acceptance here", actor: "test" });
+    assert.equal(created.ok, true);
+    if (created.ok) assert.equal(created.acceptanceRevision, null);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("MUTATION GUARD: createTask refuses invalid acceptance shapes (criteria with no texts, empty with texts, a blank text) with reason invalid-acceptance, and creates nothing", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const cases: Array<{ condition: "criteria" | "empty"; texts: string[] }> = [
+      { condition: "criteria", texts: [] },
+      { condition: "empty", texts: ["should not be here"] },
+      { condition: "criteria", texts: ["ok", "   "] }
+    ];
+    for (const acceptance of cases) {
+      const result = createTask(handle, { title: "invalid acceptance probe", acceptance, actor: "test" });
+      assert.equal(result.ok, false, `expected refusal for ${JSON.stringify(acceptance)}`);
+      if (!result.ok) assert.equal(result.reason, "invalid-acceptance", JSON.stringify(result));
+    }
+    // Nothing was created: the board still ends at T-102 (no T-103).
+    assert.equal(getTask(handle.db, "T-103"), undefined);
   } finally {
     handle.close(); restoreEnv(); cleanupDir(repoDir);
   }
