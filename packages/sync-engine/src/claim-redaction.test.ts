@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process"
 import * as path from "path"
 import test, { type TestContext } from "node:test"
 import { LEASE_TOKEN_BYTES, LEASE_TOKEN_PATTERN } from "@mapctx/store"
+import { renderHolder } from "./mapctx-cli"
 
 // T-134 (C0/D1): a refused claim must never disclose the holder's leaseToken
 // -- the bearer credential for `task renew`/`task release` -- in either
@@ -84,7 +85,11 @@ test("MUTATION GUARD: task claim against a held task never discloses the holder'
     assert.ok(!LEASE_TOKEN_PATTERN.test(combined), `${label}: a token-shaped value appeared in output:\n${combined}`);
 
     assert.ok(combined.includes("claimId") || /claim [0-9a-f-]{36}/.test(combined), `${label}: claimId must survive: ${combined}`);
-    assert.ok(combined.includes("holder") || combined.includes("holder-a") || combined.includes('"agent":"A"'), `${label}: holder must survive: ${combined}`);
+    // Review F2: human mode no longer echoes raw JSON (`"agent":"A"`); it
+    // renders only identity-shaped fields via renderHolder(), e.g. `agent=A`.
+    // --json's activeClaim.holder is untouched (the structured channel), so
+    // either spelling counts as "holder survived".
+    assert.ok(combined.includes("holder") || combined.includes("agent=A") || combined.includes('"agent":"A"'), `${label}: holder must survive: ${combined}`);
     assert.ok(combined.includes("expiresAt") || /expires \S/.test(combined), `${label}: expiresAt must survive: ${combined}`);
   }
 });
@@ -152,4 +157,117 @@ test("criterion 4: CHANGELOG's 0.4.0 (Unreleased) section has a security entry f
   const section = changelog.slice(sectionStart, nextSection === -1 ? undefined : nextSection);
   assert.match(section, /\*\*security:\*\*/);
   assert.match(section, /leaseToken/);
+});
+
+// ---------------------------------------------------------------------------
+// Review F2: `activeClaimSuffix`'s human-mode render of the holder must stay
+// bounded and identity-only -- no default pid/host, no secret-looking field
+// from an oversized holder, and no raw `{` reaching stderr in human mode.
+// ---------------------------------------------------------------------------
+
+test("renderHolder(): unit-level edge cases (empty, unidentified, clipping, total cap, brace/newline stripping)", () => {
+  assert.equal(renderHolder(undefined), "an unidentified holder");
+  assert.equal(renderHolder({}), "an unidentified holder");
+
+  // Fields present but none of them identity-shaped: counted, not echoed.
+  assert.equal(renderHolder({ pid: 123, host: "box" }), "an unidentified holder (2 field(s))");
+
+  // A single identity key.
+  assert.equal(renderHolder({ agent: "alice" }), "agent=alice");
+
+  // Clipping: a value over HOLDER_VALUE_LIMIT (40) is cut with an ellipsis.
+  const longValue = "x".repeat(100);
+  const clipped = renderHolder({ agent: longValue });
+  assert.ok(clipped.startsWith("agent="));
+  const clippedValue = clipped.slice("agent=".length);
+  assert.ok(clippedValue.length <= 41, `expected <=41 chars (40 + ellipsis), got ${clippedValue.length}: ${clippedValue}`);
+  assert.ok(clippedValue.endsWith("…"));
+
+  // Braces and newlines are stripped from a value even when short.
+  assert.ok(!renderHolder({ agent: "a{b}c\nd" }).includes("{"));
+  assert.ok(!renderHolder({ agent: "a{b}c\nd" }).includes("}"));
+  assert.ok(!renderHolder({ agent: "a{b}c\nd" }).includes("\n"));
+
+  // Total render cap (100), with multiple identity fields.
+  const many = renderHolder({ provider: "x".repeat(40), agent: "y".repeat(40), actor: "z".repeat(40) });
+  assert.ok(many.length <= 101, `expected <=101 chars (100 + ellipsis), got ${many.length}`);
+  assert.ok(many.endsWith("…"));
+
+  // pid/host are never identity keys, even alongside a real identity field.
+  const mixed = renderHolder({ pid: 999, host: "evil.internal", agent: "bob" });
+  assert.equal(mixed, "agent=bob");
+  assert.ok(!mixed.includes("999"));
+  assert.ok(!mixed.includes("evil.internal"));
+});
+
+test("MUTATION GUARD (F2): default holder ({pid,host}) renders as unidentified, with no hostname, no pid, and no brace in human mode", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const taskId = createClaimableTask(f, "default holder target");
+
+  // No --holder: taskClaimCommand defaults to { pid: process.pid, host: os.hostname() }.
+  const first = f.cli(["task", "claim", taskId, "--actor", "holder-a"]);
+  assert.equal(first.status, 0, String(first.stderr));
+
+  const refused = f.cli(["task", "claim", taskId, "--holder", '{"agent":"B"}', "--actor", "holder-b"]);
+  assert.notEqual(refused.status, 0);
+  const stderr = String(refused.stderr);
+  assert.match(stderr, /held by an unidentified holder \(2 field\(s\)\)/);
+  assert.ok(!stderr.includes(String(process.pid)), `must not disclose the first claimer's pid: ${stderr}`);
+  assert.ok(!/[A-Za-z0-9-]+\.(local|lan|internal)|held by \{/.test(stderr), `must not disclose a hostname shape: ${stderr}`);
+  assert.ok(!stderr.includes("{"), `human mode must never carry a raw brace: ${stderr}`);
+});
+
+test("MUTATION GUARD (F2): an oversized holder with a secret-looking field renders only the identity key, clipped, under the total cap", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const taskId = createClaimableTask(f, "oversized holder target");
+
+  const bigNote = "x".repeat(300);
+  const holder = JSON.stringify({ note: bigNote, secret: "hunter2", agent: "alice" });
+  f.success(["task", "claim", taskId, "--holder", holder, "--actor", "holder-a"]);
+
+  const refused = f.cli(["task", "claim", taskId, "--holder", '{"agent":"B"}', "--actor", "holder-b"]);
+  assert.notEqual(refused.status, 0);
+  const stderr = String(refused.stderr);
+  assert.ok(!stderr.includes("hunter2"), `the secret-looking field must never reach stderr: ${stderr}`);
+  assert.ok(!stderr.includes("x".repeat(50)), `the oversized note must never reach stderr intact: ${stderr}`);
+  assert.ok(!stderr.includes("{"), `human mode must never carry a raw brace: ${stderr}`);
+  assert.match(stderr, /held by agent=alice,/, stderr);
+  const line = stderr.split("\n")[0];
+  assert.ok(line.length < 200, `expected a bounded Error: line, got ${line.length} chars: ${line}`);
+});
+
+test("a Traycer-style holder ({provider, epic}) still identifies the claim in human mode", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const taskId = createClaimableTask(f, "traycer holder target");
+
+  const epicId = "e8873251-f6f0-490d-be16-8e5655300237";
+  f.success(["task", "claim", taskId, "--holder", JSON.stringify({ provider: "traycer", epic: epicId }), "--actor", "holder-a"]);
+
+  const refused = f.cli(["task", "claim", taskId, "--holder", '{"agent":"B"}', "--actor", "holder-b"]);
+  assert.notEqual(refused.status, 0);
+  const stderr = String(refused.stderr);
+  assert.match(stderr, /provider=traycer/);
+  assert.match(stderr, new RegExp(`epic=${epicId.slice(0, 40)}`));
+});
+
+test("channel convention: human-mode claim and start refusals never carry a raw `{` (CliRefusal payload stays off stderr without --json)", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+
+  const claimTaskId = createClaimableTask(f, "channel convention: claim");
+  f.success(["task", "claim", claimTaskId, "--holder", '{"agent":"A"}', "--actor", "holder-a"]);
+  const claimRefused = f.cli(["task", "claim", claimTaskId, "--holder", '{"agent":"B"}', "--actor", "holder-b"]);
+  assert.notEqual(claimRefused.status, 0);
+  assert.equal(String(claimRefused.stdout).trim(), "");
+  assert.ok(!String(claimRefused.stderr).includes("{"), `claim human mode: ${claimRefused.stderr}`);
+
+  const startTaskId = createClaimableTask(f, "channel convention: start");
+  f.success(["task", "start", startTaskId, "--holder", '{"agent":"A"}', "--actor", "holder-a"]);
+  const startRefused = f.cli(["task", "start", startTaskId, "--holder", '{"agent":"B"}', "--actor", "holder-b"]);
+  assert.notEqual(startRefused.status, 0);
+  assert.equal(String(startRefused.stdout).trim(), "");
+  assert.ok(!String(startRefused.stderr).includes("{"), `start human mode: ${startRefused.stderr}`);
 });
