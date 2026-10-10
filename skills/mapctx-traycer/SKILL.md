@@ -146,6 +146,15 @@ skips criteria that are already approved and reports them, while naming an index
 already approved is refused — `--all` means "bring this to fully approved", naming one is a claim
 about that one.
 
+**`--all` is not idempotent.** Running it again once everything is approved exits non-zero with
+`nothing-to-approve`, so do not blind-retry it after a timeout and do not treat a non-zero exit as
+"the approvals did not happen" — read the state with `acceptance show` first. A single explicit
+selection also still returns `criterionId`/`state` alongside `approved`/`alreadyApproved`, so a
+pre-existing `--index <n>` caller keeps working unchanged.
+
+Recording a revision with **no** criteria (a source holding only the `## Acceptance` heading) is
+allowed but warns: `task finish` refuses an empty revision until it is revised with criteria.
+
 Revising guards against the wrong task, which a revision check cannot do (a fresh task satisfies
 `--expect-revision 0` too — that is exactly how criteria once landed on the wrong id):
 

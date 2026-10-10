@@ -78,11 +78,37 @@ export function buildFirstAcceptanceRevision(
  * id prefix removed, trimmed and case-insensitively, because the prefix is
  * added by the store and no caller types it.
  */
-function titleMismatch(storedTitle: string, expectTitle: string): boolean {
-  const normalize = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase()
+function normalizeTitle(value: string): string {
+  // Review F2: NFC first. Without it an NFD argument (which macOS input
+  // sources and filesystem reads hand over routinely) never matches an NFC
+  // stored title, and the refusal prints two strings that LOOK identical --
+  // telling the operator the id is wrong in the one guard whose whole job is
+  // to tell them the id is wrong. This board's titles are accented Portuguese.
+  return value.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase()
+}
+
+function titleMatches(storedTitle: string, expectTitle: string): boolean {
   const stripped = storedTitle.replace(/^\s*\[[^\]]+\]\s*/, "")
-  const wanted = normalize(expectTitle)
-  return normalize(storedTitle) !== wanted && normalize(stripped) !== wanted
+  const wanted = normalizeTitle(expectTitle)
+  return normalizeTitle(storedTitle) === wanted || normalizeTitle(stripped) === wanted
+}
+
+/**
+ * Review F2 asked for a special message when the two sides differ only by
+ * Unicode normalization. With NFC applied in `normalizeTitle` that case now
+ * MATCHES and never reaches a refusal, so the remaining hazard is the general
+ * one: a genuine mismatch whose two strings still RENDER identically (a
+ * zero-width character, a look-alike glyph). Then, and only then, the message
+ * gains escaped code points, because repeating two identical-looking strings
+ * explains nothing.
+ */
+function titleMismatchDetail(storedTitle: string, expectTitle: string): string {
+  const stripped = storedTitle.replace(/^\s*\[[^\]]+\]\s*/, "").trim();
+  if (stripped !== expectTitle.trim()) return "";
+  const escape = (value: string) => [...value.trim()]
+    .map(char => (/[\x20-\x7e]/.test(char) ? char : `\\u{${char.codePointAt(0)!.toString(16)}}`))
+    .join("");
+  return ` The two render identically but differ in code points: stored ${JSON.stringify(escape(stripped))} vs expected ${JSON.stringify(escape(expectTitle))}.`;
 }
 
 export type ReviseAcceptanceOptions = {
@@ -131,11 +157,11 @@ export function reviseAcceptance(store: StoreHandle, options: ReviseAcceptanceOp
   return store.runInWriteTransaction(append => {
     const task = getTask(store.db, options.taskId);
     if (!task) return { ok: false, reason: "unknown-task", message: `Unknown task: ${options.taskId}` };
-    if (options.expectTitle !== undefined && titleMismatch(task.title, options.expectTitle)) {
+    if (options.expectTitle !== undefined && !titleMatches(task.title, options.expectTitle)) {
       return {
         ok: false,
         reason: "title-mismatch",
-        message: `${options.taskId} is titled ${JSON.stringify(task.title)}, not ${JSON.stringify(options.expectTitle)}. Nothing was revised -- check the task id.`
+        message: `${options.taskId} is titled ${JSON.stringify(task.title)}, not ${JSON.stringify(options.expectTitle)}. Nothing was revised -- check the task id.${titleMismatchDetail(task.title, options.expectTitle)}`
       };
     }
     const current = getAcceptance(store.db, options.taskId);

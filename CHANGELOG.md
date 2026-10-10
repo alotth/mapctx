@@ -107,6 +107,24 @@ Migration: read stderr's first line (or split stderr on `"\nError:"`) instead
 of stdout. Check the exit code first, as before. No consumer in this repository
 depended on the old channel.
 
+### Public contract: `task acceptance approve --json` output shape
+
+`approve` now routes every selection through the batch path, so its result
+carries `approved: [criterionId, ...]` and `alreadyApproved: [criterionId, ...]`
+instead of a single `criterionId`/`state` pair:
+
+```
+before:  {"ok":true,"revision":1,"criterionId":"350d45b5-…","state":"approved"}
+after:   {"ok":true,"revision":1,"approved":["350d45b5-…"],"alreadyApproved":[]}
+```
+
+**The pre-existing invocation is unchanged in practice**: for a single explicit
+selection (`--index <n>` or `--criterion-id <id>`) the output still carries
+`criterionId` and `state` alongside the new fields, so the change is purely
+additive there and no existing caller breaks. The batch-only shape applies to
+`--index` with a list and to `--all`, both of which are new in this release and
+never had the old shape. No consumer in this repository read either field.
+
 ### Features
 
 * **feature:** `mapctx --help` prints an "Enumerated values" table for every
@@ -141,6 +159,17 @@ depended on the old channel.
 * **feature:** `task acceptance revise --from-file` accepts a bare `- [ ]`
   checklist when the file has no `## Acceptance` heading, and reports on stderr
   which reading it used
+* **fix:** `--expect-title` normalizes Unicode to NFC before comparing, so an
+  NFD argument matches an NFC stored title instead of refusing with two strings
+  that render identically; a genuine mismatch that still looks identical now
+  reports the differing code points
+* **fix:** recording an acceptance revision with no criteria (a source holding
+  only the `## Acceptance` heading) warns that `task finish` will refuse until
+  it is revised with criteria, instead of silently building a task that cannot
+  be finished
+* **fix:** `--all=true` is refused rather than silently dropped, and a missing
+  `--acceptance-file` names the flag and the resolved path instead of returning
+  a bare ENOENT
 
 ### Fixes
 

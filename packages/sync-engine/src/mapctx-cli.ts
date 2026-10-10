@@ -75,7 +75,6 @@ import {
   commitAcceptanceImport,
   parseAcceptanceRead,
   reviseAcceptance,
-  approveAcceptanceCriterion,
   approveAcceptanceCriteria,
   unapproveAcceptanceCriterion,
   getAcceptance,
@@ -334,7 +333,10 @@ export const KNOWN_FLAGS: ReadonlySet<string> = new Set([...VALUE_FLAGS, ...BOOL
  * ignored means the command rewrites every mirror in a shared checkout, which
  * is the exact harm the flag exists to prevent (review F1).
  */
-const VALUE_REJECTING_FLAGS: ReadonlySet<string> = new Set(['--no-snapshot']);
+// Review F5: `--all=true` fell through to positional and vanished, leaving a
+// refusal that said "requires --all" to a caller who had written --all. Same
+// shape T-128 created this set for after `--no-snapshot=true` did real damage.
+const VALUE_REJECTING_FLAGS: ReadonlySet<string> = new Set(['--no-snapshot', '--all']);
 
 function printHelp(): void {
   console.log('mapctx CLI');
@@ -802,7 +804,10 @@ function parseArgs(argv: string[]): {
       const base = a.split('=')[0];
       if (!KNOWN_FLAGS.has(base)) throw new Error(`Unknown flag: ${base}`);
       if (a.includes('=') && VALUE_REJECTING_FLAGS.has(base)) {
-        throw new Error(`${base} takes no value. Use ${base} on its own, or --snapshot=none.`);
+        // The alternative spelling is flag-specific: `--snapshot=none` is the
+        // value form of --no-snapshot, and there is no value form of --all.
+        const alternative = base === '--no-snapshot' ? ' Use it on its own, or --snapshot=none.' : ' Use it on its own.';
+        throw new Error(`${base} takes no value.${alternative}`);
       }
     }
   }
@@ -2044,7 +2049,15 @@ export function taskCreateCommand(options: MapctxOptions): void {
   let acceptance: { condition: 'criteria' | 'empty'; texts: string[] } | undefined;
   let acceptanceNote: string | undefined;
   if (options.acceptanceFile) {
-    const source = fs.readFileSync(path.resolve(cwd, options.acceptanceFile), 'utf8');
+    // Review F6: every other refusal on this command names the flag; a raw
+    // ENOENT did not.
+    const acceptancePath = path.resolve(cwd, options.acceptanceFile);
+    let source: string;
+    try {
+      source = fs.readFileSync(acceptancePath, 'utf8');
+    } catch (error) {
+      throw new Error(`--acceptance-file ${options.acceptanceFile} could not be read at ${acceptancePath}: ${error instanceof Error ? error.message : String(error)}`);
+    }
     const read = readAcceptanceSource(source);
     if (read === null) {
       throw new Error(`--acceptance-file ${options.acceptanceFile} has neither a ## Acceptance section nor any \`- [ ]\` checklist item.`);
@@ -2099,6 +2112,10 @@ export function taskCreateCommand(options: MapctxOptions): void {
     });
     if (!result.ok) refuse(result, `Create refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
     if (acceptanceNote) console.error(acceptanceNote);
+    if (acceptance) {
+      const emptyNote = emptyAcceptanceWarning(result.taskId, acceptance.condition, acceptance.texts.length);
+      if (emptyNote) console.error(emptyNote);
+    }
 
     const detailPath = path.resolve(cwd, result.detailPath);
     const generated = buildExport(handle.db, { tasksRoot }).taskDetailFiles.find(file => path.resolve(file.path) === detailPath);
@@ -2167,6 +2184,18 @@ export function taskUpdateCommand(taskId: string, options: MapctxOptions): void 
   } finally {
     handle.close();
   }
+}
+
+/**
+ * Review F3: an acceptance revision with NO criteria is exactly the shape
+ * `checkTaskAcceptance` refuses `done` for ("revision N in the store is
+ * empty"), so recording one silently builds a task that cannot be finished.
+ * The create path already warned about the headerless case and the two-source
+ * case; this is the one that produced a dead end and said nothing.
+ */
+function emptyAcceptanceWarning(taskId: string, condition: 'criteria' | 'empty', count: number): string | undefined {
+  if (condition !== 'empty' && count > 0) return undefined;
+  return `Note: recorded an acceptance revision for ${taskId} with NO criteria. \`task finish\` and \`task move --status done\` will refuse until it is revised with criteria.`;
 }
 
 /**
@@ -2297,6 +2326,8 @@ export function taskAcceptanceCommand(action: string | undefined, taskId: string
         ...(options.expectTitle === undefined ? {} : { expectTitle: options.expectTitle })
       });
       if (!result.ok) refuse(result, result.message);
+      const emptyNote = emptyAcceptanceWarning(taskId, reviseArgs!.condition, result.criteria.length);
+      if (emptyNote) console.error(emptyNote);
       print(result, options.json);
       return;
     }
@@ -2315,7 +2346,20 @@ export function taskAcceptanceCommand(action: string | undefined, taskId: string
         ...(approveEvidence ? { evidence: approveEvidence } : {})
       });
       if (!result.ok) refuse(result, result.message);
-      print(result, options.json);
+      // Review F1: routing every approve through the batch path dropped
+      // `criterionId`/`state` from the output of the pre-T-129 invocation
+      // (`--index 0` / `--criterion-id <id>`). No consumer in this repo read
+      // them, but it is a documented public command, and keeping them for a
+      // single EXPLICIT selection makes the change purely additive instead of
+      // breaking. Keyed on the selection, not the result, so `--all` on a
+      // one-criterion task still returns only the batch shape -- `--all` is
+      // new and never had the old one.
+      const singleSelection = !options.all
+        && ((options.indices?.length ?? 0) + (options.criterionId ? 1 : 0)) === 1;
+      const compat = singleSelection && result.approved.length === 1
+        ? { criterionId: result.approved[0], state: 'approved' as const }
+        : {};
+      print({ ...result, ...compat }, options.json);
       return;
     }
     if (action === 'unapprove') {
