@@ -999,16 +999,22 @@ export function verifyRedactionsFromLedger(storeDir: string, db: DatabaseSync): 
   // the DB-only branch below is the lenient one, so it must be gated on the
   // reviewed instrument, not on a column the row sets about itself.
   let attestedNodes: ReadonlySet<string> | undefined
+  // Review BAIXA-7: an attestation file that cannot be READ is not the same
+  // condition as a node nothing vouches for, and saying the latter sends the
+  // operator looking for a missing approval instead of at the broken file.
+  // The load failure is kept and reported in the reason.
+  let attestationLoadFailure: string | undefined
   const isAttested = (nodeId: string): boolean => {
     if (!attestedNodes) {
       try {
         attestedNodes = new Set(loadNodeAttestations(storeDir).keys())
-      } catch {
+      } catch (error) {
         // A malformed attestation file is repair's refusal to make, loudly and
         // by name. Here it must only mean "no attestation vouches for this
         // node", or an unreadable side file would brick the open -- the very
         // failure mode T-126's ALTA-1 fix exists to prevent.
         attestedNodes = new Set<string>()
+        attestationLoadFailure = (error as Error).message
       }
     }
     return attestedNodes.has(nodeId)
@@ -1043,11 +1049,18 @@ export function verifyRedactionsFromLedger(storeDir: string, db: DatabaseSync): 
         problems.push({ nodeId, sequence, reason: `redaction target row in event_log contradicts itself: ${indexed.reason}` })
         continue
       }
-      provenance = indexed && indexed.status === "ok" && indexed.journalPath === "" && isAttested(nodeId)
+      const claimsDbOnly = Boolean(indexed && indexed.status === "ok" && indexed.journalPath === "")
+      const attested = claimsDbOnly && isAttested(nodeId)
+      provenance = attested && indexed && indexed.status === "ok"
         ? { kind: "db-only", entry: indexed.entry }
-        : { kind: "absent", reason: indexed && indexed.status === "ok" && indexed.journalPath === ""
-            ? "journal file is missing and the row claims to be DB-only, but no reviewed attestation covers this node"
-            : "journal file is missing" }
+        : {
+            kind: "absent",
+            reason: !claimsDbOnly
+              ? "journal file is missing"
+              : attestationLoadFailure !== undefined
+                ? `journal file is missing and the row claims to be DB-only, but the attestation file could not be read (${attestationLoadFailure}); no attestation can vouch for this node until it is fixed`
+                : "journal file is missing and the row claims to be DB-only, but no reviewed attestation covers this node"
+          }
     }
     const outcome = verifyTargetChain(provenance, chain)
     problems.push(...outcome.problems)

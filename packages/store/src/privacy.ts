@@ -306,10 +306,16 @@ export function formatPrivacyWarnings(
   }
   if (scan.aborted && scan.aborted.patternIndex < 0) {
     // No pattern was reached at all, so none of them is to blame: the budget
-    // itself was unusable (review BAIXA-6).
+    // itself was unusable (review BAIXA-6). Review BAIXA-8: say WHICH way it
+    // was unusable. `Infinity` and `NaN` are rejected for not being a
+    // duration at all -- `vm` takes a finite timeout -- and calling them "too
+    // small" told the operator to raise a budget that was already infinite.
     lines.push(
-      `privacy: lint aborted after ${scan.aborted.afterMs}ms without evaluating any pattern -- the ${scan.aborted.budgetMs}ms budget is too small to scan anything, so no field was checked. ` +
-      `Raise it (default ${PRIVACY_LINT_BUDGET_MS}ms). ${operation} was NOT blocked.`
+      Number.isFinite(scan.aborted.budgetMs)
+        ? `privacy: lint aborted after ${scan.aborted.afterMs}ms without evaluating any pattern -- the ${scan.aborted.budgetMs}ms budget is too small to scan anything, so no field was checked. ` +
+          `Raise it (default ${PRIVACY_LINT_BUDGET_MS}ms). ${operation} was NOT blocked.`
+        : `privacy: lint skipped: a budget of ${String(scan.aborted.budgetMs)}ms is not a finite number of milliseconds, so no field was checked. ` +
+          `Set a finite budget (default ${PRIVACY_LINT_BUDGET_MS}ms); the lint needs a real deadline precisely because a pattern can run forever. ${operation} was NOT blocked.`
     )
   } else if (scan.aborted) {
     lines.push(
