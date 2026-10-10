@@ -144,6 +144,24 @@ depended on the old channel.
 * **fix:** an acceptance refusal from either closing path (`task finish` and
   `task move --status done`, which have always shared the gate) now names the
   command that closes a task and mentions `--no-snapshot`
+* **security:** a refused claim no longer discloses the holder's `leaseToken`.
+  `task claim` and `task start` against a task somebody else holds used to
+  return the whole claim record — including the lease token, which is the
+  bearer credential for `task renew` and `task release` — so any agent that
+  merely tried to claim a busy task could take over or drop that lease. The
+  token is now stripped at the source by a single `disclosableClaim` allowlist
+  in the store, so no print site can reintroduce it, and it is gone from both
+  `--json` and human output. The refusal still carries `claimId`, `holder`,
+  `expiresAt`, `state` and the journal coordinates, and in human mode the
+  `Error:` line now names the claim, its holder and its expiry so you can
+  decide to wait or escalate without `--json`. A holder still receives its own
+  token from a successful `task claim`/`task start` and from `task renew`.
+  **This stops new disclosures but rotates nothing:** `task renew` extends a
+  lease without reissuing its token, so a token printed by any pre-0.4.0 build
+  stays valid until that lease expires or is released. If a pre-fix claim
+  refusal may have reached a CI log, a transcript or a shared terminal,
+  release those leases and re-claim them rather than waiting them out.
+  Rotating the token on renew is a separate change
 * **fix:** `externalLinks` refuses userinfo credentials (`https://user:pass@...`),
   caps each link at 2048 characters, and matches the `scheme:word:rest` provider
   form case-insensitively

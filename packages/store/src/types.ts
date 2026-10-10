@@ -96,6 +96,38 @@ export type ResourceClaimRecord = {
   eventSequence: number
 }
 
+/**
+ * T-134 (C0 of the coordination v2 design, operator decision D1): the claim
+ * shape a REFUSAL may disclose about somebody else's claim.
+ *
+ * It is an allowlist by construction, not `Omit<ResourceClaimRecord,
+ * "leaseToken">`: the next secret added to a claim -- the design already
+ * foresees a renew token and a derived lease -- must fail to compile here
+ * rather than start leaking through every refusal that echoes a claim.
+ * `leaseToken` is the bearer credential for renew/release, so only the
+ * holder that created it ever receives it.
+ */
+export type DisclosableClaimRecord = {
+  claimId: string
+  taskId: string
+  state: ResourceClaimState
+  claimedAt: string
+  expiresAt: string
+  holder: Record<string, unknown>
+  eventNode: string
+  eventSequence: number
+  /**
+   * Makes the redaction STRUCTURAL rather than aspirational. Without this,
+   * `ResourceClaimRecord` is assignable to this type -- it has all the fields
+   * above plus more, and excess-property checks only fire on fresh object
+   * literals -- so `activeClaim: active` would have compiled and quietly
+   * reintroduced the leak. The test agent's mutation proved exactly that.
+   * Declaring the secret as `never` makes any record that actually carries a
+   * token fail to compile here.
+   */
+  leaseToken?: never
+}
+
 export type EventRevision = {
   node: string
   sequence: number
