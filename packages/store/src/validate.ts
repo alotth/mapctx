@@ -1,3 +1,4 @@
+import * as crypto from "crypto"
 import { resolveMapctxToml, resolveProjectStoreDir, isStoreMaterialized } from "./config"
 import { checkDrift, type DriftReport } from "./drift"
 import { StoreHandle } from "./store-handle"
@@ -292,6 +293,225 @@ export function checkStoreSnapshots(cwd: string, tasksRoot: string): SnapshotChe
  * cannot change the outcome. Snapshot comparison is an explicit separate
  * operation (checkStoreSnapshots).
  */
+// ---------------------------------------------------------------------------
+// T-127 (R7): `validate` as a usable gate.
+//
+// The reported friction is that a board carrying old issues drowns the one
+// issue a run just introduced, so the command is useless as a pass/fail gate.
+// Two orthogonal, purely functional selectors fix that without touching any
+// validation rule: restrict the report to named tasks (`--task`), and accept a
+// recorded set of pre-existing issues that must not fail (`--baseline`).
+//
+// Both operate on the issue shape every validator in the repo already emits
+// (store canonical/semantic issues and the markdown structural report), so one
+// implementation serves both authority regimes.
+// ---------------------------------------------------------------------------
+
+export type ValidationGateIssue = {
+  severity: "error" | "warning"
+  code: string
+  message: string
+  taskId?: string
+}
+
+export const VALIDATION_BASELINE_SCHEMA_VERSION = 1
+
+export type ValidationBaselineEntry = {
+  fingerprint: string
+  severity: "error" | "warning"
+  code: string
+  taskId: string | null
+  message: string
+}
+
+export type ValidationBaselineFile = {
+  schemaVersion: number
+  issues: ValidationBaselineEntry[]
+}
+
+/**
+ * Identity of one issue for baseline purposes. The message is part of it on
+ * purpose: `invalid-domain` on the same task with a different unknown key is a
+ * different problem, and a baseline that collapsed them would silence the
+ * second one. The cost is that rewording a validator message invalidates the
+ * baselines that recorded it, which is the honest direction to fail in -- a
+ * stale entry is reported, never silently honoured.
+ */
+export function validationIssueFingerprint(issue: ValidationGateIssue): string {
+  return crypto
+    .createHash("sha256")
+    .update([issue.severity, issue.code, issue.taskId ?? "", issue.message].join("\u0000"), "utf8")
+    .digest("hex")
+    .slice(0, 32)
+}
+
+function baselineEntry(issue: ValidationGateIssue): ValidationBaselineEntry {
+  return {
+    fingerprint: validationIssueFingerprint(issue),
+    severity: issue.severity,
+    code: issue.code,
+    taskId: issue.taskId ?? null,
+    message: issue.message
+  }
+}
+
+/** Serializable baseline for the issues passed in, ordered deterministically. */
+export function buildValidationBaseline(issues: ValidationGateIssue[]): ValidationBaselineFile {
+  const byFingerprint = new Map<string, ValidationBaselineEntry>()
+  for (const issue of issues) {
+    const entry = baselineEntry(issue)
+    if (!byFingerprint.has(entry.fingerprint)) byFingerprint.set(entry.fingerprint, entry)
+  }
+  const sorted = [...byFingerprint.values()].sort((a, b) =>
+    a.code.localeCompare(b.code)
+    || (a.taskId ?? "").localeCompare(b.taskId ?? "")
+    || a.message.localeCompare(b.message)
+    || a.fingerprint.localeCompare(b.fingerprint)
+  )
+  return { schemaVersion: VALIDATION_BASELINE_SCHEMA_VERSION, issues: sorted }
+}
+
+/**
+ * Reads a baseline written by buildValidationBaseline. Throws on anything it
+ * cannot vouch for: a gate that silently treats an unreadable baseline as
+ * "nothing accepted" would turn a typo into a wall of pre-existing failures,
+ * and one that treated it as "everything accepted" would pass a broken board.
+ */
+export function parseValidationBaseline(content: string): ValidationBaselineFile {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(content)
+  } catch (error) {
+    throw new Error(`Baseline is not valid JSON: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Baseline must be a JSON object produced by `mapctx validate --write-baseline`.")
+  }
+  const file = parsed as Partial<ValidationBaselineFile>
+  if (file.schemaVersion !== VALIDATION_BASELINE_SCHEMA_VERSION) {
+    throw new Error(`Unsupported baseline schemaVersion ${String(file.schemaVersion)}; expected ${VALIDATION_BASELINE_SCHEMA_VERSION}. Regenerate with \`mapctx validate --write-baseline\`.`)
+  }
+  if (!Array.isArray(file.issues)) {
+    throw new Error("Baseline is missing the `issues` array.")
+  }
+  const issues = file.issues.map((entry, index) => {
+    if (!entry || typeof entry !== "object" || typeof (entry as ValidationBaselineEntry).fingerprint !== "string") {
+      throw new Error(`Baseline issues[${index}] has no fingerprint.`)
+    }
+    return entry as ValidationBaselineEntry
+  })
+  return { schemaVersion: file.schemaVersion, issues }
+}
+
+export type ValidationGateOptions = {
+  /** Keep only issues attributed to these task ids. Undefined keeps every issue. */
+  tasks?: string[]
+  /** Fingerprints that must not fail. */
+  baseline?: ValidationBaselineFile
+}
+
+export type ValidationGateResult<TIssue extends ValidationGateIssue> = {
+  /** Issues that survived the selectors -- the ones the gate reports and counts. */
+  issues: TIssue[]
+  errors: number
+  warnings: number
+  /** Task ids the filter asked for. */
+  taskFilter: string[] | null
+  /** Issues dropped because they belong to another task. */
+  filteredOutByTask: number
+  /**
+   * Issues dropped because the filter is task-scoped and they carry no task
+   * attribution (board-level findings like `dependency-cycle`). Counted and
+   * reported separately so a task-scoped gate never hides them in silence.
+   */
+  boardScopedExcluded: number
+  /**
+   * The excluded board-scoped issues that are ERRORS. `--task` is a filter,
+   * and `--baseline` is the gate, so these legitimately stop counting -- but
+   * an exit code of 0 while the board carries an unattributable error is
+   * exactly the kind of quiet pass this feature exists to prevent, so the
+   * caller is told about them explicitly.
+   */
+  boardScopedErrors: ValidationGateIssue[]
+  /** Issues present and accepted by the baseline. */
+  baselined: number
+  /**
+   * Baseline entries that matched no reported issue, each with WHY (review
+   * A11): `not-reported` means the board no longer has it and it can be
+   * dropped; `out-of-scope` means `--task` excluded the issue it covers, so
+   * it is still valid for the whole board and must NOT be dropped.
+   */
+  staleBaseline: Array<ValidationBaselineEntry & { cause: "not-reported" | "out-of-scope" }>
+}
+
+/**
+ * Applies `--task` and `--baseline` to one issue list. Pure: no filesystem,
+ * no store, no ordering change to the issues it keeps.
+ *
+ * `--task` is intersected BEFORE the baseline so `staleBaseline` is reported
+ * against the issues actually in scope; the baseline is matched by fingerprint
+ * only, so a baseline recorded for the whole board works unchanged under a
+ * narrower `--task`.
+ */
+export function applyValidationGate<TIssue extends ValidationGateIssue>(
+  issues: TIssue[],
+  options: ValidationGateOptions = {}
+): ValidationGateResult<TIssue> {
+  const taskFilter = options.tasks && options.tasks.length > 0 ? [...new Set(options.tasks)] : null
+  const wanted = taskFilter ? new Set(taskFilter) : null
+
+  let filteredOutByTask = 0
+  let boardScopedExcluded = 0
+  const boardScopedErrors: ValidationGateIssue[] = []
+  const inScope: TIssue[] = []
+  for (const issue of issues) {
+    if (!wanted) { inScope.push(issue); continue }
+    if (issue.taskId === undefined || issue.taskId === null) {
+      boardScopedExcluded += 1
+      if (issue.severity === "error") boardScopedErrors.push(issue)
+      continue
+    }
+    if (!wanted.has(issue.taskId)) { filteredOutByTask += 1; continue }
+    inScope.push(issue)
+  }
+
+  const accepted = new Set((options.baseline?.issues ?? []).map(entry => entry.fingerprint))
+  const matched = new Set<string>()
+  const kept: TIssue[] = []
+  let baselined = 0
+  for (const issue of inScope) {
+    const fingerprint = validationIssueFingerprint(issue)
+    if (accepted.has(fingerprint)) {
+      matched.add(fingerprint)
+      baselined += 1
+      continue
+    }
+    kept.push(issue)
+  }
+  // An entry that matched nothing in scope may still describe an issue the
+  // task filter excluded, so the two causes are told apart against the FULL
+  // issue list before any advice is given.
+  const allFingerprints = new Set(issues.map(issue => validationIssueFingerprint(issue)))
+  const staleBaseline = (options.baseline?.issues ?? [])
+    .filter(entry => !matched.has(entry.fingerprint))
+    .map(entry => ({
+      ...entry,
+      cause: allFingerprints.has(entry.fingerprint) ? ("out-of-scope" as const) : ("not-reported" as const)
+    }))
+
+  return {
+    issues: kept,
+    errors: kept.filter(issue => issue.severity === "error").length,
+    warnings: kept.filter(issue => issue.severity === "warning").length,
+    taskFilter,
+    filteredOutByTask,
+    boardScopedExcluded,
+    boardScopedErrors,
+    baselined,
+    staleBaseline
+  }
+}
+
 export function validateStoreRegime(cwd: string): StoreValidateResult {
   const resolved = resolveMapctxToml(cwd);
   if (!resolved) return { status: "no-project" };

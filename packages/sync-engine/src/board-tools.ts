@@ -456,7 +456,7 @@ function validateBoardInternal(tasksFilePath: string, config: SyncConfig): Valid
   };
 }
 
-function printValidationReport(report: ValidateReport, json?: boolean): void {
+export function printValidationReport(report: ValidateReport, json?: boolean): void {
   if (json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     return;

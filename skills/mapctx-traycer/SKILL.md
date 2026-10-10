@@ -78,6 +78,115 @@ dispatches, and receipts.
    without Traycer access.
    Acceptance criteria live in the store. Before closing `review` as `done`, inspect them with `mapctx task acceptance show <task-id>` and explicitly approve each criterion for its current revision. Use `mapctx task finish <task-id>` to apply the completion gate and publish the final checkpoint. Import existing checkboxes explicitly with `mapctx acceptance import [--commit]`; observed `[x]` state does not claim independent verification.
 
+### Who owns the prose (T-127)
+
+Under `plansAuthority: store`, `TASKS.md` and the **structured field blocks** of `tasks/<ID>.md` are
+generated snapshots. Never hand-edit them; change them through the CLI and repair drift with
+`mapctx reconcile <task-id>`.
+
+The `description:` block of `tasks/<ID>.md` is the single exception: it is **Git-authored prose**,
+owned by the repository and never by the store.
+
+- `mapctx task create --description "<text>"` / `--description-file <path>` seeds it once, at creation.
+- After that, edit `tasks/<ID>.md` in Git and commit the change. `mapctx task update` has no
+  `--set description`; the field is not patchable, and asking for it is refused.
+- A snapshot regeneration (`mapctx export`, `mapctx task finish`) preserves the committed prose.
+
+Everything written through the CLI lands in an **append-only event log**: keep secrets, tokens and
+personal data out of titles, summaries, descriptions, acceptance evidence and receipts. Declare
+`[privacy] patterns` in `mapctx.toml` to be warned at the write paths, and use `mapctx redact` when a
+value has already landed.
+
+### Reading CLI output: stdout is results only (T-127)
+
+Every command in this skill is run with `--json` and its result read back, so the channel matters:
+
+- **A refusal is not a result.** A refused command exits non-zero and leaves **stdout empty**. With
+  `--json` the structured refusal is the **first line of stderr**, as one line of compact JSON,
+  followed by the human `Error: ...` line. Read stderr's first line, or split stderr on `"\nError:"`.
+  Without `--json` only the `Error:` line is printed.
+- Affected: `task move/update/create/start/claim/renew/release`, `dispatch create`,
+  `dispatch receipt`, `task acceptance revise/approve/unapprove`, `acceptance import --commit`,
+  `redact`, `export`, `task finish`.
+- **Gate reports are the exception** and still print to stdout even when they exit non-zero, because
+  the document is what you asked for: `mapctx validate`, `mapctx import --dry-run`,
+  `mapctx store repair`.
+
+Check the exit code first, as always. An empty stdout after a non-zero exit means the refusal is on
+stderr — it does not mean the command produced nothing.
+
+### Flags need their values (T-127)
+
+A flag written without its value is refused instead of consuming the next argument. `--actor --json`
+used to journal an event attributed to the actor `"--json"` in an append-only log; it now fails.
+
+The test is pertinence, not shape: only a token that IS one of this CLI's flags counts as a missing
+value. So `--summary "- item"`, `--title "--foo is a flag"` and `--because "--x"` all pass. To pass a
+value that genuinely IS a flag name, use `--flag=value` (`--query=--json`).
+
+### List-valued fields (T-127)
+
+`--set` of a list field, and `--tags` / `--domains` / `--depends-on` / `--blocking`, take exactly two
+spellings:
+
+```sh
+mapctx task update T-127 --set detail.filesAffected=packages/store/src/tasks.ts,packages/store/src/validate.ts
+mapctx task update T-127 --set 'detail.filesAffected=["packages/store/src/tasks.ts"]'
+```
+
+A bracketed guess like `[a,b]` is **refused with the correct syntax**. It used to be accepted in
+silence and stored `["[a", "b]"]`, which corrupted `filesAffected` on this board and hid a real file
+overlap from the planner. `=null` clears a list.
+
+A value is only read as an array when it both opens and closes with a bracket, so a path that merely
+contains or ends with one (`app/[locale]`, `pages/[slug]`) stores normally in the bare spelling. A
+single value that itself looks like an array needs the JSON spelling: `--set 'tags=["[locale]"]'`.
+(`["[a,b]"]` is NOT a way out of `[a,b]`: that element contains a comma, which the next rule refuses.
+If you meant two items, write them bare: `a,b`.)
+
+Two things no element may contain, in either spelling, because the generated snapshots join lists
+with `,` and split on it — the resulting drift does not converge:
+
+- a **comma** inside one element (`["src/{a,b}.ts"]`) — use a comma-free glob (`src/*.ts`) or list
+  the paths separately;
+- a `{...}` **group split across a comma** (`src/{a,b}.ts` in the bare spelling) — same remedy.
+
+`externalLinks` is patchable the same way; each entry must be `https://host/...` (http accepted too,
+**without** `user:password`) or any `scheme:word:rest` triple, matched case-insensitively. That second
+form is a SHAPE, not a list of known providers — an unknown provider is recorded as `other`, so a
+mistyped scheme passes. `javascript:`, `data:`, `file:`, `vbscript:` and `blob:` are refused, and each
+link is capped at 2048 characters: these values become versioned content and external refs.
+
+For a URL whose query legitimately contains a comma, percent-encode it (`?b=1%2C2`) — a glob is the
+remedy for a path, not for a URL.
+
+Run `mapctx --help` for the full enum table (workload, priority, type, status, specMode, waitReason,
+effort format), with the rows read straight off the protocol schemas marked `*` and the unmarked ones
+maintained by hand.
+
+### Gating a run with `validate` (T-127)
+
+`mapctx validate` reports the whole board, so pre-existing issues drown the one a run just introduced.
+Two selectors make it usable as a per-run gate:
+
+```sh
+mapctx validate --task T-127 --json                      # only this task's issues
+mapctx validate --write-baseline .mapctx-baseline.json   # record what the board already has
+mapctx validate --baseline .mapctx-baseline.json --json  # fails only on a NEW issue
+```
+
+Baselined issues stop counting; entries that match nothing are reported as stale.
+
+`--task` filters, `--baseline` gates. Board-scoped issues (dependency cycles, missing work domains)
+carry no task id, so a task filter cannot own them: they are counted as excluded, and a board-scoped
+**error** is additionally warned about on stderr so a task-scoped run never exits 0 in silence over
+something unattributable. `--snapshots` findings are never baselined. A gate flag written without its
+value is refused rather than swallowing the next argument.
+
+Baseline identity includes the issue **message**, not just code + taskId, so the same code on the same
+task with a different detail is a different issue. The cost is that a reworded validator message
+invalidates the baselines that recorded it — reported as stale, never silently honoured.
+
 ### Difficulty discovered mid-flight
 
 When work reveals the task is harder (or easier) than planned, re-classify immediately -- do not let a

@@ -233,6 +233,7 @@ const PATCHABLE_TASK_FIELDS = new Set([
   "dueDate",
   "predictedStart",
   "externalId",
+  "externalLinks",
   "specMode",
   "assignees",
   "iteration",
@@ -251,6 +252,142 @@ const PATCHABLE_DETAIL_FIELDS = new Set([
   "blocking"
 ]);
 
+/**
+ * T-127 (R4): the unknown-field refusal used to list only the half of the
+ * surface the caller happened to miss, so `--set filesAffected=a,b` answered
+ * with the task-field list and never mentioned that the field exists behind
+ * the `detail.` prefix. Both halves are always named now, and a field that
+ * lives on the other side is called out by name.
+ */
+function unknownFieldMessage(field: string, side: "task" | "detail"): string {
+  const taskFields = [...PATCHABLE_TASK_FIELDS].join(", ");
+  const detailFields = [...PATCHABLE_DETAIL_FIELDS].join(", ");
+  const hint = side === "task" && PATCHABLE_DETAIL_FIELDS.has(field)
+    ? ` It is a detail field: use \`--set detail.${field}=...\`.`
+    : side === "detail" && PATCHABLE_TASK_FIELDS.has(field)
+      ? ` It is a task field: use \`--set ${field}=...\` without the \`detail.\` prefix.`
+      : "";
+  return `${side} field "${field}" is not patchable.${hint}`
+    + ` Task fields: ${taskFields}.`
+    + ` Detail fields (prefix each with \`detail.\`): ${detailFields}.`
+    + ` \`waitReason\` is also accepted unprefixed as a shorthand for \`detail.waitReason\`.`
+    + ` Prose lives in the Git-authored \`description:\` block of tasks/<ID>.md and is never patchable here.`;
+}
+
+/**
+ * The `provider:entity:id` form the importer already derives external refs
+ * from (import.ts externalRefFromId). The id tail may itself contain colons.
+ */
+/**
+ * Review B6: matched case-insensitively, like the http(s) scheme already was.
+ * `HTTPS://x/a` was accepted while `GitHub:issue:42` was refused, and nothing
+ * documented the asymmetry.
+ *
+ * Review B7: this is deliberately a SHAPE, not a closed provider list --
+ * `scheme:word:rest` -- which matches what the importer does with an unknown
+ * provider (`externalRefFromId` maps it to "other"). The help and the skill
+ * say so explicitly now, so a mistyped scheme is a documented pass-through
+ * rather than a silent surprise.
+ */
+const PROVIDER_REF_RE = /^[a-z][a-z0-9-]*:[A-Za-z0-9_-]+:.+$/i;
+
+/** Review B7: links are versioned content; 5 KB of URL was storable. */
+const MAX_EXTERNAL_LINK_LENGTH = 2048;
+
+/**
+ * Schemes that must never be stored, even spelled as a three-part ref
+ * (`javascript:a:b` matches the provider shape). `externalLinks` becomes
+ * versioned content in TASKS.md and an `ExternalRefRecord` with the raw value
+ * as its `uri`; nothing renders it today, so this is not a live XSS, but the
+ * value is clickable the moment anything does. Review A4.
+ */
+const FORBIDDEN_LINK_SCHEMES = new Set(["javascript", "data", "file", "vbscript", "blob"]);
+
+/**
+ * T-127: `externalLinks` became CLI-patchable, so the store is the gate that
+ * keeps the column holding URIs.
+ *
+ * Review A4: the first version only required *a* scheme plus `new URL()` not
+ * throwing, which admits every opaque URL -- `javascript:alert(1)`,
+ * `file:///etc/passwd`, `data:text/html,<script>` all parse. The help and the
+ * skill promise "https://… or provider:entity:id", so that promise is now the
+ * actual rule: an allowlisted http(s) URL with a host, or the three-part
+ * provider ref, and never a dangerous scheme.
+ */
+function invalidExternalLink(value: unknown): string | null {
+  const shape = "expected https://host/... (http is also accepted) or provider:entity:id";
+  if (typeof value !== "string") return `every externalLinks entry must be a string; got ${JSON.stringify(value)}`;
+  const trimmed = value.trim();
+  if (trimmed === "") return "externalLinks entries cannot be blank";
+  // Unreachable from the CLI, which trims each element in both spellings; it
+  // guards programmatic callers of updateTask.
+  if (trimmed !== value) return `externalLinks entry has surrounding whitespace: ${JSON.stringify(value)}`;
+  if (/\s/.test(trimmed)) return `externalLinks entry contains whitespace: ${JSON.stringify(value)}`;
+  if (trimmed.length > MAX_EXTERNAL_LINK_LENGTH) {
+    return `externalLinks entry is ${trimmed.length} characters; the limit is ${MAX_EXTERNAL_LINK_LENGTH}. These links are versioned content, not a place for a payload.`;
+  }
+  const scheme = /^([A-Za-z][A-Za-z0-9+.\-]*):/.exec(trimmed)?.[1];
+  if (!scheme) return `externalLinks entry needs an explicit URI scheme (${shape}): ${JSON.stringify(value)}`;
+  if (FORBIDDEN_LINK_SCHEMES.has(scheme.toLowerCase())) {
+    return `externalLinks entry uses the forbidden scheme "${scheme}": ${JSON.stringify(value)}. These links become versioned content and external refs, so only ${shape} is accepted.`;
+  }
+  if (scheme.toLowerCase() === "http" || scheme.toLowerCase() === "https") {
+    let url: URL;
+    try {
+      url = new URL(trimmed);
+    } catch {
+      return `externalLinks entry is not a parseable URL: ${JSON.stringify(value)}`;
+    }
+    if (!url.hostname) return `externalLinks entry has no host: ${JSON.stringify(value)}`;
+    // Review B5: credentials in a link would become versioned content in
+    // TASKS.md and the `uri` of an ExternalRefRecord -- in a CLI whose own
+    // help asks you to keep secrets out of the append-only log.
+    if (url.username || url.password) {
+      return `externalLinks entry carries userinfo credentials: ${JSON.stringify(value.replace(/\/\/[^@/]*@/, "//***@"))}. Strip the user:password and use a token out of band.`;
+    }
+    return null;
+  }
+  if (PROVIDER_REF_RE.test(trimmed) && !trimmed.includes("//")) return null;
+  return `externalLinks entry is not an accepted URI (${shape}): ${JSON.stringify(value)}`;
+}
+
+/** List-valued fields whose elements end up in a comma-joined snapshot line. */
+const SNAPSHOT_LIST_TASK_FIELDS = ["tags", "domains", "assignees", "externalLinks"] as const;
+const SNAPSHOT_LIST_DETAIL_FIELDS = ["filesAffected", "testsRequired", "prerequisites", "blocking"] as const;
+
+/**
+ * Review A2, pushed down from the CLI to the store so EVERY caller is covered.
+ *
+ * `buildExport` renders these fields as `[a, b, c]` and `parseArray` reads
+ * them back by splitting on ",". An element containing a comma therefore does
+ * not survive the round trip: the store holds one value, the regenerated
+ * snapshot parses as two, and the drift does not converge because
+ * `reconcile --accept` would write the split value back into the store.
+ *
+ * Worth noting, because it looks like a contradiction and is not: for such a
+ * state `checkStoreSnapshots` reports no drift while `reconcile`'s differ
+ * reports drift. They ask different questions -- `checkDrift` byte-compares
+ * the mirror against a fresh regeneration (which matches, the store wrote it),
+ * while the reconcile differ compares PARSED mirror values against store
+ * values (which differ). Neither is wrong; the defect was that `export` could
+ * emit a line that does not parse back to its own input. Refusing the comma
+ * here makes that unreachable, so the two can no longer disagree.
+ */
+function commaInListElement(fields: readonly string[], patch: Record<string, unknown> | undefined): string | null {
+  for (const field of fields) {
+    const value = patch?.[field];
+    if (!Array.isArray(value)) continue;
+    for (const element of value) {
+      if (typeof element === "string" && element.includes(",")) {
+        return `${field} element ${JSON.stringify(element)} contains a comma, which the generated snapshots cannot represent:`
+          + ` they render the list as "[a, b]" and read it back by splitting on ",", so this value would round-trip as two entries.`
+          + ` Use a comma-free value (a glob like \`src/*.ts\`) or separate entries.`;
+      }
+    }
+  }
+  return null;
+}
+
 export type UpdateTaskOptions = {
   taskId: string;
   patch?: Partial<TaskRecord>;
@@ -267,7 +404,7 @@ export type UpdateTaskResult =
   | { ok: true; applied: { fields: string[]; detailFields: string[]; edges: boolean } }
   | {
       ok: false;
-      reason: "unknown-task" | "no-changes" | "unknown-field" | "unknown-dependency" | "invalid-workload" | "invalid-estimated-effort" | "invalid-wait-reason" | "invalid-predicted-start";
+      reason: "unknown-task" | "no-changes" | "unknown-field" | "unknown-dependency" | "invalid-workload" | "invalid-estimated-effort" | "invalid-wait-reason" | "invalid-predicted-start" | "invalid-external-links" | "comma-in-list-element";
       to: string;
       message?: string;
     };
@@ -278,22 +415,12 @@ export function updateTask(store: StoreHandle, options: UpdateTaskOptions): Upda
 
   for (const field of Object.keys(options.patch ?? {})) {
     if (!PATCHABLE_TASK_FIELDS.has(field)) {
-      return {
-        ok: false,
-        reason: "unknown-field",
-        to,
-        message: `task field "${field}" is not patchable; allowed: ${[...PATCHABLE_TASK_FIELDS].join(", ")}`
-      };
+      return { ok: false, reason: "unknown-field", to, message: unknownFieldMessage(field, "task") };
     }
   }
   for (const field of Object.keys(options.detailPatch ?? {})) {
     if (!PATCHABLE_DETAIL_FIELDS.has(field)) {
-      return {
-        ok: false,
-        reason: "unknown-field",
-        to,
-        message: `detail field "${field}" is not patchable; allowed: ${[...PATCHABLE_DETAIL_FIELDS].join(", ")}`
-      };
+      return { ok: false, reason: "unknown-field", to, message: unknownFieldMessage(field, "detail") };
     }
   }
 
@@ -305,6 +432,22 @@ export function updateTask(store: StoreHandle, options: UpdateTaskOptions): Upda
       to,
       message: `workload must be one of ${workloadSchema.options.join("|")}; got "${suppliedWorkload}"`
     };
+  }
+  const commaProblem = commaInListElement(SNAPSHOT_LIST_TASK_FIELDS, options.patch as Record<string, unknown> | undefined)
+    ?? commaInListElement(SNAPSHOT_LIST_DETAIL_FIELDS, options.detailPatch as Record<string, unknown> | undefined);
+  if (commaProblem) return { ok: false, reason: "comma-in-list-element", to, message: commaProblem };
+  // T-127: validated before the write transaction opens, like every other
+  // enum/format gate here -- a malformed link must never reach the journal.
+  // `null` clears the list; anything else must be an array of URIs.
+  const suppliedLinks: unknown = options.patch?.externalLinks;
+  if (suppliedLinks !== undefined) {
+    if (suppliedLinks !== null && !Array.isArray(suppliedLinks)) {
+      return { ok: false, reason: "invalid-external-links", to, message: "externalLinks must be an array of URIs (or null to clear)" };
+    }
+    for (const link of (suppliedLinks as unknown[] | null) ?? []) {
+      const problem = invalidExternalLink(link);
+      if (problem) return { ok: false, reason: "invalid-external-links", to, message: problem };
+    }
   }
   const suppliedEffort = options.detailPatch?.estimatedEffort as string | null | undefined;
   const suppliedWaitReason = options.detailPatch?.waitReason;
@@ -350,6 +493,12 @@ export function updateTask(store: StoreHandle, options: UpdateTaskOptions): Upda
     const detailPatch: Partial<TaskDetailRecord> = { ...(options.detailPatch ?? {}) };
     if (typeof patch.workload === "string") {
       patch.workload = patch.workload.trim() || null;
+    }
+    // T-127: the column is a JSON array, never null -- `--set externalLinks=null`
+    // means "no links", so it normalizes to [] before the event is journaled
+    // instead of leaving a null for the projection to coerce silently.
+    if ((patch as { externalLinks?: unknown }).externalLinks === null) {
+      patch.externalLinks = [];
     }
     // Editing an estimate after the T-099 convention is an explicit new
     // declaration, not a reinterpretation of the legacy value it replaces.
@@ -472,7 +621,8 @@ export type CreateTaskResult =
         | "invalid-workload"
         | "invalid-estimated-effort"
         | "invalid-wait-reason"
-        | "state-not-exportable";
+        | "state-not-exportable"
+        | "comma-in-list-element";
       message?: string;
       taskId?: string;
     };
@@ -505,6 +655,16 @@ export function createTask(store: StoreHandle, options: CreateTaskOptions): Crea
   }
 
   const requested = options.detail ?? {};
+  // Review B2: `createTask` is a caller too, and the invariant was stated as
+  // absolute while only `updateTask` enforced it -- the reviewer reproduced
+  // the non-convergent drift through `createTask({tags:['a,b']})`. The CLI
+  // cannot reach it (parseListInput refuses both spellings on `task create`),
+  // but @mapctx/store is a published package and createTask is exported.
+  const createCommaProblem =
+    commaInListElement(SNAPSHOT_LIST_TASK_FIELDS, { tags: options.tags, domains: options.domains, assignees: undefined, externalLinks: undefined })
+    ?? commaInListElement(SNAPSHOT_LIST_DETAIL_FIELDS, requested as unknown as Record<string, unknown>)
+    ?? commaInListElement(["dependsOn", "blocking"], { dependsOn: options.dependsOn, blocking: options.blocking });
+  if (createCommaProblem) return { ok: false, reason: "comma-in-list-element", message: createCommaProblem };
   const normalizedWorkload = options.workload?.trim() ?? "";
   if (normalizedWorkload && !workloadSchema.safeParse(normalizedWorkload).success) {
     return {

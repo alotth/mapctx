@@ -201,3 +201,44 @@ test('task search markdown fallback filters by status and limit', () => {
   assert.deepEqual(filtered.matches!.map(hit => hit.taskId), ['T-002']);
   assert.deepEqual(limited.matches!.map(hit => hit.taskId), ['T-001']);
 });
+
+// ---------------------------------------------------------------------------
+// T-127 review B8: VALUE_FLAGS/BOOLEAN_FLAGS/KNOWN_FLAGS must stay exhaustive
+// against parseArgs's own `a === '--flag'` literals, so adding a new flag
+// without listing it here fails the suite instead of silently weakening the
+// pertinence check `valueFor` relies on.
+// ---------------------------------------------------------------------------
+
+test('VALUE_FLAGS/BOOLEAN_FLAGS/KNOWN_FLAGS stay exhaustive against every `a === \'--flag\'` literal in parseArgs', () => {
+  const { VALUE_FLAGS, BOOLEAN_FLAGS, KNOWN_FLAGS } = require('./mapctx-cli') as {
+    VALUE_FLAGS: ReadonlySet<string>;
+    BOOLEAN_FLAGS: ReadonlySet<string>;
+    KNOWN_FLAGS: ReadonlySet<string>;
+  };
+  const sourcePath = path.join(__dirname, '..', 'src', 'mapctx-cli.ts');
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const literalFlags = new Set<string>();
+  // Only real code lines count -- either the head of a branch
+  // (`if (a === '--flag'` / `else if (a === '--flag'`) or a second literal
+  // OR'd into the same condition (`|| a === '--flag'`, e.g. `--receipt` /
+  // `--file`, `--help` / `-h`). The doc comment above `valueFor` cites the
+  // literal pattern `a === '--flag'` as prose and must not be mistaken for a
+  // parsed flag -- it has neither prefix.
+  for (const match of source.matchAll(/(?:if|else if|\|\|)\s*\(?a === '(-{1,2}[A-Za-z][A-Za-z0-9-]*)'/g)) {
+    literalFlags.add(match[1]);
+  }
+  assert.ok(literalFlags.size > 50, `sanity: extraction found too few flags (${literalFlags.size}); regex may be broken`);
+
+  const missing = [...literalFlags].filter(flag => !KNOWN_FLAGS.has(flag));
+  assert.deepEqual(missing, [], `every parsed flag literal must be listed in KNOWN_FLAGS: ${JSON.stringify(missing)}`);
+
+  const extra = [...KNOWN_FLAGS].filter(flag => !literalFlags.has(flag));
+  assert.deepEqual(extra, [], `KNOWN_FLAGS must not list a flag parseArgs does not recognize: ${JSON.stringify(extra)}`);
+
+  const overlap = [...VALUE_FLAGS].filter(flag => BOOLEAN_FLAGS.has(flag));
+  assert.deepEqual(overlap, [], `a flag must be exactly one of VALUE_FLAGS or BOOLEAN_FLAGS, never both: ${JSON.stringify(overlap)}`);
+
+  const union = new Set([...VALUE_FLAGS, ...BOOLEAN_FLAGS]);
+  assert.equal(union.size, KNOWN_FLAGS.size, 'VALUE_FLAGS union BOOLEAN_FLAGS must equal KNOWN_FLAGS exactly');
+  for (const flag of KNOWN_FLAGS) assert.ok(union.has(flag), `KNOWN_FLAGS member ${flag} missing from VALUE_FLAGS union BOOLEAN_FLAGS`);
+});

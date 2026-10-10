@@ -539,3 +539,224 @@ test("completed receipt on a task that was never claimed is rejected with the re
     cleanupDir(repoDir);
   }
 });
+
+// ---------------------------------------------------------------------------
+// T-127: externalLinks patching + unknown-field message groups.
+// ---------------------------------------------------------------------------
+
+test("T-127 externalLinks accepts https:// and provider:entity:id URIs, clears with null, and rejects malformed entries", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const applied = updateTask(handle, {
+      taskId: "T-101",
+      patch: { externalLinks: ["https://github.com/o/r/issues/1", "github:issue:42"] },
+      actor: "test"
+    });
+    assert.equal(applied.ok, true, JSON.stringify(applied));
+    assert.deepEqual(getTask(handle.db, "T-101")?.externalLinks, ["https://github.com/o/r/issues/1", "github:issue:42"]);
+
+    const cleared = updateTask(handle, { taskId: "T-101", patch: { externalLinks: null as never }, actor: "test" });
+    assert.equal(cleared.ok, true);
+    assert.deepEqual(getTask(handle.db, "T-101")?.externalLinks, [], "null normalizes to [] before journaling");
+
+    for (const bad of ["foo/bar", "https://has space.example/x", ""]) {
+      const refused = updateTask(handle, { taskId: "T-101", patch: { externalLinks: [bad] }, actor: "test" });
+      assert.equal(refused.ok, false, `expected refusal for ${JSON.stringify(bad)}`);
+      if (!refused.ok) assert.equal(refused.reason, "invalid-external-links");
+      assert.deepEqual(getTask(handle.db, "T-101")?.externalLinks, [], "a refused patch must not land");
+    }
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-127 unknown-field refusal names both field groups and redirects a field used on the wrong side", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const wrongSide = updateTask(handle, { taskId: "T-101", patch: { filesAffected: ["a", "b"] } as never, actor: "test" });
+    assert.equal(wrongSide.ok, false);
+    if (!wrongSide.ok) {
+      assert.equal(wrongSide.reason, "unknown-field");
+      assert.match(wrongSide.message ?? "", /detail field|detail\.filesAffected/);
+      assert.match(wrongSide.message ?? "", /--set detail\.filesAffected=/);
+      assert.match(wrongSide.message ?? "", /Detail fields \(prefix each with `detail\.`\):/);
+      assert.match(wrongSide.message ?? "", /Task fields:/);
+    }
+
+    const otherWrongSide = updateTask(handle, { taskId: "T-101", detailPatch: { title: "x" } as never, actor: "test" });
+    assert.equal(otherWrongSide.ok, false);
+    if (!otherWrongSide.ok) {
+      assert.match(otherWrongSide.message ?? "", /It is a task field: use `--set title=\.\.\.` without the `detail\.` prefix\./);
+    }
+
+    const noField = updateTask(handle, { taskId: "T-101", patch: { nope: 1 } as never, actor: "test" });
+    assert.equal(noField.ok, false);
+    if (!noField.ok) {
+      assert.match(noField.message ?? "", /Task fields:/);
+      assert.match(noField.message ?? "", /Detail fields/);
+      assert.match(noField.message ?? "", /waitReason/);
+      assert.match(noField.message ?? "", /Git-authored `description:` block/);
+    }
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T-127 attempt 2, review A2 (store-level guard): a comma inside a snapshot
+// list element is refused for every caller of updateTask, not only through
+// the CLI's --set parsing.
+// ---------------------------------------------------------------------------
+
+test("T-127 updateTask refuses a comma inside a list element in tags, externalLinks, and detail.filesAffected, journaling nothing; a comma-free value still lands", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const beforeTags = getTask(handle.db, "T-101")?.tags;
+    const beforeLinks = getTask(handle.db, "T-101")?.externalLinks;
+    const beforeFiles = getTaskDetail(handle.db, "T-101")?.filesAffected;
+
+    const tagsRefused = updateTask(handle, { taskId: "T-101", patch: { tags: ["a,b"] }, actor: "test" });
+    assert.equal(tagsRefused.ok, false);
+    if (!tagsRefused.ok) assert.equal(tagsRefused.reason, "comma-in-list-element");
+    assert.deepEqual(getTask(handle.db, "T-101")?.tags, beforeTags, "a refused patch must not land");
+
+    const linksRefused = updateTask(handle, { taskId: "T-101", patch: { externalLinks: ["https://x.test/a,b"] }, actor: "test" });
+    assert.equal(linksRefused.ok, false);
+    if (!linksRefused.ok) assert.equal(linksRefused.reason, "comma-in-list-element");
+    assert.deepEqual(getTask(handle.db, "T-101")?.externalLinks, beforeLinks);
+
+    const filesRefused = updateTask(handle, { taskId: "T-101", detailPatch: { filesAffected: ["src/{a,b}.ts"] }, actor: "test" });
+    assert.equal(filesRefused.ok, false);
+    if (!filesRefused.ok) assert.equal(filesRefused.reason, "comma-in-list-element");
+    assert.deepEqual(getTaskDetail(handle.db, "T-101")?.filesAffected, beforeFiles);
+
+    // A comma-free value is unaffected.
+    const clean = updateTask(handle, { taskId: "T-101", detailPatch: { filesAffected: ["src/*.ts"] }, actor: "test" });
+    assert.equal(clean.ok, true, JSON.stringify(clean));
+    assert.deepEqual(getTaskDetail(handle.db, "T-101")?.filesAffected, ["src/*.ts"]);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-127 attempt 2 (review A4) externalLinks allowlist: refuses javascript/data/file/vbscript/blob schemes and a 3-part javascript ref; accepts http(s) with a host and provider:entity:id", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    for (const bad of ["javascript:alert(1)", "file:///etc/passwd", "data:text/html;x", "vbscript:x", "blob:http://x/y", "javascript:a:b", "ftp://x.test/a", "https://"]) {
+      const refused = updateTask(handle, { taskId: "T-101", patch: { externalLinks: [bad] }, actor: "test" });
+      assert.equal(refused.ok, false, `expected refusal for ${JSON.stringify(bad)}`);
+      if (!refused.ok) assert.equal(refused.reason, "invalid-external-links", `${bad}: ${JSON.stringify(refused)}`);
+    }
+    for (const good of ["https://github.com/o/r/issues/1", "http://x.test/a", "github:issue:42", "traycer:artifact:abc:def"]) {
+      const accepted = updateTask(handle, { taskId: "T-101", patch: { externalLinks: [good] }, actor: "test" });
+      assert.equal(accepted.ok, true, `expected acceptance for ${JSON.stringify(good)}: ${JSON.stringify(accepted)}`);
+      assert.deepEqual(getTask(handle.db, "T-101")?.externalLinks, [good]);
+    }
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T-127 review B2: createTask is a caller of the comma-in-list-element
+// invariant too, not only updateTask. Unreachable from the CLI (parseListInput
+// refuses both spellings on `task create`), but @mapctx/store is a published
+// package and createTask is exported, so a programmatic caller could still
+// produce the exact non-convergent drift the review reproduced.
+// ---------------------------------------------------------------------------
+
+test("T-127 review B2: createTask refuses a comma inside tags, domains, detail.filesAffected, dependsOn, and blocking; nothing is created", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const cases: Array<Partial<Parameters<typeof createTask>[1]>> = [
+      { tags: ["a,b"] },
+      { domains: ["a,b"] },
+      { detail: { filesAffected: ["x,y"] } },
+      { dependsOn: ["T-101,T-102"] },
+      { blocking: ["T-101,T-102"] }
+    ];
+    for (const extra of cases) {
+      const result = createTask(handle, { title: "comma probe", actor: "test", ...extra } as never);
+      assert.equal(result.ok, false, `expected refusal for ${JSON.stringify(extra)}`);
+      if (!result.ok) assert.equal(result.reason, "comma-in-list-element", JSON.stringify(result));
+    }
+    // Nothing was created: the board still ends at T-102.
+    assert.equal(getTask(handle.db, "T-103"), undefined);
+
+    // A comma-free create still succeeds.
+    const clean = createTask(handle, { title: "clean probe", tags: ["a", "b"], actor: "test" });
+    assert.equal(clean.ok, true, JSON.stringify(clean));
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T-127 attempt 4, review B5/B6/B7: userinfo credentials refused, the
+// provider:entity:id form is case-insensitive, and a length cap applies.
+// ---------------------------------------------------------------------------
+
+test("T-127 review B5: externalLinks refuses userinfo credentials and redacts the password in the refusal message", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const SECRET = "sw0rdf1sh";
+    const refused = updateTask(handle, { taskId: "T-101", patch: { externalLinks: [`https://user:${SECRET}@x.test/a`] }, actor: "test" });
+    assert.equal(refused.ok, false);
+    if (!refused.ok) {
+      assert.equal(refused.reason, "invalid-external-links");
+      assert.ok(!(refused.message ?? "").includes(SECRET), `message must not echo the password in clear: ${refused.message}`);
+      assert.match(refused.message ?? "", /\*\*\*@/);
+    }
+    assert.deepEqual(getTask(handle.db, "T-101")?.externalLinks, []);
+
+    // A link with no userinfo still works.
+    const accepted = updateTask(handle, { taskId: "T-101", patch: { externalLinks: ["https://x.test/a"] }, actor: "test" });
+    assert.equal(accepted.ok, true);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-127 review B6: provider:entity:id matches case-insensitively, like http(s); dangerous schemes still refused under any case", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    for (const good of ["GitHub:issue:42", "github:issue:42", "HTTPS://x.test/a"]) {
+      const accepted = updateTask(handle, { taskId: "T-101", patch: { externalLinks: [good] }, actor: "test" });
+      assert.equal(accepted.ok, true, `expected acceptance for ${JSON.stringify(good)}: ${JSON.stringify(accepted)}`);
+    }
+    for (const bad of ["JaVaScRiPt:alert(1)", "FILE:///etc/passwd", "javascript:a:b"]) {
+      const refused = updateTask(handle, { taskId: "T-101", patch: { externalLinks: [bad] }, actor: "test" });
+      assert.equal(refused.ok, false, `expected refusal for ${JSON.stringify(bad)}`);
+      if (!refused.ok) assert.equal(refused.reason, "invalid-external-links");
+    }
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-127 review B7: a 2048-character link is accepted, 2049 is refused citing the limit; an unknown scheme:word:rest shape is accepted by design", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const prefix = "https://x.test/";
+    const makeLink = (totalLength: number) => prefix + "a".repeat(totalLength - prefix.length);
+    const exactly2048 = makeLink(2048);
+    assert.equal(exactly2048.length, 2048);
+    const accepted = updateTask(handle, { taskId: "T-101", patch: { externalLinks: [exactly2048] }, actor: "test" });
+    assert.equal(accepted.ok, true, JSON.stringify(accepted));
+
+    const over = makeLink(2049);
+    assert.equal(over.length, 2049);
+    const refused = updateTask(handle, { taskId: "T-101", patch: { externalLinks: [over] }, actor: "test" });
+    assert.equal(refused.ok, false);
+    if (!refused.ok) assert.match(refused.message ?? "", /2048/);
+
+    // Documented pass-through: any lowercase scheme:word:rest shape is
+    // accepted even for an unknown provider (import.ts maps it to "other").
+    for (const shape of ["htps:a:b", "ssh:host:22"]) {
+      const shapeAccepted = updateTask(handle, { taskId: "T-101", patch: { externalLinks: [shape] }, actor: "test" });
+      assert.equal(shapeAccepted.ok, true, `expected ${shape} to be accepted by design: ${JSON.stringify(shapeAccepted)}`);
+    }
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
