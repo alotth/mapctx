@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 9/11
+  - subIssueProgress: 9/12
   - priority: high
   - workload: null
   - tags: []
@@ -2835,6 +2835,63 @@
   - externalId: null
   - updated: 2026-10-10
   - detail: ./tasks/T-133.md
+
+### [E-018] Provider authority (ADR 0005, opção B com provider local)
+
+  - id: E-018
+  - status: backlog
+  - type: epic
+  - parent: null
+  - subIssueProgress: 0/1
+  - priority: null
+  - workload: null
+  - tags: []
+  - domains: []
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/E-018.md
+
+### [T-134] C0: recusa de claim não expõe o leaseToken do holder
+
+  - id: T-134
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-10
+  - detail: ./tasks/T-134.md
+
+### [T-135] Spike: ler GitHub Projects e escrever campos derivados num Project de teste
+
+  - id: T-135
+  - status: backlog
+  - type: task
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [CODE, DOCS]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-10
+  - detail: ./tasks/T-135.md
 
 ## Notes
 

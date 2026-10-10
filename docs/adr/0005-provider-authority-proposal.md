@@ -4,6 +4,28 @@
 - Date: 2026-10-09
 - Related: [provider-authority study](../engineering/provider-authority-study.md)
 
+## Operator direction (2026-10-10)
+
+The operator chose a direction; the ADR stays **Proposed** until the gates in
+§Status transition are met.
+
+- **Direction: Option B with the local provider kept.** Task authority moves
+  behind the `TaskProvider` contract. The current SQLite store stays as a
+  first-class **local provider** for solo/offline work and keeps working roughly
+  as today, without generating TASKS.md/detail snapshots in Git. GitHub
+  (Issues + Projects) is the second provider.
+- **A0 is the first step of B, not an alternative to it.** Retiring the
+  snapshots for the local provider is the A0 change; the GitHub adapter comes
+  after it.
+- **First validation:** a read-only GitHub Projects spike that writes derived
+  fields (wave, forecast, cost) to a test Project without removing the store.
+- **Prerequisite:** claim refusals stop exposing the holder's `leaseToken`
+  (T-124 C0). Claims stay MapCtx-owned under every provider, and cross-machine
+  claims would make a leaked token reach other people.
+- The **OPEN — local provider** question below is answered: yes. Its persistence,
+  backup and collaboration guarantees are still to be specified. The other four
+  OPEN questions remain open.
+
 ## Context
 
 ADR 0003 chose a local store as canonical planning authority and generated
@@ -199,9 +221,10 @@ and add/remove semantics before a one-to-one blocked-by claim is accepted.
 - **OPEN — workload and domains:** Are workload, domains, estimated effort,
   and affected files provider-visible custom fields, MapCtx-only intelligence
   fields, or a documented split by field?
-- **OPEN — local provider:** Do we retain a first-class local provider for
-  solo/offline work? If yes, what persistence, backup, and collaboration
-  guarantees does it make without recreating N-way sync?
+- **ANSWERED (2026-10-10) — local provider:** Yes, a first-class local provider
+  is retained for solo/offline work (see §Operator direction). Still OPEN: what
+  persistence, backup, and collaboration guarantees it makes without
+  recreating N-way sync.
 - **OPEN — claim CAS:** Is protected Git-ref compare-and-swap acceptable for
   cross-machine claims, or is a small shared coordination service required?
 - **OPEN — provider baseline:** Is GitHub the only implementation required
@@ -211,8 +234,9 @@ and add/remove semantics before a one-to-one blocked-by claim is accepted.
 ## Status transition
 
 While Proposed, ADR 0003 and ADR 0004 remain the active authority decision.
-The operator must choose A0 or B explicitly. Accepting B must include a dated
+The operator has chosen B with the local provider kept, with A0 as its first
+step (see §Operator direction). Accepting B must still include a dated
 migration plan, provider capability matrix, one-project read-only validation,
 and a durable decision for each OPEN question above before store-authority code
-is removed. Selecting A0 must instead specify the no-snapshot boundary and the
-remaining store-authority/acceptance improvements.
+is removed. The A0 step for the local provider must specify the no-snapshot
+boundary and the remaining local acceptance improvements (T-129).
