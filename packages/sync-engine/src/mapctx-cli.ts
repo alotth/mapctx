@@ -991,6 +991,14 @@ function redactCommand(options: MapctxOptions): void {
     // this to every refusing command through CliRefusal.
     if (!result.ok) refuse(result, `Redaction refused: ${result.reason} -- ${result.message}`);
     print(result, options.json);
+    // T-131 review ALTO-1/ALTO-2: what this redaction does NOT reach, and
+    // what it costs. On stderr so `--json` stdout stays a clean document, and
+    // on BOTH the dry run and the commit -- the dry run is where the operator
+    // decides, and the commit is the last chance to hear that a derived copy
+    // is still out there. The advisories never carry a value.
+    for (const advisory of result.advisories) {
+      console.error(`Warning: ${advisory}`);
+    }
     if (!options.json && result.mode === 'dry-run') {
       console.log('');
       console.log(`Dry run: nothing was written to ${storeDir}. Re-run with --commit to destroy the content above.`);

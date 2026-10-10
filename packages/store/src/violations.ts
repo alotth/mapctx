@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ClaimViolation, ResourceClaim, RunReceipt } from "@mapctx/protocol";
 import { getDispatchAttempt, getRunReceipt, listClaimViolations } from "./projections";
+import { REDACTED_SENTINEL } from "./redact";
 import type { StoreHandle } from "./store-handle";
 
 export type WaveDispatchRef = { waveId: string; dispatchId: string; attempt: number; taskId?: string };
@@ -22,7 +23,25 @@ function normalizePath(value: string): string {
   return path.length > 1 ? path.replace(/\/$/, "") : path;
 }
 
+/**
+ * T-131 review ALTO-2: a redacted path is NOT COMPARABLE, so it overlaps
+ * nothing -- not even another redacted path.
+ *
+ * Without this, every redacted element equalled every other one, and two
+ * receipts with completely disjoint files "collided": the detector appended a
+ * `claim-violation.detected` event -- an immutable historical claim that two
+ * tasks fought over a file -- naming a file that does not exist. A privacy
+ * operation must never be able to fabricate an audit fact. Treating the
+ * sentinel as incomparable kills that at the root, and
+ * `redactedChangedFileCount` below is what keeps the resulting blind spot
+ * declared instead of silent.
+ */
+function isRedactedPath(value: string): boolean {
+  return value === REDACTED_SENTINEL;
+}
+
 function pathsOverlap(left: string, right: string): boolean {
+  if (isRedactedPath(left) || isRedactedPath(right)) return false;
   const a = normalizePath(left);
   const b = normalizePath(right);
   if (!a || !b) return false;
@@ -70,14 +89,47 @@ function semanticExists(store: StoreHandle, violation: ClaimViolation): boolean 
   }).length > 0;
 }
 
+/** How much of one receipt's changed-file list is no longer comparable. */
+export type IncompleteDetection = {
+  taskId: string;
+  dispatchId: string;
+  attempt: number;
+  /** Elements that hold the redaction sentinel instead of a path. */
+  redactedPaths: number;
+  /** Total elements, so the caller can see how much of the receipt is blind. */
+  totalPaths: number;
+};
+
+export type ClaimViolationDetectionResult = {
+  violations: ClaimViolation[];
+  /**
+   * Receipts whose changed files were (partly) redacted. Detection over them
+   * is INCOMPLETE: an empty `violations` here does not mean "no collision",
+   * it means "cannot tell". Empty array = detection saw everything.
+   */
+  incompleteDetection: IncompleteDetection[];
+};
+
+function redactedChangedFileCount(receipt: RunReceipt): number {
+  return receipt.changedFiles.filter(isRedactedPath).length;
+}
+
 /**
  * Read completed receipts, derive both feedback directions, and append events
  * atomically. Any missing/non-completed receipt aborts the whole plan with no
  * partial output. Repeating a completed plan is idempotent by semantic key.
+ *
+ * T-131 review ALTO-2: when a receipt's `changedFiles` has been redacted, the
+ * paths it contributes are gone, so a real collision on a path that was
+ * redacted simply cannot be found any more -- and redacting a whole root
+ * takes the innocent siblings with it. That blindness is now REPORTED rather
+ * than returned as a clean bill of health, because "no violations" and "could
+ * not look" are different answers and only one of them is safe to act on.
  */
-export function recordClaimViolations(store: StoreHandle, plan: ClaimViolationPlan, actor = "planner"): ClaimViolation[] {
+export function detectClaimViolations(store: StoreHandle, plan: ClaimViolationPlan, actor = "planner"): ClaimViolationDetectionResult {
   const detectedAt = plan.detectedAt ?? new Date().toISOString();
-  return store.runInWriteTransaction(append => {
+  const incompleteDetection: IncompleteDetection[] = [];
+  const violations = store.runInWriteTransaction(append => {
     const byTask = new Map<string, { receipt: RunReceipt; waveId: string }>();
     for (const wave of plan.waves) {
       if (wave.dispatches.length === 0) return [];
@@ -85,7 +137,18 @@ export function recordClaimViolations(store: StoreHandle, plan: ClaimViolationPl
         const dispatch = getDispatchAttempt(store.db, ref.dispatchId, ref.attempt);
         const receipt = getRunReceipt(store.db, ref.dispatchId, ref.attempt);
         if (!dispatch || !receipt || receipt.outcome !== "completed" || dispatch.status !== "completed") return [];
-        byTask.set(ref.taskId ?? dispatch.taskId, { receipt, waveId: wave.waveId });
+        const taskId = ref.taskId ?? dispatch.taskId;
+        const redactedPaths = redactedChangedFileCount(receipt);
+        if (redactedPaths > 0) {
+          incompleteDetection.push({
+            taskId,
+            dispatchId: ref.dispatchId,
+            attempt: ref.attempt,
+            redactedPaths,
+            totalPaths: receipt.changedFiles.length
+          });
+        }
+        byTask.set(taskId, { receipt, waveId: wave.waveId });
       }
     }
 
@@ -111,7 +174,11 @@ export function recordClaimViolations(store: StoreHandle, plan: ClaimViolationPl
       if (!left || !right || actualIntersection(left, right).length > 0) continue;
       const waveId = byTask.get(pair.taskAId)?.waveId ?? plan.waves[0]?.waveId;
       if (!waveId) continue;
-      const paths = [...new Set([...(pair.paths ?? []), ...(pair.causes ?? []).flatMap(cause => cause.paths)])].map(normalizePath).filter(Boolean).sort();
+      // A caller-supplied path can also be a redacted one; a violation whose
+      // path is the sentinel asserts nothing and must never be journaled.
+      const paths = [...new Set([...(pair.paths ?? []), ...(pair.causes ?? []).flatMap(cause => cause.paths)])]
+        .filter(path => !isRedactedPath(path))
+        .map(normalizePath).filter(Boolean).sort();
       for (const path of paths) {
         const [taskAId, taskBId] = [pair.taskAId, pair.taskBId].sort();
         violations.push(makeViolation({ waveId, kind: "overbroad", taskAId, taskBId, path, detectedAt, source: "derived-from-receipts" }));
@@ -121,6 +188,9 @@ export function recordClaimViolations(store: StoreHandle, plan: ClaimViolationPl
     const unique = new Map(violations.map(violation => [`${violation.waveId}:${violation.kind}:${violation.taskAId}:${violation.taskBId}:${violation.path}`, violation]));
     const emitted: ClaimViolation[] = [];
     for (const violation of [...unique.values()].sort((a, b) => a.id.localeCompare(b.id))) {
+      // Belt and braces for the fabricated-fact class: nothing with a
+      // sentinel path is ever appended, whatever route produced it.
+      if (isRedactedPath(violation.path)) continue;
       if (semanticExists(store, violation)) continue;
       append({ eventType: "claim-violation.detected", actor, occurredAt: violation.detectedAt, payload: { violation } });
       // Projection is already updated by append; return protocol object.
@@ -128,6 +198,24 @@ export function recordClaimViolations(store: StoreHandle, plan: ClaimViolationPl
     }
     return emitted;
   });
+  return { violations, incompleteDetection };
+}
+
+/**
+ * The published signature: the violations alone. Kept array-returning so
+ * existing callers and the two aliases below are untouched; incomplete
+ * detection is still impossible to miss, because it is raised as a process
+ * warning here. Callers that need it as data use detectClaimViolations.
+ */
+export function recordClaimViolations(store: StoreHandle, plan: ClaimViolationPlan, actor = "planner"): ClaimViolation[] {
+  const result = detectClaimViolations(store, plan, actor);
+  for (const incomplete of result.incompleteDetection) {
+    process.emitWarning(
+      `claim-violation detection over ${incomplete.taskId} (${incomplete.dispatchId}/${incomplete.attempt}) is INCOMPLETE: ${incomplete.redactedPaths} of ${incomplete.totalPaths} changed-file path(s) are redacted and cannot be compared. ` +
+      `${result.violations.length === 0 ? "An empty result here means \"cannot tell\", not \"no collision\"." : "Violations found may be a subset."} Use detectClaimViolations for this as data.`
+    );
+  }
+  return result.violations;
 }
 
 export const detectAndPersistClaimViolations = recordClaimViolations;
