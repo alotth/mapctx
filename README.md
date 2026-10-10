@@ -28,11 +28,14 @@ mapctx dispatch receipt <dispatch-id> --receipt /tmp/receipt.json --json
 mapctx task acceptance show T-123 --json
 mapctx task acceptance approve T-123 --index 0 --expect-revision 1 --evidence uri=proof://review --json
 mapctx task finish T-123 --json     # canonical done gate + final checkpoint
+mapctx task finish T-123 --no-snapshot --json   # same gate, no mirrors, no checkpoint
 ```
 
 Renew/release the returned lease through `task renew/release`; keep its token private. Approve each current Acceptance criterion explicitly. `task acceptance revise --from-file ... --expect-revision ...` creates a new pending revision. For existing projects, `mapctx acceptance import` previews a batch; `--commit` records observed checkboxes (`[x]` approved, `[ ]` pending), skips existing revisions and never infers approval from done.
 
-Routine mutations do not regenerate mirrors. Use `task finish` or explicit `mapctx export --reason manual|wave-end|epic-end` at final boundaries. Wave/epic labels do not automate orchestration. Export preserves authored Acceptance notes; ambiguous reassociation or malformed fences refuse publication.
+Routine mutations do not regenerate mirrors. Use `task finish` or explicit `mapctx export --reason manual|wave-end|epic-end` at final boundaries.
+
+`task finish --no-snapshot` applies the same done gate but writes nothing — no `TASKS.md`, no `tasks/*.md`, no `checkpoint.exported` event — for a checkout shared with other agents, where regenerating every mirror would mix generated files into uncommitted work. It is a **durability trade**: the committed checkpoint is what `mapctx store init` recovers from, so each skipped snapshot widens the window in which a lost store also loses that closure. The window is not per task — a checkpoint carries the `filesHash` of the whole mirror set, so one later `mapctx export` (or one default `finish`) captures every previously skipped task at once. Publish and commit at wave-end or epic-end. Wave/epic labels do not automate orchestration. Export preserves authored Acceptance notes; ambiguous reassociation or malformed fences refuse publication.
 
 ## Adoption, recovery and GitHub
 

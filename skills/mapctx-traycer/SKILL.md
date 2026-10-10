@@ -78,6 +78,45 @@ dispatches, and receipts.
    without Traycer access.
    Acceptance criteria live in the store. Before closing `review` as `done`, inspect them with `mapctx task acceptance show <task-id>` and explicitly approve each criterion for its current revision. Use `mapctx task finish <task-id>` to apply the completion gate and publish the final checkpoint. Import existing checkboxes explicitly with `mapctx acceptance import [--commit]`; observed `[x]` state does not claim independent verification.
 
+### Closing a task in a shared checkout (T-128)
+
+There is **one** gate, not two. `mapctx task finish` and `mapctx task move --status done` call the
+same acceptance check and refuse with the same message — the only difference is what they publish:
+
+| Command | Gate | Regenerates TASKS.md + tasks/*.md | Journals a checkpoint |
+| --- | --- | --- | --- |
+| `task finish <id>` | acceptance | **yes** | yes (`task-end`/`epic-end`) |
+| `task finish <id> --no-snapshot` | acceptance | no | no |
+| `task move <id> --status done` | acceptance | no | no |
+
+**Prefer `finish`.** `--no-snapshot` is the one to use in a worktree shared with other agents: a full
+`finish` rewrites every mirror file, which mixes generated output into whatever uncommitted work is
+sitting in the tree. `finish` is still better than `move --status done` because it also re-verifies
+the gate when the task is *already* `done` (a criterion unapproved after closing makes it refuse),
+and it reports the checkpoint it published — `move --status done` on an already-done task refuses
+with `illegal-transition`, since `done` is terminal with no self-edge.
+
+**`--no-snapshot` is a durability trade, not a free win.** The store lives in `~/.mapctx/projects/<id>/`,
+outside the repo and untracked; the committed `TASKS.md`/`tasks/*.md` checkpoint is what
+`mapctx store init` recovers from. Every skipped snapshot widens the window in which a lost store also
+loses that closure. The window is **not per task**: a checkpoint carries the `filesHash` of the whole
+mirror set, so one later `mapctx export` — or one default `finish` — captures every previously skipped
+task at once. Publish and commit at wave-end or epic-end.
+
+**Closing revokes the active claim.** On both paths, and whoever holds it: if another agent had the
+lease, it loses it. The CLI warns on stderr naming the released claim id. Pre-existing `moveTask`
+semantics, but it matters most in exactly the shared setting `--no-snapshot` is for.
+
+**"One gate" is about the two closing commands, not every route into `done`.** Creation and ingest
+bypass it: `mapctx task create --status done` succeeds with no acceptance revision at all (and leaves
+`completedOn: null`, unlike a transition), and a bootstrap `import` can do the same from a `TASKS.md`
+that already says done. Both are caught after the fact by `mapctx validate`
+(`completion-acceptance-incomplete`), not at the write.
+
+Publish the mirrors later, deliberately, with `mapctx export` or a plain `mapctx task finish` once
+the working tree is yours to rewrite. Nothing closes a task behind your back: the default of `finish`
+still publishes.
+
 ### Who owns the prose (T-127)
 
 Under `plansAuthority: store`, `TASKS.md` and the **structured field blocks** of `tasks/<ID>.md` are

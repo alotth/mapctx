@@ -258,7 +258,11 @@ test('finish refuses a task-end checkpoint when acceptance is revised in the gat
     assert.equal(retry.ok, true, JSON.stringify(retry));
     if (retry.ok) {
       assert.equal(retry.move.performed, false);
-      assert.equal(retry.checkpoint.reason, 'task-end');
+      // T-128: the default still publishes, so this narrowing is part of the
+      // contract -- a caller must read `snapshot` before reaching for the
+      // checkpoint, because --no-snapshot returns without one.
+      assert.equal(retry.snapshot, 'published');
+      assert.equal(retry.snapshot === 'published' ? retry.checkpoint.reason : undefined, 'task-end');
     }
     assert.equal(listExportCheckpoints(fixture.handle.db).length, 1);
   } finally {
