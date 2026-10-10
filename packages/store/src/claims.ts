@@ -3,9 +3,43 @@ import { parseEstimatedEffortMs, workloadSchema } from "@mapctx/protocol"
 import { getActiveClaimForTask, getClaim, getTask, getTaskDetail } from "./projections"
 import type { AppendEventInput, StoreHandle } from "./store-handle"
 import type { EventLogEntry } from "@mapctx/protocol"
-import type { ResourceClaimRecord } from "./types"
+import type { DisclosableClaimRecord, ResourceClaimRecord } from "./types"
 
 export const DEFAULT_LEASE_DURATION_MS = 30 * 60 * 1000;
+
+/**
+ * Byte length of a lease token. Exported so the regression test derives its
+ * token-shaped pattern from the generator instead of hardcoding a width that
+ * could silently drift away from what is actually minted.
+ */
+export const LEASE_TOKEN_BYTES = 24;
+
+/** The pattern a minted lease token matches: hex, two characters per byte. */
+export const LEASE_TOKEN_PATTERN = new RegExp(`\\b[0-9a-f]{${LEASE_TOKEN_BYTES * 2}}\\b`);
+
+/**
+ * T-134 (C0 / D1): the ONE place a foreign claim is stripped for disclosure.
+ *
+ * Every refusal that names somebody else's claim goes through this, so the
+ * secret cannot escape through a print site that forgot. It is written as an
+ * explicit field list -- not a spread-minus-leaseToken -- so a new secret on
+ * ResourceClaimRecord is a compile error here instead of a silent leak.
+ *
+ * The refused caller still gets everything it needs to act: which claim holds
+ * the task, who holds it, and when the lease expires.
+ */
+export function disclosableClaim(claim: ResourceClaimRecord): DisclosableClaimRecord {
+  return {
+    claimId: claim.claimId,
+    taskId: claim.taskId,
+    state: claim.state,
+    claimedAt: claim.claimedAt,
+    expiresAt: claim.expiresAt,
+    holder: claim.holder,
+    eventNode: claim.eventNode,
+    eventSequence: claim.eventSequence
+  };
+}
 
 export type ClaimOptions = {
   taskId: string;
@@ -17,7 +51,7 @@ export type ClaimOptions = {
 
 export type ClaimResult =
   | { ok: true; claim: ResourceClaimRecord; expiredPrevious?: string; planningTransitionsTo?: string }
-  | { ok: false; reason: "active-claim-held" | "unknown-task" | "terminal-state" | "missing-workload-or-estimate" | "invalid-workload-or-estimate"; activeClaim?: ResourceClaimRecord; message?: string };
+  | { ok: false; reason: "active-claim-held" | "unknown-task" | "terminal-state" | "missing-workload-or-estimate" | "invalid-workload-or-estimate"; activeClaim?: DisclosableClaimRecord; message?: string };
 
 /**
  * BEGIN IMMEDIATE (via runInWriteTransaction) is what makes this
@@ -90,11 +124,14 @@ export function appendTaskClaim(
   }
 
   if (active) {
-    return { ok: false, reason: "active-claim-held", activeClaim: active };
+    // T-134: `activeClaim: active` used to hand the whole ResourceClaimRecord
+    // -- including the holder's leaseToken -- to anyone who tried to claim a
+    // held task, which is the bearer credential for renew and release.
+    return { ok: false, reason: "active-claim-held", activeClaim: disclosableClaim(active) };
   }
 
   const claimId = crypto.randomUUID();
-  const leaseToken = crypto.randomBytes(24).toString("hex");
+  const leaseToken = crypto.randomBytes(LEASE_TOKEN_BYTES).toString("hex");
   const claimedAt = now().toISOString();
   const expiresAt = new Date(nowMs + leaseDurationMs).toISOString();
 
