@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 5/10
+  - subIssueProgress: 6/10
   - priority: high
   - workload: null
   - tags: []
@@ -2706,7 +2706,7 @@
 ### [T-127] P1 CLI: enums na ajuda, erros de update, externalLinks, validate --task/--baseline
 
   - id: T-127
-  - status: doing
+  - status: review
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -2719,7 +2719,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-09
+  - updated: 2026-10-10
   - detail: ./tasks/T-127.md
 
 ### [T-128] R1 paliativo: task finish --no-snapshot e gate unico de done
@@ -2801,7 +2801,7 @@
 ### [T-132] Planner: globs com chaves/extglob/negação e normalização de paths
 
   - id: T-132
-  - status: review
+  - status: done
   - type: chore
   - parent: E-017
   - subIssueProgress: null
@@ -2812,9 +2812,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-10
   - externalId: null
-  - updated: 2026-10-09
+  - updated: 2026-10-10
   - detail: ./tasks/T-132.md
 
 ## Notes
