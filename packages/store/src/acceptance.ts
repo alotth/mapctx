@@ -94,21 +94,61 @@ function titleMatches(storedTitle: string, expectTitle: string): boolean {
 }
 
 /**
- * Review F2 asked for a special message when the two sides differ only by
- * Unicode normalization. With NFC applied in `normalizeTitle` that case now
- * MATCHES and never reaches a refusal, so the remaining hazard is the general
- * one: a genuine mismatch whose two strings still RENDER identically (a
- * zero-width character, a look-alike glyph). Then, and only then, the message
- * gains escaped code points, because repeating two identical-looking strings
- * explains nothing.
+ * Characters that occupy no visual space: soft hyphen, the zero-width and
+ * bidi controls, line/paragraph separators, the invisible math operators and
+ * BOM. Two titles differing only by these RENDER identically.
+ */
+const INVISIBLE_CHARS_SOURCE = "[\\u00ad\\u200b-\\u200f\\u2028\\u2029\\u202a-\\u202e\\u2060-\\u2064\\ufeff]"
+/** For `replace`: global. */
+const INVISIBLE_CHARS = new RegExp(INVISIBLE_CHARS_SOURCE, "g")
+/**
+ * For `test`: NOT global. A `/g` regex carries `lastIndex` across calls, so
+ * testing one character at a time returns true, false, true... for a run of
+ * identical invisible characters -- which would hide exactly the input this
+ * code exists to reveal.
+ */
+const IS_INVISIBLE_CHAR = new RegExp(INVISIBLE_CHARS_SOURCE)
+
+/**
+ * The form two titles share when they look the same on screen: compatibility
+ * normalization, invisible characters removed, whitespace collapsed, lowercase.
+ * Deliberately NOT what `titleMatches` uses -- a title differing by an
+ * invisible character IS a different title and must still be refused. This
+ * only decides whether the refusal owes the reader an explanation.
+ */
+function visuallyComparable(value: string): string {
+  return value.normalize("NFKC").replace(INVISIBLE_CHARS, "").trim().replace(/\s+/g, " ").toLowerCase()
+}
+
+/**
+ * Review F2: the refusal must never print two strings that look identical and
+ * leave the operator concluding they got the id wrong -- which is the opposite
+ * of what this guard exists to tell them.
+ *
+ * NFC in `normalizeTitle` closes the reported NFD instance by making it MATCH,
+ * so the review's "say it was only normalization" case is now unreachable by
+ * construction. What remains is the general hazard: an invisible character or
+ * a compatibility variant that survives NFC. When the two are visually
+ * comparable but genuinely different, the message gains escaped code points.
+ *
+ * (An earlier version of this guarded on `stripped === expectTitle.trim()`,
+ * which is unsatisfiable from the refusal branch -- raw equality implies
+ * normalized equality, so `titleMatches` would have returned true. It was dead
+ * code; the delegated test agent proved it with an isolated repro.)
  */
 function titleMismatchDetail(storedTitle: string, expectTitle: string): string {
-  const stripped = storedTitle.replace(/^\s*\[[^\]]+\]\s*/, "").trim();
-  if (stripped !== expectTitle.trim()) return "";
-  const escape = (value: string) => [...value.trim()]
-    .map(char => (/[\x20-\x7e]/.test(char) ? char : `\\u{${char.codePointAt(0)!.toString(16)}}`))
-    .join("");
-  return ` The two render identically but differ in code points: stored ${JSON.stringify(escape(stripped))} vs expected ${JSON.stringify(escape(expectTitle))}.`;
+  const stripped = storedTitle.replace(/^\s*\[[^\]]+\]\s*/, "")
+  const wanted = visuallyComparable(expectTitle)
+  if (visuallyComparable(storedTitle) !== wanted && visuallyComparable(stripped) !== wanted) return ""
+  // Escape ONLY what cannot be seen: an accented letter renders fine and
+  // escaping it buries the character that actually differs. Built by hand
+  // rather than via JSON.stringify, which would double the backslashes.
+  const reveal = (value: string) => `"${[...value.trim()]
+    .map(char => (IS_INVISIBLE_CHAR.test(char) || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Zs}]/u.test(char) && char !== " "
+      ? `\\u{${char.codePointAt(0)!.toString(16)}}`
+      : char))
+    .join("")}"`
+  return ` They render identically but differ in code points: stored ${reveal(stripped)} vs expected ${reveal(expectTitle)}.`
 }
 
 export type ReviseAcceptanceOptions = {
