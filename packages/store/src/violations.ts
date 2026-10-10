@@ -94,25 +94,84 @@ function stableUuid(seed: string): string {
   return [hex.slice(0, 8).join(""), hex.slice(8, 12).join(""), hex.slice(12, 16).join(""), hex.slice(16, 20).join(""), hex.slice(20).join("")].join("-");
 }
 
+/**
+ * THE id derivation, in one place so a lookup can reproduce it exactly.
+ *
+ * The key order below is the order the two call sites always used, and it is
+ * load-bearing: the seed is `JSON.stringify(fields)`, so reordering these
+ * keys would change every id and orphan every row already recorded.
+ */
+function violationIdFor(fields: Omit<ClaimViolation, "id">): string {
+  const ordered = {
+    waveId: fields.waveId,
+    kind: fields.kind,
+    taskAId: fields.taskAId,
+    taskBId: fields.taskBId,
+    path: fields.path,
+    detectedAt: fields.detectedAt,
+    source: fields.source
+  };
+  return stableUuid(`mapctx:claim-violation:${JSON.stringify(ordered)}`);
+}
+
 function makeViolation(fields: Omit<ClaimViolation, "id">): ClaimViolation {
-  return { ...fields, id: stableUuid(`mapctx:claim-violation:${JSON.stringify(fields)}`) };
+  return { ...fields, id: violationIdFor(fields) };
 }
 
 /**
- * Whether this exact violation is already recorded.
+ * Whether this violation is already recorded -- under ANY of the identities
+ * it can legitimately wear.
  *
- * Matched by ID, not by the field tuple (review MEDIA-1). The id is a
- * stableUuid over the ORIGINAL fields and redaction does not change it, so a
- * row whose `path` has since been redacted still answers "already recorded".
- * Matching on `path` instead meant a redacted row stopped being found, the
- * next detection run appended a BRAND NEW event carrying the real path, and
- * the projection ended up with both rows -- redacting the derived copy was
- * silently undone by the next wave. `insertClaimViolation` already keys its
- * ON CONFLICT on the id alone, which is what proves the id is the stable
- * identity here.
+ * Two different things want to be the identity here, and each one alone is
+ * wrong (review MEDIA-1 then ALTO-4):
+ *
+ *   - the semantic TUPLE (waveId, kind, taskAId, taskBId, path), which was the
+ *     original query. It deliberately omits `detectedAt`, which is what made
+ *     repeating a plan idempotent -- but a REDACTED row holds the sentinel
+ *     instead of the path, so it stopped matching, and the next run appended a
+ *     brand new event carrying the real path. Redaction silently undone.
+ *   - the `id`, which I switched to for exactly that reason. It survives
+ *     redaction (it is a hash over the ORIGINAL fields and redaction does not
+ *     rewrite it) -- but it also hashes `detectedAt`, and `detectedAt`
+ *     defaults to `new Date()`. So on the normal path two runs of the same
+ *     plan produced two ids, two events and two rows: the documented
+ *     idempotence, gone, and MEDIA-1 back in full whenever the timestamp
+ *     differed.
+ *
+ * So: match on either, plus the case neither covers. A row that is BOTH
+ * redacted AND being re-detected with a fresh timestamp defeats the id (new
+ * `detectedAt`) and the tuple (sentinel path) at once -- that was a duplicate
+ * carrying the real path. It is resolved by recomputing the candidate's
+ * identity against THAT ROW's own `detectedAt`: if the hash lands on the
+ * row's id, the row is this very violation, because the id covers the path
+ * too. Exact, not heuristic -- a different path between the same pair of
+ * tasks in the same wave hashes differently and is still recorded, which it
+ * must be.
+ *
+ * That last step uses the enumeration property the id already has (the header
+ * of redact.ts documents it as a 128-bit verifier of the original path).
+ * Nothing is leaked by it: the candidate path is in hand from the intact
+ * receipt, and the comparison only confirms identity.
  */
 function semanticExists(store: StoreHandle, violation: ClaimViolation): boolean {
-  return listClaimViolations(store.db, { id: violation.id }).length > 0;
+  if (listClaimViolations(store.db, { id: violation.id }).length > 0) return true;
+  const siblings = listClaimViolations(store.db, {
+    waveId: violation.waveId,
+    kind: violation.kind,
+    taskAId: violation.taskAId,
+    taskBId: violation.taskBId
+  });
+  return siblings.some(row =>
+    row.path === violation.path ||
+    violationIdFor({
+      waveId: violation.waveId,
+      kind: violation.kind,
+      taskAId: violation.taskAId,
+      taskBId: violation.taskBId,
+      path: violation.path,
+      detectedAt: row.detectedAt,
+      source: violation.source
+    }) === row.id);
 }
 
 /** How much of one receipt's changed-file list is no longer comparable. */
@@ -143,7 +202,16 @@ function redactedChangedFileCount(receipt: RunReceipt): number {
 /**
  * Read completed receipts, derive both feedback directions, and append events
  * atomically. Any missing/non-completed receipt aborts the whole plan with no
- * partial output. Repeating a completed plan is idempotent by semantic key.
+ * partial output.
+ *
+ * Repeating a completed plan is idempotent, including on the normal path
+ * where `detectedAt` is left out and therefore differs between runs: see
+ * semanticExists, which recognises an already-recorded violation under its
+ * id, its semantic tuple, or its identity recomputed against the stored row's
+ * own timestamp. (The earlier wording claimed idempotence "by semantic key"
+ * while the lookup had moved to the id, which hashes `detectedAt` -- so two
+ * runs of the same plan appended two events. Measured, not assumed, this
+ * time: a test calls it twice with no `detectedAt` at all.)
  *
  * T-131 review ALTO-2: when a receipt's `changedFiles` has been redacted, the
  * paths it contributes are gone, so a real collision on a path that was

@@ -750,8 +750,15 @@ function redactionAdvisories(
           ? `This path was DERIVED from ${sources.length} receipt(s) that still hold it in receipt.changedFiles; this redaction does not reach them. Finish the job: ${sources.map(source => `mapctx redact --node ${source.nodeId} --sequence ${source.sequence} --field receipt.changedFiles --reason "..." --commit`).join(" ; ")}`
           : "No receipt in this store still holds this path in receipt.changedFiles, so there is no remaining source copy to redact."
       )
+      // Review ALTO-4: this used to promise unconditionally that detection
+      // would not re-create the violation, which was only true when the next
+      // run happened to pass the SAME detectedAt -- and the default is a
+      // fresh timestamp. An advisory that buys confidence it has not earned
+      // is the ALTO-3 failure mode again, so the sentence now states what the
+      // lookup actually guarantees (violations.ts semanticExists), which
+      // includes the fresh-timestamp and the redacted-row cases.
       advisories.push(
-        "A later detection run will NOT re-create this violation: semanticExists matches by violation id, which is derived from the ORIGINAL fields and is unchanged by redaction, so the redacted row keeps satisfying it."
+        "A later detection run will not re-create this violation: it is recognised as already recorded by its id, by its semantic tuple, and by its identity recomputed against this row's own detectedAt -- so a later run with a fresh timestamp, which is the default, does not duplicate it."
       )
     }
   }
