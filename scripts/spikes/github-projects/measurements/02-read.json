@@ -1,0 +1,1132 @@
+{
+  "startedAt": "2026-10-10T16:55:01.831Z",
+  "args": {
+    "account": "alotth",
+    "owner": "alotth",
+    "repo": "mapctx",
+    "projectTitle": "MapCtx provider spike (test)",
+    "cli": "/Users/alt/repos/mapctx/packages/sync-engine/dist/mapctx-cli.js",
+    "tasks": [
+      "T-116",
+      "T-117",
+      "T-118",
+      "T-119",
+      "T-120",
+      "T-126",
+      "T-127",
+      "T-128",
+      "T-129",
+      "T-131",
+      "T-133",
+      "T-134"
+    ],
+    "usdPerActiveHour": 0,
+    "projectNumber": 3,
+    "first": 2,
+    "depRepos": "mapctx,kanban-sync-engine,markdown-kanban-roadmap"
+  },
+  "project": {
+    "id": "PVT_kwHOAcgr-s4BmfEN",
+    "number": 3,
+    "title": "MapCtx provider spike (test)",
+    "public": false,
+    "itemCountReported": 12,
+    "fieldCount": 19,
+    "fieldsHasNextPage": false,
+    "fields": [
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6d0",
+        "name": "Title",
+        "dataType": "TITLE"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6d4",
+        "name": "Assignees",
+        "dataType": "ASSIGNEES"
+      },
+      {
+        "id": "PVTSSF_lAHOAcgr-s4BmfENzhlH6d8",
+        "name": "Status",
+        "dataType": "SINGLE_SELECT",
+        "optionCount": 3
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6eA",
+        "name": "Labels",
+        "dataType": "LABELS"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6eE",
+        "name": "Linked pull requests",
+        "dataType": "LINKED_PULL_REQUESTS"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6eI",
+        "name": "Milestone",
+        "dataType": "MILESTONE"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6eM",
+        "name": "Repository",
+        "dataType": "REPOSITORY"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6eU",
+        "name": "Reviewers",
+        "dataType": "REVIEWERS"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6eY",
+        "name": "Parent issue",
+        "dataType": "PARENT_ISSUE"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6ec",
+        "name": "Sub-issues progress",
+        "dataType": "SUB_ISSUES_PROGRESS"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6eg",
+        "name": "Created",
+        "dataType": "CREATED"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6ek",
+        "name": "Updated",
+        "dataType": "UPDATED"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6eo",
+        "name": "Closed",
+        "dataType": "CLOSED"
+      },
+      {
+        "id": "PVTSSF_lAHOAcgr-s4BmfENzhlH6fk",
+        "name": "Wave",
+        "dataType": "SINGLE_SELECT",
+        "optionCount": 8
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6fo",
+        "name": "Forecast P50 (h)",
+        "dataType": "NUMBER"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6fs",
+        "name": "Forecast P90 (h)",
+        "dataType": "NUMBER"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6fw",
+        "name": "Forecast end P90",
+        "dataType": "DATE"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6f0",
+        "name": "Est. custo",
+        "dataType": "NUMBER"
+      },
+      {
+        "id": "PVTF_lAHOAcgr-s4BmfENzhlH6gQ",
+        "name": "Custo real",
+        "dataType": "NUMBER"
+      }
+    ]
+  },
+  "itemPagination": {
+    "pageSize": 2,
+    "pageCount": 6,
+    "itemsWalked": 12,
+    "pages": [
+      {
+        "pageSize": 2,
+        "returned": 2,
+        "totalCount": 12,
+        "hasNext": true,
+        "freshness": {
+          "fetchedAt": "2026-10-10T16:55:03.002Z",
+          "source": "live",
+          "stale": false,
+          "partial": true
+        }
+      },
+      {
+        "pageSize": 2,
+        "returned": 2,
+        "totalCount": 12,
+        "hasNext": true,
+        "freshness": {
+          "fetchedAt": "2026-10-10T16:55:03.539Z",
+          "source": "live",
+          "stale": false,
+          "partial": true
+        }
+      },
+      {
+        "pageSize": 2,
+        "returned": 2,
+        "totalCount": 12,
+        "hasNext": true,
+        "freshness": {
+          "fetchedAt": "2026-10-10T16:55:04.026Z",
+          "source": "live",
+          "stale": false,
+          "partial": true
+        }
+      },
+      {
+        "pageSize": 2,
+        "returned": 2,
+        "totalCount": 12,
+        "hasNext": true,
+        "freshness": {
+          "fetchedAt": "2026-10-10T16:55:04.504Z",
+          "source": "live",
+          "stale": false,
+          "partial": true
+        }
+      },
+      {
+        "pageSize": 2,
+        "returned": 2,
+        "totalCount": 12,
+        "hasNext": true,
+        "freshness": {
+          "fetchedAt": "2026-10-10T16:55:05.287Z",
+          "source": "live",
+          "stale": false,
+          "partial": true
+        }
+      },
+      {
+        "pageSize": 2,
+        "returned": 2,
+        "totalCount": 12,
+        "hasNext": false,
+        "freshness": {
+          "fetchedAt": "2026-10-10T16:55:05.716Z",
+          "source": "live",
+          "stale": false,
+          "partial": false
+        }
+      }
+    ]
+  },
+  "items": [
+    {
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E8s",
+      "workItemId": "DI_lAHOAcgr-s4BmfENzgLVkT4",
+      "key": "draft:PVTI_lAHOAcgr-s4BmfENzg_4E8s",
+      "contentKind": "DraftIssue",
+      "title": "[T-116] Histórico: isolar projeto, corrigir atribuições e recuperar done sem alterar execução",
+      "revision": "2026-10-10T16:54:03Z",
+      "fieldValues": [
+        {
+          "fieldId": "PVTF_lAHOAcgr-s4BmfENzhlH6d0",
+          "fieldName": "Title",
+          "kind": "ProjectV2ItemFieldTextValue",
+          "value": "[T-116] Histórico: isolar projeto, corrigir atribuições e recuperar done sem alterar execução",
+          "optionId": null
+        },
+        {
+          "fieldId": "PVTSSF_lAHOAcgr-s4BmfENzhlH6d8",
+          "fieldName": "Status",
+          "kind": "ProjectV2ItemFieldSingleSelectValue",
+          "value": "Todo",
+          "optionId": "f75ad846"
+        }
+      ]
+    },
+    {
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E9I",
+      "workItemId": "DI_lAHOAcgr-s4BmfENzgLVkT8",
+      "key": "draft:PVTI_lAHOAcgr-s4BmfENzg_4E9I",
+      "contentKind": "DraftIssue",
+      "title": "[T-117] Histórico: revisar candidatos ambíguos e janelas de sessões mistas",
+      "revision": "2026-10-10T16:54:05Z",
+      "fieldValues": [
+        {
+          "fieldId": "PVTF_lAHOAcgr-s4BmfENzhlH6d0",
+          "fieldName": "Title",
+          "kind": "ProjectV2ItemFieldTextValue",
+          "value": "[T-117] Histórico: revisar candidatos ambíguos e janelas de sessões mistas",
+          "optionId": null
+        },
+        {
+          "fieldId": "PVTSSF_lAHOAcgr-s4BmfENzhlH6d8",
+          "fieldName": "Status",
+          "kind": "ProjectV2ItemFieldSingleSelectValue",
+          "value": "Todo",
+          "optionId": "f75ad846"
+        }
+      ]
+    },
+    {
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E9g",
+      "workItemId": "DI_lAHOAcgr-s4BmfENzgLVkUA",
+      "key": "draft:PVTI_lAHOAcgr-s4BmfENzg_4E9g",
+      "contentKind": "DraftIssue",
+      "title": "[T-118] Store repair: replay multi-node falha em dispatch histórico de tarefa terminal",
+      "revision": "2026-10-10T16:54:04Z",
+      "fieldValues": [
+        {
+          "fieldId": "PVTF_lAHOAcgr-s4BmfENzhlH6d0",
+          "fieldName": "Title",
+          "kind": "ProjectV2ItemFieldTextValue",
+          "value": "[T-118] Store repair: replay multi-node falha em dispatch histórico de tarefa terminal",
+          "optionId": null
+        },
+        {
+          "fieldId": "PVTSSF_lAHOAcgr-s4BmfENzhlH6d8",
+          "fieldName": "Status",
+          "kind": "ProjectV2ItemFieldSingleSelectValue",
+          "value": "Todo",
+          "optionId": "f75ad846"
+        }
+      ]
+    },
+    {
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E9o",
+      "workItemId": "DI_lAHOAcgr-s4BmfENzgLVkUE",
+      "key": "draft:PVTI_lAHOAcgr-s4BmfENzg_4E9o",
+      "contentKind": "DraftIssue",
+      "title": "[T-119] Store recovery: resolver nós históricos sem journal sem perder eventos",
+      "revision": "2026-10-10T16:54:06Z",
+      "fieldValues": [
+        {
+          "fieldId": "PVTF_lAHOAcgr-s4BmfENzhlH6d0",
+          "fieldName": "Title",
+          "kind": "ProjectV2ItemFieldTextValue",
+          "value": "[T-119] Store recovery: resolver nós históricos sem journal sem perder eventos",
+          "optionId": null
+        },
+        {
+          "fieldId": "PVTSSF_lAHOAcgr-s4BmfENzhlH6d8",
+          "fieldName": "Status",
+          "kind": "ProjectV2ItemFieldSingleSelectValue",
+          "value": "Todo",
+          "optionId": "f75ad846"
+        }
+      ]
+    },
+    {
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E98",
+      "workItemId": "DI_lAHOAcgr-s4BmfENzgLVkUI",
+      "key": "draft:PVTI_lAHOAcgr-s4BmfENzg_4E98",
+      "contentKind": "DraftIssue",
+      "title": "[T-120] Store authority: validate canônico e snapshots apenas nos checkpoints finais",
+      "revision": "2026-10-10T16:54:04Z",
+      "fieldValues": [
+        {
+          "fieldId": "PVTF_lAHOAcgr-s4BmfENzhlH6d0",
+          "fieldName": "Title",
+          "kind": "ProjectV2ItemFieldTextValue",
+          "value": "[T-120] Store authority: validate canônico e snapshots apenas nos checkpoints finais",
+          "optionId": null
+        },
+        {
+          "fieldId": "PVTSSF_lAHOAcgr-s4BmfENzhlH6d8",
+          "fieldName": "Status",
+          "kind": "ProjectV2ItemFieldSingleSelectValue",
+          "value": "Todo",
+          "optionId": "f75ad846"
+        }
+      ]
+    },
+    {
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E-M",
+      "workItemId": "DI_lAHOAcgr-s4BmfENzgLVkUM",
+      "key": "draft:PVTI_lAHOAcgr-s4BmfENzg_4E-M",
+      "contentKind": "DraftIssue",
+      "title": "[T-126] R5 redacao auditavel de evidencia sensivel + lint [privacy] patterns",
+      "revision": "2026-10-10T16:54:07Z",
+      "fieldValues": [
+        {
+          "fieldId": "PVTF_lAHOAcgr-s4BmfENzhlH6d0",
+          "fieldName": "Title",
+          "kind": "ProjectV2ItemFieldTextValue",
+          "value": "[T-126] R5 redacao auditavel de evidencia sensivel + lint [privacy] patterns",
+          "optionId": null
+        },
+        {
+          "fieldId": "PVTSSF_lAHOAcgr-s4BmfENzhlH6d8",
+          "fieldName": "Status",
+          "kind": "ProjectV2ItemFieldSingleSelectValue",
+          "value": "Todo",
+          "optionId": "f75ad846"
+        }
+      ]
+    },
+    {
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E-o",
+      "workItemId": "DI_lAHOAcgr-s4BmfENzgLVkUQ",
+      "key": "draft:PVTI_lAHOAcgr-s4BmfENzg_4E-o",
+      "contentKind": "DraftIssue",
+      "title": "[T-127] P1 CLI: enums na ajuda, erros de update, externalLinks, validate --task/--baseline",
+      "revision": "2026-10-10T16:54:08Z",
+      "fieldValues": [
+        {
+          "fieldId": "PVTF_lAHOAcgr-s4BmfENzhlH6d0",
+          "fieldName": "Title",
+          "kind": "ProjectV2ItemFieldTextValue",
+          "value": "[T-127] P1 CLI: enums na ajuda, erros de update, externalLinks, validate --task/--baseline",
+          "optionId": null
+        },
+        {
+          "fieldId": "PVTSSF_lAHOAcgr-s4BmfENzhlH6d8",
+          "fieldName": "Status",
+          "kind": "ProjectV2ItemFieldSingleSelectValue",
+          "value": "Todo",
+          "optionId": "f75ad846"
+        }
+      ]
+    },
+    {
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E-4",
+      "workItemId": "DI_lAHOAcgr-s4BmfENzgLVkUU",
+      "key": "draft:PVTI_lAHOAcgr-s4BmfENzg_4E-4",
+      "contentKind": "DraftIssue",
+      "title": "[T-128] R1 paliativo: task finish --no-snapshot e gate unico de done",
+      "revision": "2026-10-10T16:54:07Z",
+      "fieldValues": [
+        {
+          "fieldId": "PVTF_lAHOAcgr-s4BmfENzhlH6d0",
+          "fieldName": "Title",
+          "kind": "ProjectV2ItemFieldTextValue",
+          "value": "[T-128] R1 paliativo: task finish --no-snapshot e gate unico de done",
+          "optionId": null
+        },
+        {
+          "fieldId": "PVTSSF_lAHOAcgr-s4BmfENzhlH6d8",
+          "fieldName": "Status",
+          "kind": "ProjectV2ItemFieldSingleSelectValue",
+          "value": "Todo",
+          "optionId": "f75ad846"
+        }
+      ]
+    },
+    {
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E_A",
+      "workItemId": "DI_lAHOAcgr-s4BmfENzgLVkUY",
+      "key": "draft:PVTI_lAHOAcgr-s4BmfENzg_4E_A",
+      "contentKind": "DraftIssue",
+      "title": "[T-129] R3 paliativo: acceptance no create, approve em lote, revise --expect-title, import --task",
+      "revision": "2026-10-10T16:54:07Z",
+      "fieldValues": [
+        {
+          "fieldId": "PVTF_lAHOAcgr-s4BmfENzhlH6d0",
+          "fieldName": "Title",
+          "kind": "ProjectV2ItemFieldTextValue",
+          "value": "[T-129] R3 paliativo: acceptance no create, approve em lote, revise --expect-title, import --task",
+          "optionId": null
+        },
+        {
+          "fieldId": "PVTSSF_lAHOAcgr-s4BmfENzhlH6d8",
+          "fieldName": "Status",
+          "kind": "ProjectV2ItemFieldSingleSelectValue",
+          "value": "Todo",
+          "optionId": "f75ad846"
+        }
+      ]
+    },
+    {
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E_I",
+      "workItemId": "DI_lAHOAcgr-s4BmfENzgLVkUc",
+      "key": "draft:PVTI_lAHOAcgr-s4BmfENzg_4E_I",
+      "contentKind": "DraftIssue",
+      "title": "[T-131] Redação de receipt.failure, changedFiles e payloads de run event",
+      "revision": "2026-10-10T16:54:07Z",
+      "fieldValues": [
+        {
+          "fieldId": "PVTF_lAHOAcgr-s4BmfENzhlH6d0",
+          "fieldName": "Title",
+          "kind": "ProjectV2ItemFieldTextValue",
+          "value": "[T-131] Redação de receipt.failure, changedFiles e payloads de run event",
+          "optionId": null
+        },
+        {
+          "fieldId": "PVTSSF_lAHOAcgr-s4BmfENzhlH6d8",
+          "fieldName": "Status",
+          "kind": "ProjectV2ItemFieldSingleSelectValue",
+          "value": "Todo",
+          "optionId": "f75ad846"
+        }
+      ]
+    },
+    {
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E_Q",
+      "workItemId": "DI_lAHOAcgr-s4BmfENzgLVkUg",
+      "key": "draft:PVTI_lAHOAcgr-s4BmfENzg_4E_Q",
+      "contentKind": "DraftIssue",
+      "title": "[T-133] Planner: deduplicar a detecção de violações de claim e guardar o sentinela",
+      "revision": "2026-10-10T16:54:08Z",
+      "fieldValues": [
+        {
+          "fieldId": "PVTF_lAHOAcgr-s4BmfENzhlH6d0",
+          "fieldName": "Title",
+          "kind": "ProjectV2ItemFieldTextValue",
+          "value": "[T-133] Planner: deduplicar a detecção de violações de claim e guardar o sentinela",
+          "optionId": null
+        },
+        {
+          "fieldId": "PVTSSF_lAHOAcgr-s4BmfENzhlH6d8",
+          "fieldName": "Status",
+          "kind": "ProjectV2ItemFieldSingleSelectValue",
+          "value": "Todo",
+          "optionId": "f75ad846"
+        }
+      ]
+    },
+    {
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E_g",
+      "workItemId": "DI_lAHOAcgr-s4BmfENzgLVkUk",
+      "key": "draft:PVTI_lAHOAcgr-s4BmfENzg_4E_g",
+      "contentKind": "DraftIssue",
+      "title": "[T-134] C0: recusa de claim não expõe o leaseToken do holder",
+      "revision": "2026-10-10T16:54:09Z",
+      "fieldValues": [
+        {
+          "fieldId": "PVTF_lAHOAcgr-s4BmfENzhlH6d0",
+          "fieldName": "Title",
+          "kind": "ProjectV2ItemFieldTextValue",
+          "value": "[T-134] C0: recusa de claim não expõe o leaseToken do holder",
+          "optionId": null
+        },
+        {
+          "fieldId": "PVTSSF_lAHOAcgr-s4BmfENzhlH6d8",
+          "fieldName": "Status",
+          "kind": "ProjectV2ItemFieldSingleSelectValue",
+          "value": "Todo",
+          "optionId": "f75ad846"
+        }
+      ]
+    }
+  ],
+  "dependencyReads": [
+    {
+      "repo": "mapctx",
+      "ok": true,
+      "repository": {
+        "nameWithOwner": "alotth/mapctx",
+        "isPrivate": false,
+        "hasIssuesEnabled": true
+      },
+      "issueCount": 0,
+      "dependencyEdges": 0,
+      "subIssueEdges": 0,
+      "freshness": {
+        "fetchedAt": "2026-10-10T16:55:06.068Z",
+        "source": "live",
+        "stale": false,
+        "partial": false
+      },
+      "dependencies": [],
+      "subIssues": [],
+      "perIssue": []
+    },
+    {
+      "repo": "kanban-sync-engine",
+      "ok": true,
+      "repository": {
+        "nameWithOwner": "alotth/kanban-sync-engine",
+        "isPrivate": false,
+        "hasIssuesEnabled": true
+      },
+      "issueCount": 7,
+      "dependencyEdges": 0,
+      "subIssueEdges": 0,
+      "freshness": {
+        "fetchedAt": "2026-10-10T16:55:06.570Z",
+        "source": "live",
+        "stale": false,
+        "partial": false
+      },
+      "dependencies": [],
+      "subIssues": [],
+      "perIssue": [
+        {
+          "key": "alotth/kanban-sync-engine#1",
+          "state": "CLOSED",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/kanban-sync-engine#2",
+          "state": "CLOSED",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/kanban-sync-engine#3",
+          "state": "OPEN",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/kanban-sync-engine#4",
+          "state": "CLOSED",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/kanban-sync-engine#5",
+          "state": "OPEN",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/kanban-sync-engine#6",
+          "state": "OPEN",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/kanban-sync-engine#7",
+          "state": "CLOSED",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        }
+      ]
+    },
+    {
+      "repo": "markdown-kanban-roadmap",
+      "ok": true,
+      "repository": {
+        "nameWithOwner": "alotth/markdown-kanban-roadmap",
+        "isPrivate": false,
+        "hasIssuesEnabled": true
+      },
+      "issueCount": 9,
+      "dependencyEdges": 0,
+      "subIssueEdges": 0,
+      "freshness": {
+        "fetchedAt": "2026-10-10T16:55:07.054Z",
+        "source": "live",
+        "stale": false,
+        "partial": false
+      },
+      "dependencies": [],
+      "subIssues": [],
+      "perIssue": [
+        {
+          "key": "alotth/markdown-kanban-roadmap#2",
+          "state": "CLOSED",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/markdown-kanban-roadmap#3",
+          "state": "OPEN",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/markdown-kanban-roadmap#4",
+          "state": "OPEN",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/markdown-kanban-roadmap#5",
+          "state": "OPEN",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/markdown-kanban-roadmap#6",
+          "state": "OPEN",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/markdown-kanban-roadmap#7",
+          "state": "OPEN",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/markdown-kanban-roadmap#8",
+          "state": "OPEN",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/markdown-kanban-roadmap#9",
+          "state": "OPEN",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        },
+        {
+          "key": "alotth/markdown-kanban-roadmap#10",
+          "state": "CLOSED",
+          "summary": {
+            "blockedBy": 0,
+            "blocking": 0,
+            "totalBlockedBy": 0,
+            "totalBlocking": 0
+          },
+          "subIssues": {
+            "total": 0,
+            "completed": 0,
+            "percentCompleted": 0
+          },
+          "parent": null,
+          "issueType": null
+        }
+      ]
+    }
+  ],
+  "restDependencyProbe": [
+    {
+      "repo": "kanban-sync-engine",
+      "number": 1,
+      "blockedBy": [],
+      "blocking": [],
+      "calls": [
+        {
+          "key": "blockedBy",
+          "status": 200,
+          "latencyMs": 280,
+          "restRemaining": "4963"
+        },
+        {
+          "key": "blocking",
+          "status": 200,
+          "latencyMs": 252,
+          "restRemaining": "4978"
+        }
+      ]
+    },
+    {
+      "repo": "markdown-kanban-roadmap",
+      "number": 2,
+      "blockedBy": [],
+      "blocking": [],
+      "calls": [
+        {
+          "key": "blockedBy",
+          "status": 200,
+          "latencyMs": 254,
+          "restRemaining": "4962"
+        },
+        {
+          "key": "blocking",
+          "status": 200,
+          "latencyMs": 284,
+          "restRemaining": "4977"
+        }
+      ]
+    }
+  ],
+  "capabilitiesObserved": {
+    "fields": {},
+    "relations": {
+      "blocked-by": {
+        "read": true,
+        "write": false
+      },
+      "blocks": {
+        "read": true,
+        "write": false
+      },
+      "relates-to": {
+        "read": true,
+        "write": false
+      }
+    },
+    "comments": {
+      "read": false,
+      "write": false
+    },
+    "criteria": {
+      "read": false,
+      "write": false
+    },
+    "timeline": {
+      "read": false
+    }
+  },
+  "endedAt": "2026-10-10T16:55:08.125Z",
+  "metrics": [
+    {
+      "label": "getProject(fields,100)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 532,
+      "pointsCost": 1,
+      "pointsRemaining": 4758,
+      "headerUsed": "242",
+      "headerRemaining": "4758",
+      "requestId": "624C:CE609:10D1083:1E0C843:6ACA6DE5"
+    },
+    {
+      "label": "listItems(project,first=2)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 635,
+      "pointsCost": 1,
+      "pointsRemaining": 4757,
+      "headerUsed": "243",
+      "headerRemaining": "4757",
+      "requestId": "624D:16F2BC:10C85EA:1E022E6:6ACA6DE6"
+    },
+    {
+      "label": "listItems(project,first=2)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 537,
+      "pointsCost": 1,
+      "pointsRemaining": 4756,
+      "headerUsed": "244",
+      "headerRemaining": "4756",
+      "requestId": "624C:CE609:10D1156:1E0C9A8:6ACA6DE6"
+    },
+    {
+      "label": "listItems(project,first=2)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 487,
+      "pointsCost": 1,
+      "pointsRemaining": 4755,
+      "headerUsed": "245",
+      "headerRemaining": "4755",
+      "requestId": "624D:16F2BC:10C86C2:1E02460:6ACA6DE7"
+    },
+    {
+      "label": "listItems(project,first=2)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 478,
+      "pointsCost": 1,
+      "pointsRemaining": 4754,
+      "headerUsed": "246",
+      "headerRemaining": "4754",
+      "requestId": "624C:CE609:10D1201:1E0CAD4:6ACA6DE7"
+    },
+    {
+      "label": "listItems(project,first=2)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 783,
+      "pointsCost": 1,
+      "pointsRemaining": 4753,
+      "headerUsed": "247",
+      "headerRemaining": "4753",
+      "requestId": "624D:16F2BC:10C8769:1E02587:6ACA6DE8"
+    },
+    {
+      "label": "listItems(project,first=2)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 429,
+      "pointsCost": 1,
+      "pointsRemaining": 4752,
+      "headerUsed": "248",
+      "headerRemaining": "4752",
+      "requestId": "624C:CE609:10D12DC:1E0CC6A:6ACA6DE8"
+    },
+    {
+      "label": "listRepoItems+deps(first=50)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 353,
+      "pointsCost": 3,
+      "pointsRemaining": 4749,
+      "headerUsed": "251",
+      "headerRemaining": "4749",
+      "requestId": "624D:16F2BC:10C8843:1E0271F:6ACA6DE9"
+    },
+    {
+      "label": "listRepoItems+deps(first=50)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 501,
+      "pointsCost": 3,
+      "pointsRemaining": 4979,
+      "headerUsed": "21",
+      "headerRemaining": "4979",
+      "requestId": "624C:CE609:10D1357:1E0CD9A:6ACA6DE9"
+    },
+    {
+      "label": "listRepoItems+deps(first=50)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 484,
+      "pointsCost": 3,
+      "pointsRemaining": 4746,
+      "headerUsed": "254",
+      "headerRemaining": "4746",
+      "requestId": "624D:16F2BC:10C88D3:1E02837:6ACA6DEA"
+    },
+    {
+      "label": "rest deps blockedBy",
+      "api": "rest",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 280,
+      "restUsed": "37",
+      "restRemaining": "4963",
+      "restResource": "core",
+      "link": null,
+      "requestId": "624C:CE609:10D1416:1E0CEE9:6ACA6DEA"
+    },
+    {
+      "label": "rest deps blocking",
+      "api": "rest",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 252,
+      "restUsed": "22",
+      "restRemaining": "4978",
+      "restResource": "core",
+      "link": null,
+      "requestId": "624D:16F2BC:10C894B:1E0290D:6ACA6DEB"
+    },
+    {
+      "label": "rest deps blockedBy",
+      "api": "rest",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 254,
+      "restUsed": "38",
+      "restRemaining": "4962",
+      "restResource": "core",
+      "link": null,
+      "requestId": "624C:CE609:10D1475:1E0CF87:6ACA6DEB"
+    },
+    {
+      "label": "rest deps blocking",
+      "api": "rest",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 284,
+      "restUsed": "23",
+      "restRemaining": "4977",
+      "restResource": "core",
+      "link": null,
+      "requestId": "624D:16F2BC:10C8992:1E029A6:6ACA6DEB"
+    }
+  ],
+  "metricsSummary": [
+    {
+      "label": "getProject(fields,100)",
+      "api": "graphql",
+      "calls": 1,
+      "pointsTotal": 1,
+      "latencyMinMs": 532,
+      "latencyMaxMs": 532,
+      "latencyMeanMs": 532
+    },
+    {
+      "label": "listItems(project,first=2)",
+      "api": "graphql",
+      "calls": 6,
+      "pointsTotal": 6,
+      "latencyMinMs": 429,
+      "latencyMaxMs": 783,
+      "latencyMeanMs": 558
+    },
+    {
+      "label": "listRepoItems+deps(first=50)",
+      "api": "graphql",
+      "calls": 3,
+      "pointsTotal": 9,
+      "latencyMinMs": 353,
+      "latencyMaxMs": 501,
+      "latencyMeanMs": 446
+    },
+    {
+      "label": "rest deps blockedBy",
+      "api": "rest",
+      "calls": 2,
+      "pointsTotal": 0,
+      "latencyMinMs": 254,
+      "latencyMaxMs": 280,
+      "latencyMeanMs": 267
+    },
+    {
+      "label": "rest deps blocking",
+      "api": "rest",
+      "calls": 2,
+      "pointsTotal": 0,
+      "latencyMinMs": 252,
+      "latencyMaxMs": 284,
+      "latencyMeanMs": 268
+    }
+  ]
+}
