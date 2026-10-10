@@ -186,14 +186,23 @@ export function deriveResourceClaims(tasks: readonly PlannerTask[]): ResourceCla
  * Reduce a declared path to one comparable form by walking its segments: separators
  * fold, `.` and empty segments drop, `..` pops, and a leading `/` disappears. So
  * `/src/a.ts`, `src/../src/a.ts`, `.//src/a.ts` and `src\a.ts` all become `src/a.ts`.
- * Case folds for macOS/Windows default filesystems.
+ * `..` clamps at the root rather than escaping it, so `../a.ts` compares as `a.ts`;
+ * a repo-relative path leaving the root is nonsense data, and conflating it with the
+ * root-relative one errs toward collision. Case folds for macOS/Windows default
+ * filesystems. Two known limits, both pre-existing and both conservative: there is no
+ * Unicode normalization, so NFC and NFD spellings of the same name stay disjoint; and
+ * folding `\` to `/` means `src/\*.ts` becomes the glob `src/*.ts` — escapes are not
+ * supported, they over-serialize.
  */
 function normalizePath(value: string): string {
   const segments: string[] = [];
   for (const segment of value.trim().replaceAll("\\", "/").split("/")) {
     if (segment === "" || segment === ".") continue;
     if (segment === "..") {
-      segments.pop();
+      // A single-segment wildcard consumes exactly one segment, so popping it is exact.
+      // `**` spans zero or more, so popping it would narrow a pattern that still
+      // matches: leave the path unresolvable instead, which collides broadly.
+      if (segments.pop()?.includes("**")) return "";
       continue;
     }
     segments.push(segment);
@@ -202,18 +211,36 @@ function normalizePath(value: string): string {
 }
 
 /**
- * Index of the first glob construct, or -1. Beyond `?`, `*` and `[`, this counts
- * brace lists (`{a,b}`) and extglob groups, backing up over the `?*+@!` that
- * introduces `@(a|b)`, plus a leading `!` negation. Those shapes are not matched,
- * only detected: detecting them truncates the static prefix instead of comparing
- * the pattern literally, which is the difference between a conservative collision
- * and a missed one.
+ * Index of the first glob construct, or -1. `?`, `*` and `[` always count. A `(`
+ * counts only as an extglob group — introduced by `?*+@!`, or holding a `|` within its
+ * own segment — and a `{` only as a brace expansion, its body holding a `,` or a `..`
+ * range. Bare parens and braces are literals in bash and picomatch, so counting them
+ * unconditionally would serialize `app/(marketing)/page.tsx` against every sibling
+ * route and `src/{id}.ts` against its whole directory. A leading `!` negates the whole
+ * pattern. These shapes are detected, never matched: detection truncates the static
+ * prefix instead of comparing the pattern literally, which is the difference between a
+ * conservative collision and a missed one.
  */
 function wildcardIndex(path: string): number {
   if (path.startsWith("!")) return 0;
-  const found = path.search(/[?*[{(]/);
-  if (found > 0 && path[found] === "(" && "?*+@!".includes(path[found - 1])) return found - 1;
-  return found;
+  for (let index = 0; index < path.length; index += 1) {
+    const char = path[index];
+    if (char === "?" || char === "*" || char === "[") return index;
+    if (char !== "(" && char !== "{") continue;
+    const segmentEnd = path.indexOf("/", index) < 0 ? path.length : path.indexOf("/", index);
+    if (char === "(") {
+      if (index > 0 && "?*+@!".includes(path[index - 1])) return index - 1;
+      const group = path.slice(index, segmentEnd);
+      const close = group.indexOf(")") < 0 ? group.length : group.indexOf(")");
+      if (group.slice(0, close).includes("|")) return index;
+      continue;
+    }
+    const body = path.slice(index + 1, segmentEnd);
+    const close = body.indexOf("}") < 0 ? body.length : body.indexOf("}");
+    const list = body.slice(0, close);
+    if (list.includes(",") || list.includes("..")) return index;
+  }
+  return -1;
 }
 
 /**
@@ -256,8 +283,10 @@ function pathOverlap(left: string, right: string): boolean {
   if (aPartial || bPartial) {
     if (aPrefix.startsWith(bPrefix) || bPrefix.startsWith(aPrefix)) return true;
   } else if (aPrefix.startsWith(`${bPrefix}/`) || bPrefix.startsWith(`${aPrefix}/`)) return true;
-  const aDir = a.endsWith("/**") || a.endsWith("/*") || a.endsWith("/");
-  const bDir = b.endsWith("/**") || b.endsWith("/*") || b.endsWith("/");
+  // Backstop for a trailing directory wildcard. The prefix rules above decide every
+  // input observed so far; this stays as a safety net, not as live logic.
+  const aDir = a.endsWith("/**") || a.endsWith("/*");
+  const bDir = b.endsWith("/**") || b.endsWith("/*");
   if (aDir && b.startsWith(`${a.slice(0, a.lastIndexOf("/"))}/`)) return true;
   if (bDir && a.startsWith(`${b.slice(0, b.lastIndexOf("/"))}/`)) return true;
   return false;
@@ -272,9 +301,14 @@ function domainsOverlap(left: ResourceClaim, right: ResourceClaim): string[] {
   return sortedUnique(left.domains.filter(domain => right.domains.includes(domain)));
 }
 
+/** Name a path in a cause the way it was declared when it normalizes away entirely. */
+function causePath(value: string): string {
+  return normalizePath(value) || value.trim();
+}
+
 function pathsOverlap(left: ResourceClaim, right: ResourceClaim): string[] {
   return sortedUnique(
-    left.paths.flatMap(leftPath => right.paths.filter(rightPath => pathOverlap(leftPath, rightPath)).map(rightPath => `${normalizePath(leftPath)} ↔ ${normalizePath(rightPath)}`))
+    left.paths.flatMap(leftPath => right.paths.filter(rightPath => pathOverlap(leftPath, rightPath)).map(rightPath => `${causePath(leftPath)} ↔ ${causePath(rightPath)}`))
   );
 }
 
