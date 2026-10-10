@@ -135,9 +135,9 @@ test("task pair is not reported as both serialized and advisory (multi-claim: ov
     ],
     claims: [
       { claimId: "00000000-0000-5000-8000-000000000041", taskId: "T-A", domains: ["CODE"], paths: ["src/shared.ts"], mode: "write", confidence: "high", provenance: "filesAffected" },
-      { claimId: "00000000-0000-5000-8000-000000000043", taskId: "T-A", domains: ["DOCS"], paths: [], mode: "write", confidence: "low", provenance: "inferred" },
+      { claimId: "00000000-0000-5000-8000-000000000043", taskId: "T-A", domains: ["CODE"], paths: [], mode: "write", confidence: "low", provenance: "inferred" },
       { claimId: "00000000-0000-5000-8000-000000000042", taskId: "T-B", domains: ["CODE"], paths: ["src/shared.ts"], mode: "write", confidence: "high", provenance: "filesAffected" },
-      { claimId: "00000000-0000-5000-8000-000000000044", taskId: "T-B", domains: ["DOCS"], paths: [], mode: "write", confidence: "low", provenance: "inferred" }
+      { claimId: "00000000-0000-5000-8000-000000000044", taskId: "T-B", domains: ["CODE"], paths: [], mode: "write", confidence: "low", provenance: "inferred" }
     ]
   });
   assert.equal(report.serializedPairs.length, 1);
@@ -345,6 +345,96 @@ test("R2 guards: wildcard filesAffected overlaps serialize with exact cause path
     assert.equal(report.serializedPairs.length, 1, `${a} vs ${b}`);
     assert.deepEqual(report.serializedPairs[0].causes[0].paths, [cause], `${a} vs ${b}`);
   }
+});
+
+test("T-132: brace, extglob, negation, and path-resolution overlaps serialize with exact cause path", () => {
+  const cases: Array<{ a: string; b: string; cause: string }> = [
+    { a: "{a,b}/x.ts", b: "a/x.ts", cause: "{a,b}/x.ts ↔ a/x.ts" },
+    { a: "src/{a,b}.ts", b: "src/a.ts", cause: "src/{a,b}.ts ↔ src/a.ts" },
+    { a: "@(a|b)/x.ts", b: "a/x.ts", cause: "@(a|b)/x.ts ↔ a/x.ts" },
+    { a: "src/@(a|b).ts", b: "src/a.ts", cause: "src/@(a|b).ts ↔ src/a.ts" },
+    { a: "!src/a.ts", b: "src/a.ts", cause: "!src/a.ts ↔ src/a.ts" },
+    { a: "/src/a.ts", b: "src/a.ts", cause: "src/a.ts ↔ src/a.ts" },
+    { a: "src/../src/a.ts", b: "src/a.ts", cause: "src/a.ts ↔ src/a.ts" },
+    { a: ".//src/a.ts", b: "src/a.ts", cause: "src/a.ts ↔ src/a.ts" },
+    { a: "src/**/../a.ts", b: "src/foo/a.ts", cause: "src/**/../a.ts ↔ src/foo/a.ts" },
+    { a: "src/*/../a.ts", b: "src/a.ts", cause: "src/a.ts ↔ src/a.ts" },
+    { a: "(a|b)/x.ts", b: "a/x.ts", cause: "(a|b)/x.ts ↔ a/x.ts" },
+    { a: "src/{a..c}.ts", b: "src/b.ts", cause: "src/{a..c}.ts ↔ src/b.ts" }
+  ];
+  for (const { a, b, cause } of cases) {
+    const report = planExecution({
+      tasks: [
+        { id: "T-A", status: "backlog", type: "task", domains: ["CODE"], filesAffected: [a] },
+        { id: "T-B", status: "backlog", type: "task", domains: ["CODE"], filesAffected: [b] }
+      ]
+    });
+    assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]], `${a} vs ${b}`);
+    assert.equal(report.serializedPairs.length, 1, `${a} vs ${b}`);
+    assert.deepEqual(report.serializedPairs[0].causes[0].paths, [cause], `${a} vs ${b}`);
+  }
+});
+
+test("T-132 attempt 2: F1 pin — a single-segment wildcard before `..` resolves exactly, so it stays in one wave", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", status: "backlog", type: "task", domains: ["CODE"], filesAffected: ["src/*/../a.ts"] },
+      { id: "T-B", status: "backlog", type: "task", domains: ["CODE"], filesAffected: ["src/foo/a.ts"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]]);
+  assert.deepEqual(report.serializedPairs, []);
+});
+
+test("T-132 attempt 2: F2 pin — bare parens and braces are literals, not glob syntax, so they stay in one wave", () => {
+  const cases: Array<{ a: string; b: string }> = [
+    { a: "app/(marketing)/page.tsx", b: "app/(shop)/page.tsx" },
+    { a: "src/{id}.ts", b: "src/other.ts" },
+    { a: "src/foo(1).ts", b: "src/a.ts" }
+  ];
+  for (const { a, b } of cases) {
+    const report = planExecution({
+      tasks: [
+        { id: "T-A", status: "backlog", type: "task", domains: ["CODE"], filesAffected: [a] },
+        { id: "T-B", status: "backlog", type: "task", domains: ["CODE"], filesAffected: [b] }
+      ]
+    });
+    assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]], `${a} vs ${b}`);
+    assert.deepEqual(report.serializedPairs, [], `${a} vs ${b}`);
+  }
+});
+
+test("T-132 attempt 2: F3/F5 guard — a path that normalizes away entirely still collides and names itself in the cause", () => {
+  const cases: Array<{ a: string; b: string; cause: string }> = [
+    { a: ".", b: "src/a.ts", cause: ". ↔ src/a.ts" },
+    { a: "src/..", b: "src/a.ts", cause: "src/.. ↔ src/a.ts" }
+  ];
+  for (const { a, b, cause } of cases) {
+    const report = planExecution({
+      tasks: [
+        { id: "T-A", status: "backlog", type: "task", domains: ["CODE"], filesAffected: [a] },
+        { id: "T-B", status: "backlog", type: "task", domains: ["CODE"], filesAffected: [b] }
+      ]
+    });
+    assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]], `${a} vs ${b}`);
+    assert.equal(report.serializedPairs.length, 1, `${a} vs ${b}`);
+    assert.deepEqual(report.serializedPairs[0].causes[0].paths, [cause], `${a} vs ${b}`);
+  }
+});
+
+test("T-132 attempt 2: F3 guard — blank paths stay ignored even with mixed whitespace and empty strings (T-125 finding 5 stays fixed)", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", status: "backlog", type: "task" },
+      { id: "T-B", status: "backlog", type: "task" }
+    ],
+    claims: [
+      { claimId: "00000000-0000-5000-8000-000000000071", taskId: "T-A", domains: [], paths: ["   "], mode: "write", confidence: "high", provenance: "authored" },
+      { claimId: "00000000-0000-5000-8000-000000000072", taskId: "T-B", domains: [], paths: [""], mode: "write", confidence: "high", provenance: "authored" }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]]);
+  assert.deepEqual(report.serializedPairs, []);
 });
 
 test("R2 non-regression: literal path siblings with a shared prefix stay disjoint and in one wave", () => {
