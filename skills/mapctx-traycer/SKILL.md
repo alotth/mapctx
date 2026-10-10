@@ -76,7 +76,7 @@ dispatches, and receipts.
    required assets into the repository's relevant `docs/` location, then link
    that copied artifact from the matching task. The repo must remain usable
    without Traycer access.
-   Acceptance criteria live in the store. Before closing `review` as `done`, inspect them with `mapctx task acceptance show <task-id>` and explicitly approve each criterion for its current revision. Use `mapctx task finish <task-id>` to apply the completion gate and publish the final checkpoint. Import existing checkboxes explicitly with `mapctx acceptance import [--commit]`; observed `[x]` state does not claim independent verification.
+   Acceptance criteria live in the store. Before closing `review` as `done`, inspect them with `mapctx task acceptance show <task-id>` and explicitly approve each criterion for its current revision. Use `mapctx task finish <task-id>` to apply the completion gate and publish the final checkpoint. Import existing checkboxes explicitly with `mapctx acceptance import [--commit] [--task T-1,T-2]`; observed `[x]` state does not claim independent verification.
 
 ### Closing a task in a shared checkout (T-128)
 
@@ -116,6 +116,48 @@ that already says done. Both are caught after the fact by `mapctx validate`
 Publish the mirrors later, deliberately, with `mapctx export` or a plain `mapctx task finish` once
 the working tree is yours to rewrite. Nothing closes a task behind your back: the default of `finish`
 still publishes.
+
+### Acceptance in one step (T-129)
+
+Create the task and its criteria in a single command. The criteria land as revision 1 in the **same
+transaction** as the task, so a failure creates neither — there is no window where a task exists with
+its criteria missing:
+
+```sh
+mapctx task create --title "..." --workload Normal --effort 4h \
+  --acceptance-file acceptance.md --actor <name> --json      # or a `## Acceptance` section in
+mapctx task create --title "..." --description-file spec.md  # --description-file / --description
+```
+
+`--acceptance-file` wins over a `## Acceptance` section in the description and says so on stderr. A
+checklist in the description with **no** `## Acceptance` heading is reported and **not** recorded — a
+prose bullet list is not an acceptance declaration. Both notes go to stderr, so `--json` stdout stays
+a clean document.
+
+Approving is one command, not one per criterion:
+
+```sh
+mapctx task acceptance approve <id> --all --expect-revision <n> --evidence uri=<proof> --actor <name>
+mapctx task acceptance approve <id> --index 0,2,5 --expect-revision <n> --evidence uri=<proof>
+```
+
+One transaction, one revision check, one evidence set; a mid-batch refusal approves nothing. `--all`
+skips criteria that are already approved and reports them, while naming an index or id that is
+already approved is refused — `--all` means "bring this to fully approved", naming one is a claim
+about that one.
+
+Revising guards against the wrong task, which a revision check cannot do (a fresh task satisfies
+`--expect-revision 0` too — that is exactly how criteria once landed on the wrong id):
+
+```sh
+mapctx task acceptance revise <id> --from-file acc.md --expect-revision <n> \
+  --expect-title "<the task's title>" --actor <name>
+```
+
+`--from-file` takes a `## Acceptance` section, or — when the file has no heading at all — a bare
+`- [ ]` checklist, reported on stderr. **Every revision resets every criterion to pending**: a
+revision never inherits an approval or its evidence, so re-approval is always explicit. A missing
+`--expect-revision` tells you the revision the store currently holds.
 
 ### Who owns the prose (T-127)
 

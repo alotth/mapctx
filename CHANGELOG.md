@@ -121,6 +121,27 @@ depended on the old channel.
   `--blocking` accept a bare comma list or a JSON array, and refuse a bracketed
   guess instead of storing the brackets as part of the values
 
+* **feature:** acceptance in one step: `task create --acceptance-file <path>`, or a
+  `## Acceptance` section in `--description`/`--description-file`, records the
+  criteria as revision 1 in the SAME transaction as the task, so a failure
+  creates neither. `--acceptance-file` wins over the description's section and
+  says so; a checklist with no `## Acceptance` heading is reported and not
+  recorded
+* **feature:** `task acceptance approve --index 0,2,5` and `--all` approve
+  several criteria in one transaction, under one `--expect-revision`, with one
+  `--evidence` set; a mid-batch refusal approves nothing. `--all` skips
+  already-approved criteria and reports them, while naming one that is already
+  approved is refused
+* **feature:** `task acceptance revise --expect-title "<title>"` refuses when
+  the task is titled differently, catching a revise aimed at the wrong id --
+  which a revision check cannot catch, since a fresh task satisfies
+  `--expect-revision 0` as well
+* **feature:** `acceptance import --task T-1,T-2` narrows the import; an id
+  that does not exist is refused instead of importing a smaller set in silence
+* **feature:** `task acceptance revise --from-file` accepts a bare `- [ ]`
+  checklist when the file has no `## Acceptance` heading, and reports on stderr
+  which reading it used
+
 ### Fixes
 
 * **fix:** the `task update` unknown-field refusal names both the task and the
