@@ -116,6 +116,16 @@ export type DisclosableClaimRecord = {
   holder: Record<string, unknown>
   eventNode: string
   eventSequence: number
+  /**
+   * Makes the redaction STRUCTURAL rather than aspirational. Without this,
+   * `ResourceClaimRecord` is assignable to this type -- it has all the fields
+   * above plus more, and excess-property checks only fire on fresh object
+   * literals -- so `activeClaim: active` would have compiled and quietly
+   * reintroduced the leak. The test agent's mutation proved exactly that.
+   * Declaring the secret as `never` makes any record that actually carries a
+   * token fail to compile here.
+   */
+  leaseToken?: never
 }
 
 export type EventRevision = {
