@@ -819,3 +819,231 @@ test("the Enumerated values table's --reason (export) row matches CHECKPOINT_REA
   const exported = f.success(["export", "--reason", "task-end", "--actor", "test"]);
   assert.equal(exported.reason, "task-end");
 });
+
+// ---------------------------------------------------------------------------
+// 13. Review B8 (the blocking regression): `valueFor`'s missing-value check
+// is pertinence (is the next token actually a known flag?), not shape (does
+// it merely look like one?) -- and `--flag=value` is the escape hatch for a
+// legitimate value that IS a flag name.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD (B8): a value that merely starts with -- (not a known flag) passes through title/summary/history-correct's --because", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+
+  const titled = f.success(["task", "create", "--title", "--foo is a flag", "--actor", "test"]);
+  assert.equal(f.success(["task", "show", titled.taskId]).task.title, `[${titled.taskId}] --foo is a flag`);
+
+  const summarized = f.success(["task", "create", "--title", "summary probe", "--summary", "--no-snapshot x", "--actor", "test"]);
+  assert.equal(f.success(["task", "show", summarized.taskId]).detail.summary, "--no-snapshot x");
+
+  // history correct: --because "--x" must be accepted by the parser (proven
+  // by reaching the unrelated unknown-target refusal, never "missing its value").
+  const historyResult = f.cli(["history", "correct", "T-101", "--target", "evidence:does-not-exist", "--because", "--x", "--actor", "test", "--json"]);
+  assert.notEqual(historyResult.status, 0, "unknown-target must still refuse, just not at parse time");
+  assert.ok(!/is missing its value/.test(String(historyResult.stderr)), `--because "--x" must not be treated as a missing value: ${historyResult.stderr}`);
+});
+
+test("--actor --json (and other flag-as-value attempts) still refuse, and nothing is journaled for the --actor case", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const before = f.read(handle => require("@mapctx/store").getTask(handle.db, "T-101"));
+
+  const actorRefused = f.cli(["task", "update", "T-101", "--set", "detail.summary=x", "--actor", "--json"]);
+  assert.notEqual(actorRefused.status, 0);
+  assert.match(String(actorRefused.stderr), /--actor is missing its value/);
+  assert.match(String(actorRefused.stderr), /To pass a value that is itself a flag name, write --actor=--json/);
+  const after = f.read(handle => require("@mapctx/store").getTask(handle.db, "T-101"));
+  assert.deepEqual(after, before, "a refused parse must never reach the journal (no actor \"--json\" event)");
+
+  for (const args of [
+    ["task", "create", "--title", "--json"],
+    ["task", "create", "--title", "ok", "--tags", "--json"],
+    ["export", "--reason", "--json"],
+    ["validate", "--task", "--json"]
+  ]) {
+    const result = f.cli([...args, "--json"]);
+    assert.notEqual(result.status, 0, `${JSON.stringify(args)}: expected a refusal`);
+    assert.match(String(result.stderr), /is missing its value/, `${JSON.stringify(args)}: ${result.stderr}`);
+  }
+});
+
+test("--flag=value is accepted for value-taking flags (--title=--json, --title=InlineOk), does not affect --set, and is NOT recognized for boolean flags", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+
+  const inlineJson = f.success(["task", "create", "--title=--json", "--actor", "test"]);
+  assert.equal(f.success(["task", "show", inlineJson.taskId]).task.title, `[${inlineJson.taskId}] --json`);
+
+  const inlineOk = f.success(["task", "create", "--title=InlineOk", "--actor", "test"]);
+  assert.equal(f.success(["task", "show", inlineOk.taskId]).task.title, `[${inlineOk.taskId}] InlineOk`);
+
+  // --set key=value is unaffected: the `=` there belongs to the value.
+  f.success(["task", "update", "T-101", "--set", "detail.summary=a=b", "--actor", "test"]);
+  assert.equal(f.success(["task", "show", "T-101"]).detail.summary, "a=b");
+
+  // --json=true is a boolean flag: inline-value rewriting must not apply, so
+  // this must NOT turn on JSON output (the command prints human text, not JSON).
+  const booleanInline = f.cli(["validate", "--json=true"]);
+  assert.doesNotThrow(() => { if (booleanInline.stdout.trim().startsWith("{")) throw new Error("looks like JSON"); });
+  assert.match(booleanInline.stdout, /Store validation:/, "validate must have run in human mode, proving --json=true was not recognized as --json");
+});
+
+test("legitimate non-flag-shaped values keep passing: --summary \"- item\", --title \"--- front matter\", --budget -1 falls through to integer validation", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+
+  const dashItem = f.success(["task", "create", "--title", "dash probe", "--summary", "- item", "--actor", "test"]);
+  assert.equal(f.success(["task", "show", dashItem.taskId]).detail.summary, "- item");
+
+  const frontMatter = f.success(["task", "create", "--title", "--- front matter", "--actor", "test"]);
+  assert.equal(f.success(["task", "show", frontMatter.taskId]).task.title, `[${frontMatter.taskId}] --- front matter`);
+
+  const budget = f.cli(["task", "context", "T-101", "--budget", "-1", "--json"]);
+  assert.notEqual(budget.status, 0);
+  assert.match(String(budget.stderr), /--budget must be a positive integer/, "falls through to the integer validator, not valueFor's missing-value check");
+});
+
+// ---------------------------------------------------------------------------
+// 14. Review B1: the JSON hint offered on a bracket-parse failure must not
+// itself be refused. For `[a,b]` it must suggest the bare two-item list
+// instead of a JSON spelling the comma rule then rejects.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD (B1): the refusal for [a,b] suggests the bare list (not JSON), and running the suggestion works; [locale]'s JSON hint still works", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+
+  const commaRefused = f.cli(["task", "update", "T-101", "--set", "detail.filesAffected=[a,b]", "--actor", "test", "--json"]);
+  assert.notEqual(commaRefused.status, 0);
+  assert.match(String(commaRefused.stderr), /If you meant a two-item list, write them bare/);
+  assert.ok(!/A single value that itself contains brackets needs the JSON spelling/.test(String(commaRefused.stderr)), "a comma-containing value must not be pointed at the JSON spelling, which the comma rule would then refuse");
+
+  // Running the suggested fix must actually work.
+  f.success(["task", "update", "T-101", "--set", "detail.filesAffected=a,b", "--actor", "test"]);
+  assert.deepEqual(f.success(["task", "show", "T-101"]).detail.filesAffected, ["a", "b"]);
+
+  // A comma-free bracketed value still gets the JSON hint, and it works.
+  const localeRefused = f.cli(["task", "update", "T-101", "--set", "detail.filesAffected=[locale]", "--actor", "test", "--json"]);
+  assert.notEqual(localeRefused.status, 0);
+  assert.match(String(localeRefused.stderr), /A single value that itself contains brackets needs the JSON spelling, e\.g\. \["\[locale\]"\]/);
+  f.success(["task", "update", "T-101", "--set", 'detail.filesAffected=["[locale]"]', "--actor", "test"]);
+  assert.deepEqual(f.success(["task", "show", "T-101"]).detail.filesAffected, ["[locale]"]);
+});
+
+// ---------------------------------------------------------------------------
+// 15. Review B4: the unbalanced-delimiter rule must not claim a split
+// happened when there was no comma to split on; legal POSIX single-element
+// names like `a{b`, `a)b`, `}`, `]` are refused for being unbalanced, but
+// truthfully (pointed at the JSON spelling, not "split across a comma").
+// With a real comma-split, the "split across a comma" phrasing still applies.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD (B4): a single unbalanced element (no comma) is refused truthfully -- JSON spelling offered, no false split claim; real splits keep the split phrasing", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+
+  for (const bad of ["a{b", "a)b", "}", "]"]) {
+    const result = f.cli(["task", "update", "T-101", "--set", `detail.filesAffected=${bad}`, "--actor", "test", "--json"]);
+    assert.notEqual(result.status, 0, `expected ${JSON.stringify(bad)} to be refused`);
+    assert.match(String(result.stderr), /has an unbalanced/);
+    assert.match(String(result.stderr), /use the JSON spelling/);
+    assert.ok(!/split across a comma/.test(String(result.stderr)), `${JSON.stringify(bad)}: no comma was split, so this phrase must not appear: ${result.stderr}`);
+  }
+  assert.deepEqual(f.success(["task", "show", "T-101"]).detail.filesAffected, [], "none of the refused single-element values must land");
+
+  // The JSON spelling the message offers must actually work for these names.
+  f.success(["task", "update", "T-101", "--set", 'detail.filesAffected=["a{b"]', "--actor", "test"]);
+  assert.deepEqual(f.success(["task", "show", "T-101"]).detail.filesAffected, ["a{b"]);
+
+  // A REAL split (comma present) keeps the "split across a comma" phrasing.
+  const realSplit = f.cli(["task", "update", "T-101", "--set", "detail.filesAffected=src/{a,b}.ts", "--actor", "test", "--json"]);
+  assert.notEqual(realSplit.status, 0);
+  assert.match(String(realSplit.stderr), /split across a comma/);
+});
+
+// ---------------------------------------------------------------------------
+// 16. Review B3: externalLinks' comma-in-element message names %2C, the
+// correct remedy for a URL (a glob makes no sense there); other fields keep
+// the glob-oriented wording.
+// ---------------------------------------------------------------------------
+
+test("externalLinks' comma-in-element message names %2C as the remedy; detail.filesAffected's message does not", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+
+  const linkRefused = f.cli(["task", "update", "T-101", "--set", 'externalLinks=["https://x.test/a?b=1,2"]', "--actor", "test", "--json"]);
+  assert.notEqual(linkRefused.status, 0);
+  assert.match(String(linkRefused.stderr), /percent-encode the comma as `%2C`/);
+
+  const filesRefused = f.cli(["task", "update", "T-101", "--set", 'detail.filesAffected=["src/{a,b}.ts"]', "--actor", "test", "--json"]);
+  assert.notEqual(filesRefused.status, 0);
+  assert.ok(!/%2C/.test(String(filesRefused.stderr)), "a non-URL field must not be told to percent-encode");
+
+  // The remedy actually works: percent-encoding the comma stores the link.
+  f.success(["task", "update", "T-101", "--set", "externalLinks=https://x.test/a?b=1%2C2", "--actor", "test"]);
+  assert.deepEqual(f.success(["task", "show", "T-101"]).task.externalLinks, ["https://x.test/a?b=1%2C2"]);
+});
+
+// ---------------------------------------------------------------------------
+// 17. Review B5 (CLI level): userinfo credentials refused through --set too.
+// ---------------------------------------------------------------------------
+
+test("task update --set externalLinks refuses userinfo credentials and does not echo the password", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const SECRET = "sw0rdf1sh";
+  const result = f.cli(["task", "update", "T-101", "--set", `externalLinks=https://user:${SECRET}@x.test/a`, "--actor", "test", "--json"]);
+  assert.notEqual(result.status, 0);
+  assert.match(String(result.stderr), /\*\*\*@/);
+  assert.ok(!String(result.stderr).includes(SECRET), `the password must never reach stderr in clear: ${result.stderr}`);
+  assert.deepEqual(f.success(["task", "show", "T-101"]).task.externalLinks, []);
+});
+
+// ---------------------------------------------------------------------------
+// 18. Review B11: `task finish`'s human-mode message carries the blocking
+// detail (reason/message, or checkpoint stage + whether the move applied),
+// not just the bare stage name.
+// ---------------------------------------------------------------------------
+
+test("task finish on a review task with no acceptance carries the specific reason in human mode, and the --json payload's stage/move.reason agree", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  f.success(["task", "move", "T-101", "--status", "ready-for-do", "--actor", "test"]);
+  f.success(["task", "move", "T-101", "--status", "doing", "--actor", "test"]);
+  f.success(["task", "move", "T-101", "--status", "review", "--actor", "test"]);
+
+  const human = f.refusedHuman(["task", "finish", "T-101", "--actor", "test"]);
+  assert.match(human.stderr, /acceptance-incomplete/);
+  assert.match(human.stderr, /no acceptance revision exists/);
+
+  const { payload } = f.refused(["task", "finish", "T-101", "--actor", "test"]);
+  assert.equal(payload.stage, "move");
+  assert.equal(payload.move.reason, "acceptance-incomplete");
+});
+
+// ---------------------------------------------------------------------------
+// 19. Review B12: a baseline write that fails part-way must not leave a
+// *.tmp sibling behind.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD (B12): a failed --write-baseline leaves no *.tmp file behind", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const readonlyDir = path.join(f.repoDir, "readonly-baseline-dir");
+  fs.mkdirSync(readonlyDir);
+  fs.chmodSync(readonlyDir, 0o500);
+  t.after(() => { try { fs.chmodSync(readonlyDir, 0o700); } catch { /* best effort */ } });
+
+  const baselinePath = path.join(readonlyDir, "baseline.json");
+  const result = f.cli(["validate", "--write-baseline", baselinePath, "--json"]);
+  if (result.status === 0) {
+    // Running as a user who can write despite the read-only bit (e.g. root
+    // in some sandboxes) -- the happy path is covered elsewhere; skip rather
+    // than assert something the environment cannot produce.
+    return;
+  }
+  assert.notEqual(result.status, 0, "the write must fail under a read-only directory");
+  const leftoverTmp = fs.readdirSync(readonlyDir).filter(name => name.includes(".tmp"));
+  assert.deepEqual(leftoverTmp, [], `no *.tmp file must survive a failed write-baseline: ${JSON.stringify(leftoverTmp)}`);
+});
