@@ -436,15 +436,31 @@ test("MUTATION GUARD (A2): a comma inside a list element is refused in the JSON 
   const f = fixture(t);
   f.success(["import", "--commit", "--actor", "test"]);
 
+  // The CLI's parseListInput check and the store's updateTask check are two
+  // independent layers (review A2 follow-up): mutating only the CLI's
+  // `item.includes(',')` leaves the store's own comma guard (reason
+  // comma-in-list-element) to catch the same input, which would mask the
+  // CLI layer's removal if these assertions only checked "refused". Pinning
+  // the CLI layer specifically requires two properties the store layer does
+  // NOT have: the exact parseListInput wording (not the store's reason
+  // string), and that mapctx.db is untouched -- the CLI refuses before any
+  // writable store handle opens (no migration, no metadata write), while the
+  // store's own refusal happens AFTER that handle is already open.
+  const beforeDbStat = fs.statSync(path.join(f.storeDir(), "mapctx.db")).mtimeMs;
+
   const filesRefused = f.cli(["task", "update", "T-101", "--set", 'detail.filesAffected=["src/{a,b}.ts"]', "--actor", "test", "--json"]);
   assert.notEqual(filesRefused.status, 0, "a comma inside one element must be refused");
   assert.match(String(filesRefused.stderr), /contains a comma/);
+  assert.ok(!/comma-in-list-element/.test(String(filesRefused.stderr)), "this must be the CLI's parseListInput refusal, not the store's reason string -- proves the CLI layer caught it, not the store layer");
   assert.deepEqual(f.success(["task", "show", "T-101"]).detail.filesAffected, [], "nothing must be stored");
+  assert.equal(fs.statSync(path.join(f.storeDir(), "mapctx.db")).mtimeMs, beforeDbStat, "the CLI layer refuses before any writable store handle opens; mapctx.db must be untouched");
 
   const linksRefused = f.cli(["task", "update", "T-101", "--set", 'externalLinks=["https://x.test/a,b"]', "--actor", "test", "--json"]);
   assert.notEqual(linksRefused.status, 0, "a comma inside one externalLinks element must be refused");
   assert.match(String(linksRefused.stderr), /contains a comma/);
+  assert.ok(!/comma-in-list-element/.test(String(linksRefused.stderr)), "this must be the CLI's parseListInput refusal, not the store's reason string");
   assert.deepEqual(f.success(["task", "show", "T-101"]).task.externalLinks, [], "nothing must be stored");
+  assert.equal(fs.statSync(path.join(f.storeDir(), "mapctx.db")).mtimeMs, beforeDbStat, "mapctx.db must still be untouched after both refusals");
 
   // Bonus (review A2): a comma-free glob and a balanced brace group store,
   // export, and reconcile with zero drift -- the round trip this review
