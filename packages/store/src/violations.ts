@@ -32,16 +32,28 @@ export type ClaimViolationPlan = {
  * `redactedChangedFileCount` below is what keeps the resulting blind spot
  * declared instead of silent.
  *
- * DELIBERATELY REDUNDANT, and measured as such. The same invariant -- never
- * journal a claim derived from redacted evidence -- is enforced three times:
- * here at the comparison, at the serialized-pair decision, and by the
- * sentinel filter in the emission loop. No single one of the three is
- * individually load-bearing, so removing only this guard changes nothing
- * observable and no test fails (verified by mutation). The protection is the
- * SET: remove two and the fabricated violation returns immediately, which is
- * what the tests pin. Do not delete one of them because a mutation shows it
- * "dead" -- each is dead only while its siblings live, and they guard
- * different routes into the same append.
+ * HOW THE THREE GUARDS RELATE, as measured rather than assumed. The same
+ * invariant -- never journal a claim derived from redacted evidence -- is
+ * enforced at three places: G1 here at the comparison, G2 at the
+ * serialized-pair decision, and G3 by the sentinel filter in the emission
+ * loop. An earlier version of this comment called that a three-way redundancy
+ * where no guard was individually load-bearing. That was wrong in both
+ * halves. The mutation matrix (violations.test.ts + redact.test.ts):
+ *
+ *   G1 alone        green      G1+G2  RED (serializedPairs test)
+ *   G2 alone        RED        G1+G3  RED (ALTO-2a test)
+ *   G3 alone        green      G2+G3  RED (serializedPairs test)
+ *                              G1+G2+G3 RED (both tests)
+ *
+ * So: G2 is the SOLE guard of the serialized-pair route -- G1 and G3 never
+ * execute on it -- and is individually load-bearing. G1 and G3 are a
+ * redundant PAIR on the collision route: either one alone covers it, so
+ * removing either is invisible, and removing both brings the fabricated
+ * collision straight back. Every combination that changes observable
+ * behaviour is now red; the ones that stay green are the ones where the
+ * surviving sibling still enforces the invariant. Do not delete G1 or G3
+ * because a single mutation shows it "dead" -- it is dead only while the
+ * other lives.
  */
 function isRedactedPath(value: string): boolean {
   return value === REDACTED_SENTINEL;
