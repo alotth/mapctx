@@ -601,3 +601,58 @@ test("T-127 unknown-field refusal names both field groups and redirects a field 
     handle.close(); restoreEnv(); cleanupDir(repoDir);
   }
 });
+
+// ---------------------------------------------------------------------------
+// T-127 attempt 2, review A2 (store-level guard): a comma inside a snapshot
+// list element is refused for every caller of updateTask, not only through
+// the CLI's --set parsing.
+// ---------------------------------------------------------------------------
+
+test("T-127 updateTask refuses a comma inside a list element in tags, externalLinks, and detail.filesAffected, journaling nothing; a comma-free value still lands", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const beforeTags = getTask(handle.db, "T-101")?.tags;
+    const beforeLinks = getTask(handle.db, "T-101")?.externalLinks;
+    const beforeFiles = getTaskDetail(handle.db, "T-101")?.filesAffected;
+
+    const tagsRefused = updateTask(handle, { taskId: "T-101", patch: { tags: ["a,b"] }, actor: "test" });
+    assert.equal(tagsRefused.ok, false);
+    if (!tagsRefused.ok) assert.equal(tagsRefused.reason, "comma-in-list-element");
+    assert.deepEqual(getTask(handle.db, "T-101")?.tags, beforeTags, "a refused patch must not land");
+
+    const linksRefused = updateTask(handle, { taskId: "T-101", patch: { externalLinks: ["https://x.test/a,b"] }, actor: "test" });
+    assert.equal(linksRefused.ok, false);
+    if (!linksRefused.ok) assert.equal(linksRefused.reason, "comma-in-list-element");
+    assert.deepEqual(getTask(handle.db, "T-101")?.externalLinks, beforeLinks);
+
+    const filesRefused = updateTask(handle, { taskId: "T-101", detailPatch: { filesAffected: ["src/{a,b}.ts"] }, actor: "test" });
+    assert.equal(filesRefused.ok, false);
+    if (!filesRefused.ok) assert.equal(filesRefused.reason, "comma-in-list-element");
+    assert.deepEqual(getTaskDetail(handle.db, "T-101")?.filesAffected, beforeFiles);
+
+    // A comma-free value is unaffected.
+    const clean = updateTask(handle, { taskId: "T-101", detailPatch: { filesAffected: ["src/*.ts"] }, actor: "test" });
+    assert.equal(clean.ok, true, JSON.stringify(clean));
+    assert.deepEqual(getTaskDetail(handle.db, "T-101")?.filesAffected, ["src/*.ts"]);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-127 attempt 2 (review A4) externalLinks allowlist: refuses javascript/data/file/vbscript/blob schemes and a 3-part javascript ref; accepts http(s) with a host and provider:entity:id", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    for (const bad of ["javascript:alert(1)", "file:///etc/passwd", "data:text/html;x", "vbscript:x", "blob:http://x/y", "javascript:a:b", "ftp://x.test/a", "https://"]) {
+      const refused = updateTask(handle, { taskId: "T-101", patch: { externalLinks: [bad] }, actor: "test" });
+      assert.equal(refused.ok, false, `expected refusal for ${JSON.stringify(bad)}`);
+      if (!refused.ok) assert.equal(refused.reason, "invalid-external-links", `${bad}: ${JSON.stringify(refused)}`);
+    }
+    for (const good of ["https://github.com/o/r/issues/1", "http://x.test/a", "github:issue:42", "traycer:artifact:abc:def"]) {
+      const accepted = updateTask(handle, { taskId: "T-101", patch: { externalLinks: [good] }, actor: "test" });
+      assert.equal(accepted.ok, true, `expected acceptance for ${JSON.stringify(good)}: ${JSON.stringify(accepted)}`);
+      assert.deepEqual(getTask(handle.db, "T-101")?.externalLinks, [good]);
+    }
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
