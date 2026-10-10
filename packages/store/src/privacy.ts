@@ -302,7 +302,7 @@ export function formatPrivacyWarnings(
       lines.push(`${where} Not blocked. If this is production data, remove it, or redact it after the fact: mapctx redact --sequence <n> --field "${finding.fieldPath}" --reason "..." --commit`)
       continue
     }
-    lines.push(`${where} Not blocked. This field is NOT redactable afterwards (mapctx redact covers acceptance evidence, receipt evidence URIs and history repo paths only): remove it before writing.`)
+    lines.push(`${where} Not blocked. This field is NOT redactable afterwards (mapctx redact covers acceptance evidence, receipt evidence URIs, receipt failure messages and changed files, run event payloads, and history repo paths): remove it before writing.`)
   }
   if (scan.aborted && scan.aborted.patternIndex < 0) {
     // No pattern was reached at all, so none of them is to blame: the budget

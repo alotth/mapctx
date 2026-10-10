@@ -48,7 +48,7 @@ import {
   listRedactionCandidates,
   lintForPrivacy,
   REDACTABLE_ROOTS,
-  redactableRootFor,
+  isRedactableFieldPath,
   StoreHandle,
   queryTask,
   queryTaskFromMarkdown,
@@ -933,7 +933,7 @@ function warnPrivacy(
   const eventType = wiring.eventType;
   for (const warning of lintForPrivacy(operation, value, patterns, {
     ...(wiring.rootPath ? { rootPath: wiring.rootPath } : {}),
-    ...(eventType ? { redactable: (fieldPath: string) => Boolean(redactableRootFor(eventType, fieldPath)) } : {})
+    ...(eventType ? { redactable: (fieldPath: string) => isRedactableFieldPath(eventType, fieldPath) } : {})
   }).warnings) {
     console.error(warning);
   }

@@ -10,14 +10,41 @@
  * that content without destroying the audit trail -- and without handing
  * anyone a way to quietly rewrite history under the cover of "redaction".
  *
- * WHAT IS REDACTABLE (v1)
- * Evidence FIELDS of specific event types only -- never arbitrary payloads,
- * never structural facts (ids, states, timestamps, hashes). See
- * REDACTABLE_ROOTS. Only string leaves are replaced, and they are replaced by
- * a string sentinel, so every payload stays schema-valid and every projection
- * keeps its column types. Container keys survive (`evidence.shift` stays a
- * key); only the VALUE is destroyed, which is the right granularity: the key
- * is the audit label, the value is the identifier.
+ * WHAT IS REDACTABLE
+ * Agent-authored FREE TEXT under specific roots of specific event types --
+ * never arbitrary payloads, never structural facts (ids, states, timestamps,
+ * hashes, closed enums). See REDACTABLE_ROOTS and REDACTABLE_LEAVES, which
+ * carry the per-root reasoning. Only string leaves are replaced, and they are
+ * replaced by a string sentinel, so every payload stays schema-valid and
+ * every projection keeps its column types. Container keys survive
+ * (`evidence.shift` stays a key); only the VALUE is destroyed, which is the
+ * right granularity: the key is the audit label, the value is the identifier.
+ *
+ * v1 (T-126) covered acceptance approval evidence, receipt evidence URIs and
+ * history repo paths. T-131 adds the three sinks the T-126 review recorded as
+ * out of scope, having found them to be real free-text sinks:
+ *   - `receipt.failure.message` -- the prose half of a FailureDetail. Agents
+ *     paste error text here, and error text quotes whatever it was handling.
+ *     `category` and `retryable` stay: a closed enum and a boolean cannot
+ *     hold a secret, and rewriting them would corrupt the record's meaning.
+ *   - `receipt.changedFiles[]` -- repository paths, which carry customer,
+ *     project and branch names. Free text end to end, so every element is
+ *     redactable.
+ *   - `event.payload` of `run.event-recorded` -- an OPEN record
+ *     (`z.record(z.string(), z.unknown())`) that executors fill with progress
+ *     text, questions and blocking reasons. Every string leaf is redactable;
+ *     the event's identity (dispatchId, attempt, sequence, type, timestamp)
+ *     sits outside the root and stays untouchable.
+ * Schema-validity was the deciding constraint, as it was for ArtifactRef in
+ * T-126: `failureDetailSchema` requires a NON-EMPTY message, which is exactly
+ * why the sentinel is a reserved string and not "". A redacted receipt and a
+ * redacted run event both still parse against their own schemas.
+ *
+ * Still NOT redactable, deliberately: the `description:` prose of a task.
+ * That text is git-authored durable intent, versioned in the repository, so
+ * destroying the store's copy would destroy nothing -- it would only promise
+ * a cure this instrument cannot deliver. Git history rewriting is the tool
+ * for git history.
  *
  * That makes a secret written INTO a key (`--evidence "shift-998877=ok"`)
  * permanently uncurable here, so the prevention half has to carry it: the
@@ -174,33 +201,80 @@ export const REDACTED_SENTINEL = "mapctx:redacted"
  */
 export const REDACTABLE_ROOTS: Readonly<Record<string, readonly string[]>> = {
   "acceptance.approved": ["evidence"],
-  "run.receipt-recorded": ["receipt.evidence"],
+  "run.receipt-recorded": ["receipt.evidence", "receipt.failure", "receipt.changedFiles"],
+  "run.event-recorded": ["event.payload"],
   "history.evidence-recorded": ["evidence.repoRoot", "evidence.repoOrigin"]
 }
 
 /**
  * Within a redactable root, which LEAF NAMES may actually be destroyed.
- * Absent means "every string leaf under the root" -- correct for
- * acceptance.approved, whose evidence is a flat label -> value map where the
- * values are the whole payload of interest.
+ * Absent means "every string leaf under that root".
  *
- * `run.receipt-recorded` needs the filter: receipt.evidence is an
- * ArtifactRef[], so a naive leaf walk would also hit `artifactId` (a UUID),
- * `ownerKind` and `kind` (closed enums) and `ownerId` (the structural link to
- * the owning task). Replacing those with a sentinel would leave a RunReceipt
- * that no longer satisfies its own schema and an artifact reference pointing
- * nowhere, for no privacy gain. The genuinely free-text members -- where a
- * secret actually lands -- are the location fields.
+ * Keyed by event type AND root, because one event type can own roots with
+ * opposite needs: a `run.receipt-recorded` receipt holds an ArtifactRef[]
+ * (mostly structural), a FailureDetail (one free-text member among an enum
+ * and a boolean), and changedFiles (free text end to end). The T-126 model
+ * had a single leaf-name list per event type, which cannot express that.
+ *
+ * `receipt.evidence` is an ArtifactRef[], so a naive leaf walk would also hit
+ * `artifactId` (a UUID), `ownerKind` and `kind` (closed enums) and `ownerId`
+ * (the structural link to the owning task). Replacing those with a sentinel
+ * would leave a RunReceipt that no longer satisfies its own schema and an
+ * artifact reference pointing nowhere, for no privacy gain. The genuinely
+ * free-text members -- where a secret actually lands -- are the location
+ * fields.
+ *
+ * `receipt.failure` (T-131) is `{category, message, retryable}`. Only
+ * `message` is prose: `category` is a closed enum and `retryable` a boolean,
+ * and `failureDetailSchema` requires `message` to be NON-EMPTY -- which the
+ * sentinel satisfies, so a redacted failure still parses. That is the whole
+ * reason the sentinel is a reserved string rather than "".
+ *
+ * `receipt.changedFiles` and `event.payload` have no allowlist, so every
+ * string leaf under them is redactable. For changedFiles that is right by
+ * construction (`z.array(z.string())` -- each element is a repository path an
+ * agent wrote, and paths carry customer and project names). For a run event's
+ * payload it is right because the schema is literally open
+ * (`z.record(z.string(), z.unknown())`): there is no structural member to
+ * protect inside it, while the event's OWN identity (schemaVersion,
+ * dispatchId, attempt, sequence, type, timestamp) lives outside the root and
+ * is therefore untouchable.
+ *
+ * Considered and deliberately left out: `receipt.timeEvidence` (timestamps,
+ * closed enums and session ids -- identifiers, not prose) and
+ * `receipt.usageEvents` (provider/model vocabulary plus counters). Neither is
+ * a place an agent writes free text, so neither is a leak path T-131 closes.
  */
-const REDACTABLE_LEAVES: Readonly<Record<string, readonly string[] | undefined>> = {
-  "run.receipt-recorded": ["uri", "promotedPath"]
+const REDACTABLE_LEAVES: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  "run.receipt-recorded": {
+    "receipt.evidence": ["uri", "promotedPath"],
+    "receipt.failure": ["message"]
+  }
 }
 
-function leafIsRedactable(eventType: string, leafPath: string): boolean {
-  const allowed = REDACTABLE_LEAVES[eventType]
+function leafIsRedactable(eventType: string, root: string, leafPath: string): boolean {
+  const allowed = REDACTABLE_LEAVES[eventType]?.[root]
   if (!allowed) return true
   const segments = leafPath.split(".")
   return allowed.includes(segments[segments.length - 1])
+}
+
+/**
+ * Whether `mapctx redact` can actually destroy this exact VALUE path later --
+ * root allowlist and leaf allowlist together.
+ *
+ * The `[privacy]` lint uses this to decide whether to promise a cure (T-126
+ * MEDIA-1). Asking only about the root would re-introduce that bug on the new
+ * roots: `receipt.failure` is redactable, yet `receipt.failure.category` is
+ * not, so a pattern that fired on the enum would be told to run a command
+ * that then refuses. Container keys are never redactable at all, and the lint
+ * says so on its own, so this answers for value leaves.
+ */
+export function isRedactableFieldPath(eventType: string, fieldPath: string): boolean {
+  const root = redactableRootFor(eventType, fieldPath)
+  if (!root) return false
+  if (fieldPath === root) return true // the root expands to its allowed leaves
+  return leafIsRedactable(eventType, root, fieldPath)
 }
 
 export type RedactionTarget = { nodeId: string; sequence: number }
@@ -356,12 +430,12 @@ export function planRedaction(storeDir: string, options: { target: RedactionTarg
   if (allLeaves.length === 0) {
     return { ok: false, reason: "nothing-to-redact", message: `Field "${options.fieldPath}" holds no string content to redact (null, empty container, or non-string value).` }
   }
-  const leaves = allLeaves.filter(leaf => leafIsRedactable(entry.eventType, leaf))
+  const leaves = allLeaves.filter(leaf => leafIsRedactable(entry.eventType, root, leaf))
   if (leaves.length === 0) {
     return {
       ok: false,
       reason: "not-redactable",
-      message: `Nothing under "${options.fieldPath}" is redactable on ${entry.eventType}: only the free-text members ${(REDACTABLE_LEAVES[entry.eventType] ?? []).map(name => `"${name}"`).join(", ")} may be destroyed. Identifiers, owner links and closed enums are structural facts.`
+      message: `Nothing under "${options.fieldPath}" is redactable on ${entry.eventType}: under "${root}" only the free-text members ${(REDACTABLE_LEAVES[entry.eventType]?.[root] ?? []).map(name => `"${name}"`).join(", ")} may be destroyed. Identifiers, owner links and closed enums are structural facts.`
     }
   }
   const alreadyRedacted: string[] = []
@@ -416,12 +490,48 @@ function scrubDerivedProjections(db: DatabaseSync, eventType: string, original: 
   }
   if (eventType === "run.receipt-recorded") {
     const originalReceipt = (original.receipt ?? original) as { dispatchId: string; attempt: number; evidence?: unknown }
-    const redactedReceipt = (redacted.receipt ?? redacted) as { evidence?: unknown }
+    const redactedReceipt = (redacted.receipt ?? redacted) as { evidence?: unknown; changedFiles?: unknown; failure?: unknown }
     const row = db.prepare("SELECT receipt_json FROM run_receipt_projection WHERE dispatch_id = ? AND attempt = ?")
       .get(originalReceipt.dispatchId, originalReceipt.attempt) as { receipt_json: string | null } | undefined
     if (!stillHolds(row?.receipt_json, originalReceipt)) return
-    db.prepare("UPDATE run_receipt_projection SET evidence_json = ?, receipt_json = ? WHERE dispatch_id = ? AND attempt = ?")
-      .run(JSON.stringify(redactedReceipt.evidence ?? []), JSON.stringify(redactedReceipt), originalReceipt.dispatchId, originalReceipt.attempt)
+    // T-131: changed_files_json and failure_json are separate columns holding
+    // their own copy of the same prose, so rewriting receipt_json alone would
+    // leave the plaintext indexed one column over. `failure_json` mirrors
+    // insertRunReceipt: NULL when there is no failure, never the string
+    // "null".
+    db.prepare(
+      `UPDATE run_receipt_projection
+       SET evidence_json = ?, changed_files_json = ?, failure_json = ?, receipt_json = ?
+       WHERE dispatch_id = ? AND attempt = ?`
+    ).run(
+      JSON.stringify(redactedReceipt.evidence ?? []),
+      JSON.stringify(redactedReceipt.changedFiles ?? []),
+      redactedReceipt.failure === null || redactedReceipt.failure === undefined ? null : JSON.stringify(redactedReceipt.failure),
+      JSON.stringify(redactedReceipt),
+      originalReceipt.dispatchId,
+      originalReceipt.attempt
+    )
+    return
+  }
+  if (eventType === "run.event-recorded") {
+    // T-131: a run event's payload is an open record of agent-authored
+    // content, projected twice -- once whole (`event_json`) and once as just
+    // the payload (`payload_json`). Both have to go.
+    const originalEvent = (original.event ?? original) as { dispatchId: string; attempt: number; sequence: number }
+    const redactedEvent = (redacted.event ?? redacted) as { payload?: unknown }
+    const row = db.prepare("SELECT event_json FROM run_event_projection WHERE dispatch_id = ? AND attempt = ? AND sequence = ?")
+      .get(originalEvent.dispatchId, originalEvent.attempt, originalEvent.sequence) as { event_json: string | null } | undefined
+    if (!stillHolds(row?.event_json, originalEvent)) return
+    db.prepare(
+      `UPDATE run_event_projection SET payload_json = ?, event_json = ?
+       WHERE dispatch_id = ? AND attempt = ? AND sequence = ?`
+    ).run(
+      JSON.stringify(redactedEvent.payload ?? {}),
+      JSON.stringify(redactedEvent),
+      originalEvent.dispatchId,
+      originalEvent.attempt,
+      originalEvent.sequence
+    )
     return
   }
   if (eventType === "history.evidence-recorded") {
@@ -1103,7 +1213,7 @@ export function listRedactionCandidates(db: DatabaseSync, options: { taskId?: st
       const located = readPath(payload, root.split("."))
       if (!located.found) continue
       for (const leaf of stringLeafPaths(located.value, root)) {
-        if (!leafIsRedactable(row.event_type, leaf)) continue
+        if (!leafIsRedactable(row.event_type, root, leaf)) continue
         const value = readPath(payload, leaf.split("."))
         if (value.found && value.value === REDACTED_SENTINEL) {
           if (audited.has(leaf)) redacted.push(leaf)
@@ -1140,6 +1250,10 @@ function subjectOf(eventType: string, payload: Record<string, unknown>): string 
   if (eventType === "run.receipt-recorded") {
     const receipt = (payload.receipt ?? payload) as { dispatchId?: unknown }
     return typeof receipt.dispatchId === "string" ? receipt.dispatchId : null
+  }
+  if (eventType === "run.event-recorded") {
+    const event = (payload.event ?? payload) as { dispatchId?: unknown }
+    return typeof event.dispatchId === "string" ? event.dispatchId : null
   }
   return null
 }
