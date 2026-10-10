@@ -210,9 +210,10 @@ test('task search markdown fallback filters by status and limit', () => {
 // ---------------------------------------------------------------------------
 
 test('VALUE_FLAGS/BOOLEAN_FLAGS/KNOWN_FLAGS stay exhaustive against every `a === \'--flag\'` literal in parseArgs', () => {
-  const { VALUE_FLAGS, BOOLEAN_FLAGS, KNOWN_FLAGS } = require('./mapctx-cli') as {
+  const { VALUE_FLAGS, BOOLEAN_FLAGS, WORKSPACE_FLAGS, KNOWN_FLAGS } = require('./mapctx-cli') as {
     VALUE_FLAGS: ReadonlySet<string>;
     BOOLEAN_FLAGS: ReadonlySet<string>;
+    WORKSPACE_FLAGS: ReadonlySet<string>;
     KNOWN_FLAGS: ReadonlySet<string>;
   };
   const sourcePath = path.join(__dirname, '..', 'src', 'mapctx-cli.ts');
@@ -232,13 +233,29 @@ test('VALUE_FLAGS/BOOLEAN_FLAGS/KNOWN_FLAGS stay exhaustive against every `a ===
   const missing = [...literalFlags].filter(flag => !KNOWN_FLAGS.has(flag));
   assert.deepEqual(missing, [], `every parsed flag literal must be listed in KNOWN_FLAGS: ${JSON.stringify(missing)}`);
 
-  const extra = [...KNOWN_FLAGS].filter(flag => !literalFlags.has(flag));
+  // T-128: WORKSPACE_FLAGS are real flags of this binary that the chain above
+  // never matches, because `mapctx workspace` hands argv to
+  // parseWorkspaceServerArgs instead -- but parseArgs sees them first, so the
+  // unknown-flag rule has to accept them. They are therefore legitimately in
+  // KNOWN_FLAGS without appearing as a literal here.
+  const extra = [...KNOWN_FLAGS].filter(flag => !literalFlags.has(flag) && !WORKSPACE_FLAGS.has(flag));
   assert.deepEqual(extra, [], `KNOWN_FLAGS must not list a flag parseArgs does not recognize: ${JSON.stringify(extra)}`);
 
   const overlap = [...VALUE_FLAGS].filter(flag => BOOLEAN_FLAGS.has(flag));
   assert.deepEqual(overlap, [], `a flag must be exactly one of VALUE_FLAGS or BOOLEAN_FLAGS, never both: ${JSON.stringify(overlap)}`);
 
-  const union = new Set([...VALUE_FLAGS, ...BOOLEAN_FLAGS]);
-  assert.equal(union.size, KNOWN_FLAGS.size, 'VALUE_FLAGS union BOOLEAN_FLAGS must equal KNOWN_FLAGS exactly');
-  for (const flag of KNOWN_FLAGS) assert.ok(union.has(flag), `KNOWN_FLAGS member ${flag} missing from VALUE_FLAGS union BOOLEAN_FLAGS`);
+  const union = new Set([...VALUE_FLAGS, ...BOOLEAN_FLAGS, ...WORKSPACE_FLAGS]);
+  assert.equal(union.size, KNOWN_FLAGS.size, 'VALUE_FLAGS union BOOLEAN_FLAGS union WORKSPACE_FLAGS must equal KNOWN_FLAGS exactly');
+  for (const flag of KNOWN_FLAGS) assert.ok(union.has(flag), `KNOWN_FLAGS member ${flag} missing from the three source sets`);
+
+  // T-128: WORKSPACE_FLAGS must not drift from the parser that actually reads
+  // them. Letting it drift is how `mapctx workspace --no-open --port <n>` --
+  // the `pack:smoke` CI step, which `npm test` does NOT run -- would start
+  // failing with "Unknown flag".
+  const workspaceSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'workspace-server.ts'), 'utf8');
+  const workspaceLiterals = new Set<string>();
+  for (const match of workspaceSource.matchAll(/=== '(--[a-z][a-z0-9-]*)'/g)) workspaceLiterals.add(match[1]);
+  assert.ok(workspaceLiterals.size >= 8, `sanity: found ${workspaceLiterals.size} workspace flag literals`);
+  const workspaceMissing = [...workspaceLiterals].filter(flag => !KNOWN_FLAGS.has(flag));
+  assert.deepEqual(workspaceMissing, [], `every flag parseWorkspaceServerArgs reads must be in KNOWN_FLAGS, or the unknown-flag rule rejects a legitimate workspace invocation: ${JSON.stringify(workspaceMissing)}`);
 });
