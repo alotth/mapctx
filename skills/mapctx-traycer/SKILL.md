@@ -78,6 +78,58 @@ dispatches, and receipts.
    without Traycer access.
    Acceptance criteria live in the store. Before closing `review` as `done`, inspect them with `mapctx task acceptance show <task-id>` and explicitly approve each criterion for its current revision. Use `mapctx task finish <task-id>` to apply the completion gate and publish the final checkpoint. Import existing checkboxes explicitly with `mapctx acceptance import [--commit]`; observed `[x]` state does not claim independent verification.
 
+### Who owns the prose (T-127)
+
+Under `plansAuthority: store`, `TASKS.md` and the **structured field blocks** of `tasks/<ID>.md` are
+generated snapshots. Never hand-edit them; change them through the CLI and repair drift with
+`mapctx reconcile <task-id>`.
+
+The `description:` block of `tasks/<ID>.md` is the single exception: it is **Git-authored prose**,
+owned by the repository and never by the store.
+
+- `mapctx task create --description "<text>"` / `--description-file <path>` seeds it once, at creation.
+- After that, edit `tasks/<ID>.md` in Git and commit the change. `mapctx task update` has no
+  `--set description`; the field is not patchable, and asking for it is refused.
+- A snapshot regeneration (`mapctx export`, `mapctx task finish`) preserves the committed prose.
+
+Everything written through the CLI lands in an **append-only event log**: keep secrets, tokens and
+personal data out of titles, summaries, descriptions, acceptance evidence and receipts. Declare
+`[privacy] patterns` in `mapctx.toml` to be warned at the write paths, and use `mapctx redact` when a
+value has already landed.
+
+### List-valued fields (T-127)
+
+`--set` of a list field, and `--tags` / `--domains` / `--depends-on` / `--blocking`, take exactly two
+spellings:
+
+```sh
+mapctx task update T-127 --set detail.filesAffected=packages/store/src/tasks.ts,packages/store/src/validate.ts
+mapctx task update T-127 --set 'detail.filesAffected=["packages/store/src/tasks.ts"]'
+```
+
+A bracketed guess like `[a,b]` is **refused with the correct syntax**. It used to be accepted in
+silence and stored `["[a", "b]"]`, which corrupted `filesAffected` on this board and hid a real file
+overlap from the planner. `=null` clears a list. `externalLinks` is patchable the same way and every
+entry is validated as a URI (`https://…` or `provider:entity:id`).
+
+Run `mapctx --help` for the full enum table (workload, priority, type, status, specMode, waitReason,
+effort format) read straight off the protocol schemas.
+
+### Gating a run with `validate` (T-127)
+
+`mapctx validate` reports the whole board, so pre-existing issues drown the one a run just introduced.
+Two selectors make it usable as a per-run gate:
+
+```sh
+mapctx validate --task T-127 --json                      # only this task's issues
+mapctx validate --write-baseline .mapctx-baseline.json   # record what the board already has
+mapctx validate --baseline .mapctx-baseline.json --json  # fails only on a NEW issue
+```
+
+Baselined issues stop counting; entries that match nothing are reported as stale. Board-scoped issues
+(dependency cycles, missing work domains) carry no task id, so `--task` reports them as excluded
+instead of dropping them silently. `--snapshots` findings are never baselined.
+
 ### Difficulty discovered mid-flight
 
 When work reveals the task is harder (or easier) than planned, re-classify immediately -- do not let a
