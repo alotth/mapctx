@@ -111,6 +111,15 @@ depended on the old channel.
   value that merely looks flag-ish (`--title "--foo is a flag"`) still works
 * **feature:** `--flag=value` is accepted for value-taking flags, which is how
   you pass a value that is itself a flag name (`--query=--json`)
+* **feature:** `mapctx task finish <id> --no-snapshot` applies the canonical
+  done gate without regenerating TASKS.md or tasks/*.md and without journaling
+  a checkpoint — for a shared checkout where rewriting every mirror would mix
+  generated files into uncommitted work. The default still publishes; the
+  success result carries `snapshot: "published" | "skipped"` and omits
+  `checkpoint` when skipped
+* **fix:** an acceptance refusal from either closing path (`task finish` and
+  `task move --status done`, which have always shared the gate) now names the
+  command that closes a task and mentions `--no-snapshot`
 * **fix:** `externalLinks` refuses userinfo credentials (`https://user:pass@...`),
   caps each link at 2048 characters, and matches the `scheme:word:rest` provider
   form case-insensitively
