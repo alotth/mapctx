@@ -1,3 +1,22 @@
+/**
+ * NOTE (T-131 review MEDIA-3): this is a STRUCTURAL TWIN of
+ * packages/store/src/violations.ts -- normalizePath, pathsOverlap,
+ * actualIntersection, claimCovers and the stable violation id are duplicated
+ * here -- and it does NOT carry the redaction guards the store version has.
+ *
+ * Concretely, with a redacted `changedFiles` this version would still
+ * fabricate both kinds of false audit fact that T-131 fixed in the store: a
+ * `collision` on the redaction sentinel (positive use of actualIntersection)
+ * and an `overbroad` "these tasks did not conflict" (negative use), plus it
+ * takes plan-declared paths without filtering the sentinel. Nothing in the
+ * repo calls this version today except its own test, so it is not a live
+ * leak -- but it is published API.
+ *
+ * The safe path is the store's: recordClaimViolations /
+ * detectClaimViolationsWithCoverage in @mapctx/store, which refuse to compare
+ * or journal anything derived from redacted evidence and report the resulting
+ * blind spot. Deduping the two is T-133; do not add callers here meanwhile.
+ */
 import { createHash } from "node:crypto";
 import type { ClaimViolation, ResourceClaim, RunReceipt } from "@mapctx/protocol";
 

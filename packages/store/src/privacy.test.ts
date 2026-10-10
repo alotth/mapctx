@@ -103,6 +103,10 @@ test("privacy lint on an event type with no redactable root says there is no cur
   assert.equal(report.warnings.length, 1);
   assert.match(report.warnings[0], /NOT redactable afterwards/);
   assert.ok(!report.warnings[0].includes("redact it after the fact"));
+  // T-131 widened the surfaces mapctx redact covers; the no-cure wording must
+  // name the current list, not the stale T-126 one.
+  assert.match(report.warnings[0], /receipt failure messages and changed files/);
+  assert.match(report.warnings[0], /run event payloads/);
 });
 
 // MÉDIA-1 cross-check: when the caller DOES know the field is redactable
@@ -186,6 +190,27 @@ test("a zero (or non-finite) privacy lint budget is named as the cause, never bl
   assert.ok(catastrophic.aborted);
   assert.equal(catastrophic.aborted!.patternIndex, 0);
   assert.ok(catastrophic.warnings.some(w => /too expensive/.test(w)), JSON.stringify(catastrophic.warnings));
+});
+
+// Review BAIXA-8: a non-finite budget (Infinity/NaN) is not a duration at
+// all -- `vm` takes a finite timeout -- so calling it "too small" told the
+// operator to raise a budget that was already infinite. It now gets its own
+// wording; a `<= 0` budget keeps the correct "too small, raise it" message.
+test("a non-finite privacy lint budget is named as not a duration, distinct from a too-small one", () => {
+  for (const budgetMs of [Infinity, Number.NaN]) {
+    const report = lintForPrivacy("task create", { summary: "x" }, ["a"], { budgetMs });
+    assert.ok(report.aborted, `budgetMs=${budgetMs} must still report an abort`);
+    assert.equal(report.findings.length, 0, "a lint that never ran must find nothing");
+    const abortWarning = report.warnings.find(w => /not a finite number of milliseconds/.test(w));
+    assert.ok(abortWarning, JSON.stringify(report.warnings));
+    assert.ok(!report.warnings.some(w => /too small/.test(w)), JSON.stringify(report.warnings));
+    assert.match(abortWarning!, /NOT blocked/);
+  }
+  const zero = lintForPrivacy("task create", { summary: "x" }, ["a"], { budgetMs: 0 });
+  assert.ok(zero.aborted);
+  assert.equal(zero.findings.length, 0);
+  assert.ok(zero.warnings.some(w => /0ms budget is too small/.test(w)), JSON.stringify(zero.warnings));
+  assert.ok(!zero.warnings.some(w => /not a finite number of milliseconds/.test(w)), JSON.stringify(zero.warnings));
 });
 
 const CONFIG = 'schemaVersion = 1\nprojectId = "11111111-1111-4111-8111-111111111111"\nplansAuthority = "store"\n';

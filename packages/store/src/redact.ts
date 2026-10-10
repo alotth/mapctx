@@ -10,14 +10,69 @@
  * that content without destroying the audit trail -- and without handing
  * anyone a way to quietly rewrite history under the cover of "redaction".
  *
- * WHAT IS REDACTABLE (v1)
- * Evidence FIELDS of specific event types only -- never arbitrary payloads,
- * never structural facts (ids, states, timestamps, hashes). See
- * REDACTABLE_ROOTS. Only string leaves are replaced, and they are replaced by
- * a string sentinel, so every payload stays schema-valid and every projection
- * keeps its column types. Container keys survive (`evidence.shift` stays a
- * key); only the VALUE is destroyed, which is the right granularity: the key
- * is the audit label, the value is the identifier.
+ * WHAT IS REDACTABLE
+ * Agent-authored FREE TEXT under specific roots of specific event types --
+ * never arbitrary payloads, never structural facts (ids, states, timestamps,
+ * hashes, closed enums). See REDACTABLE_ROOTS and REDACTABLE_LEAVES, which
+ * carry the per-root reasoning. Only string leaves are replaced, and they are
+ * replaced by a string sentinel, so every payload stays schema-valid and
+ * every projection keeps its column types. Container keys survive
+ * (`evidence.shift` stays a key); only the VALUE is destroyed, which is the
+ * right granularity: the key is the audit label, the value is the identifier.
+ *
+ * v1 (T-126) covered acceptance approval evidence, receipt evidence URIs and
+ * history repo paths. T-131 adds the three sinks the T-126 review recorded as
+ * out of scope, having found them to be real free-text sinks:
+ *   - `receipt.failure.message` -- the prose half of a FailureDetail. Agents
+ *     paste error text here, and error text quotes whatever it was handling.
+ *     `category` and `retryable` stay: a closed enum and a boolean cannot
+ *     hold a secret, and rewriting them would corrupt the record's meaning.
+ *   - `receipt.changedFiles[]` -- repository paths, which carry customer,
+ *     project and branch names. Free text end to end, so every element is
+ *     redactable. This array FEEDS T-061 claim-violation detection
+ *     (violations.ts intersects two receipts' changed files), which is why
+ *     `claim-violation.detected` is redactable too and why redacting it
+ *     warns: see DERIVED_COPY_WARNINGS and ALTO-1/ALTO-2 below.
+ *   - `violation.path` of `claim-violation.detected` -- the derived copy of a
+ *     changed-file path. `nonEmptyStringSchema`, so the sentinel satisfies it.
+ *     The rest of a ClaimViolation is ids, a closed `kind`, task ids, a
+ *     timestamp and a literal `source`: structure, all of it.
+ *   - `event.payload` of `run.event-recorded` -- an OPEN record
+ *     (`z.record(z.string(), z.unknown())`) that executors fill with progress
+ *     text, questions and blocking reasons. Every string leaf is redactable;
+ *     the event's identity (dispatchId, attempt, sequence, type, timestamp)
+ *     sits outside the root and stays untouchable.
+ * Schema-validity was the deciding constraint, as it was for ArtifactRef in
+ * T-126: `failureDetailSchema` requires a NON-EMPTY message, which is exactly
+ * why the sentinel is a reserved string and not "". A redacted receipt and a
+ * redacted run event both still parse against their own schemas.
+ *
+ * HONEST LIMIT ON A REDACTED VIOLATION PATH
+ * `ClaimViolation.id` is `stableUuid` over the violation's own fields, which
+ * include the path (violations.ts). It is the primary key of the projection
+ * and the event's semantic identity, so it cannot be rewritten without
+ * destroying the record. That makes the id a published 128-bit verifier of
+ * the original path: given the other fields -- which are ids, task ids and a
+ * timestamp, none of them secret -- candidate paths can be enumerated and
+ * checked against it. Redacting `violation.path` therefore destroys the
+ * READABLE copy and keeps an auditable trail; it is not a confidentiality
+ * guarantee against enumeration, exactly as recorded above for payload
+ * hashes. A path whose secrecy must survive enumeration has to be kept out of
+ * `changedFiles` in the first place, which is what the `[privacy]` lint is
+ * for.
+ *
+ * KNOWN THIRD COPY THAT DOES NOT EXIST YET
+ * `artifact_ref_projection.uri` / `.promoted_path` would be another copy of
+ * ArtifactRef prose, but the table has no writer anywhere in the repo (only
+ * its DDL and the clearProjections list). It is not a leak today. Whoever
+ * gives it a writer must add it to scrubDerivedProjections in the same
+ * change, or redaction will silently start missing a copy.
+ *
+ * Still NOT redactable, deliberately: the `description:` prose of a task.
+ * That text is git-authored durable intent, versioned in the repository, so
+ * destroying the store's copy would destroy nothing -- it would only promise
+ * a cure this instrument cannot deliver. Git history rewriting is the tool
+ * for git history.
  *
  * That makes a secret written INTO a key (`--evidence "shift-998877=ok"`)
  * permanently uncurable here, so the prevention half has to carry it: the
@@ -139,10 +194,11 @@
  */
 
 import type { DatabaseSync } from "node:sqlite"
-import { canonicalJson } from "@mapctx/protocol"
+import { canonicalJson, claimViolationSchema, runEventSchema, runReceiptSchema } from "@mapctx/protocol"
 import type { EventLogEntry, RedactionMarker } from "@mapctx/protocol"
 import { loadNodeAttestations, verifyRowPayloadHash } from "./attestation"
 import { payloadSha256, readJournalEntry, rewriteJournalEntrySync } from "./journal"
+import { normalizePath } from "./paths"
 import { listRedactions } from "./projections"
 // Type-only: store-handle imports reconcilePendingRedactions from here, so a
 // value import would close a runtime require cycle. redactEvidence takes an
@@ -174,33 +230,111 @@ export const REDACTED_SENTINEL = "mapctx:redacted"
  */
 export const REDACTABLE_ROOTS: Readonly<Record<string, readonly string[]>> = {
   "acceptance.approved": ["evidence"],
-  "run.receipt-recorded": ["receipt.evidence"],
+  "run.receipt-recorded": ["receipt.evidence", "receipt.failure", "receipt.changedFiles"],
+  "run.event-recorded": ["event.payload"],
+  "claim-violation.detected": ["violation.path"],
   "history.evidence-recorded": ["evidence.repoRoot", "evidence.repoOrigin"]
 }
 
 /**
- * Within a redactable root, which LEAF NAMES may actually be destroyed.
- * Absent means "every string leaf under the root" -- correct for
- * acceptance.approved, whose evidence is a flat label -> value map where the
- * values are the whole payload of interest.
+ * Roots whose content is COPIED into another event type by a derivation, so
+ * redacting the source leaves the copy behind (review ALTO-1).
  *
- * `run.receipt-recorded` needs the filter: receipt.evidence is an
- * ArtifactRef[], so a naive leaf walk would also hit `artifactId` (a UUID),
- * `ownerKind` and `kind` (closed enums) and `ownerId` (the structural link to
- * the owning task). Replacing those with a sentinel would leave a RunReceipt
- * that no longer satisfies its own schema and an artifact reference pointing
- * nowhere, for no privacy gain. The genuinely free-text members -- where a
- * secret actually lands -- are the location fields.
+ * `receipt.changedFiles` is the one: T-061's claim-violation detection
+ * intersects two receipts' changed files and writes each overlapping path
+ * into a `claim-violation.detected` event and
+ * `claim_violation_projection.path`. Redacting the receipts does not touch
+ * that third copy, and before this was mapped the operator got
+ * `reclaimed: true` with the path still in the journal and the database.
+ *
+ * Mapping it here does two things: `claim-violation.detected` is redactable
+ * (above), and `redactEvidence` tells the operator which derived events still
+ * hold the content, by (node, sequence), so the job can be finished instead
+ * of looking finished.
  */
-const REDACTABLE_LEAVES: Readonly<Record<string, readonly string[] | undefined>> = {
-  "run.receipt-recorded": ["uri", "promotedPath"]
+const DERIVED_COPY_WARNINGS: Readonly<Record<string, readonly string[]>> = {
+  "run.receipt-recorded": ["receipt.changedFiles"]
 }
 
-function leafIsRedactable(eventType: string, leafPath: string): boolean {
-  const allowed = REDACTABLE_LEAVES[eventType]
+/**
+ * The other end of the same derivation: the event type that HOLDS a derived
+ * copy, so redacting it can point back at the sources that still hold the
+ * original (review MEDIA-1). Kept as its own constant rather than inverting
+ * DERIVED_COPY_WARNINGS at runtime, because the two directions carry
+ * different advice -- forward says "finish the job", reverse says "the source
+ * is still there and detection will not undo this".
+ */
+const REDACTED_SOURCE_OF_DERIVED = "claim-violation.detected"
+
+/**
+ * Within a redactable root, which LEAF NAMES may actually be destroyed.
+ * Absent means "every string leaf under that root".
+ *
+ * Keyed by event type AND root, because one event type can own roots with
+ * opposite needs: a `run.receipt-recorded` receipt holds an ArtifactRef[]
+ * (mostly structural), a FailureDetail (one free-text member among an enum
+ * and a boolean), and changedFiles (free text end to end). The T-126 model
+ * had a single leaf-name list per event type, which cannot express that.
+ *
+ * `receipt.evidence` is an ArtifactRef[], so a naive leaf walk would also hit
+ * `artifactId` (a UUID), `ownerKind` and `kind` (closed enums) and `ownerId`
+ * (the structural link to the owning task). Replacing those with a sentinel
+ * would leave a RunReceipt that no longer satisfies its own schema and an
+ * artifact reference pointing nowhere, for no privacy gain. The genuinely
+ * free-text members -- where a secret actually lands -- are the location
+ * fields.
+ *
+ * `receipt.failure` (T-131) is `{category, message, retryable}`. Only
+ * `message` is prose: `category` is a closed enum and `retryable` a boolean,
+ * and `failureDetailSchema` requires `message` to be NON-EMPTY -- which the
+ * sentinel satisfies, so a redacted failure still parses. That is the whole
+ * reason the sentinel is a reserved string rather than "".
+ *
+ * `receipt.changedFiles` and `event.payload` have no allowlist, so every
+ * string leaf under them is redactable. For changedFiles that is right by
+ * construction (`z.array(z.string())` -- each element is a repository path an
+ * agent wrote, and paths carry customer and project names). For a run event's
+ * payload it is right because the schema is literally open
+ * (`z.record(z.string(), z.unknown())`): there is no structural member to
+ * protect inside it, while the event's OWN identity (schemaVersion,
+ * dispatchId, attempt, sequence, type, timestamp) lives outside the root and
+ * is therefore untouchable.
+ *
+ * Considered and deliberately left out: `receipt.timeEvidence` (timestamps,
+ * closed enums and session ids -- identifiers, not prose) and
+ * `receipt.usageEvents` (provider/model vocabulary plus counters). Neither is
+ * a place an agent writes free text, so neither is a leak path T-131 closes.
+ */
+const REDACTABLE_LEAVES: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  "run.receipt-recorded": {
+    "receipt.evidence": ["uri", "promotedPath"],
+    "receipt.failure": ["message"]
+  }
+}
+
+function leafIsRedactable(eventType: string, root: string, leafPath: string): boolean {
+  const allowed = REDACTABLE_LEAVES[eventType]?.[root]
   if (!allowed) return true
   const segments = leafPath.split(".")
   return allowed.includes(segments[segments.length - 1])
+}
+
+/**
+ * Whether `mapctx redact` can actually destroy this exact VALUE path later --
+ * root allowlist and leaf allowlist together.
+ *
+ * The `[privacy]` lint uses this to decide whether to promise a cure (T-126
+ * MEDIA-1). Asking only about the root would re-introduce that bug on the new
+ * roots: `receipt.failure` is redactable, yet `receipt.failure.category` is
+ * not, so a pattern that fired on the enum would be told to run a command
+ * that then refuses. Container keys are never redactable at all, and the lint
+ * says so on its own, so this answers for value leaves.
+ */
+export function isRedactableFieldPath(eventType: string, fieldPath: string): boolean {
+  const root = redactableRootFor(eventType, fieldPath)
+  if (!root) return false
+  if (fieldPath === root) return true // the root expands to its allowed leaves
+  return leafIsRedactable(eventType, root, fieldPath)
 }
 
 export type RedactionTarget = { nodeId: string; sequence: number }
@@ -226,11 +360,29 @@ export type RedactionPlan = {
 
 export type RedactionRefusal = {
   ok: false;
-  reason: "unknown-event" | "corrupt-event" | "not-redactable" | "nothing-to-redact" | "attested-node" | "invalid-request" | "drifted";
+  reason: "unknown-event" | "corrupt-event" | "not-redactable" | "nothing-to-redact" | "attested-node" | "invalid-request" | "drifted" | "schema-invalid";
   message: string;
 };
 
-export type RedactionDryRunResult = { ok: true; mode: "dry-run"; plan: RedactionPlan };
+/**
+ * A derived copy of this content that lives in ANOTHER event, with the
+ * command that destroys it (review ALTO-1). Never carries the value.
+ */
+export type DerivedCopy = {
+  nodeId: string;
+  sequence: number;
+  eventType: string;
+  fieldPath: string;
+};
+
+export type RedactionDryRunResult = {
+  ok: true;
+  mode: "dry-run";
+  plan: RedactionPlan;
+  /** Consequences the operator has to know BEFORE committing. Never echo a value. */
+  advisories: string[];
+  derivedCopies: DerivedCopy[];
+};
 
 export type RedactionCommitResult = {
   ok: true;
@@ -241,6 +393,9 @@ export type RedactionCommitResult = {
   /** False only when the post-commit space reclaim failed; the redaction itself still landed. */
   reclaimed: boolean;
   reclaimWarning?: string;
+  /** Same advisories as the dry run: what this redaction did NOT reach, and what it cost. */
+  advisories: string[];
+  derivedCopies: DerivedCopy[];
 };
 
 export type RedactionResult = RedactionDryRunResult | RedactionCommitResult | RedactionRefusal
@@ -356,12 +511,12 @@ export function planRedaction(storeDir: string, options: { target: RedactionTarg
   if (allLeaves.length === 0) {
     return { ok: false, reason: "nothing-to-redact", message: `Field "${options.fieldPath}" holds no string content to redact (null, empty container, or non-string value).` }
   }
-  const leaves = allLeaves.filter(leaf => leafIsRedactable(entry.eventType, leaf))
+  const leaves = allLeaves.filter(leaf => leafIsRedactable(entry.eventType, root, leaf))
   if (leaves.length === 0) {
     return {
       ok: false,
       reason: "not-redactable",
-      message: `Nothing under "${options.fieldPath}" is redactable on ${entry.eventType}: only the free-text members ${(REDACTABLE_LEAVES[entry.eventType] ?? []).map(name => `"${name}"`).join(", ")} may be destroyed. Identifiers, owner links and closed enums are structural facts.`
+      message: `Nothing under "${options.fieldPath}" is redactable on ${entry.eventType}: under "${root}" only the free-text members ${(REDACTABLE_LEAVES[entry.eventType]?.[root] ?? []).map(name => `"${name}"`).join(", ")} may be destroyed. Identifiers, owner links and closed enums are structural facts.`
     }
   }
   const alreadyRedacted: string[] = []
@@ -416,12 +571,62 @@ function scrubDerivedProjections(db: DatabaseSync, eventType: string, original: 
   }
   if (eventType === "run.receipt-recorded") {
     const originalReceipt = (original.receipt ?? original) as { dispatchId: string; attempt: number; evidence?: unknown }
-    const redactedReceipt = (redacted.receipt ?? redacted) as { evidence?: unknown }
+    const redactedReceipt = (redacted.receipt ?? redacted) as { evidence?: unknown; changedFiles?: unknown; failure?: unknown }
     const row = db.prepare("SELECT receipt_json FROM run_receipt_projection WHERE dispatch_id = ? AND attempt = ?")
       .get(originalReceipt.dispatchId, originalReceipt.attempt) as { receipt_json: string | null } | undefined
     if (!stillHolds(row?.receipt_json, originalReceipt)) return
-    db.prepare("UPDATE run_receipt_projection SET evidence_json = ?, receipt_json = ? WHERE dispatch_id = ? AND attempt = ?")
-      .run(JSON.stringify(redactedReceipt.evidence ?? []), JSON.stringify(redactedReceipt), originalReceipt.dispatchId, originalReceipt.attempt)
+    // T-131: changed_files_json and failure_json are separate columns holding
+    // their own copy of the same prose, so rewriting receipt_json alone would
+    // leave the plaintext indexed one column over. `failure_json` mirrors
+    // insertRunReceipt: NULL when there is no failure, never the string
+    // "null".
+    db.prepare(
+      `UPDATE run_receipt_projection
+       SET evidence_json = ?, changed_files_json = ?, failure_json = ?, receipt_json = ?
+       WHERE dispatch_id = ? AND attempt = ?`
+    ).run(
+      JSON.stringify(redactedReceipt.evidence ?? []),
+      JSON.stringify(redactedReceipt.changedFiles ?? []),
+      redactedReceipt.failure === null || redactedReceipt.failure === undefined ? null : JSON.stringify(redactedReceipt.failure),
+      JSON.stringify(redactedReceipt),
+      originalReceipt.dispatchId,
+      originalReceipt.attempt
+    )
+    return
+  }
+  if (eventType === "run.event-recorded") {
+    // T-131: a run event's payload is an open record of agent-authored
+    // content, projected twice -- once whole (`event_json`) and once as just
+    // the payload (`payload_json`). Both have to go.
+    const originalEvent = (original.event ?? original) as { dispatchId: string; attempt: number; sequence: number }
+    const redactedEvent = (redacted.event ?? redacted) as { payload?: unknown }
+    const row = db.prepare("SELECT event_json FROM run_event_projection WHERE dispatch_id = ? AND attempt = ? AND sequence = ?")
+      .get(originalEvent.dispatchId, originalEvent.attempt, originalEvent.sequence) as { event_json: string | null } | undefined
+    if (!stillHolds(row?.event_json, originalEvent)) return
+    db.prepare(
+      `UPDATE run_event_projection SET payload_json = ?, event_json = ?
+       WHERE dispatch_id = ? AND attempt = ? AND sequence = ?`
+    ).run(
+      JSON.stringify(redactedEvent.payload ?? {}),
+      JSON.stringify(redactedEvent),
+      originalEvent.dispatchId,
+      originalEvent.attempt,
+      originalEvent.sequence
+    )
+    return
+  }
+  if (eventType === "claim-violation.detected") {
+    // T-131 review ALTO-1: the derived copy. One plain TEXT column, so it is
+    // compared directly (like history's repo columns) rather than canonically
+    // -- and only replaced while it still holds exactly what this event
+    // produced, so a row rewritten by something else is never clobbered.
+    const originalViolation = (original.violation ?? {}) as { id: string; path?: string }
+    const redactedViolation = (redacted.violation ?? {}) as { path?: string }
+    const row = db.prepare("SELECT path FROM claim_violation_projection WHERE id = ?")
+      .get(originalViolation.id) as { path: string } | undefined
+    if (!row || row.path !== originalViolation.path) return
+    db.prepare("UPDATE claim_violation_projection SET path = ? WHERE id = ?")
+      .run(redactedViolation.path ?? REDACTED_SENTINEL, originalViolation.id)
     return
   }
   if (eventType === "history.evidence-recorded") {
@@ -455,7 +660,168 @@ function stillHolds(storedJson: string | null | undefined, expected: unknown): b
   }
 }
 
+// ---- post-redaction schema guard ----
+
+/**
+ * Re-parses the redacted inner object against its published schema, INSIDE
+ * the write transaction and before anything is written (review observation:
+ * the validity guarantee was structural -- the allowlists -- with no runtime
+ * check, so a future root that broke a schema would only be caught by a
+ * test). Cheap, and it fails closed.
+ *
+ * Covers the event types whose inner object has a published runtime schema.
+ * `acceptance.approved` and `history.evidence-recorded` have none to parse
+ * against, so there is nothing to call for them -- their structural
+ * allowlists stay the only guard, which is why a new root on those two still
+ * needs a test.
+ *
+ * Precise about what "nothing was applied" means here: the refusal happens
+ * inside the write transaction, which has already opened and reindexed any
+ * pending journal entries, so `mapctx.db` BYTES can differ afterwards. The
+ * logical state is untouched -- no redaction event, no projection change, no
+ * journal rewrite -- and that is what the message claims. Byte identity is
+ * only promised for the dry run, which opens the store read-only.
+ */
+function redactedPayloadSchemaProblem(eventType: string, redacted: Record<string, unknown>): string | undefined {
+  const guards: Record<string, () => { success: boolean; error?: { issues: unknown } }> = {
+    "run.receipt-recorded": () => runReceiptSchema.safeParse(redacted.receipt ?? redacted),
+    "run.event-recorded": () => runEventSchema.safeParse(redacted.event ?? redacted),
+    "claim-violation.detected": () => claimViolationSchema.safeParse(redacted.violation ?? redacted)
+  }
+  const guard = guards[eventType]
+  if (!guard) return undefined
+  const parsed = guard()
+  if (parsed.success) return undefined
+  return JSON.stringify(parsed.error?.issues ?? "unknown schema error")
+}
+
 // ---- commit ----
+
+/**
+ * Receipt events whose `changedFiles` still holds `path`, compared through
+ * normalizePath on both sides for the same reason as the forward direction.
+ * Reported by (node, sequence); the value never leaves.
+ */
+function receiptEventsHolding(db: DatabaseSync, path: string): Array<{ nodeId: string; sequence: number }> {
+  const wanted = new Set([path, normalizePath(path)])
+  const rows = db.prepare(
+    "SELECT node_id, sequence, payload_json FROM event_log WHERE event_type = 'run.receipt-recorded' ORDER BY node_id ASC, sequence ASC"
+  ).all() as Array<{ node_id: string; sequence: number; payload_json: string }>
+  const found: Array<{ nodeId: string; sequence: number }> = []
+  for (const row of rows) {
+    let changedFiles: unknown
+    try {
+      const payload = JSON.parse(row.payload_json) as { receipt?: { changedFiles?: unknown }; changedFiles?: unknown }
+      changedFiles = payload.receipt?.changedFiles ?? payload.changedFiles
+    } catch {
+      continue
+    }
+    if (!Array.isArray(changedFiles)) continue
+    if (!changedFiles.some(item => typeof item === "string" && (wanted.has(item) || wanted.has(normalizePath(item))))) continue
+    found.push({ nodeId: row.node_id, sequence: row.sequence })
+  }
+  return found
+}
+
+/**
+ * What this redaction does NOT reach, and what it costs, as lines the CLI
+ * prints and the JSON carries. Built from the ORIGINAL payload, so it can
+ * find the derived copies -- and it never includes a value (review ALTO-1,
+ * ALTO-2, ALTO-3 and MEDIA-1).
+ */
+function redactionAdvisories(
+  db: DatabaseSync,
+  plan: RedactionPlan,
+  originalPayload: Record<string, unknown>
+): { advisories: string[]; derivedCopies: DerivedCopy[] } {
+  const advisories: string[] = []
+  const derivedCopies: DerivedCopy[] = []
+
+  // Review MEDIA-1, the REVERSE direction: redacting the derived copy while
+  // the source receipt still holds the path. That used to produce no advisory
+  // at all, and the operator had every reason to think the path was gone.
+  if (plan.target.eventType === REDACTED_SOURCE_OF_DERIVED && plan.fieldPaths.some(field => field === "violation.path")) {
+    const located = readPath(originalPayload, ["violation", "path"])
+    const original = located.found && typeof located.value === "string" ? located.value : undefined
+    if (original !== undefined) {
+      const sources = receiptEventsHolding(db, original)
+      advisories.push(
+        sources.length > 0
+          ? `This path was DERIVED from ${sources.length} receipt(s) that still hold it in receipt.changedFiles; this redaction does not reach them. Finish the job: ${sources.map(source => `mapctx redact --node ${source.nodeId} --sequence ${source.sequence} --field receipt.changedFiles --reason "..." --commit`).join(" ; ")}`
+          : "No receipt in this store still holds this path in receipt.changedFiles, so there is no remaining source copy to redact."
+      )
+      // Review ALTO-4: this used to promise unconditionally that detection
+      // would not re-create the violation, which was only true when the next
+      // run happened to pass the SAME detectedAt -- and the default is a
+      // fresh timestamp. An advisory that buys confidence it has not earned
+      // is the ALTO-3 failure mode again, so the sentence now states what the
+      // lookup actually guarantees (violations.ts semanticExists), which
+      // includes the fresh-timestamp and the redacted-row cases.
+      advisories.push(
+        "A later detection run will not re-create this violation: it is recognised as already recorded by its id, by its semantic tuple, and by its identity recomputed against this row's own detectedAt -- so a later run with a fresh timestamp, which is the default, does not duplicate it."
+      )
+    }
+  }
+
+  const derivedRoots = DERIVED_COPY_WARNINGS[plan.target.eventType] ?? []
+  const touched = derivedRoots.filter(root => plan.fieldPaths.some(field => field === root || field.startsWith(`${root}.`)))
+  if (touched.length === 0) return { advisories, derivedCopies }
+
+  // ALTO-2: detection compares path STRINGS, so a redacted element can no
+  // longer match anything. Element-level redaction keeps the siblings
+  // comparable; redacting the whole root blinds the receipt entirely. Either
+  // way the operator hears it before committing, and never silently after.
+  const wholeRoot = plan.fieldPaths.some(field => derivedRoots.includes(field)) || plan.requestedFieldPath === "receipt.changedFiles"
+  advisories.push(
+    `claim-violation detection (T-061) compares changed-file paths as strings, so ${wholeRoot ? "this receipt's paths become uncomparable" : "the redacted element becomes uncomparable"} and future detection over it is INCOMPLETE, not negative. recordClaimViolations reports that as incompleteDetection instead of reporting "no violations".` +
+    (wholeRoot ? " Redacting one element at a time (--field receipt.changedFiles.<i>) keeps the other paths comparable." : "")
+  )
+
+  // ALTO-1: the copies that already exist. Matched on the ORIGINAL values, so
+  // this finds them before they are destroyed here; reported by (node,
+  // sequence) so the job can be finished, never by value.
+  //
+  // Review ALTO-3: compared through normalizePath on BOTH sides. Detection
+  // stores every path normalized, so comparing a receipt's raw
+  // `./src/x.ts` against the stored `src/x.ts` matched nothing -- the
+  // advisory then named only the innocent neighbour, the operator ran exactly
+  // the command it printed, and the secret survived with no warning left. An
+  // advisory that points at the wrong copy is worse than no advisory, because
+  // it buys confidence. Both forms are kept so a path that needs no
+  // normalization still matches byte-for-byte.
+  const originalValues = new Set<string>()
+  for (const fieldPath of plan.fieldPaths) {
+    const located = readPath(originalPayload, fieldPath.split("."))
+    if (located.found && typeof located.value === "string") {
+      originalValues.add(located.value)
+      originalValues.add(normalizePath(located.value))
+    }
+  }
+  if (originalValues.size === 0) return { advisories, derivedCopies }
+  // O(n) over this event type on every changedFiles redaction: there is no
+  // index on event_type, and at board scale (tens of violations) it does not
+  // matter. If it ever does, the redaction ledger is the place to add one.
+  const rows = db.prepare(
+    "SELECT node_id, sequence, payload_json FROM event_log WHERE event_type = 'claim-violation.detected' ORDER BY node_id ASC, sequence ASC"
+  ).all() as Array<{ node_id: string; sequence: number; payload_json: string }>
+  for (const row of rows) {
+    let violationPath: unknown
+    try {
+      violationPath = (JSON.parse(row.payload_json) as { violation?: { path?: unknown } }).violation?.path
+    } catch {
+      continue
+    }
+    if (typeof violationPath !== "string") continue
+    if (!originalValues.has(violationPath) && !originalValues.has(normalizePath(violationPath))) continue
+    derivedCopies.push({ nodeId: row.node_id, sequence: row.sequence, eventType: "claim-violation.detected", fieldPath: "violation.path" })
+  }
+  if (derivedCopies.length > 0) {
+    advisories.push(
+      `${derivedCopies.length} claim-violation.detected event(s) hold a DERIVED copy of the same path and are NOT touched by this redaction. Finish the job: ${derivedCopies.map(copy => `mapctx redact --node ${copy.nodeId} --sequence ${copy.sequence} --field violation.path --reason "..." --commit`).join(" ; ")}`
+    )
+  }
+  return { advisories, derivedCopies }
+}
 
 export type RedactEvidenceOptions = {
   target: RedactionTarget;
@@ -473,7 +839,16 @@ export function redactEvidence(handle: StoreHandle, options: RedactEvidenceOptio
   const storeDir = handle.storeDir
   const planned = planRedaction(storeDir, { target: options.target, fieldPath: options.fieldPath })
   if ("ok" in planned) return planned
-  if (!options.commit) return { ok: true, mode: "dry-run", plan: planned }
+  if (!options.commit) {
+    // The dry run is where an operator decides, so it must carry the same
+    // consequences the commit reports -- including the derived copies this
+    // redaction will NOT reach.
+    const read = readJournalEntry(storeDir, planned.target.nodeId, planned.target.sequence)
+    const dryRunAdvice = read.status === "ok"
+      ? redactionAdvisories(handle.db, planned, read.entry.payload)
+      : { advisories: [], derivedCopies: [] }
+    return { ok: true, mode: "dry-run", plan: planned, ...dryRunAdvice }
+  }
 
   const now = options.now ?? (() => new Date())
   const redactedAt = now().toISOString()
@@ -495,6 +870,18 @@ export function redactEvidence(handle: StoreHandle, options: RedactEvidenceOptio
       if (redactedSha !== planned.redactedPayloadSha256) {
         return { ok: false as const, reason: "drifted" as const, message: "Redacted payload hash diverged from the plan; nothing was applied." }
       }
+      // Runtime proof of the claim the allowlists are supposed to guarantee,
+      // before a single write: if a root's redaction would leave the event
+      // invalid against its own schema, refuse instead of committing it.
+      const schemaProblem = redactedPayloadSchemaProblem(planned.target.eventType, redactedPayload)
+      if (schemaProblem) {
+        return {
+          ok: false as const,
+          reason: "schema-invalid" as const,
+          message: `Redacting ${planned.fieldPaths.join(", ")} would leave the ${planned.target.eventType} payload invalid against its own schema (${schemaProblem}); refusing. Nothing was applied.`
+        }
+      }
+      const advice = redactionAdvisories(handle.db, planned, originalPayload)
 
       const event = append({
         eventType: REDACTION_EVENT_TYPE,
@@ -534,7 +921,7 @@ export function redactEvidence(handle: StoreHandle, options: RedactEvidenceOptio
         payloadSha256: redactedSha,
         redactions: [...(fresh.entry.redactions ?? []), marker]
       }
-      return { ok: true as const, event, redactedEntry }
+      return { ok: true as const, event, redactedEntry, advice }
     })
 
     if (!applied.ok) return applied
@@ -564,7 +951,9 @@ export function redactEvidence(handle: StoreHandle, options: RedactEvidenceOptio
       redactionEvent: { nodeId: applied.event.nodeId, sequence: applied.event.sequence },
       journalPath,
       reclaimed,
-      ...(reclaimWarning ? { reclaimWarning } : {})
+      ...(reclaimWarning ? { reclaimWarning } : {}),
+      advisories: applied.advice.advisories,
+      derivedCopies: applied.advice.derivedCopies
     }
   }
 }
@@ -889,16 +1278,22 @@ export function verifyRedactionsFromLedger(storeDir: string, db: DatabaseSync): 
   // the DB-only branch below is the lenient one, so it must be gated on the
   // reviewed instrument, not on a column the row sets about itself.
   let attestedNodes: ReadonlySet<string> | undefined
+  // Review BAIXA-7: an attestation file that cannot be READ is not the same
+  // condition as a node nothing vouches for, and saying the latter sends the
+  // operator looking for a missing approval instead of at the broken file.
+  // The load failure is kept and reported in the reason.
+  let attestationLoadFailure: string | undefined
   const isAttested = (nodeId: string): boolean => {
     if (!attestedNodes) {
       try {
         attestedNodes = new Set(loadNodeAttestations(storeDir).keys())
-      } catch {
+      } catch (error) {
         // A malformed attestation file is repair's refusal to make, loudly and
         // by name. Here it must only mean "no attestation vouches for this
         // node", or an unreadable side file would brick the open -- the very
         // failure mode T-126's ALTA-1 fix exists to prevent.
         attestedNodes = new Set<string>()
+        attestationLoadFailure = (error as Error).message
       }
     }
     return attestedNodes.has(nodeId)
@@ -933,11 +1328,18 @@ export function verifyRedactionsFromLedger(storeDir: string, db: DatabaseSync): 
         problems.push({ nodeId, sequence, reason: `redaction target row in event_log contradicts itself: ${indexed.reason}` })
         continue
       }
-      provenance = indexed && indexed.status === "ok" && indexed.journalPath === "" && isAttested(nodeId)
+      const claimsDbOnly = Boolean(indexed && indexed.status === "ok" && indexed.journalPath === "")
+      const attested = claimsDbOnly && isAttested(nodeId)
+      provenance = attested && indexed && indexed.status === "ok"
         ? { kind: "db-only", entry: indexed.entry }
-        : { kind: "absent", reason: indexed && indexed.status === "ok" && indexed.journalPath === ""
-            ? "journal file is missing and the row claims to be DB-only, but no reviewed attestation covers this node"
-            : "journal file is missing" }
+        : {
+            kind: "absent",
+            reason: !claimsDbOnly
+              ? "journal file is missing"
+              : attestationLoadFailure !== undefined
+                ? `journal file is missing and the row claims to be DB-only, but the attestation file could not be read (${attestationLoadFailure}); no attestation can vouch for this node until it is fixed`
+                : "journal file is missing and the row claims to be DB-only, but no reviewed attestation covers this node"
+          }
     }
     const outcome = verifyTargetChain(provenance, chain)
     problems.push(...outcome.problems)
@@ -1103,7 +1505,7 @@ export function listRedactionCandidates(db: DatabaseSync, options: { taskId?: st
       const located = readPath(payload, root.split("."))
       if (!located.found) continue
       for (const leaf of stringLeafPaths(located.value, root)) {
-        if (!leafIsRedactable(row.event_type, leaf)) continue
+        if (!leafIsRedactable(row.event_type, root, leaf)) continue
         const value = readPath(payload, leaf.split("."))
         if (value.found && value.value === REDACTED_SENTINEL) {
           if (audited.has(leaf)) redacted.push(leaf)
@@ -1115,7 +1517,7 @@ export function listRedactionCandidates(db: DatabaseSync, options: { taskId?: st
     }
     if (redactable.length === 0 && redacted.length === 0 && unexplained.length === 0) continue
     const subject = subjectOf(row.event_type, payload)
-    if (options.taskId && subject !== options.taskId) continue
+    if (options.taskId && !subjectMatches(row.event_type, payload, options.taskId)) continue
     candidates.push({
       nodeId: row.node_id,
       sequence: row.sequence,
@@ -1141,5 +1543,29 @@ function subjectOf(eventType: string, payload: Record<string, unknown>): string 
     const receipt = (payload.receipt ?? payload) as { dispatchId?: unknown }
     return typeof receipt.dispatchId === "string" ? receipt.dispatchId : null
   }
+  if (eventType === "run.event-recorded") {
+    const event = (payload.event ?? payload) as { dispatchId?: unknown }
+    return typeof event.dispatchId === "string" ? event.dispatchId : null
+  }
+  if (eventType === "claim-violation.detected") {
+    // A violation names TWO tasks. The display subject is the first, and
+    // subjectMatches below is what makes `--task` find it under either.
+    const violation = (payload.violation ?? {}) as { taskAId?: unknown; taskBId?: unknown }
+    return typeof violation.taskAId === "string" ? violation.taskAId : null
+  }
   return null
+}
+
+/**
+ * Whether a candidate belongs to `taskId`, for the `redact list --task`
+ * filter. Separate from subjectOf because one event can belong to more than
+ * one task: filtering a claim violation by its first task id only would hide
+ * it from the other party to the very same collision.
+ */
+function subjectMatches(eventType: string, payload: Record<string, unknown>, taskId: string): boolean {
+  if (eventType === "claim-violation.detected") {
+    const violation = (payload.violation ?? {}) as { taskAId?: unknown; taskBId?: unknown }
+    return violation.taskAId === taskId || violation.taskBId === taskId
+  }
+  return subjectOf(eventType, payload) === taskId
 }
