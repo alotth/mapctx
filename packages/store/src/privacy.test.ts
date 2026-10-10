@@ -152,6 +152,42 @@ test("catastrophic backtracking pattern is bounded by budget, reported by name, 
   assert.ok(!JSON.stringify(ok).includes(SECRET));
 });
 
+// Review BAIXA-6: a non-positive or non-finite budget cannot scan anything,
+// and must be reported as what it is -- the budget was unusable -- never as
+// a nonexistent "patterns[-1] /(unknown)/" blaming a pattern that was never
+// evaluated. A real catastrophic abort must still name its pattern.
+test("a zero (or non-finite) privacy lint budget is named as the cause, never blamed on a nonexistent pattern", () => {
+  const long = "x".repeat(50);
+  for (const budgetMs of [0, -1, Number.NaN]) {
+    const zeroBudget = scanForPrivacyPatterns(long, compilePrivacyPatterns(["x+"]), { budgetMs });
+    assert.ok(zeroBudget.aborted, `budgetMs=${budgetMs} must still report an abort`);
+    assert.equal(zeroBudget.aborted!.patternIndex, -1);
+    assert.equal(zeroBudget.aborted!.pattern, "");
+    assert.equal(zeroBudget.aborted!.budgetMs, budgetMs);
+  }
+
+  const lint = lintForPrivacy("task create", { summary: long }, ["x+"], { budgetMs: 0 });
+  assert.ok(lint.aborted);
+  assert.equal(lint.aborted!.patternIndex, -1);
+  assert.ok(!lint.warnings.some(w => /patterns\[-1\]/.test(w) || /\(unknown\)/.test(w)), JSON.stringify(lint.warnings));
+  const budgetWarning = lint.warnings.find(w => /without evaluating any pattern/.test(w));
+  assert.ok(budgetWarning, JSON.stringify(lint.warnings));
+  assert.match(budgetWarning!, /0ms budget/);
+  assert.match(budgetWarning!, /NOT blocked/);
+
+  // A normal lint is unaffected by the default budget.
+  const sane = lintForPrivacy("task create", { summary: `a ${SECRET}` }, [PATTERN]);
+  assert.equal(sane.findings.length, 1);
+  assert.equal(sane.aborted, undefined);
+
+  // A real catastrophic abort still names its pattern -- the fix is scoped to
+  // an unusable budget, not to abort reporting in general.
+  const catastrophic = lintForPrivacy("task create", { summary: `${"a".repeat(60)}b` }, ["^(a+)+$"]);
+  assert.ok(catastrophic.aborted);
+  assert.equal(catastrophic.aborted!.patternIndex, 0);
+  assert.ok(catastrophic.warnings.some(w => /too expensive/.test(w)), JSON.stringify(catastrophic.warnings));
+});
+
 const CONFIG = 'schemaVersion = 1\nprojectId = "11111111-1111-4111-8111-111111111111"\nplansAuthority = "store"\n';
 
 test("config parses and round-trips privacy regex strings, leaving invalid regex non-fatal for lint", t => {

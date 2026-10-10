@@ -545,6 +545,11 @@ test("losing a redacted target's journal file surfaces as a maintenanceAdvisory;
 // "redacted target, journal gone" to a healthy store, and refuses the
 // symmetric case where the pinned bytes would contradict the ledger. ----
 
+// Review MEDIA-4: a row that merely self-declares journal_path="" must NOT
+// buy the lenient db-only branch's silence -- that requires BOTH halves of
+// the T-119 claim, the column AND a reviewed attestation. Before attesting,
+// the unattested state is an advisory (not a problem, not silence); after
+// attesting, it is genuinely silent and repairable.
 test("attesting a redacted DB-only node (journal gone) is accepted and lets repair reach a healthy store", t => {
   const f = fixture(t);
   seed(f.handle);
@@ -560,16 +565,34 @@ test("attesting a redacted DB-only node (journal gone) is accepted and lets repa
   db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
   db.close();
 
-  const ro = f.open(true);
-  ro.db.prepare("SELECT COUNT(*) FROM event_log").get();
-  assert.equal(ro.maintenanceNeeded(), null);
-  assert.deepEqual(ro.maintenanceAdvisory(), [], "a redacted DB-only row holding the final state verifies cleanly");
+  // Before attesting: journal_path="" alone is not the T-119 claim. This must
+  // surface as an advisory, never pass silently (MEDIA-4), and never refuse
+  // reads or writes (ALTA-1 behaviour preserved).
+  const unattestedRo = f.open(true);
+  unattestedRo.db.prepare("SELECT COUNT(*) FROM event_log").get();
+  assert.equal(unattestedRo.maintenanceNeeded(), null);
+  const unattestedAdvisory = unattestedRo.maintenanceAdvisory();
+  assert.equal(unattestedAdvisory.length, 1);
+  assert.match(unattestedAdvisory[0], /no reviewed attestation covers this node/);
+  assert.ok(!unattestedAdvisory.join("|").includes(SECRET));
   f.close();
+  let unattestedOpenOk = true, unattestedOpenError = "";
+  try { f.open(); } catch (error) { unattestedOpenOk = false; unattestedOpenError = (error as Error).message; }
+  assert.ok(unattestedOpenOk, unattestedOpenError);
+  f.close();
+  assert.equal(repairStore(f.dir).status, "gap", "repair still refuses an unattested self-declared DB-only row");
 
   const options = { reason: "lost machine; rows are DB-only", approvedBy: "reviewer" };
   const draft = draftNodeAttestation(f.dir, node, options);
   commitNodeAttestation(f.dir, node, draft.contentSha256, options);
   assert.ok(loadNodeAttestations(f.dir).has(node));
+
+  // After attesting: the genuinely attested node verifies silently.
+  const ro = f.open(true);
+  ro.db.prepare("SELECT COUNT(*) FROM event_log").get();
+  assert.equal(ro.maintenanceNeeded(), null);
+  assert.deepEqual(ro.maintenanceAdvisory(), [], "a redacted, genuinely attested DB-only row verifies cleanly");
+  f.close();
 
   const repaired = repairStore(f.dir);
   assert.equal(repaired.status, "ok", JSON.stringify(repaired).slice(0, 400));
@@ -669,4 +692,119 @@ test("reconciling a pending redaction from the ledger reclaims database pages, m
   assert.equal(reconciled.reclaimed, true, reconciled.reclaimWarning);
   assert.deepEqual(journal(f.dir, target).payload.evidence, { shift: REDACTED_SENTINEL });
   assertAbsent(f.dir);
+});
+
+// ---- review MEDIA-6(a): a redaction target whose journal file is CORRUPT
+// (exists, but does not parse) must never be adjudicated as absent -- a file
+// that disagrees with itself is tampering/damage, exactly like the existing
+// corrupt-payload-hash cases, and must fail closed the same way. ----
+
+test("a corrupt redacted target journal file is a problem, never an absence; opening the store still fails closed", t => {
+  const f = fixture(t);
+  seed(f.handle);
+  const target = approve(f.handle);
+  commit(f.handle, target);
+  f.close();
+  const targetPath = journalEntryPath(f.dir, target.nodeId, target.sequence);
+  fs.writeFileSync(targetPath, fs.readFileSync(targetPath, "utf8").slice(0, 40)); // truncate -> invalid JSON
+
+  const db = new DatabaseSync(StoreHandle.dbPathFor(f.dir));
+  const verified = verifyRedactionsFromLedger(f.dir, db);
+  db.close();
+  assert.equal(verified.problems.length, 1, JSON.stringify(verified));
+  assert.equal(verified.unresolved.length, 0, JSON.stringify(verified));
+  assert.match(verified.problems[0].reason, /is corrupt/);
+
+  let threw = "";
+  try { StoreHandle.open(f.dir).close(); } catch (error) { threw = (error as Error).message; }
+  assert.match(threw, /redaction verification failed/);
+});
+
+// ---- review MEDIA-6(b): the db-only branch's position gate must still
+// refuse a row rolled back to its PRE-redaction payload even when that
+// payload's own hash is internally consistent (so MEDIA-5's self-consistency
+// check alone would pass it) -- the ledger says this row should be redacted,
+// and it is not. ----
+
+test("an attested DB-only row rolled back to its pre-redaction payload is refused by the position gate", t => {
+  const f = fixture(t);
+  seed(f.handle);
+  const target = approve(f.handle);
+  const result = commit(f.handle, target);
+  f.close();
+
+  fs.rmSync(path.join(f.dir, "events", target.nodeId), { recursive: true, force: true });
+  const db = new DatabaseSync(StoreHandle.dbPathFor(f.dir));
+  db.exec(`UPDATE event_log SET journal_path = '' WHERE node_id = '${target.nodeId}'`);
+  db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  db.close();
+  const options = { reason: "db-only", approvedBy: "reviewer" };
+  const draft = draftNodeAttestation(f.dir, target.nodeId, options);
+  commitNodeAttestation(f.dir, target.nodeId, draft.contentSha256, options);
+
+  // Roll the row back to the PRE-redaction payload, with its own (internally
+  // consistent) hash: MEDIA-5's self-consistency check alone would accept
+  // this row, so the ledger-position gate has to be what refuses it.
+  const original = { taskId: "T-001", revision: 1, criterionId: "c1", evidence: { shift: SECRET }, approvedAt: AT };
+  const db2 = new DatabaseSync(StoreHandle.dbPathFor(f.dir));
+  db2.prepare("UPDATE event_log SET payload_json = ?, payload_sha256 = ? WHERE node_id = ? AND sequence = ?")
+    .run(JSON.stringify(original), result.plan.priorPayloadSha256, target.nodeId, target.sequence);
+  db2.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  db2.close();
+
+  const db3 = new DatabaseSync(StoreHandle.dbPathFor(f.dir));
+  const verified = verifyRedactionsFromLedger(f.dir, db3);
+  db3.close();
+  assert.equal(verified.problems.length, 1, JSON.stringify(verified).slice(0, 300));
+  assert.match(verified.problems[0].reason, /pinned payload still carries content/);
+  assert.ok(!JSON.stringify(verified).includes(SECRET));
+});
+
+// ---- review MEDIA-5: the indexed (DB-only) provenance gets the same
+// self-consistency guarantee readJournalEntry already gives a journal file.
+// A row whose payload_json does not hash to its own payload_sha256 is a
+// CONTRADICTION, never an absence, and is pushed onto `problems`. ----
+
+test("a DB-only row whose payload_json does not hash to its own payload_sha256 contradicts itself and fails closed", t => {
+  const f = fixture(t);
+  seed(f.handle);
+  const target = approve(f.handle);
+  commit(f.handle, target);
+  f.close();
+
+  fs.rmSync(path.join(f.dir, "events", target.nodeId), { recursive: true, force: true });
+  const options = { reason: "db-only", approvedBy: "reviewer" };
+  const db = new DatabaseSync(StoreHandle.dbPathFor(f.dir));
+  db.exec(`UPDATE event_log SET journal_path = '' WHERE node_id = '${target.nodeId}'`);
+  db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  db.close();
+  const draft = draftNodeAttestation(f.dir, target.nodeId, options);
+  commitNodeAttestation(f.dir, target.nodeId, draft.contentSha256, options);
+
+  // Forge the row's bytes, keeping payload_sha256 at the previously recorded
+  // (correct, redacted) hash: the stored hash no longer describes the stored
+  // JSON, which is exactly the self-inconsistency readJournalEntry already
+  // catches for journal files.
+  const db2 = new DatabaseSync(StoreHandle.dbPathFor(f.dir));
+  db2.prepare("UPDATE event_log SET payload_json = ? WHERE node_id = ? AND sequence = ?")
+    .run(JSON.stringify({ taskId: "T-001", revision: 1, criterionId: "c1", evidence: { shift: "forged-content" }, approvedAt: AT }), target.nodeId, target.sequence);
+  db2.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  db2.close();
+
+  const db3 = new DatabaseSync(StoreHandle.dbPathFor(f.dir));
+  const verified = verifyRedactionsFromLedger(f.dir, db3);
+  const needed = (() => {
+    try { const h = StoreHandle.openReadOnly(f.dir); h.db.prepare("SELECT COUNT(*) FROM event_log").get(); const n = h.maintenanceNeeded(); h.close(); return n; }
+    catch (error) { return (error as Error).message; }
+  })();
+  db3.close();
+  assert.equal(verified.problems.length, 1, JSON.stringify(verified));
+  assert.equal(verified.unresolved.length, 0, JSON.stringify(verified));
+  assert.match(verified.problems[0].reason, /contradicts itself/);
+  assert.match(String(needed), /redaction verification failed/);
+
+  let threw = "";
+  try { StoreHandle.open(f.dir).close(); } catch (error) { threw = (error as Error).message; }
+  assert.match(threw, /redaction verification failed/);
+  assert.equal(repairStore(f.dir).status, "gap");
 });

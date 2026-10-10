@@ -141,7 +141,7 @@
 import type { DatabaseSync } from "node:sqlite"
 import { canonicalJson } from "@mapctx/protocol"
 import type { EventLogEntry, RedactionMarker } from "@mapctx/protocol"
-import { loadNodeAttestations } from "./attestation"
+import { loadNodeAttestations, verifyRowPayloadHash } from "./attestation"
 import { payloadSha256, readJournalEntry, rewriteJournalEntrySync } from "./journal"
 import { listRedactions } from "./projections"
 // Type-only: store-handle imports reconcilePendingRedactions from here, so a
@@ -885,6 +885,25 @@ export function verifyRedactionsFromLedger(storeDir: string, db: DatabaseSync): 
     })
     chains.set(key, chain)
   }
+  // Loaded once, and only if a journal file actually turns out to be missing:
+  // the DB-only branch below is the lenient one, so it must be gated on the
+  // reviewed instrument, not on a column the row sets about itself.
+  let attestedNodes: ReadonlySet<string> | undefined
+  const isAttested = (nodeId: string): boolean => {
+    if (!attestedNodes) {
+      try {
+        attestedNodes = new Set(loadNodeAttestations(storeDir).keys())
+      } catch {
+        // A malformed attestation file is repair's refusal to make, loudly and
+        // by name. Here it must only mean "no attestation vouches for this
+        // node", or an unreadable side file would brick the open -- the very
+        // failure mode T-126's ALTA-1 fix exists to prevent.
+        attestedNodes = new Set<string>()
+      }
+    }
+    return attestedNodes.has(nodeId)
+  }
+
   for (const [, chain] of chains) {
     const { nodeId, sequence } = chain[0].target
     const read = readJournalEntry(storeDir, nodeId, sequence)
@@ -898,13 +917,27 @@ export function verifyRedactionsFromLedger(storeDir: string, db: DatabaseSync): 
     if (read.status === "ok") {
       provenance = { kind: "journal", entry: read.entry }
     } else {
-      // No journal file. An event_log row with an empty journal_path is an
-      // attested DB-only row (T-119) -- the database IS its storage, so it is
-      // adjudicated against the ledger instead of against journal artifacts.
+      // No journal file. The DB-only branch skips every journal-side check, so
+      // it requires BOTH halves of the T-119 claim: the row must declare it has
+      // no journal file (journal_path ""), and a reviewed attestation must
+      // vouch for the node. Review MEDIA-4: taking journal_path alone let a row
+      // self-declare its way into the lenient branch and buy total silence --
+      // no advisory, no problem -- which inverts the signal ALTA-1 added.
       const indexed = readIndexedEntry(db, nodeId, sequence)
-      provenance = indexed && indexed.journalPath === ""
+      if (indexed && indexed.status === "self-contradictory") {
+        // Review MEDIA-5: the journal provenance gets self-consistency for
+        // free inside readJournalEntry; the indexed row is the one path with a
+        // single artifact, so it has to earn the same check. A row whose bytes
+        // do not hash to its own column is a contradiction, exactly like a
+        // corrupt file -- not an absence.
+        problems.push({ nodeId, sequence, reason: `redaction target row in event_log contradicts itself: ${indexed.reason}` })
+        continue
+      }
+      provenance = indexed && indexed.status === "ok" && indexed.journalPath === "" && isAttested(nodeId)
         ? { kind: "db-only", entry: indexed.entry }
-        : { kind: "absent", reason: "journal file is missing" }
+        : { kind: "absent", reason: indexed && indexed.status === "ok" && indexed.journalPath === ""
+            ? "journal file is missing and the row claims to be DB-only, but no reviewed attestation covers this node"
+            : "journal file is missing" }
     }
     const outcome = verifyTargetChain(provenance, chain)
     problems.push(...outcome.problems)
@@ -919,8 +952,21 @@ export function verifyRedactionsFromLedger(storeDir: string, db: DatabaseSync): 
  * `journal_path` that says whether a journal file is supposed to exist for it
  * at all. Used only when the journal file is absent: for an attested DB-only
  * node ("" path) the row is the authoritative content.
+ *
+ * The row's payload is re-hashed from its own bytes before it is handed back
+ * (review MEDIA-5), under either documented scheme -- the current canonical
+ * one or the compact-legacy one the two known T-119 DB-only rows were written
+ * with, re-derived from the bytes rather than trusted from anywhere. A row
+ * whose `payload_sha256` does not describe its own `payload_json` is reported
+ * as self-contradictory, which the caller treats as a problem, never as a
+ * missing entry: this is the indexed counterpart of the self-consistency check
+ * readJournalEntry performs for a journal file.
  */
-function readIndexedEntry(db: DatabaseSync, nodeId: string, sequence: number): { entry: EventLogEntry; journalPath: string } | undefined {
+type IndexedEntryRead =
+  | { status: "ok"; entry: EventLogEntry; journalPath: string }
+  | { status: "self-contradictory"; reason: string };
+
+function readIndexedEntry(db: DatabaseSync, nodeId: string, sequence: number): IndexedEntryRead | undefined {
   const row = db.prepare(
     `SELECT node_id, sequence, logical_clock, event_type, schema_version, occurred_at, actor,
             causation_json, payload_json, payload_sha256, journal_path
@@ -931,7 +977,13 @@ function readIndexedEntry(db: DatabaseSync, nodeId: string, sequence: number): {
   } | undefined
   if (!row) return undefined
   try {
+    verifyRowPayloadHash({ payload_json: row.payload_json, payload_sha256: row.payload_sha256 })
+  } catch (error) {
+    return { status: "self-contradictory", reason: (error as Error).message }
+  }
+  try {
     return {
+      status: "ok",
       journalPath: row.journal_path,
       entry: {
         nodeId: row.node_id,
