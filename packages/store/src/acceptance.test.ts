@@ -4,9 +4,9 @@ import * as crypto from "crypto"
 import * as fs from "fs"
 import * as path from "path"
 import { importCommit } from "./cutover"
-import { approveAcceptanceCriterion, commitAcceptanceImport, planAcceptanceImport, reviseAcceptance, unapproveAcceptanceCriterion } from "./acceptance"
+import { approveAcceptanceCriteria, approveAcceptanceCriterion, commitAcceptanceImport, planAcceptanceImport, reviseAcceptance, unapproveAcceptanceCriterion } from "./acceptance"
 import { getAcceptance } from "./projections"
-import { moveTask } from "./tasks"
+import { moveTask, updateTask } from "./tasks"
 import { StoreHandle } from "./store-handle"
 import { cleanupDir, setupGoldenRepo } from "./__test-helpers__"
 
@@ -173,3 +173,262 @@ test("raw acceptance.revised cannot carry approval metadata into a pending new r
 function awaitlessHash(bytes: Buffer): string {
   return crypto.createHash("sha256").update(bytes).digest("hex")
 }
+
+// ---------------------------------------------------------------------------
+// T-129 criterion 1: approveAcceptanceCriteria -- batch approve.
+// ---------------------------------------------------------------------------
+
+function materializeWithThreeCriteria() {
+  const fixture = materialize()
+  const revised = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["a", "b", "c"], actor: "author", expectRevision: 0 })
+  assert.ok(revised.ok, JSON.stringify(revised))
+  if (!revised.ok) throw new Error("setup failed")
+  return { ...fixture, criteria: revised.criteria }
+}
+
+test("T-129 approveAcceptanceCriteria: --index 0,2 approves both under one evidence set; alreadyApproved stays empty for an explicit selection", () => {
+  const fixture = materializeWithThreeCriteria()
+  try {
+    const result = approveAcceptanceCriteria(fixture.store, { taskId: "T-101", indices: [0, 2], evidence: { uri: "proof://batch" }, actor: "reviewer", expectRevision: 1 })
+    assert.ok(result.ok, JSON.stringify(result))
+    if (!result.ok) return
+    assert.equal(result.approved.length, 2)
+    assert.deepEqual(result.alreadyApproved, [])
+
+    const acceptance = getAcceptance(fixture.store.db, "T-101")!
+    assert.equal(acceptance.criteria[0].state, "approved")
+    assert.deepEqual(acceptance.criteria[0].evidence, { uri: "proof://batch" })
+    assert.equal(acceptance.criteria[1].state, "pending")
+    assert.equal(acceptance.criteria[2].state, "approved")
+    assert.deepEqual(acceptance.criteria[2].evidence, { uri: "proof://batch" }, "the SAME evidence set lands on every criterion the batch approves")
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+test("T-129 approveAcceptanceCriteria: --all approves every pending criterion and skips (reports) already-approved ones; explicit selection of an approved one refuses", () => {
+  const fixture = materializeWithThreeCriteria()
+  try {
+    const first = approveAcceptanceCriteria(fixture.store, { taskId: "T-101", indices: [0], actor: "reviewer", expectRevision: 1 })
+    assert.ok(first.ok)
+
+    const all = approveAcceptanceCriteria(fixture.store, { taskId: "T-101", all: true, actor: "reviewer", expectRevision: 1 })
+    assert.ok(all.ok, JSON.stringify(all))
+    if (!all.ok) return
+    assert.equal(all.approved.length, 2, "the two still-pending criteria")
+    assert.deepEqual(all.alreadyApproved, [fixture.criteria[0].criterionId])
+    assert.ok(getAcceptance(fixture.store.db, "T-101")!.criteria.every(c => c.state === "approved"))
+
+    // Explicit selection of an already-approved criterion refuses (unlike --all).
+    const explicit = approveAcceptanceCriteria(fixture.store, { taskId: "T-101", indices: [0], actor: "reviewer", expectRevision: 1 })
+    assert.equal(explicit.ok, false)
+    if (!explicit.ok) assert.equal(explicit.reason, "already-approved")
+
+    // --all when everything is already approved refuses nothing-to-approve.
+    const nothing = approveAcceptanceCriteria(fixture.store, { taskId: "T-101", all: true, actor: "reviewer", expectRevision: 1 })
+    assert.equal(nothing.ok, false)
+    if (!nothing.ok) assert.equal(nothing.reason, "nothing-to-approve")
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+test("MUTATION GUARD: approveAcceptanceCriteria rolls back the WHOLE batch when one selector is out of range -- no partial approval", () => {
+  const fixture = materializeWithThreeCriteria()
+  try {
+    const result = approveAcceptanceCriteria(fixture.store, { taskId: "T-101", indices: [0, 99], actor: "reviewer", expectRevision: 1 })
+    assert.equal(result.ok, false)
+    if (!result.ok) assert.equal(result.reason, "unknown-criterion")
+    const acceptance = getAcceptance(fixture.store.db, "T-101")!
+    assert.ok(acceptance.criteria.every(c => c.state === "pending"), "index 0 must NOT have been approved despite being valid -- the whole batch rolls back");
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+test("approveAcceptanceCriteria refuses invalid selections: --all with an explicit selection, duplicate index, duplicate criterionId, index+id selecting the same criterion twice, and a stale revision -- none approve anything", () => {
+  const fixture = materializeWithThreeCriteria()
+  try {
+    const bothAllAndIndex = approveAcceptanceCriteria(fixture.store, { taskId: "T-101", all: true, indices: [0], actor: "reviewer", expectRevision: 1 })
+    assert.equal(bothAllAndIndex.ok, false)
+    if (!bothAllAndIndex.ok) assert.equal(bothAllAndIndex.reason, "invalid-selection")
+
+    const dupeIndex = approveAcceptanceCriteria(fixture.store, { taskId: "T-101", indices: [0, 0], actor: "reviewer", expectRevision: 1 })
+    assert.equal(dupeIndex.ok, false)
+    if (!dupeIndex.ok) assert.equal(dupeIndex.reason, "invalid-selection")
+
+    const criterionId = fixture.criteria[0].criterionId
+    const dupeId = approveAcceptanceCriteria(fixture.store, { taskId: "T-101", criterionIds: [criterionId, criterionId], actor: "reviewer", expectRevision: 1 })
+    assert.equal(dupeId.ok, false)
+    if (!dupeId.ok) assert.equal(dupeId.reason, "invalid-selection")
+
+    const sameByBoth = approveAcceptanceCriteria(fixture.store, { taskId: "T-101", indices: [0], criterionIds: [criterionId], actor: "reviewer", expectRevision: 1 })
+    assert.equal(sameByBoth.ok, false)
+    if (!sameByBoth.ok) assert.equal(sameByBoth.reason, "invalid-selection")
+
+    const staleRevision = approveAcceptanceCriteria(fixture.store, { taskId: "T-101", indices: [0], actor: "reviewer", expectRevision: 999 })
+    assert.equal(staleRevision.ok, false)
+    if (!staleRevision.ok) assert.equal(staleRevision.reason, "revision-conflict")
+
+    assert.ok(getAcceptance(fixture.store.db, "T-101")!.criteria.every(c => c.state === "pending"), "none of the refused calls approved anything")
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+// ---------------------------------------------------------------------------
+// T-129 criterion 2: reviseAcceptance --expect-title (titleMismatch).
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD: reviseAcceptance with the wrong --expect-title refuses title-mismatch, naming both titles, and leaves acceptance untouched", () => {
+  const fixture = materialize()
+  try {
+    const before = getAcceptance(fixture.store.db, "T-101")
+    const refused = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["x"], actor: "author", expectRevision: 0, expectTitle: "Completely wrong title" })
+    assert.equal(refused.ok, false)
+    if (!refused.ok) {
+      assert.equal(refused.reason, "title-mismatch")
+      assert.match(refused.message, /Completely wrong title/)
+    }
+    assert.deepEqual(getAcceptance(fixture.store.db, "T-101"), before, "a title mismatch must change nothing: no revision, no criteria")
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+test("reviseAcceptance --expect-title accepts the human form (no [T-xxx] prefix), the full stored form, and case/whitespace variants; proceeds normally without the flag", () => {
+  const fixture = materialize()
+  try {
+    const storedTitle = require("./projections").getTask(fixture.store.db, "T-101")!.title as string
+    assert.match(storedTitle, /^\[T-101\]/, "sanity: the stored title carries the bracketed id prefix")
+    const humanTitle = storedTitle.replace(/^\s*\[[^\]]+\]\s*/, "")
+
+    for (const [label, title] of [
+      ["human form", humanTitle],
+      ["full stored form", storedTitle],
+      ["different case", humanTitle.toUpperCase()],
+      ["collapsed whitespace", humanTitle.replace(/\s+/g, "   ")]
+    ] as const) {
+      const result = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: [`texts for ${label}`], actor: "author", expectRevision: (getAcceptance(fixture.store.db, "T-101")?.revision ?? 0), expectTitle: title })
+      assert.ok(result.ok, `${label}: ${JSON.stringify(result)}`)
+    }
+
+    // Without --expect-title, old behavior is unaffected.
+    const noFlag = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["no flag"], actor: "author", expectRevision: getAcceptance(fixture.store.db, "T-101")!.revision })
+    assert.ok(noFlag.ok)
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+// ---------------------------------------------------------------------------
+// T-129 criterion 3: acceptance import --task (scoped import).
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD: planAcceptanceImport without --task has taskFilter null and every task; with --task T-101 it scopes to one entry and names the filter; an unknown id throws", () => {
+  const fixture = materialize()
+  try {
+    const unscoped = planAcceptanceImport(fixture.store.db, fixture.repoDir)
+    assert.equal(unscoped.taskFilter, null)
+    assert.ok(unscoped.entries.length >= 3, JSON.stringify(unscoped.entries))
+
+    const scoped = planAcceptanceImport(fixture.store.db, fixture.repoDir, { taskIds: ["T-101"] })
+    assert.deepEqual(scoped.taskFilter, ["T-101"])
+    assert.deepEqual(scoped.entries.map(e => e.taskId), ["T-101"])
+
+    assert.throws(
+      () => planAcceptanceImport(fixture.store.db, fixture.repoDir, { taskIds: ["T-101", "T-999"] }),
+      /T-999/
+    )
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+test("commitAcceptanceImport --task honors the same scope: only the filtered task gets an acceptance revision", () => {
+  const fixture = materialize()
+  try {
+    const result = commitAcceptanceImport(fixture.store, fixture.repoDir, { actor: "import-bot", taskIds: ["T-101"] })
+    assert.ok(result.ok, JSON.stringify(result))
+    assert.ok(getAcceptance(fixture.store.db, "T-101"), "T-101 (in scope, has a ## Acceptance section) must have been imported")
+    assert.equal(getAcceptance(fixture.store.db, "T-102"), null, "T-102 is out of scope and must still have no acceptance revision")
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+// ---------------------------------------------------------------------------
+// T-129 attempt 2, review F2: --expect-title compares Unicode-normalized
+// (NFC), so an NFD argument now matches an NFC-stored title. A genuinely
+// different title still refuses regardless of normalization form.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD: reviseAcceptance --expect-title matches regardless of NFC/NFD normalization form (stored NFC vs argument NFD, and the reverse); a genuinely different title still refuses", () => {
+  const fixture = materialize()
+  try {
+    // "Ação crítica" built two ways: composed (NFC) and decomposed (NFD).
+    // Never paste raw bytes -- derive both forms from the same source string
+    // via String.prototype.normalize so the test is explicit about what it
+    // is actually comparing.
+    const composed = "Ação crítica".normalize("NFC")
+    const decomposed = "Ação crítica".normalize("NFD")
+    assert.notEqual(composed, decomposed, "sanity: NFC and NFD must be different code unit sequences for this to test anything")
+    assert.equal(composed.normalize("NFC"), decomposed.normalize("NFC"), "sanity: both normalize to the same NFC form")
+
+    // Rename T-101 to the NFC form (updateTask stores title verbatim).
+    const renamed = updateTask(fixture.store, { taskId: "T-101", patch: { title: composed }, actor: "test" })
+    assert.ok(renamed.ok, JSON.stringify(renamed))
+
+    // Stored NFC, argument NFD: must match (this used to refuse before F2).
+    const nfdArg = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["x"], actor: "test", expectRevision: 0, expectTitle: decomposed })
+    assert.ok(nfdArg.ok, JSON.stringify(nfdArg))
+
+    // Rename to the NFD form now; stored NFD, argument NFC must also match.
+    const renamedAgain = updateTask(fixture.store, { taskId: "T-101", patch: { title: decomposed }, actor: "test" })
+    assert.ok(renamedAgain.ok)
+    const nfcArg = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["y"], actor: "test", expectRevision: 1, expectTitle: composed })
+    assert.ok(nfcArg.ok, JSON.stringify(nfcArg))
+
+    // A genuinely different title (not a normalization variant) still refuses.
+    const wrong = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["z"], actor: "test", expectRevision: 2, expectTitle: "Completely different title" })
+    assert.equal(wrong.ok, false)
+    if (!wrong.ok) assert.equal(wrong.reason, "title-mismatch")
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+// ---------------------------------------------------------------------------
+// T-129 attempt 2, review F2 (continued): a title that differs ONLY by
+// invisible characters still refuses (it IS a different title), but the
+// message now explains why instead of repeating two identical-looking
+// strings. A genuinely different title still refuses with NO such detail.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD: --expect-title with a zero-width space refuses (it is a different title) AND the message reveals the invisible code point", () => {
+  const fixture = materialize()
+  try {
+    const renamed = updateTask(fixture.store, { taskId: "T-101", patch: { title: "Ação crítica" }, actor: "test" })
+    assert.ok(renamed.ok)
+
+    const withZwsp = "Ação​ crítica"
+    const refused = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["x"], actor: "test", expectRevision: 0, expectTitle: withZwsp })
+    assert.equal(refused.ok, false, "a title differing by an invisible character IS a different title and must still refuse")
+    if (!refused.ok) {
+      assert.equal(refused.reason, "title-mismatch")
+      assert.match(refused.message, /render identically but differ in code points/)
+      assert.match(refused.message, /\\u\{200b\}/, "the message must reveal the invisible code point, not bury it")
+      assert.match(refused.message, /stored "Ação crítica"/, "a visible accented letter must NOT be escaped -- only what cannot be seen")
+    }
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+test("MUTATION GUARD: three consecutive zero-width spaces are ALL revealed (not true/false/true) -- catches a global regex's lastIndex bug in a per-character .test()", () => {
+  const fixture = materialize()
+  try {
+    const renamed = updateTask(fixture.store, { taskId: "T-101", patch: { title: "Triple" }, actor: "test" })
+    assert.ok(renamed.ok)
+
+    const triple = "Triple​​​"
+    const refused = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["x"], actor: "test", expectRevision: 0, expectTitle: triple })
+    assert.equal(refused.ok, false)
+    if (!refused.ok) {
+      const occurrences = (refused.message.match(/\\u\{200b\}/g) ?? []).length
+      assert.equal(occurrences, 3, `expected all three zero-width spaces revealed, got ${occurrences} in: ${refused.message}`)
+    }
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+test("a genuinely different --expect-title still refuses WITHOUT the code-point explanation (that detail is only for titles that render identically)", () => {
+  const fixture = materialize()
+  try {
+    const refused = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["x"], actor: "test", expectRevision: 0, expectTitle: "A completely different sentence" })
+    assert.equal(refused.ok, false)
+    if (!refused.ok) {
+      assert.equal(refused.reason, "title-mismatch")
+      assert.ok(!/render identically but differ in code points/.test(refused.message), "a plainly different title must not get the identical-rendering explanation")
+    }
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})

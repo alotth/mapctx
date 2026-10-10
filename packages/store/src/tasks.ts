@@ -1,8 +1,9 @@
 import * as crypto from "crypto"
 import { parseEstimatedEffortMs, predictedStartSchema, STATUS_TO_PLANNING, transitionPlanning, workloadSchema } from "@mapctx/protocol"
+import { buildFirstAcceptanceRevision } from "./acceptance"
 import { getAcceptance, getActiveClaimForTask, getTask, getTaskDetail } from "./projections"
 import type { StoreHandle } from "./store-handle"
-import type { DependencyRecord, TaskDetailRecord, TaskRecord } from "./types"
+import type { AcceptanceCondition, DependencyRecord, TaskDetailRecord, TaskRecord } from "./types"
 
 /**
  * Planning states the canonical Markdown export can represent. `blocked` has
@@ -603,12 +604,19 @@ export type CreateTaskOptions = {
   dueDate?: string | null;
   /** Initial detail-file fields. `description` prose is Git-authored: it is written to the new detail file, never stored. */
   detail?: Partial<TaskDetailRecord> & { description?: string };
+  /**
+   * T-129 (criterion 0): acceptance criteria recorded as revision 1 in the
+   * SAME transaction as the task. Two commands meant a task could exist with
+   * no criteria if the second one failed; one transaction means the task and
+   * its criteria either both land or neither does.
+   */
+  acceptance?: { condition: AcceptanceCondition; texts: string[] };
   actor: string;
   now?: () => Date;
 };
 
 export type CreateTaskResult =
-  | { ok: true; taskId: string; detailPath: string; warnings: string[] }
+  | { ok: true; taskId: string; detailPath: string; warnings: string[]; acceptanceRevision: number | null }
   | {
       ok: false;
       reason:
@@ -622,7 +630,8 @@ export type CreateTaskResult =
         | "invalid-estimated-effort"
         | "invalid-wait-reason"
         | "state-not-exportable"
-        | "comma-in-list-element";
+        | "comma-in-list-element"
+        | "invalid-acceptance";
       message?: string;
       taskId?: string;
     };
@@ -665,6 +674,19 @@ export function createTask(store: StoreHandle, options: CreateTaskOptions): Crea
     ?? commaInListElement(SNAPSHOT_LIST_DETAIL_FIELDS, requested as unknown as Record<string, unknown>)
     ?? commaInListElement(["dependsOn", "blocking"], { dependsOn: options.dependsOn, blocking: options.blocking });
   if (createCommaProblem) return { ok: false, reason: "comma-in-list-element", message: createCommaProblem };
+  if (options.acceptance) {
+    const { condition, texts } = options.acceptance;
+    if (condition === "criteria" && texts.length === 0) {
+      return { ok: false, reason: "invalid-acceptance", message: 'acceptance condition "criteria" requires at least one criterion text.' };
+    }
+    if (condition === "empty" && texts.length > 0) {
+      return { ok: false, reason: "invalid-acceptance", message: 'acceptance condition "empty" forbids criterion texts.' };
+    }
+    const blank = texts.find(text => text.trim() === "");
+    if (blank !== undefined) {
+      return { ok: false, reason: "invalid-acceptance", message: "acceptance criterion texts cannot be blank." };
+    }
+  }
   const normalizedWorkload = options.workload?.trim() ?? "";
   if (normalizedWorkload && !workloadSchema.safeParse(normalizedWorkload).success) {
     return {
@@ -779,12 +801,27 @@ export function createTask(store: StoreHandle, options: CreateTaskOptions): Crea
       }
     });
 
+    // Same transaction as task.upserted: a refusal here rolls the task back
+    // too, so `create` never leaves a task whose criteria silently went
+    // missing (T-129 criterion 0).
+    let acceptanceRevision: number | null = null;
+    if (options.acceptance) {
+      const revision = buildFirstAcceptanceRevision(taskId, options.acceptance.condition, options.acceptance.texts);
+      append({
+        eventType: "acceptance.revised",
+        actor: options.actor,
+        occurredAt: now().toISOString(),
+        payload: revision
+      });
+      acceptanceRevision = revision.revision;
+    }
+
     const warnings: string[] = [];
     if (type !== "epic") {
       if (!record.workload) warnings.push(`Missing workload. Set it before claim: mapctx task update ${taskId} --set workload=Normal`);
       if (!detail.estimatedEffort.trim()) warnings.push(`Missing estimatedEffort. Set it before claim: mapctx task update ${taskId} --set detail.estimatedEffort=1d`);
     }
-    return { ok: true, taskId, detailPath, warnings };
+    return { ok: true, taskId, detailPath, warnings, acceptanceRevision };
   });
 }
 

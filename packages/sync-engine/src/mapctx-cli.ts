@@ -12,7 +12,7 @@ import {
   writeWorkspaceRegistry,
   type WorkspaceRegistry
 } from '@mapctx/core/workspace';
-import { generateTaskDetailFile, parseTaskDetailFile, parseTasksFile, readTaskDetailFile } from '@mapctx/core';
+import { generateTaskDetailFile, parseBareAcceptanceChecklist, parseTaskDetailFile, parseTasksFile, readTaskDetailFile } from '@mapctx/core';
 import {
   buildExport,
   claimTask,
@@ -75,7 +75,7 @@ import {
   commitAcceptanceImport,
   parseAcceptanceRead,
   reviseAcceptance,
-  approveAcceptanceCriterion,
+  approveAcceptanceCriteria,
   unapproveAcceptanceCriterion,
   getAcceptance,
   checkTaskAcceptance,
@@ -166,7 +166,12 @@ type MapctxOptions = SyncOptions & {
   fromFile?: string;
   expectRevision?: number;
   criterionId?: string;
-  index?: number;
+  /** T-129: a comma list of zero-based positions, not a single index. */
+  indices?: number[];
+  /** T-129 acceptance palliative */
+  acceptanceFile?: string;
+  expectTitle?: string;
+  all?: boolean;
   /** T-126 redact */
   nodeId?: string;
   sequence?: number;
@@ -204,6 +209,7 @@ const ENUM_HELP: Array<{ flag: string; values: string; schema?: true }> = [
     flag: 'list values (--tags, --domains, --depends-on, --blocking, --task, --set of a list field)',
     values: 'bare `a,b,c` or a JSON array `["a","b"]`. `[a,b]` is refused; a value that itself contains brackets needs the JSON spelling; no element may contain a comma or a split `{...}` group (the snapshots cannot represent it)'
   },
+  { flag: '--index (acceptance approve)', values: 'zero-based position, or a list: 0,2,5 -- `--all` covers every pending criterion' },
   { flag: '--set externalLinks', values: 'list of URIs: https://host/... (http too), or provider:entity:id. javascript/data/file/vbscript/blob are refused' }
 ];
 
@@ -287,6 +293,7 @@ export const VALUE_FLAGS: ReadonlySet<string> = new Set([
   '--config', '--context-hash', '--criterion-id', '--currency', '--depends-on', '--description',
   '--description-file', '--dispatch-id', '--domains', '--due', '--effort',
   '--emit-approval-template', '--end', '--evidence', '--executor', '--expect-revision', '--field',
+  '--acceptance-file', '--expect-title',
   '--file', '--from-file', '--holder', '--id', '--idle-threshold-ms', '--impact', '--index',
   '--limit', '--minutes', '--node', '--note', '--opencode-db', '--other-session-activity',
   '--parent', '--parked-threshold-ms', '--plan-name', '--priority', '--query', '--reason',
@@ -297,7 +304,7 @@ export const VALUE_FLAGS: ReadonlySet<string> = new Set([
 ]);
 
 export const BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
-  '--accept', '--commit', '--discard', '--dry-run', '--help', '--include-inferred', '--json',
+  '--accept', '--all', '--commit', '--discard', '--dry-run', '--help', '--include-inferred', '--json',
   '--no-snapshot', '--project', '--read', '--remove', '--snapshots', '-h'
 ]);
 
@@ -326,7 +333,10 @@ export const KNOWN_FLAGS: ReadonlySet<string> = new Set([...VALUE_FLAGS, ...BOOL
  * ignored means the command rewrites every mirror in a shared checkout, which
  * is the exact harm the flag exists to prevent (review F1).
  */
-const VALUE_REJECTING_FLAGS: ReadonlySet<string> = new Set(['--no-snapshot']);
+// Review F5: `--all=true` fell through to positional and vanished, leaving a
+// refusal that said "requires --all" to a caller who had written --all. Same
+// shape T-128 created this set for after `--no-snapshot=true` did real damage.
+const VALUE_REJECTING_FLAGS: ReadonlySet<string> = new Set(['--no-snapshot', '--all']);
 
 function printHelp(): void {
   console.log('mapctx CLI');
@@ -375,9 +385,24 @@ function printHelp(): void {
   console.log('    that no longer match anything are reported as stale.');
   console.log('    --write-baseline <file> records the issues of the current run (honouring --task)');
   console.log('    and exits 0 without gating. --snapshots findings are never baselined.');
-  console.log('  mapctx acceptance import [--commit] [--json]');
+  console.log('  mapctx acceptance import [--commit] [--task T-1,T-2] [--json]');
   console.log('    Dry-run by default; --commit imports observed checkboxes atomically, pins source bytes, skips existing revisions.');
-  console.log('  mapctx task acceptance <show|revise|approve|unapprove> <task-id> [--from-file path] [--expect-revision n] [--criterion-id id|--index n] [--evidence key=value ...]');
+  console.log('    --task narrows the import to those tasks; an id that does not exist is refused');
+  console.log('    rather than quietly importing a smaller set.');
+  console.log('  mapctx task acceptance <show|revise|approve|unapprove> <task-id> [--from-file path]');
+  console.log('    [--expect-revision n] [--expect-title "<title>"] [--criterion-id id | --index n[,n...] | --all]');
+  console.log('    [--evidence key=value ...]');
+  console.log('    revise: --from-file takes a `## Acceptance` section, or -- when the file has no');
+  console.log('    heading at all -- a bare `- [ ]` checklist, which it reports on stderr. Every');
+  console.log('    revision resets EVERY criterion to pending: re-approval is always explicit, and a');
+  console.log('    revision never inherits an approval or its evidence. --expect-title refuses when');
+  console.log('    the task is titled differently, which catches revising the wrong id (a revision');
+  console.log('    check cannot: a fresh task satisfies --expect-revision 0 too).');
+  console.log('    approve: --index takes a list and --all takes every still-pending criterion, both');
+  console.log('    in ONE transaction under ONE --expect-revision with ONE --evidence set. A mid-batch');
+  console.log('    refusal approves nothing. --all skips criteria that are already approved and says');
+  console.log('    so; naming an index or id that is already approved is refused instead.');
+  console.log('    A missing --expect-revision reports the revision the store currently holds.');
   console.log('  mapctx task finish <task-id> [--no-snapshot | --snapshot none|full] [--json]');
   console.log('    Moves through the canonical done gate (every current store Acceptance criterion');
   console.log('    approved), then publishes the final checkpoint; retry after a checkpoint failure');
@@ -424,7 +449,12 @@ function printHelp(): void {
   console.log('    [--depends-on a,b] [--blocking x,y]');
   console.log('    [--start date] [--due date] [--role r] [--impact i] [--effort e] [--summary s]');
   console.log('    `--effort` is agent active time: 1d=8 active hours, 1w=40 active hours. Executable tasks without workload or effort are warned and cannot be claimed.');
-  console.log('    (--description text | --description-file path) [--json] [--actor name]');
+  console.log('    (--description text | --description-file path) [--acceptance-file path] [--json] [--actor name]');
+  console.log('    Acceptance in the same command: --acceptance-file, or a `## Acceptance` section in');
+  console.log('    the description, is recorded as revision 1 in the SAME transaction as the task, so');
+  console.log('    a failure creates neither. --acceptance-file wins over the description section and');
+  console.log('    says so; a checklist with no `## Acceptance` heading in the description is reported');
+  console.log('    and NOT recorded, because a prose bullet list is not an acceptance declaration.');
   console.log('    Auto-assigns the next free id for the type prefix (E for epic, T otherwise). The');
   console.log('    description prose goes into the new detail file and stays Git-authored from then');
   console.log('    on: edit tasks/<ID>.md in Git and commit it, never through `task update`.');
@@ -638,10 +668,18 @@ function parseArgs(argv: string[]): {
     else if (a === '--from-file') options.fromFile = valueFor(a);
     else if (a === '--criterion-id') options.criterionId = valueFor(a);
     else if (a === '--index') {
-      const value = Number(valueFor(a));
-      if (!Number.isInteger(value) || value < 0) throw new Error('--index must be a non-negative integer');
-      options.index = value;
+      // T-129: a comma list, so one approve can cover several criteria. A
+      // single index is still the common case and parses as a one-item list.
+      options.indices = parseListInput('--index', valueFor(a)).map(part => {
+        const value = Number(part);
+        if (!Number.isInteger(value) || value < 0) throw new Error(`--index must be non-negative integers, got: ${part}`);
+        return value;
+      });
+      if (options.indices.length === 0) throw new Error('--index needs at least one zero-based position');
     }
+    else if (a === '--acceptance-file') options.acceptanceFile = valueFor(a);
+    else if (a === '--expect-title') options.expectTitle = valueFor(a);
+    else if (a === '--all') options.all = true;
     else if (a === '--expect-revision') {
       const value = Number(valueFor(a));
       if (!Number.isInteger(value) || value < 0) throw new Error('--expect-revision must be a non-negative integer');
@@ -766,7 +804,10 @@ function parseArgs(argv: string[]): {
       const base = a.split('=')[0];
       if (!KNOWN_FLAGS.has(base)) throw new Error(`Unknown flag: ${base}`);
       if (a.includes('=') && VALUE_REJECTING_FLAGS.has(base)) {
-        throw new Error(`${base} takes no value. Use ${base} on its own, or --snapshot=none.`);
+        // The alternative spelling is flag-specific: `--snapshot=none` is the
+        // value form of --no-snapshot, and there is no value form of --all.
+        const alternative = base === '--no-snapshot' ? ' Use it on its own, or --snapshot=none.' : ' Use it on its own.';
+        throw new Error(`${base} takes no value.${alternative}`);
       }
     }
   }
@@ -1999,6 +2040,50 @@ export function taskCreateCommand(options: MapctxOptions): void {
   const domains = splitList(options.domains, '--domains') ?? [];
   const dependsOn = splitList(options.dependsOn, '--depends-on');
   const blocking = splitList(options.blocking, '--blocking');
+
+  // ---- T-129 criterion 0: acceptance in the SAME command ----
+  // Resolved here, before the writable open, so a bad source file refuses
+  // without having created anything.
+  const description = options.description
+    ?? (options.descriptionFile ? fs.readFileSync(path.resolve(cwd, options.descriptionFile), 'utf8') : undefined);
+  let acceptance: { condition: 'criteria' | 'empty'; texts: string[] } | undefined;
+  let acceptanceNote: string | undefined;
+  if (options.acceptanceFile) {
+    // Review F6: every other refusal on this command names the flag; a raw
+    // ENOENT did not.
+    const acceptancePath = path.resolve(cwd, options.acceptanceFile);
+    let source: string;
+    try {
+      source = fs.readFileSync(acceptancePath, 'utf8');
+    } catch (error) {
+      throw new Error(`--acceptance-file ${options.acceptanceFile} could not be read at ${acceptancePath}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const read = readAcceptanceSource(source);
+    if (read === null) {
+      throw new Error(`--acceptance-file ${options.acceptanceFile} has neither a ## Acceptance section nor any \`- [ ]\` checklist item.`);
+    }
+    acceptance = { condition: read.condition, texts: read.texts };
+    // The description's own section is NOT silently dropped: --acceptance-file
+    // wins, and the caller is told which one was used (criterion 0's "seção
+    // ignorada gera aviso").
+    if (description !== undefined && parseAcceptanceRead(description).condition !== 'absent') {
+      acceptanceNote = `Note: both --acceptance-file and a ## Acceptance section in the description were given; the criteria came from --acceptance-file ${options.acceptanceFile} and the description's section was NOT recorded.`;
+    } else if (read.headerless) {
+      acceptanceNote = `Note: --acceptance-file ${options.acceptanceFile} has no ## Acceptance heading; read ${read.texts.length} checklist item(s) from the whole file.`;
+    }
+  } else if (description !== undefined) {
+    const read = readAcceptanceSource(description);
+    // Only a REAL section is promoted from the description. A bare checklist
+    // in prose is not an acceptance declaration -- it would turn any
+    // description bullet list into criteria -- so it is warned about, not used.
+    const sectioned = parseAcceptanceRead(description);
+    if (sectioned.condition !== 'absent' && read !== null) {
+      acceptance = { condition: read.condition, texts: read.texts };
+    } else if (read !== null && read.headerless) {
+      acceptanceNote = `Note: the description holds ${read.texts.length} checklist item(s) but no ## Acceptance heading, so NO criteria were recorded. Add the heading, or pass --acceptance-file.`;
+    }
+  }
+
   const { handle, tasksRoot } = requireStoreAuthority(cwd);
   try {
     const result = createTask(handle, {
@@ -2022,11 +2107,16 @@ export function taskCreateCommand(options: MapctxOptions): void {
         waitReason: options.waitReason,
         summary: options.summary
       },
+      ...(acceptance ? { acceptance } : {}),
       actor: defaultActor(options.actor)
     });
     if (!result.ok) refuse(result, `Create refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
+    if (acceptanceNote) console.error(acceptanceNote);
+    if (acceptance) {
+      const emptyNote = emptyAcceptanceWarning(result.taskId, acceptance.condition, acceptance.texts.length);
+      if (emptyNote) console.error(emptyNote);
+    }
 
-    const description = options.description ?? (options.descriptionFile ? fs.readFileSync(path.resolve(cwd, options.descriptionFile), 'utf8') : undefined);
     const detailPath = path.resolve(cwd, result.detailPath);
     const generated = buildExport(handle.db, { tasksRoot }).taskDetailFiles.find(file => path.resolve(file.path) === detailPath);
     if (!generated) throw new Error(`Created task detail is missing from canonical export: ${result.detailPath}`);
@@ -2097,6 +2187,42 @@ export function taskUpdateCommand(taskId: string, options: MapctxOptions): void 
 }
 
 /**
+ * Review F3: an acceptance revision with NO criteria is exactly the shape
+ * `checkTaskAcceptance` refuses `done` for ("revision N in the store is
+ * empty"), so recording one silently builds a task that cannot be finished.
+ * The create path already warned about the headerless case and the two-source
+ * case; this is the one that produced a dead end and said nothing.
+ */
+function emptyAcceptanceWarning(taskId: string, condition: 'criteria' | 'empty', count: number): string | undefined {
+  if (condition !== 'empty' && count > 0) return undefined;
+  return `Note: recorded an acceptance revision for ${taskId} with NO criteria. \`task finish\` and \`task move --status done\` will refuse until it is revised with criteria.`;
+}
+
+/**
+ * T-129 (criteria 0 and 4): reads acceptance criteria from caller-supplied
+ * content, preferring a real `## Acceptance` section and falling back to a
+ * bare checklist when there is no heading at all.
+ *
+ * The fallback is what makes `--from-file` usable on a scratch file holding
+ * just the list (friction A1.6). It is a FALLBACK, not an alternative: when a
+ * real section exists, only that section's items are read, so a file with
+ * both a section and unrelated checkboxes elsewhere behaves exactly as before.
+ *
+ * Returns null when neither reading finds anything, so the caller can refuse
+ * with its own message. `headerless` lets the caller say which reading it got.
+ */
+function readAcceptanceSource(content: string): { condition: 'criteria' | 'empty'; texts: string[]; headerless: boolean } | null {
+  const sectioned = parseAcceptanceRead(content);
+  if (sectioned.condition === 'criteria') {
+    return { condition: 'criteria', texts: sectioned.items.map(item => item.text), headerless: false };
+  }
+  if (sectioned.condition === 'empty') return { condition: 'empty', texts: [], headerless: false };
+  const bare = parseBareAcceptanceChecklist(content);
+  if (bare.length === 0) return null;
+  return { condition: 'criteria', texts: bare.map(item => item.text), headerless: true };
+}
+
+/**
  * T-127 (R4 item 6): a missing `--expect-revision` used to refuse without
  * saying what to pass, so the agent had to go run `acceptance show` and come
  * back. The number is one read-only lookup away, so the refusal carries it --
@@ -2137,15 +2263,33 @@ export function taskAcceptanceCommand(action: string | undefined, taskId: string
       throw new Error(`acceptance revise requires --expect-revision <current-revision> (use 0 when no revision exists).${currentRevisionHint(cwd, taskId)}`);
     }
     const source = fs.readFileSync(path.resolve(cwd, options.fromFile), 'utf8');
-    const parsed = parseAcceptanceRead(source);
-    if (parsed.condition === 'absent') throw new Error('Source has no ## Acceptance section; use a file with explicit checklist criteria.');
+    const read = readAcceptanceSource(source);
+    if (read === null) {
+      throw new Error('Source has neither a ## Acceptance section nor any `- [ ]` checklist item; use a file with explicit checklist criteria.');
+    }
+    if (read.headerless) {
+      // Said once, on stderr, so --json stdout stays a clean document: the
+      // caller should know WHICH reading produced the criteria.
+      console.error(`Note: ${options.fromFile} has no ## Acceptance heading; read ${read.texts.length} checklist item(s) from the whole file.`);
+    }
     expectRevision = options.expectRevision;
-    reviseArgs = { condition: parsed.condition, texts: parsed.condition === 'criteria' ? parsed.items.map(item => item.text) : [] };
+    reviseArgs = { condition: read.condition, texts: read.texts };
   } else if (action === 'approve' || action === 'unapprove') {
     if (options.expectRevision === undefined) {
       throw new Error(`acceptance ${action} requires --expect-revision <current-revision>.${currentRevisionHint(cwd, taskId)}`);
     }
-    if (options.criterionId === undefined && options.index === undefined) throw new Error(`acceptance ${action} requires --criterion-id <id> or --index <zero-based-index>`);
+    if (options.all && action === 'unapprove') {
+      throw new Error('acceptance unapprove does not take --all; unapproving is a per-criterion decision.');
+    }
+    if (!options.all && options.criterionId === undefined && options.indices === undefined) {
+      throw new Error(`acceptance ${action} requires --criterion-id <id>, --index <n[,n...]>${action === 'approve' ? ' or --all' : ''}`);
+    }
+    if (options.all && (options.criterionId !== undefined || options.indices !== undefined)) {
+      throw new Error('acceptance approve takes --all or an explicit --index/--criterion-id, not both.');
+    }
+    if (action === 'unapprove' && options.indices !== undefined && options.indices.length > 1) {
+      throw new Error('acceptance unapprove takes a single --index; unapproving is a per-criterion decision.');
+    }
     // Evidence belongs to approvals only; refusing it on unapprove keeps
     // the CLI from silently dropping caller input (review: CLI evidence gap).
     if (action === 'unapprove' && (options.evidencePairs ?? []).length > 0) {
@@ -2178,25 +2322,54 @@ export function taskAcceptanceCommand(action: string | undefined, taskId: string
         condition: reviseArgs!.condition,
         texts: reviseArgs!.texts,
         actor: defaultActor(options.actor),
-        expectRevision: expectRevision!
+        expectRevision: expectRevision!,
+        ...(options.expectTitle === undefined ? {} : { expectTitle: options.expectTitle })
       });
       if (!result.ok) refuse(result, result.message);
+      const emptyNote = emptyAcceptanceWarning(taskId, reviseArgs!.condition, result.criteria.length);
+      if (emptyNote) console.error(emptyNote);
       print(result, options.json);
       return;
     }
-    if (action === 'approve' || action === 'unapprove') {
-      // Forward evidence ONLY when the caller actually supplied pairs: an
-      // absent flag must keep the store's null/omitted semantics, never
-      // invent an empty evidence map (attempt-6 review).
-      const args = {
+    if (action === 'approve') {
+      // T-129: one transaction, one revision check, one evidence set --
+      // including the single-criterion case, so there is one code path and
+      // not two that can drift. Evidence is forwarded ONLY when the caller
+      // supplied pairs, keeping the store's null/omitted semantics.
+      const result = approveAcceptanceCriteria(handle, {
         taskId,
-        criterionId: options.criterionId,
-        index: options.index,
+        ...(options.indices ? { indices: options.indices } : {}),
+        ...(options.criterionId ? { criterionIds: [options.criterionId] } : {}),
+        ...(options.all ? { all: true } : {}),
         actor: defaultActor(options.actor),
         expectRevision: expectRevision!,
         ...(approveEvidence ? { evidence: approveEvidence } : {})
-      };
-      const result = action === 'approve' ? approveAcceptanceCriterion(handle, args) : unapproveAcceptanceCriterion(handle, args);
+      });
+      if (!result.ok) refuse(result, result.message);
+      // Review F1: routing every approve through the batch path dropped
+      // `criterionId`/`state` from the output of the pre-T-129 invocation
+      // (`--index 0` / `--criterion-id <id>`). No consumer in this repo read
+      // them, but it is a documented public command, and keeping them for a
+      // single EXPLICIT selection makes the change purely additive instead of
+      // breaking. Keyed on the selection, not the result, so `--all` on a
+      // one-criterion task still returns only the batch shape -- `--all` is
+      // new and never had the old one.
+      const singleSelection = !options.all
+        && ((options.indices?.length ?? 0) + (options.criterionId ? 1 : 0)) === 1;
+      const compat = singleSelection && result.approved.length === 1
+        ? { criterionId: result.approved[0], state: 'approved' as const }
+        : {};
+      print({ ...result, ...compat }, options.json);
+      return;
+    }
+    if (action === 'unapprove') {
+      const result = unapproveAcceptanceCriterion(handle, {
+        taskId,
+        criterionId: options.criterionId,
+        index: options.indices?.[0],
+        actor: defaultActor(options.actor),
+        expectRevision: expectRevision!
+      });
       if (!result.ok) refuse(result, result.message);
       print(result, options.json);
       return;
@@ -2532,12 +2705,18 @@ async function main(): Promise<void> {
   }
 
   if (command === 'acceptance' && subcommand === 'import') {
+    // T-129 criterion 3: `--task` narrows the scope. Parsed before the store
+    // opens; an unknown id makes the store throw rather than import a smaller
+    // set in silence.
+    const taskIds = options.taskFilter ? parseListInput('--task', options.taskFilter) : undefined;
+    if (taskIds && taskIds.length === 0) throw new Error('--task needs at least one task id.');
+    const scope = taskIds ? { taskIds } : {};
     const { handle } = openStoreOrFail(process.cwd(), { mode: options.commit ? 'write' : 'read' });
     try {
       if (!options.commit) {
-        print({ mode: 'dry-run', ...planAcceptanceImport(handle.db, resolveMapctxToml(process.cwd())?.dir ?? process.cwd()) }, options.json);
+        print({ mode: 'dry-run', ...planAcceptanceImport(handle.db, resolveMapctxToml(process.cwd())?.dir ?? process.cwd(), scope) }, options.json);
       } else {
-        const result = commitAcceptanceImport(handle, resolveMapctxToml(process.cwd())?.dir ?? process.cwd(), { actor: defaultActor(options.actor) });
+        const result = commitAcceptanceImport(handle, resolveMapctxToml(process.cwd())?.dir ?? process.cwd(), { actor: defaultActor(options.actor), ...scope });
         if (!result.ok) refuse(result, result.message);
         print(result, options.json);
       }

@@ -107,6 +107,24 @@ Migration: read stderr's first line (or split stderr on `"\nError:"`) instead
 of stdout. Check the exit code first, as before. No consumer in this repository
 depended on the old channel.
 
+### Public contract: `task acceptance approve --json` output shape
+
+`approve` now routes every selection through the batch path, so its result
+carries `approved: [criterionId, ...]` and `alreadyApproved: [criterionId, ...]`
+instead of a single `criterionId`/`state` pair:
+
+```
+before:  {"ok":true,"revision":1,"criterionId":"350d45b5-…","state":"approved"}
+after:   {"ok":true,"revision":1,"approved":["350d45b5-…"],"alreadyApproved":[]}
+```
+
+**The pre-existing invocation is unchanged in practice**: for a single explicit
+selection (`--index <n>` or `--criterion-id <id>`) the output still carries
+`criterionId` and `state` alongside the new fields, so the change is purely
+additive there and no existing caller breaks. The batch-only shape applies to
+`--index` with a list and to `--all`, both of which are new in this release and
+never had the old shape. No consumer in this repository read either field.
+
 ### Features
 
 * **feature:** `mapctx --help` prints an "Enumerated values" table for every
@@ -120,6 +138,38 @@ depended on the old channel.
 * **feature:** list-valued `--set` fields and `--tags`/`--domains`/`--depends-on`/
   `--blocking` accept a bare comma list or a JSON array, and refuse a bracketed
   guess instead of storing the brackets as part of the values
+
+* **feature:** acceptance in one step: `task create --acceptance-file <path>`, or a
+  `## Acceptance` section in `--description`/`--description-file`, records the
+  criteria as revision 1 in the SAME transaction as the task, so a failure
+  creates neither. `--acceptance-file` wins over the description's section and
+  says so; a checklist with no `## Acceptance` heading is reported and not
+  recorded
+* **feature:** `task acceptance approve --index 0,2,5` and `--all` approve
+  several criteria in one transaction, under one `--expect-revision`, with one
+  `--evidence` set; a mid-batch refusal approves nothing. `--all` skips
+  already-approved criteria and reports them, while naming one that is already
+  approved is refused
+* **feature:** `task acceptance revise --expect-title "<title>"` refuses when
+  the task is titled differently, catching a revise aimed at the wrong id --
+  which a revision check cannot catch, since a fresh task satisfies
+  `--expect-revision 0` as well
+* **feature:** `acceptance import --task T-1,T-2` narrows the import; an id
+  that does not exist is refused instead of importing a smaller set in silence
+* **feature:** `task acceptance revise --from-file` accepts a bare `- [ ]`
+  checklist when the file has no `## Acceptance` heading, and reports on stderr
+  which reading it used
+* **fix:** `--expect-title` normalizes Unicode to NFC before comparing, so an
+  NFD argument matches an NFC stored title instead of refusing with two strings
+  that render identically; a genuine mismatch that still looks identical now
+  reports the differing code points
+* **fix:** recording an acceptance revision with no criteria (a source holding
+  only the `## Acceptance` heading) warns that `task finish` will refuse until
+  it is revised with criteria, instead of silently building a task that cannot
+  be finished
+* **fix:** `--all=true` is refused rather than silently dropped, and a missing
+  `--acceptance-file` names the flag and the resolved path instead of returning
+  a bare ENOENT
 
 ### Fixes
 

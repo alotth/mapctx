@@ -53,6 +53,109 @@ function sameCriteriaTexts(a: AcceptanceCriterionRecord[], texts: string[]): boo
   return a.length === texts.length && a.every((criterion, index) => criterion.text === texts[index])
 }
 
+/**
+ * T-129: the `acceptance.revised` payload for a first revision, shared with
+ * `createTask` so a task can be created WITH its criteria in one transaction
+ * (criterion 0) without either side re-deriving the criterion shape.
+ */
+export function buildFirstAcceptanceRevision(
+  taskId: string,
+  condition: AcceptanceCondition,
+  texts: string[]
+): { taskId: string; revision: number; condition: AcceptanceCondition; criteria: AcceptanceCriterionRecord[] } {
+  const criteria = criteriaFromTexts(texts, "authored").map(criterion => ({ ...criterion, revision: 1 }))
+  return { taskId, revision: 1, condition, criteria }
+}
+
+/**
+ * T-129 (criterion 2): the reported incident was criteria landing on the
+ * WRONG task -- `create` returned T-178, `revise` ran against T-177, and
+ * `--expect-revision 0` was satisfied there too, so nothing caught it. An id
+ * typo is invisible to a revision check; a title is the thing the caller
+ * actually knows.
+ *
+ * Matched against both the stored title and the same title with its `[T-xxx]`
+ * id prefix removed, trimmed and case-insensitively, because the prefix is
+ * added by the store and no caller types it.
+ */
+function normalizeTitle(value: string): string {
+  // Review F2: NFC first. Without it an NFD argument (which macOS input
+  // sources and filesystem reads hand over routinely) never matches an NFC
+  // stored title, and the refusal prints two strings that LOOK identical --
+  // telling the operator the id is wrong in the one guard whose whole job is
+  // to tell them the id is wrong. This board's titles are accented Portuguese.
+  return value.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase()
+}
+
+function titleMatches(storedTitle: string, expectTitle: string): boolean {
+  const stripped = storedTitle.replace(/^\s*\[[^\]]+\]\s*/, "")
+  const wanted = normalizeTitle(expectTitle)
+  return normalizeTitle(storedTitle) === wanted || normalizeTitle(stripped) === wanted
+}
+
+/**
+ * Characters that occupy no visual space: soft hyphen, the zero-width and
+ * bidi controls, line/paragraph separators, the invisible math operators and
+ * BOM. Two titles differing only by these RENDER identically.
+ */
+/**
+ * Characters that occupy no visual space: soft hyphen, the zero-width and
+ * bidi controls, line/paragraph separators, the invisible math operators and
+ * BOM. Two titles differing only by these RENDER identically.
+ *
+ * Used with `replace`, so the `g` flag is correct here. Nothing calls `.test()`
+ * on it: a `/g` regex carries `lastIndex` between calls, which made a
+ * character-by-character test return true, false, true... across a run of
+ * identical invisible characters. `reveal` below uses the Unicode-category
+ * test instead, which covers every member of this set (verified) and is not
+ * stateful -- so the hazard is gone by construction rather than by a second
+ * regex happening to mask it.
+ */
+const INVISIBLE_CHARS = /[\u00ad\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064\ufeff]/g
+
+/**
+ * The form two titles share when they look the same on screen: compatibility
+ * normalization, invisible characters removed, whitespace collapsed, lowercase.
+ * Deliberately NOT what `titleMatches` uses -- a title differing by an
+ * invisible character IS a different title and must still be refused. This
+ * only decides whether the refusal owes the reader an explanation.
+ */
+function visuallyComparable(value: string): string {
+  return value.normalize("NFKC").replace(INVISIBLE_CHARS, "").trim().replace(/\s+/g, " ").toLowerCase()
+}
+
+/**
+ * Review F2: the refusal must never print two strings that look identical and
+ * leave the operator concluding they got the id wrong -- which is the opposite
+ * of what this guard exists to tell them.
+ *
+ * NFC in `normalizeTitle` closes the reported NFD instance by making it MATCH,
+ * so the review's "say it was only normalization" case is now unreachable by
+ * construction. What remains is the general hazard: an invisible character or
+ * a compatibility variant that survives NFC. When the two are visually
+ * comparable but genuinely different, the message gains escaped code points.
+ *
+ * (An earlier version of this guarded on `stripped === expectTitle.trim()`,
+ * which is unsatisfiable from the refusal branch -- raw equality implies
+ * normalized equality, so `titleMatches` would have returned true. It was dead
+ * code; the delegated test agent proved it with an isolated repro.)
+ */
+function titleMismatchDetail(storedTitle: string, expectTitle: string): string {
+  const stripped = storedTitle.replace(/^\s*\[[^\]]+\]\s*/, "")
+  const wanted = visuallyComparable(expectTitle)
+  if (visuallyComparable(storedTitle) !== wanted && visuallyComparable(stripped) !== wanted) return ""
+  // Escape ONLY what cannot be seen: an accented letter renders fine and
+  // escaping it buries the character that actually differs. Built by hand
+  // rather than via JSON.stringify, which would double the backslashes.
+  // One test, not two. A space is in Zs and renders, so it is excluded.
+  const reveal = (value: string) => `"${[...value.trim()]
+    .map(char => (char !== " " && /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Zs}]/u.test(char)
+      ? `\\u{${char.codePointAt(0)!.toString(16)}}`
+      : char))
+    .join("")}"`
+  return ` They render identically but differ in code points: stored ${reveal(stripped)} vs expected ${reveal(expectTitle)}.`
+}
+
 export type ReviseAcceptanceOptions = {
   taskId: string;
   condition: AcceptanceCondition;
@@ -67,11 +170,17 @@ export type ReviseAcceptanceOptions = {
    * no silent "latest" default: callers act on the revision they read.
    */
   expectRevision: number;
+  /**
+   * T-129: optional guard against revising the WRONG task. Checked inside the
+   * same transaction as the revision check, so an id typo cannot slip between
+   * the two.
+   */
+  expectTitle?: string;
 };
 
 export type ReviseAcceptanceResult =
   | { ok: true; changed: boolean; revision: number; criteria: AcceptanceCriterionRecord[] }
-  | { ok: false; reason: "unknown-task" | "revision-conflict"; message: string };
+  | { ok: false; reason: "unknown-task" | "revision-conflict" | "title-mismatch"; message: string };
 
 /**
  * Replaces the task's acceptance list under a new revision. EVERY criterion
@@ -93,6 +202,13 @@ export function reviseAcceptance(store: StoreHandle, options: ReviseAcceptanceOp
   return store.runInWriteTransaction(append => {
     const task = getTask(store.db, options.taskId);
     if (!task) return { ok: false, reason: "unknown-task", message: `Unknown task: ${options.taskId}` };
+    if (options.expectTitle !== undefined && !titleMatches(task.title, options.expectTitle)) {
+      return {
+        ok: false,
+        reason: "title-mismatch",
+        message: `${options.taskId} is titled ${JSON.stringify(task.title)}, not ${JSON.stringify(options.expectTitle)}. Nothing was revised -- check the task id.${titleMismatchDetail(task.title, options.expectTitle)}`
+      };
+    }
     const current = getAcceptance(store.db, options.taskId);
     if (options.expectRevision !== undefined && (current?.revision ?? 0) !== options.expectRevision) {
       return {
@@ -189,6 +305,142 @@ export function approveAcceptanceCriterion(store: StoreHandle, options: ApproveC
   });
 }
 
+export type ApproveCriteriaBatchOptions = {
+  taskId: string;
+  /** Zero-based positions to approve. Mutually exclusive with `all`. */
+  indices?: number[];
+  criterionIds?: string[];
+  /** Approve every criterion that is still pending. */
+  all?: boolean;
+  /** ONE evidence set, recorded on every criterion this call approves. */
+  evidence?: Record<string, string>;
+  actor: string;
+  now?: () => Date;
+  /** REQUIRED. The revision the caller read; refuses on drift. */
+  expectRevision: number;
+};
+
+export type ApproveCriteriaBatchResult =
+  | {
+      ok: true;
+      revision: number;
+      /** Criteria this call moved to approved. */
+      approved: string[];
+      /**
+       * Criteria `--all` passed over because they were already approved.
+       * Always empty for an explicit selection, which refuses instead.
+       */
+      alreadyApproved: string[];
+    }
+  | { ok: false; reason: "unknown-task" | "unknown-criterion" | "revision-conflict" | "already-approved" | "nothing-to-approve" | "invalid-selection"; message: string };
+
+/**
+ * T-129 (criterion 1): approves several criteria in ONE write transaction,
+ * under one revision check, with one evidence set -- the reported friction
+ * (A1.4) was approving a seven-criterion task one command at a time, each
+ * repeating `--expect-revision` and its own `--evidence`.
+ *
+ * A mid-batch refusal rolls the whole batch back, so the store never holds
+ * half an approval set and the caller never has to work out where it stopped.
+ *
+ * `all` and an explicit selection differ deliberately on already-approved
+ * criteria: `all` means "bring this task to fully approved", so it skips them
+ * and reports them; naming an index or id is a specific claim about a specific
+ * criterion, so it refuses exactly as the single-criterion path does.
+ */
+export function approveAcceptanceCriteria(store: StoreHandle, options: ApproveCriteriaBatchOptions): ApproveCriteriaBatchResult {
+  const now = options.now ?? (() => new Date());
+  const indices = options.indices ?? [];
+  const criterionIds = options.criterionIds ?? [];
+  const explicit = indices.length > 0 || criterionIds.length > 0;
+  if (options.all && explicit) {
+    return { ok: false, reason: "invalid-selection", message: "--all cannot be combined with --index or --criterion-id." };
+  }
+  if (!options.all && !explicit) {
+    return { ok: false, reason: "invalid-selection", message: "Provide --all, --index <n[,n...]> or --criterion-id <id>." };
+  }
+  const duplicateIndex = indices.find((value, position) => indices.indexOf(value) !== position);
+  if (duplicateIndex !== undefined) {
+    return { ok: false, reason: "invalid-selection", message: `--index lists ${duplicateIndex} more than once.` };
+  }
+  const duplicateId = criterionIds.find((value, position) => criterionIds.indexOf(value) !== position);
+  if (duplicateId !== undefined) {
+    return { ok: false, reason: "invalid-selection", message: `--criterion-id lists ${duplicateId} more than once.` };
+  }
+
+  return store.runInWriteTransaction(append => {
+    const task = getTask(store.db, options.taskId);
+    if (!task) return { ok: false, reason: "unknown-task", message: `Unknown task: ${options.taskId}` };
+    const acceptance = getAcceptance(store.db, options.taskId);
+    if ((acceptance?.revision ?? 0) !== options.expectRevision) {
+      return { ok: false, reason: "revision-conflict", message: `Acceptance revision drifted: store holds ${acceptance?.revision ?? 0}, caller expected ${options.expectRevision}.` };
+    }
+    if (!acceptance) return { ok: false, reason: "unknown-criterion", message: `No acceptance revision exists for ${options.taskId}.` };
+
+    const selected: AcceptanceCriterionRecord[] = [];
+    if (options.all) {
+      selected.push(...acceptance.criteria);
+    } else {
+      for (const index of indices) {
+        const criterion = acceptance.criteria[index];
+        if (!criterion) {
+          return { ok: false, reason: "unknown-criterion", message: `Index ${index} is out of range: revision ${acceptance.revision} holds ${acceptance.criteria.length} criterion/criteria. Nothing was approved.` };
+        }
+        selected.push(criterion);
+      }
+      for (const criterionId of criterionIds) {
+        const criterion = acceptance.criteria.find(item => item.criterionId === criterionId);
+        if (!criterion) {
+          return { ok: false, reason: "unknown-criterion", message: `Criterion ${criterionId} does not exist at revision ${acceptance.revision}. Nothing was approved.` };
+        }
+        if (selected.some(item => item.criterionId === criterion.criterionId)) {
+          return { ok: false, reason: "invalid-selection", message: `Criterion ${criterionId} is selected twice (by index and by id).` };
+        }
+        selected.push(criterion);
+      }
+    }
+
+    const alreadyApproved = selected.filter(criterion => criterion.state === "approved");
+    if (!options.all && alreadyApproved.length > 0) {
+      return {
+        ok: false,
+        reason: "already-approved",
+        message: `Criterion ${alreadyApproved[0].criterionId} is already approved; unapprove first if this is intentional, or use --all to skip the approved ones. Nothing was approved.`
+      };
+    }
+    const pending = selected.filter(criterion => criterion.state !== "approved");
+    if (pending.length === 0) {
+      return {
+        ok: false,
+        reason: "nothing-to-approve",
+        message: `Every selected criterion of ${options.taskId} is already approved at revision ${acceptance.revision}.`
+      };
+    }
+
+    const occurredAt = now().toISOString();
+    for (const criterion of pending) {
+      append({
+        eventType: "acceptance.approved",
+        actor: options.actor,
+        occurredAt,
+        payload: {
+          taskId: options.taskId,
+          revision: acceptance.revision,
+          criterionId: criterion.criterionId,
+          evidence: options.evidence ?? null,
+          approvedAt: occurredAt
+        }
+      });
+    }
+    return {
+      ok: true,
+      revision: acceptance.revision,
+      approved: pending.map(criterion => criterion.criterionId),
+      alreadyApproved: alreadyApproved.map(criterion => criterion.criterionId)
+    };
+  });
+}
+
 export type UnapproveCriterionOptions = {
   taskId: string;
   index?: number;
@@ -251,7 +503,32 @@ export type AcceptanceImportPlan = {
   entries: AcceptanceImportPlanEntry[];
   importable: number;
   skippedExisting: number;
+  /** T-129: the `--task` scope this plan was built for, or null for the whole project. */
+  taskFilter: string[] | null;
 };
+
+export type AcceptanceImportScope = {
+  /**
+   * T-129 (criterion 3): restrict the import to these task ids. An id that
+   * does not exist THROWS rather than importing a smaller set in silence --
+   * the reported friction was an import that could only ever run project-wide,
+   * and a filter that quietly matched nothing would be worse than no filter.
+   */
+  taskIds?: string[];
+};
+
+function scopedTasks(db: StoreHandle["db"], scope: AcceptanceImportScope | undefined) {
+  const all = listTasks(db);
+  const wanted = scope?.taskIds;
+  if (!wanted || wanted.length === 0) return { tasks: all, taskFilter: null as string[] | null };
+  const known = new Set(all.map(task => task.taskId));
+  const unknown = wanted.filter(taskId => !known.has(taskId));
+  if (unknown.length > 0) {
+    throw new Error(`acceptance import --task names unknown task(s): ${unknown.join(", ")}. Nothing was planned or imported.`);
+  }
+  const scoped = new Set(wanted);
+  return { tasks: all.filter(task => scoped.has(task.taskId)), taskFilter: [...new Set(wanted)] };
+}
 
 /**
  * Dry-run plan of the cutover acceptance import over the checkout mirrors.
@@ -263,9 +540,10 @@ export type AcceptanceImportPlan = {
  * revisioning (skip-existing), so re-running with the same source can never
  * overwrite later revisions.
  */
-export function planAcceptanceImport(db: StoreHandle["db"], tasksRoot: string): AcceptanceImportPlan {
+export function planAcceptanceImport(db: StoreHandle["db"], tasksRoot: string, scope?: AcceptanceImportScope): AcceptanceImportPlan {
   const entries: AcceptanceImportPlanEntry[] = [];
-  for (const task of listTasks(db)) {
+  const { tasks, taskFilter } = scopedTasks(db, scope);
+  for (const task of tasks) {
     if (!task.detailPath) {
       entries.push({ taskId: task.taskId, detailPath: null, action: "absent", approvedCount: 0, pendingCount: 0, sourceSha256: null });
       continue;
@@ -308,7 +586,8 @@ export function planAcceptanceImport(db: StoreHandle["db"], tasksRoot: string): 
   return {
     entries,
     importable: entries.filter(entry => entry.action === "import" || entry.action === "empty").length,
-    skippedExisting: entries.filter(entry => entry.action === "skip-existing").length
+    skippedExisting: entries.filter(entry => entry.action === "skip-existing").length,
+    taskFilter
   };
 }
 
@@ -333,9 +612,9 @@ export type AcceptanceImportCommitResult =
  * path. Tasks whose section is absent get NO event -- absent stays an
  * absence of revisioning, not an empty revision.
  */
-export function commitAcceptanceImport(store: StoreHandle, tasksRoot: string, options: { actor: string; now?: () => Date }): AcceptanceImportCommitResult {
+export function commitAcceptanceImport(store: StoreHandle, tasksRoot: string, options: { actor: string; now?: () => Date } & AcceptanceImportScope): AcceptanceImportCommitResult {
   const now = options.now ?? (() => new Date());
-  const plan = planAcceptanceImport(store.db, tasksRoot);
+  const plan = planAcceptanceImport(store.db, tasksRoot, { taskIds: options.taskIds });
   let revisionRef: { node: string; sequence: number } | null = null;
   return store.runInWriteTransaction(append => {
     const sourceBytes = new Map<string, Buffer>();

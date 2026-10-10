@@ -336,6 +336,45 @@ export function analyzeAcceptanceProse(prose: string): AcceptanceProseAnalysis {
 }
 
 /**
+ * T-129: checkbox bullets anywhere in the content, with no `## Acceptance`
+ * heading required.
+ *
+ * The reported friction (A1.6) is that `acceptance revise --from-file` demands
+ * the heading, so the obvious thing -- a scratch file holding just the list --
+ * is refused. This is the fallback for that case, never the primary read: a
+ * caller still prefers `parseAcceptanceChecklist`, and only drops here when
+ * no real section exists.
+ *
+ * Deliberately stricter than the in-section parser: it collects ONLY bullets
+ * that carry an explicit `[ ]`/`[x]` box, because without a heading to scope
+ * them an ordinary `- bullet` of prose is not a criterion. Fences stay opaque
+ * via the same tokenizer, so a checkbox inside a fenced example is still not
+ * a criterion, and a real `## Acceptance` section's own items are included
+ * (they are checkbox bullets like any other) rather than specially cased.
+ */
+export function parseBareAcceptanceChecklist(content: string): AcceptanceChecklistItem[] {
+  const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")
+  const items: AcceptanceChecklistItem[] = []
+  let open: FenceInfo | null = null
+  for (const line of lines) {
+    if (open) {
+      if (fenceCloser(line, open)) open = null
+      continue
+    }
+    const opener = fenceOpener(line)
+    if (opener) {
+      open = opener
+      continue
+    }
+    const bullet = line.match(/^\s*[-*+]\s+\[([ xX])\]\s+(.+?)\s*$/)
+    if (bullet) {
+      items.push({ text: bullet[2].trim(), completed: bullet[1].toLowerCase() === "x" })
+    }
+  }
+  return items
+}
+
+/**
  * Removes EVERY real `## Acceptance` section (any heading level; nested
  * headings stay in scope, a sibling heading at or above its level ends it)
  * from description prose. Used by the store-authority export and GitHub
