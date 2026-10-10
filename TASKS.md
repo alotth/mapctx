@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 9/12
+  - subIssueProgress: 10/12
   - priority: high
   - workload: null
   - tags: []
@@ -2858,7 +2858,7 @@
 ### [T-134] C0: recusa de claim não expõe o leaseToken do holder
 
   - id: T-134
-  - status: backlog
+  - status: done
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -2869,7 +2869,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-10
   - externalId: null
   - updated: 2026-10-10
   - detail: ./tasks/T-134.md
@@ -2877,7 +2877,7 @@
 ### [T-135] Spike: ler GitHub Projects e escrever campos derivados num Project de teste
 
   - id: T-135
-  - status: backlog
+  - status: doing
   - type: task
   - parent: E-018
   - subIssueProgress: null
