@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 4/10
+  - subIssueProgress: 5/10
   - priority: high
   - workload: null
   - tags: []
@@ -2706,7 +2706,7 @@
 ### [T-127] P1 CLI: enums na ajuda, erros de update, externalLinks, validate --task/--baseline
 
   - id: T-127
-  - status: backlog
+  - status: doing
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -2763,7 +2763,7 @@
 ### [T-130] T-126 hardening: ramo db-only exige atestação e recomputa hash (MÉDIA-4/5/6)
 
   - id: T-130
-  - status: backlog
+  - status: done
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -2774,9 +2774,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-10
   - externalId: null
-  - updated: 2026-10-09
+  - updated: 2026-10-10
   - detail: ./tasks/T-130.md
 
 ### [T-131] Redação de receipt.failure, changedFiles e payloads de run event
@@ -2801,7 +2801,7 @@
 ### [T-132] Planner: globs com chaves/extglob/negação e normalização de paths
 
   - id: T-132
-  - status: backlog
+  - status: review
   - type: chore
   - parent: E-017
   - subIssueProgress: null
