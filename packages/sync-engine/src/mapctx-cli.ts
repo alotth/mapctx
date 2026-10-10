@@ -80,7 +80,7 @@ import {
   checkTaskAcceptance,
   type MapctxTomlConfig
 } from '@mapctx/store';
-import { CHECKPOINT_REASONS, finishTask, publishCheckpoint, type CheckpointReason } from './checkpoint';
+import { CHECKPOINT_REASONS, finishTask, publishCheckpoint, type CheckpointReason, type FinishSnapshotMode } from './checkpoint';
 import { getValidationReport, printValidationReport } from './board-tools';
 import { historyCorrectCommand, historyReconstructCommand, historyScanCommand } from './history-cli';
 import { loadConfigOptionalForBoard } from './config';
@@ -173,6 +173,8 @@ type MapctxOptions = SyncOptions & {
   /** T-127 validate gate */
   baselinePath?: string;
   writeBaselinePath?: string;
+  /** T-128 finish snapshot mode */
+  snapshot?: FinishSnapshotMode;
 };
 
 /**
@@ -291,7 +293,7 @@ export const VALUE_FLAGS: ReadonlySet<string> = new Set([
 
 export const BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
   '--accept', '--commit', '--discard', '--dry-run', '--help', '--include-inferred', '--json',
-  '--project', '--read', '--remove', '--snapshots', '-h'
+  '--no-snapshot', '--project', '--read', '--remove', '--snapshots', '-h'
 ]);
 
 export const KNOWN_FLAGS: ReadonlySet<string> = new Set([...VALUE_FLAGS, ...BOOLEAN_FLAGS]);
@@ -346,8 +348,16 @@ function printHelp(): void {
   console.log('  mapctx acceptance import [--commit] [--json]');
   console.log('    Dry-run by default; --commit imports observed checkboxes atomically, pins source bytes, skips existing revisions.');
   console.log('  mapctx task acceptance <show|revise|approve|unapprove> <task-id> [--from-file path] [--expect-revision n] [--criterion-id id|--index n] [--evidence key=value ...]');
-  console.log('  mapctx task finish <task-id> [--json]');
-  console.log('    Moves through canonical done gate, then publishes final checkpoint; retry after checkpoint failure is safe.');
+  console.log('  mapctx task finish <task-id> [--no-snapshot] [--json]');
+  console.log('    Moves through the canonical done gate (every current store Acceptance criterion');
+  console.log('    approved), then publishes the final checkpoint; retry after a checkpoint failure');
+  console.log('    is safe. --no-snapshot applies the SAME gate and stops there: no TASKS.md, no');
+  console.log('    tasks/*.md, no checkpoint event -- for a shared checkout where regenerating every');
+  console.log('    mirror would mix generated files into someone else\'s WIP. Publish later with');
+  console.log('    `mapctx export` or a plain `mapctx task finish`.');
+  console.log('    `task move --status done` enforces the same acceptance gate and refuses with the');
+  console.log('    same message; `finish` is the command to prefer, because it also re-verifies the');
+  console.log('    gate when the task is already done and reports the checkpoint it published.');
   console.log('  mapctx task show <task-id> [--json]');
   console.log('  mapctx task context <task-id> --budget <n> [--json]');
   console.log('  mapctx task search --query "<text>" [--status <planning-state>] [--limit n] [--json]');
@@ -381,6 +391,8 @@ function printHelp(): void {
   console.log('    on: edit tasks/<ID>.md in Git and commit it, never through `task update`.');
   console.log('    See "Enumerated values" below for every enum and the list syntax.');
   console.log('  mapctx task move <task-id> --status <planning-state> [--json] [--actor name]');
+  console.log('    `--status done` is the same gate as `task finish --no-snapshot`, no more and no');
+  console.log('    less: shared code, identical refusal. Neither regenerates mirrors.');
   console.log('    Legal transition under store authority (backlog|ready-for-do|doing|review|done|paused|cancelled|archived,');
   console.log('    or canonical backlog|ready|in-progress|review|done|paused|cancelled|archived). done stamps completedOn and');
   console.log('    releases any active claim; done also requires every current store Acceptance criterion to be approved.');
@@ -560,6 +572,7 @@ function parseArgs(argv: string[]): {
     else if (a === '--commit') options.commit = true;
     else if (a === '--json') options.json = true;
     else if (a === '--snapshots') options.snapshots = true;
+    else if (a === '--no-snapshot') options.snapshot = 'none';
     else if (a === '--from-file') options.fromFile = valueFor(a);
     else if (a === '--criterion-id') options.criterionId = valueFor(a);
     else if (a === '--index') {
@@ -1748,13 +1761,33 @@ function parseSetValue(field: string, raw: string, key = field): unknown {
   return raw;
 }
 
+/**
+ * T-128 (R1): the ONE piece of closing advice, appended by both closing paths.
+ *
+ * The acceptance gate itself was never duplicated -- `moveTask` and
+ * `finishTask` both call `checkTaskAcceptance`, so `task move --status done`
+ * and `task finish` already refused with a byte-identical message (verified
+ * against a disposable store before this change). What was missing is that
+ * neither refusal told the reader which command actually closes a task, which
+ * is how agents ended up picking a path by guesswork. The advice lives here,
+ * once, rather than inside the store message, so `mapctx validate`'s
+ * `completion-acceptance-incomplete` issue stays a plain statement of fact.
+ */
+function closingAdvice(taskId: string, reason: string): string {
+  if (reason !== 'acceptance-incomplete') return '';
+  return ` Once every criterion is approved, close it with \`mapctx task finish ${taskId}\``
+    + ` (add --no-snapshot to apply the same gate without regenerating TASKS.md and tasks/*.md).`;
+}
+
 export function taskMoveCommand(taskId: string, options: MapctxOptions): void {
   if (!options.status) throw new Error('task move requires --status <planning-state>');
   const cwd = process.cwd();
   const { handle } = requireStoreAuthority(cwd);
   try {
     const result = moveTask(handle, { taskId, to: toPlanningState(options.status), actor: defaultActor(options.actor) });
-    if (!result.ok) refuse(result, `Move refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
+    if (!result.ok) {
+      refuse(result, `Move refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}${closingAdvice(taskId, result.reason)}`);
+    }
     print(result, options.json);
   } finally {
     handle.close();
@@ -2027,7 +2060,7 @@ export function taskFinishCommand(taskId: string, options: MapctxOptions): void 
   const cwd = process.cwd();
   const { handle, tasksRoot } = requireStoreAuthority(cwd);
   try {
-    const result = finishTask(handle, tasksRoot, { taskId, actor: defaultActor(options.actor) });
+    const result = finishTask(handle, tasksRoot, { taskId, actor: defaultActor(options.actor), snapshot: options.snapshot });
     if (!result.ok) {
       // Review B11: A9's premise -- "the `Error:` sentence already carries the
       // reason and the message" -- held for move/update/acceptance/export but
@@ -2037,8 +2070,14 @@ export function taskFinishCommand(taskId: string, options: MapctxOptions): void 
       // sentence now, so `--json` is not required to diagnose a failed finish.
       const detail = result.stage === 'move'
         ? `${result.move.reason}${result.move.message ? ` -- ${result.move.message}` : ''}`
+          // T-128: the same closing advice `task move --status done` gives, so
+          // the two paths stay indistinguishable when the gate is what failed.
+          + closingAdvice(taskId, result.move.reason)
         : `checkpoint-${result.checkpoint.stage}${result.checkpoint.error ? ` -- ${result.checkpoint.error}` : ''}`
-          + ` (planning move ${result.move.performed ? `applied ${result.move.from} -> ${result.move.to}` : 'not applied'})`;
+          + ` (planning move ${result.move.performed ? `applied ${result.move.from} -> ${result.move.to}` : 'not applied'})`
+          // T-128: a checkpoint failure is exactly what --no-snapshot avoids,
+          // and the planning move has already been applied at this point.
+          + ` The planning state is already closed; re-run with --no-snapshot to finish without regenerating the mirrors, or \`mapctx export\` once the working tree is ready.`;
       refuse(result, `Finish ${result.stage} failed: ${detail}`);
     }
     print(result, options.json);

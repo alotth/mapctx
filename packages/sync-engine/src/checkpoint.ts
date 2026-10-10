@@ -195,12 +195,40 @@ export function sha256Hex(content: string): string {
   return crypto.createHash("sha256").update(content, "utf8").digest("hex");
 }
 
+/**
+ * T-128 (R1): whether finishing also publishes the mirrors.
+ *
+ * `full` is the default and the pre-T-128 behaviour: regenerate TASKS.md and
+ * every tasks/*.md and journal a `checkpoint.exported`. `none` applies the
+ * canonical done gate and stops there, touching no file.
+ *
+ * There is no partial mode. A `checkpoint.exported` event carries a
+ * `filesHash` for the WHOLE mirror set and `store init` recovery replays it as
+ * such, so writing one task's file and journaling it as a checkpoint would
+ * misrepresent what was materialized -- see the note on `--snapshot=task` in
+ * the T-128 report.
+ */
+export type FinishSnapshotMode = "full" | "none";
+
 export type FinishTaskResult =
   | {
       ok: true;
       taskId: string;
       move: { performed: boolean; from: string; to: string; releasedClaimId?: string };
       checkpoint: PublishedCheckpoint;
+      snapshot: "published";
+    }
+  | {
+      ok: true;
+      taskId: string;
+      move: { performed: boolean; from: string; to: string; releasedClaimId?: string };
+      /**
+       * Deliberately absent, not merely missing: nothing was published, so
+       * there is no checkpoint to report. A caller that needs a checkpoint
+       * must check `snapshot` rather than assume this field exists.
+       */
+      checkpoint?: undefined;
+      snapshot: "skipped";
     }
   | { ok: false; stage: "move"; taskId: string; move: Extract<ReturnType<typeof moveTask>, { ok: false }> }
   | { ok: false; stage: "checkpoint"; taskId: string; move: { performed: boolean; from: string; to: string }; checkpoint: FailedCheckpoint };
@@ -223,8 +251,9 @@ export type FinishTaskResult =
 export function finishTask(
   handle: StoreHandle,
   tasksRoot: string,
-  options: { taskId: string; actor: string; now?: () => Date }
+  options: { taskId: string; actor: string; now?: () => Date; snapshot?: FinishSnapshotMode }
 ): FinishTaskResult {
+  const snapshotMode: FinishSnapshotMode = options.snapshot ?? "full";
   const existing = handle.db.prepare("SELECT planning_state, type FROM task_projection WHERE task_id = ?").get(options.taskId) as { planning_state: string; type: string | null } | undefined;
   if (!existing) {
     return {
@@ -259,6 +288,20 @@ export function finishTask(
     releasedClaimId = move.releasedClaimId;
   }
 
+  // T-128: with the snapshot suppressed there is nothing left to publish, so
+  // the gate above IS the whole operation. Returning here keeps the working
+  // tree untouched -- the point of --no-snapshot in a shared checkout -- and
+  // the F6 publication precondition below is moot, because the gate and the
+  // move already ran in one transaction and no second one follows.
+  if (snapshotMode === "none") {
+    return {
+      ok: true,
+      taskId: options.taskId,
+      move: { performed: movePerformed, from: fromState, to: "done", ...(releasedClaimId ? { releasedClaimId } : {}) },
+      snapshot: "skipped"
+    };
+  }
+
   const reason: CheckpointReason = existing.type === "epic" ? "epic-end" : "task-end";
   // F6: the gate/move above ran in its own transaction. Capture the gated
   // acceptance revision and re-verify everything under the publication
@@ -283,6 +326,7 @@ export function finishTask(
     ok: true,
     taskId: options.taskId,
     move: { performed: movePerformed, from: fromState, to: "done", ...(releasedClaimId ? { releasedClaimId } : {}) },
-    checkpoint
+    checkpoint,
+    snapshot: "published"
   };
 }
