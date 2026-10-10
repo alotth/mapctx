@@ -177,6 +177,11 @@ test("--index on an already-approved criterion refuses already-approved; --all w
 
   const allAgain = f.refused(["task", "acceptance", "approve", taskId, "--all", "--expect-revision", "1", "--actor", "test"]);
   assert.equal(allAgain.payload.reason, "nothing-to-approve");
+
+  // F4 (recorded decision, not changed): --all is not idempotent, and the
+  // refusal must not have corrupted the already-fully-approved state.
+  const shown = f.success(["task", "acceptance", "show", taskId]);
+  assert.ok(shown.acceptance.criteria.every((c: { state: string }) => c.state === "approved"), "the refused retry must not disturb the fully-approved state");
 });
 
 test("MUTATION GUARD: --index 0,99 (99 out of range) refuses and approves NOTHING -- not even the valid index 0", t => {
@@ -368,3 +373,184 @@ test("revise still clears every approval: criteria return to pending and prior e
 // "acceptance revise, approve, AND unapprove each refuse without
 // --expect-revision, naming the store's current revision or 0 when none
 // exists yet" -- packages/sync-engine/src/cli-quickwins.test.ts:600.
+
+// ---------------------------------------------------------------------------
+// Attempt 2, review F1: `approve --json` shape is keyed on the SELECTION, not
+// the result. A single EXPLICIT selection (--index <n> or --criterion-id
+// <id>) is additive: it keeps the pre-batch criterionId/state fields
+// alongside the new approved/alreadyApproved ones. A list (even length 1 via
+// --all) gets ONLY the batch shape. This is the subtle part: it would be easy
+// to "simplify" the condition to `result.approved.length === 1`, which would
+// also add the compat fields to `--all` on a one-criterion task -- wrong,
+// because `--all` is new in this release and never had the old shape.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD (F1): approve --index <n> (single explicit) returns BOTH the batch shape and the compat criterionId/state fields", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const { taskId } = createWithThreeCriteria(f);
+  const result = f.success(["task", "acceptance", "approve", taskId, "--index", "0", "--expect-revision", "1", "--actor", "test"]);
+  assert.deepEqual(Object.keys(result).sort(), ["alreadyApproved", "approved", "criterionId", "ok", "revision", "state"]);
+  assert.equal(result.state, "approved");
+  assert.equal(result.criterionId, result.approved[0]);
+});
+
+test("MUTATION GUARD (F1): approve --criterion-id <id> (single explicit by id) returns BOTH shapes the same way", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const { taskId } = createWithThreeCriteria(f);
+  const criterionId = f.success(["task", "acceptance", "show", taskId]).acceptance.criteria[1].criterionId;
+  const result = f.success(["task", "acceptance", "approve", taskId, "--criterion-id", criterionId, "--expect-revision", "1", "--actor", "test"]);
+  assert.deepEqual(Object.keys(result).sort(), ["alreadyApproved", "approved", "criterionId", "ok", "revision", "state"]);
+  assert.equal(result.criterionId, criterionId);
+  assert.equal(result.state, "approved");
+});
+
+test("MUTATION GUARD (F1): approve --index 1,2 (a LIST, even though it approves 2) returns ONLY the batch shape -- no criterionId/state", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const { taskId } = createWithThreeCriteria(f);
+  const result = f.success(["task", "acceptance", "approve", taskId, "--index", "1,2", "--expect-revision", "1", "--actor", "test"]);
+  assert.deepEqual(Object.keys(result).sort(), ["alreadyApproved", "approved", "ok", "revision"]);
+  assert.equal(result.criterionId, undefined);
+  assert.equal(result.state, undefined);
+});
+
+// This is the test the mutation ("compat keyed on result.approved.length===1
+// instead of on the selection") must break: --all on a ONE-criterion task
+// also approves exactly 1 criterion, so a result-length-based condition would
+// wrongly add criterionId/state here. --all is new in this release and never
+// had the old shape, regardless of how many criteria it happens to approve.
+test("MUTATION GUARD (F1): approve --all on a task with exactly ONE criterion still returns ONLY the batch shape, never the compat fields (compat is keyed on the SELECTION, not on approved.length)", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  fs.writeFileSync(path.join(f.repoDir, "one.md"), "## Acceptance\n- [ ] only one\n");
+  const created = f.success(["task", "create", "--title", "Single criterion task", "--acceptance-file", "one.md", "--actor", "test"]);
+  const result = f.success(["task", "acceptance", "approve", created.taskId, "--all", "--expect-revision", "1", "--actor", "test"]);
+  assert.equal(result.approved.length, 1, "sanity: --all approved exactly one criterion here");
+  assert.deepEqual(Object.keys(result).sort(), ["alreadyApproved", "approved", "ok", "revision"], "MUST be the batch-only shape despite approving exactly 1 -- compat is about the selection, not the count");
+  assert.equal(result.criterionId, undefined);
+  assert.equal(result.state, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// Attempt 2, review F3: an acceptance revision recorded with condition
+// "empty" warns that task finish / task move --status done will refuse,
+// instead of silently building a dead end. Same warning on revise.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD (F3): --acceptance-file holding only the ## Acceptance heading creates the task (condition empty, revision 1) and warns on stderr that task finish will refuse; task finish then actually refuses acceptance-incomplete/is empty", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  fs.writeFileSync(path.join(f.repoDir, "empty-section.md"), "## Acceptance\n");
+  const result = f.cli(["task", "create", "--title", "Empty acceptance probe", "--acceptance-file", "empty-section.md", "--actor", "test", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(String(result.stderr), /recorded an acceptance revision for .+ with NO criteria/);
+  assert.match(String(result.stderr), /task finish.* and .*task move --status done.* will refuse/);
+  const created = JSON.parse(result.stdout);
+  assert.equal(created.acceptanceRevision, 1);
+  const shown = f.success(["task", "acceptance", "show", created.taskId]);
+  assert.equal(shown.acceptance.condition, "empty");
+  assert.equal(shown.acceptance.revision, 1);
+
+  // Consequence: move it to review, then task finish refuses specifically.
+  f.success(["task", "move", created.taskId, "--status", "ready-for-do", "--actor", "test"]);
+  f.success(["task", "move", created.taskId, "--status", "doing", "--actor", "test"]);
+  f.success(["task", "move", created.taskId, "--status", "review", "--actor", "test"]);
+  const finishResult = f.cli(["task", "finish", created.taskId, "--actor", "test"]);
+  assert.notEqual(finishResult.status, 0);
+  assert.match(String(finishResult.stderr), /acceptance-incomplete/);
+  assert.match(String(finishResult.stderr), /is empty/);
+});
+
+test("MUTATION GUARD (F3): revise with condition empty warns the same way on stderr", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  fs.writeFileSync(path.join(f.repoDir, "empty2.md"), "## Acceptance\n");
+  const result = f.cli(["task", "acceptance", "revise", "T-101", "--from-file", "empty2.md", "--expect-revision", "0", "--actor", "test", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(String(result.stderr), /recorded an acceptance revision for T-101 with NO criteria/);
+  const revised = JSON.parse(result.stdout);
+  assert.equal(revised.revision, 1);
+});
+
+// ---------------------------------------------------------------------------
+// Attempt 2, review F5: --all=true is refused (not silently dropped into
+// "requires --all"), with a flag-specific no-value message. --all alone
+// still works.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD (F5): --all=true refuses 'takes no value', NOT 'requires --all'; the message is --all-specific (no --snapshot=none); --no-snapshot=x's message DOES mention --snapshot=none; --all alone still works", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const { taskId } = createWithThreeCriteria(f);
+
+  const allEqualsTrue = f.cli(["task", "acceptance", "approve", taskId, "--all=true", "--expect-revision", "1", "--actor", "test", "--json"]);
+  assert.notEqual(allEqualsTrue.status, 0);
+  assert.match(String(allEqualsTrue.stderr), /--all takes no value/);
+  assert.ok(!/requires --all/.test(String(allEqualsTrue.stderr)), "must not fall through to the missing-selector message");
+  assert.ok(!/--snapshot=none/.test(String(allEqualsTrue.stderr)), "the no-value hint for --all must not mention --snapshot=none, which is --no-snapshot's value form");
+
+  const noSnapshotEqualsX = f.cli(["task", "finish", taskId, "--no-snapshot=x", "--actor", "test", "--json"]);
+  assert.notEqual(noSnapshotEqualsX.status, 0);
+  assert.match(String(noSnapshotEqualsX.stderr), /--snapshot=none/, "the no-value hint for --no-snapshot must still mention --snapshot=none");
+
+  // --all alone (no value) still works.
+  const plain = f.success(["task", "acceptance", "approve", taskId, "--all", "--expect-revision", "1", "--actor", "test"]);
+  assert.equal(plain.approved.length, 3);
+});
+
+// ---------------------------------------------------------------------------
+// Attempt 2, review F6: a missing --acceptance-file names the flag, the
+// value given, and the resolved path -- never a bare ENOENT. No task created.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD (F6): --acceptance-file pointing nowhere refuses with a message naming the flag, the given value, and the resolved path (not a raw ENOENT); no task is created", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const before = countTasks(f);
+  const result = f.cli(["task", "create", "--title", "Missing acceptance file probe", "--acceptance-file", "does-not-exist.md", "--actor", "test", "--json"]);
+  assert.notEqual(result.status, 0);
+  const stderr = String(result.stderr);
+  assert.match(stderr, /--acceptance-file does-not-exist\.md could not be read at/);
+  assert.match(stderr, new RegExp(path.join(f.repoDir, "does-not-exist.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.ok(!/^Error: ENOENT/m.test(stderr), "must not be a bare ENOENT with no context");
+  assert.equal(countTasks(f), before, "no task must have been created");
+});
+
+// ---------------------------------------------------------------------------
+// Attempt 2, review F7 (recorded decision, not changed): numbered checkboxes
+// like `1. [ ] x` are not read by the headerless fallback; the refusal shows
+// the accepted bullet spelling.
+// ---------------------------------------------------------------------------
+
+test("a numbered checklist (1. [ ] x) is NOT read by the headerless fallback; the refusal shows the accepted `- [ ]` spelling", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  fs.writeFileSync(path.join(f.repoDir, "numbered.md"), "1. [ ] first\n2. [x] second\n");
+  const result = f.cli(["task", "acceptance", "revise", "T-101", "--from-file", "numbered.md", "--expect-revision", "0", "--actor", "test", "--json"]);
+  assert.notEqual(result.status, 0, "numbered checkboxes must not be read as criteria");
+  assert.match(String(result.stderr), /`- \[ \]` checklist item/);
+});
+
+// ---------------------------------------------------------------------------
+// Attempt 2, review F8: the dead `approveAcceptanceCriterion` import was
+// removed from the CLI (the store function stays exported and store-tested).
+// Static check against the source, same technique as the T-128 flag
+// exhaustiveness test.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD (F8): mapctx-cli.ts does not import the single-criterion approveAcceptanceCriterion -- only the batch approveAcceptanceCriteria and unapproveAcceptanceCriterion", () => {
+  const sourcePath = path.join(path.dirname(require.resolve("./mapctx-cli.js")), "..", "src", "mapctx-cli.ts");
+  const source = fs.readFileSync(sourcePath, "utf8");
+  // Only the import block's bare identifier counts -- a prose/comment
+  // mention would not. Importers list bare identifiers one per line/comma.
+  const importsApproveCriteria = /\bapproveAcceptanceCriteria\b/.test(source);
+  const importsUnapprove = /\bunapproveAcceptanceCriterion\b/.test(source);
+  assert.ok(importsApproveCriteria, "sanity: the batch function must still be imported and used");
+  assert.ok(importsUnapprove, "sanity: unapprove must still be imported and used");
+  const importBlockMatch = /import\s*\{([^}]*)\}\s*from\s*['"]@mapctx\/store['"]/s.exec(source);
+  assert.ok(importBlockMatch, "could not locate the @mapctx/store import block");
+  const importedNames = importBlockMatch![1].split(",").map(s => s.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
+  assert.ok(!importedNames.includes("approveAcceptanceCriterion"), `approveAcceptanceCriterion must not be imported from @mapctx/store: ${JSON.stringify(importedNames)}`);
+});

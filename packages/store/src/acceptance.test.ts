@@ -6,7 +6,7 @@ import * as path from "path"
 import { importCommit } from "./cutover"
 import { approveAcceptanceCriteria, approveAcceptanceCriterion, commitAcceptanceImport, planAcceptanceImport, reviseAcceptance, unapproveAcceptanceCriterion } from "./acceptance"
 import { getAcceptance } from "./projections"
-import { moveTask } from "./tasks"
+import { moveTask, updateTask } from "./tasks"
 import { StoreHandle } from "./store-handle"
 import { cleanupDir, setupGoldenRepo } from "./__test-helpers__"
 
@@ -338,5 +338,97 @@ test("commitAcceptanceImport --task honors the same scope: only the filtered tas
     assert.ok(result.ok, JSON.stringify(result))
     assert.ok(getAcceptance(fixture.store.db, "T-101"), "T-101 (in scope, has a ## Acceptance section) must have been imported")
     assert.equal(getAcceptance(fixture.store.db, "T-102"), null, "T-102 is out of scope and must still have no acceptance revision")
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+// ---------------------------------------------------------------------------
+// T-129 attempt 2, review F2: --expect-title compares Unicode-normalized
+// (NFC), so an NFD argument now matches an NFC-stored title. A genuinely
+// different title still refuses regardless of normalization form.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD: reviseAcceptance --expect-title matches regardless of NFC/NFD normalization form (stored NFC vs argument NFD, and the reverse); a genuinely different title still refuses", () => {
+  const fixture = materialize()
+  try {
+    // "Ação crítica" built two ways: composed (NFC) and decomposed (NFD).
+    // Never paste raw bytes -- derive both forms from the same source string
+    // via String.prototype.normalize so the test is explicit about what it
+    // is actually comparing.
+    const composed = "Ação crítica".normalize("NFC")
+    const decomposed = "Ação crítica".normalize("NFD")
+    assert.notEqual(composed, decomposed, "sanity: NFC and NFD must be different code unit sequences for this to test anything")
+    assert.equal(composed.normalize("NFC"), decomposed.normalize("NFC"), "sanity: both normalize to the same NFC form")
+
+    // Rename T-101 to the NFC form (updateTask stores title verbatim).
+    const renamed = updateTask(fixture.store, { taskId: "T-101", patch: { title: composed }, actor: "test" })
+    assert.ok(renamed.ok, JSON.stringify(renamed))
+
+    // Stored NFC, argument NFD: must match (this used to refuse before F2).
+    const nfdArg = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["x"], actor: "test", expectRevision: 0, expectTitle: decomposed })
+    assert.ok(nfdArg.ok, JSON.stringify(nfdArg))
+
+    // Rename to the NFD form now; stored NFD, argument NFC must also match.
+    const renamedAgain = updateTask(fixture.store, { taskId: "T-101", patch: { title: decomposed }, actor: "test" })
+    assert.ok(renamedAgain.ok)
+    const nfcArg = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["y"], actor: "test", expectRevision: 1, expectTitle: composed })
+    assert.ok(nfcArg.ok, JSON.stringify(nfcArg))
+
+    // A genuinely different title (not a normalization variant) still refuses.
+    const wrong = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["z"], actor: "test", expectRevision: 2, expectTitle: "Completely different title" })
+    assert.equal(wrong.ok, false)
+    if (!wrong.ok) assert.equal(wrong.reason, "title-mismatch")
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+// ---------------------------------------------------------------------------
+// T-129 attempt 2, review F2 (continued): a title that differs ONLY by
+// invisible characters still refuses (it IS a different title), but the
+// message now explains why instead of repeating two identical-looking
+// strings. A genuinely different title still refuses with NO such detail.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD: --expect-title with a zero-width space refuses (it is a different title) AND the message reveals the invisible code point", () => {
+  const fixture = materialize()
+  try {
+    const renamed = updateTask(fixture.store, { taskId: "T-101", patch: { title: "Ação crítica" }, actor: "test" })
+    assert.ok(renamed.ok)
+
+    const withZwsp = "Ação​ crítica"
+    const refused = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["x"], actor: "test", expectRevision: 0, expectTitle: withZwsp })
+    assert.equal(refused.ok, false, "a title differing by an invisible character IS a different title and must still refuse")
+    if (!refused.ok) {
+      assert.equal(refused.reason, "title-mismatch")
+      assert.match(refused.message, /render identically but differ in code points/)
+      assert.match(refused.message, /\\u\{200b\}/, "the message must reveal the invisible code point, not bury it")
+      assert.match(refused.message, /stored "Ação crítica"/, "a visible accented letter must NOT be escaped -- only what cannot be seen")
+    }
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+test("MUTATION GUARD: three consecutive zero-width spaces are ALL revealed (not true/false/true) -- catches a global regex's lastIndex bug in a per-character .test()", () => {
+  const fixture = materialize()
+  try {
+    const renamed = updateTask(fixture.store, { taskId: "T-101", patch: { title: "Triple" }, actor: "test" })
+    assert.ok(renamed.ok)
+
+    const triple = "Triple​​​"
+    const refused = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["x"], actor: "test", expectRevision: 0, expectTitle: triple })
+    assert.equal(refused.ok, false)
+    if (!refused.ok) {
+      const occurrences = (refused.message.match(/\\u\{200b\}/g) ?? []).length
+      assert.equal(occurrences, 3, `expected all three zero-width spaces revealed, got ${occurrences} in: ${refused.message}`)
+    }
+  } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
+})
+
+test("a genuinely different --expect-title still refuses WITHOUT the code-point explanation (that detail is only for titles that render identically)", () => {
+  const fixture = materialize()
+  try {
+    const refused = reviseAcceptance(fixture.store, { taskId: "T-101", condition: "criteria", texts: ["x"], actor: "test", expectRevision: 0, expectTitle: "A completely different sentence" })
+    assert.equal(refused.ok, false)
+    if (!refused.ok) {
+      assert.equal(refused.reason, "title-mismatch")
+      assert.ok(!/render identically but differ in code points/.test(refused.message), "a plainly different title must not get the identical-rendering explanation")
+    }
   } finally { fixture.store.close(); fixture.restoreEnv(); cleanupDir(fixture.repoDir) }
 })
