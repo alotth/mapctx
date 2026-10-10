@@ -4,7 +4,11 @@ import { spawnSync } from "node:child_process"
 import * as fs from "fs"
 import * as path from "path"
 import test, { type TestContext } from "node:test"
-import { resolveProjectStoreDir, readMapctxToml, StoreHandle } from "@mapctx/store"
+import {
+  resolveProjectStoreDir, readMapctxToml, StoreHandle,
+  upsertProject, createTask, moveTask, reviseAcceptance, approveAcceptanceCriterion, buildExport
+} from "@mapctx/store"
+import { taskFinishCommand, CliRefusal } from "./mapctx-cli"
 
 // T-128: reuse the store's golden repo + isolated MAPCTX_HOME fixture, same
 // pattern as privacy-cli.test.ts / cli-quickwins.test.ts. Its internal helpers
@@ -293,4 +297,318 @@ test("a checkpoint failure during the default (publishing) finish says the plann
   fs.chmodSync(tasksDir, 0o700);
   const shown = f.success(["task", "show", "T-101"]);
   assert.equal(shown.task.planningState, "done", "the move is not rolled back by a downstream checkpoint failure");
+});
+
+// ---------------------------------------------------------------------------
+// Review F1 (the blocking regression): an unrecognized `--flag` must be an
+// error, not silently dropped -- four plausible misspellings of
+// `--no-snapshot` used to publish instead of skipping, exit 0, no warning.
+// Each row gets its own fixture, with WIP in tasks/ and approved acceptance,
+// asserting both exit/snapshot AND the actual mirror byte count.
+// ---------------------------------------------------------------------------
+
+function countChangedMirrorFiles(before: Record<string, string>, after: Record<string, string>): number {
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  let changed = 0;
+  for (const key of keys) if (before[key] !== after[key]) changed += 1;
+  return changed;
+}
+
+test("MUTATION GUARD (F1): --no-snapshot and --snapshot=none / --snapshot none all skip (0 files changed); unknown spellings are refused (0 files changed); no flag publishes (files change)", t => {
+  const cases: Array<{ args: string[]; expectExitZero: boolean; expectSnapshot?: "skipped" | "published"; messageRe?: RegExp }> = [
+    { args: ["--no-snapshot"], expectExitZero: true, expectSnapshot: "skipped" },
+    { args: ["--snapshot=none"], expectExitZero: true, expectSnapshot: "skipped" },
+    { args: ["--snapshot", "none"], expectExitZero: true, expectSnapshot: "skipped" },
+    { args: ["--no-snapshots"], expectExitZero: false, messageRe: /Unknown flag: --no-snapshots/ },
+    { args: ["--no-snapshot=true"], expectExitZero: false, messageRe: /--no-snapshot takes no value/ },
+    { args: ["--snapshot=task"], expectExitZero: false, messageRe: /filesHash/ },
+    { args: ["--snapshot=task"], expectExitZero: false, messageRe: /mapctx export/ },
+    { args: ["--snapshot=weird"], expectExitZero: false, messageRe: /--snapshot must be none or full/ },
+    { args: ["--bogus-flag"], expectExitZero: false, messageRe: /Unknown flag: --bogus-flag/ },
+    { args: [], expectExitZero: true, expectSnapshot: "published" }
+  ];
+
+  for (const { args, expectExitZero, expectSnapshot, messageRe } of cases) {
+    const t2 = t; // one sub-fixture per row, as asked
+    const f = fixture(t2);
+    f.success(["import", "--commit", "--actor", "test"]);
+    f.bringToReviewWithApprovedAcceptance("T-101", "acceptance.md");
+    const wipPath = path.join(f.repoDir, "tasks", "wip-marker.txt");
+    fs.writeFileSync(wipPath, "wip\n");
+    const before = hashTree(f.repoDir);
+
+    const result = f.cli(["task", "finish", "T-101", ...args, "--actor", "test", "--json"]);
+    if (expectExitZero) {
+      assert.equal(result.status, 0, `${JSON.stringify(args)}: expected exit 0, got stderr=${result.stderr}`);
+      const parsed = JSON.parse(result.stdout);
+      assert.equal(parsed.snapshot, expectSnapshot, `${JSON.stringify(args)}`);
+    } else {
+      assert.notEqual(result.status, 0, `${JSON.stringify(args)}: expected a refusal`);
+      if (messageRe) assert.match(String(result.stderr), messageRe, `${JSON.stringify(args)}: ${result.stderr}`);
+    }
+
+    const after = hashTree(f.repoDir);
+    const changed = countChangedMirrorFiles(before, after);
+    if (expectSnapshot === "published") {
+      assert.ok(changed > 0, `${JSON.stringify(args)}: expected mirrors to change (unchanged default)`);
+    } else {
+      assert.equal(changed, 0, `${JSON.stringify(args)}: expected 0 changed files, got ${changed}`);
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Review F1b: must not regress T-127 (`validate --json=true` stays human
+// mode -- already covered in cli-quickwins.test.ts) nor the CI pack:smoke
+// step (`mapctx workspace --no-open --port <n>` and friends must still
+// parse). The drift guard against workspace-server.ts's own literals already
+// lives in mapctx-cli.test.ts; this is the behavioral half.
+// ---------------------------------------------------------------------------
+
+test("workspace-only flags (--port, --no-open, --org, ...) pass through parseArgs unrejected on an unrelated command; an actual typo is still refused", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+
+  const passthrough = f.cli(["task", "show", "T-101", "--port", "123", "--no-open", "--org", "x", "--json"]);
+  assert.equal(passthrough.status, 0, `workspace flags must not be rejected by the unknown-flag rule: ${passthrough.stderr}`);
+  const shown = JSON.parse(passthrough.stdout);
+  assert.equal(shown.taskId, "T-101");
+
+  const typo = f.cli(["task", "show", "T-101", "--porttypo", "--json"]);
+  assert.notEqual(typo.status, 0, "an actual typo must still be refused");
+  assert.match(String(typo.stderr), /Unknown flag: --porttypo/);
+});
+
+// ---------------------------------------------------------------------------
+// Review F2: a checkpoint failure at the `precondition` stage means the
+// planning state is NOT closed (it changed under the lock) -- the message
+// must say so, and must NOT claim "already closed" (which would invite
+// re-closing a task someone deliberately reopened). The `publish`-stage
+// failure (EACCES) keeps the "already closed" wording, which is true there.
+// ---------------------------------------------------------------------------
+
+/**
+ * Library-level fixture for the precondition race: writes a store-authority
+ * mapctx.toml + isolated MAPCTX_HOME, like checkpoint.test.ts's openFixture,
+ * but also chdir's into the repo so `taskFinishCommand` (which reads
+ * `process.cwd()` internally) finds it exactly as the CLI binary would.
+ */
+function libraryFixture(t: TestContext) {
+  const repoDir = fs.mkdtempSync(path.join(require("os").tmpdir(), "mapctx-finish-lib-repo-"));
+  const mapctxHome = fs.mkdtempSync(path.join(require("os").tmpdir(), "mapctx-finish-lib-home-"));
+  const previousHome = process.env.MAPCTX_HOME;
+  const previousCwd = process.cwd();
+  process.env.MAPCTX_HOME = mapctxHome;
+  const projectId = "00000000-0000-0000-0000-0000000000f2";
+  const storeDir = path.join(mapctxHome, "projects", projectId);
+  fs.writeFileSync(path.join(repoDir, "mapctx.toml"), [
+    "schemaVersion = 1",
+    `projectId = "${projectId}"`,
+    'plansAuthority = "store"',
+    ""
+  ].join("\n"), "utf8");
+  const handle = StoreHandle.open(storeDir);
+  upsertProject(handle.db, {
+    projectId, boardTitle: "F2 fixture",
+    workDomains: [{ key: "CORE", description: "core" }],
+    notesMarkdown: "", plansAuthority: "store", sourceSnapshotHash: null
+  });
+  const created = createTask(handle, { id: "T-001", title: "F2 task", actor: "test", status: "review", workload: "Normal" });
+  assert.equal(created.ok, true, JSON.stringify(created));
+  const taskId = "T-001";
+  const revised = reviseAcceptance(handle, { taskId, condition: "criteria", texts: ["one criterion"], actor: "author", expectRevision: 0 });
+  assert.equal(revised.ok, true);
+  if (revised.ok) assert.equal(approveAcceptanceCriterion(handle, { taskId, index: 0, expectRevision: revised.revision, actor: "reviewer" }).ok, true);
+  // Materialize tasks/ so a later (unrelated) publish attempt in the same
+  // process does not fail on a missing directory for a different reason.
+  const exported = buildExport(handle.db, { tasksRoot: repoDir });
+  fs.mkdirSync(path.join(repoDir, "tasks"), { recursive: true });
+  fs.writeFileSync(exported.tasksMd.path, exported.tasksMd.content, "utf8");
+  for (const file of exported.taskDetailFiles) fs.writeFileSync(file.path, file.content, "utf8");
+  // Move to done FIRST, regularly (unpatched), so the only
+  // runInWriteTransaction call left for `taskFinishCommand` to make is the
+  // publish step -- finishTask skips its internal move when already done.
+  assert.equal(moveTask(handle, { taskId, to: "done", actor: "test" }).ok, true);
+  process.chdir(repoDir);
+  t.after(() => {
+    process.chdir(previousCwd);
+    handle.close();
+    if (previousHome === undefined) delete process.env.MAPCTX_HOME; else process.env.MAPCTX_HOME = previousHome;
+    fs.rmSync(repoDir, { recursive: true, force: true });
+    fs.rmSync(mapctxHome, { recursive: true, force: true });
+  });
+  return { repoDir, handle, taskId };
+}
+
+test("MUTATION GUARD (F2): a precondition-stage checkpoint failure says the task is NOT closed (never 'already closed'); the publish-stage failure still says 'already closed'", t => {
+  const lib = libraryFixture(t);
+
+  // Simulate a concurrent reopen landing in the gap between the gated move
+  // and the publication transaction, same technique as checkpoint.test.ts's
+  // "finish refuses a task-end checkpoint when the task is reopened in the
+  // gap" -- but patched on the PROTOTYPE, so it intercepts the handle
+  // `taskFinishCommand` opens internally (it opens its own, via cwd + toml).
+  const originalTx = StoreHandle.prototype.runInWriteTransaction;
+  let injected = false;
+  (StoreHandle.prototype as unknown as { runInWriteTransaction: unknown }).runInWriteTransaction = function (this: StoreHandle, fn: unknown) {
+    if (!injected && this.nodeId === lib.handle.nodeId) {
+      injected = true;
+      this.appendEvent({ eventType: "task.patched", actor: "gap-writer", payload: { taskId: lib.taskId, patch: { planningState: "review" } } });
+    }
+    return (originalTx as (fn: unknown) => unknown).call(this, fn);
+  };
+  t.after(() => { StoreHandle.prototype.runInWriteTransaction = originalTx; });
+
+  let thrown: unknown;
+  try {
+    taskFinishCommand(lib.taskId, { actor: "finisher", json: true } as never);
+  } catch (error) {
+    thrown = error;
+  }
+  assert.ok(thrown instanceof CliRefusal, `expected a CliRefusal, got: ${thrown}`);
+  const message = (thrown as CliRefusal).message;
+  assert.match(message, /The task is NOT closed/);
+  assert.ok(!/already closed/.test(message), `precondition-stage failure must never claim "already closed": ${message}`);
+});
+
+test("a publish-stage (EACCES) checkpoint failure keeps the 'already closed' wording and --no-snapshot pointer", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  f.bringToReviewWithApprovedAcceptance("T-101", "acceptance.md");
+  const tasksDir = path.join(f.repoDir, "tasks");
+  fs.chmodSync(tasksDir, 0o500);
+  t.after(() => { try { fs.chmodSync(tasksDir, 0o700); } catch { /* best effort */ } });
+  const { stderr } = f.refused(["task", "finish", "T-101", "--actor", "test"]);
+  assert.match(stderr, /already closed/);
+  assert.match(stderr, /--no-snapshot/);
+  fs.chmodSync(tasksDir, 0o700);
+});
+
+// ---------------------------------------------------------------------------
+// Review F3: documentation + the actual durability trade-off, proven by
+// recovery. Closing via --no-snapshot alone does not survive a total store
+// loss; a later export (or default finish) does.
+// ---------------------------------------------------------------------------
+
+function commitAll(repoDir: string, message: string): void {
+  const { execFileSync } = require("child_process") as typeof import("child_process");
+  execFileSync("git", ["add", "-A"], { cwd: repoDir });
+  execFileSync("git", ["commit", "-q", "-m", message], { cwd: repoDir });
+}
+
+test("--no-snapshot WITHOUT a later export loses the closure: after a total store loss, store init recovers the task as it was at the last checkpoint, NOT done", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  f.bringToReviewWithApprovedAcceptance("T-101", "acceptance.md");
+  const finished = f.success(["task", "finish", "T-101", "--no-snapshot", "--actor", "test"]);
+  assert.equal(finished.snapshot, "skipped");
+  assert.equal(f.success(["task", "show", "T-101"]).task.planningState, "done", "sanity: the store itself does show done before the loss");
+
+  commitAll(f.repoDir, "pre-loss state (TASKS.md still says the pre-close status)");
+  fs.rmSync(f.storeDir(), { recursive: true, force: true });
+
+  const recovered = f.success(["store", "init", "--actor", "test"]);
+  assert.equal(recovered.recovered, true);
+  assert.notEqual(f.success(["task", "show", "T-101"]).task.planningState, "done", "the --no-snapshot closure was never durable, so recovery must NOT show done");
+});
+
+test("--no-snapshot FOLLOWED BY a later mapctx export makes the closure durable: after a total store loss, store init recovers the task as done", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  f.bringToReviewWithApprovedAcceptance("T-101", "acceptance.md");
+  f.success(["task", "finish", "T-101", "--no-snapshot", "--actor", "test"]);
+  f.success(["export", "--actor", "test"]);
+
+  commitAll(f.repoDir, "export after no-snapshot close");
+  fs.rmSync(f.storeDir(), { recursive: true, force: true });
+
+  const recovered = f.success(["store", "init", "--actor", "test"]);
+  assert.equal(recovered.recovered, true);
+  assert.equal(f.success(["task", "show", "T-101"]).task.planningState, "done", "a later export must capture the closure and make it recoverable");
+});
+
+test("help/README/skill document the durability trade-off, not only mirror freshness", t => {
+  const f = fixture(t);
+  const help = f.cli(["--help"]).stdout;
+  assert.match(help, /DURABILITY/);
+  assert.match(help, /filesHash of the whole mirror set/);
+
+  // __dirname is dist/ (dist -> sync-engine -> packages -> repo root).
+  const repoRoot = path.join(__dirname, "..", "..", "..");
+  const readme = fs.readFileSync(path.join(repoRoot, "README.md"), "utf8");
+  assert.match(readme, /durability trade/i);
+  assert.match(readme, /filesHash/);
+
+  const skill = fs.readFileSync(path.join(repoRoot, "skills", "mapctx-traycer", "SKILL.md"), "utf8");
+  assert.match(skill, /durability trade/i);
+});
+
+// ---------------------------------------------------------------------------
+// Review F4: the `task move --status done` help line no longer claims
+// unconditional equivalence with `task finish --no-snapshot` -- they diverge
+// once the task IS already done (`done` has no self-edge).
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD (F4): on an already-done task, task move --status done is illegal-transition while task finish --no-snapshot succeeds with move.performed:false; help no longer claims unconditional equivalence", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  f.bringToReviewWithApprovedAcceptance("T-101", "acceptance.md");
+  f.success(["task", "finish", "T-101", "--no-snapshot", "--actor", "test"]);
+
+  const moveRefused = f.refused(["task", "move", "T-101", "--status", "done", "--actor", "test"]);
+  assert.match(moveRefused.stderr, /illegal-transition/);
+
+  const finishResult = f.success(["task", "finish", "T-101", "--no-snapshot", "--actor", "test"]);
+  assert.equal(finishResult.ok, true);
+  assert.equal(finishResult.move.performed, false);
+
+  const help = f.cli(["--help"]).stdout;
+  assert.ok(!/no more and no less/.test(help), "help must no longer claim unconditional equivalence");
+  assert.match(help, /not yet done/);
+});
+
+// ---------------------------------------------------------------------------
+// Review F5: closing releases whatever claim is active, even one held by a
+// different actor -- previously silent. Both closing paths now warn on
+// stderr, naming the released claim id, without disturbing --json stdout.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD (F5): finish --no-snapshot and move --status done both warn on stderr and report releasedClaimId when closing revokes another holder's active claim", t => {
+  for (const closeVia of ["finish", "move"] as const) {
+    const f = fixture(t);
+    f.success(["import", "--commit", "--actor", "test"]);
+    f.success(["task", "update", "T-101", "--set", "workload=Normal", "--set", "detail.estimatedEffort=1d", "--actor", "test"]);
+    f.success(["task", "claim", "T-101", "--actor", "other-agent"]);
+    f.success(["task", "move", "T-101", "--status", "review", "--actor", "test"]);
+    fs.writeFileSync(path.join(f.repoDir, "acceptance.md"), "## Acceptance\n- [ ] one.\n");
+    const revised = f.success(["task", "acceptance", "revise", "T-101", "--from-file", "acceptance.md", "--expect-revision", "0", "--actor", "test"]);
+    f.success(["task", "acceptance", "approve", "T-101", "--index", "0", "--expect-revision", String(revised.revision), "--actor", "test"]);
+
+    const result = closeVia === "finish"
+      ? f.cli(["task", "finish", "T-101", "--no-snapshot", "--actor", "me", "--json"])
+      : f.cli(["task", "move", "T-101", "--status", "done", "--actor", "me", "--json"]);
+    assert.equal(result.status, 0, `${closeVia}: ${result.stderr}`);
+    const payload = JSON.parse(result.stdout);
+    const releasedClaimId = closeVia === "finish" ? payload.move.releasedClaimId : payload.releasedClaimId;
+    assert.ok(releasedClaimId, `${closeVia}: expected releasedClaimId in the payload: ${JSON.stringify(payload)}`);
+    assert.match(String(result.stderr), /released the active claim/);
+    assert.ok(String(result.stderr).includes(releasedClaimId), `${closeVia}: stderr must name the released claim id`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Extra (cheap): the skill now documents that `task create --status done`
+// bypasses the done gate entirely -- pin the fact at the store level.
+// ---------------------------------------------------------------------------
+
+test("createTask({status:'done'}) bypasses the acceptance gate entirely: no acceptance revision required, completedOn is null (unlike moveTask, which stamps it)", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const created = f.success(["task", "create", "--title", "bootstrap bypass", "--status", "done", "--workload", "Normal", "--actor", "test"]);
+  assert.ok(created.ok);
+  const shown = f.success(["task", "show", created.taskId]);
+  assert.equal(shown.task.planningState, "done");
+  assert.equal(shown.task.completedOn, null, "createTask does not stamp completedOn the way moveTask does");
+  const acceptance = f.success(["task", "acceptance", "show", created.taskId]);
+  assert.equal(acceptance.acceptance.condition, "absent", "no acceptance revision was required to create it as done");
 });
