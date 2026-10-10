@@ -233,6 +233,7 @@ const PATCHABLE_TASK_FIELDS = new Set([
   "dueDate",
   "predictedStart",
   "externalId",
+  "externalLinks",
   "specMode",
   "assignees",
   "iteration",
@@ -251,6 +252,52 @@ const PATCHABLE_DETAIL_FIELDS = new Set([
   "blocking"
 ]);
 
+/**
+ * T-127 (R4): the unknown-field refusal used to list only the half of the
+ * surface the caller happened to miss, so `--set filesAffected=a,b` answered
+ * with the task-field list and never mentioned that the field exists behind
+ * the `detail.` prefix. Both halves are always named now, and a field that
+ * lives on the other side is called out by name.
+ */
+function unknownFieldMessage(field: string, side: "task" | "detail"): string {
+  const taskFields = [...PATCHABLE_TASK_FIELDS].join(", ");
+  const detailFields = [...PATCHABLE_DETAIL_FIELDS].join(", ");
+  const hint = side === "task" && PATCHABLE_DETAIL_FIELDS.has(field)
+    ? ` It is a detail field: use \`--set detail.${field}=...\`.`
+    : side === "detail" && PATCHABLE_TASK_FIELDS.has(field)
+      ? ` It is a task field: use \`--set ${field}=...\` without the \`detail.\` prefix.`
+      : "";
+  return `${side} field "${field}" is not patchable.${hint}`
+    + ` Task fields: ${taskFields}.`
+    + ` Detail fields (prefix each with \`detail.\`): ${detailFields}.`
+    + ` \`waitReason\` is also accepted unprefixed as a shorthand for \`detail.waitReason\`.`
+    + ` Prose lives in the Git-authored \`description:\` block of tasks/<ID>.md and is never patchable here.`;
+}
+
+const URI_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.\-]*:/;
+
+/**
+ * T-127: `externalLinks` became CLI-patchable, so the store is the gate that
+ * keeps the column holding URIs. Every entry must be a non-blank, whitespace-
+ * free string carrying an explicit scheme and parsing as a URI -- which admits
+ * both `https://github.com/o/r/issues/1` and the `provider:entity:id` form the
+ * importer already derives external refs from (import.ts externalRefFromId).
+ */
+function invalidExternalLink(value: unknown): string | null {
+  if (typeof value !== "string") return `every externalLinks entry must be a string; got ${JSON.stringify(value)}`;
+  const trimmed = value.trim();
+  if (trimmed === "") return "externalLinks entries cannot be blank";
+  if (trimmed !== value) return `externalLinks entry has surrounding whitespace: ${JSON.stringify(value)}`;
+  if (/\s/.test(trimmed)) return `externalLinks entry contains whitespace: ${JSON.stringify(value)}`;
+  if (!URI_SCHEME_RE.test(trimmed)) return `externalLinks entry needs an explicit URI scheme (https://… or provider:entity:id): ${JSON.stringify(value)}`;
+  try {
+    new URL(trimmed);
+  } catch {
+    return `externalLinks entry is not a parseable URI: ${JSON.stringify(value)}`;
+  }
+  return null;
+}
+
 export type UpdateTaskOptions = {
   taskId: string;
   patch?: Partial<TaskRecord>;
@@ -267,7 +314,7 @@ export type UpdateTaskResult =
   | { ok: true; applied: { fields: string[]; detailFields: string[]; edges: boolean } }
   | {
       ok: false;
-      reason: "unknown-task" | "no-changes" | "unknown-field" | "unknown-dependency" | "invalid-workload" | "invalid-estimated-effort" | "invalid-wait-reason" | "invalid-predicted-start";
+      reason: "unknown-task" | "no-changes" | "unknown-field" | "unknown-dependency" | "invalid-workload" | "invalid-estimated-effort" | "invalid-wait-reason" | "invalid-predicted-start" | "invalid-external-links";
       to: string;
       message?: string;
     };
@@ -278,22 +325,12 @@ export function updateTask(store: StoreHandle, options: UpdateTaskOptions): Upda
 
   for (const field of Object.keys(options.patch ?? {})) {
     if (!PATCHABLE_TASK_FIELDS.has(field)) {
-      return {
-        ok: false,
-        reason: "unknown-field",
-        to,
-        message: `task field "${field}" is not patchable; allowed: ${[...PATCHABLE_TASK_FIELDS].join(", ")}`
-      };
+      return { ok: false, reason: "unknown-field", to, message: unknownFieldMessage(field, "task") };
     }
   }
   for (const field of Object.keys(options.detailPatch ?? {})) {
     if (!PATCHABLE_DETAIL_FIELDS.has(field)) {
-      return {
-        ok: false,
-        reason: "unknown-field",
-        to,
-        message: `detail field "${field}" is not patchable; allowed: ${[...PATCHABLE_DETAIL_FIELDS].join(", ")}`
-      };
+      return { ok: false, reason: "unknown-field", to, message: unknownFieldMessage(field, "detail") };
     }
   }
 
@@ -305,6 +342,19 @@ export function updateTask(store: StoreHandle, options: UpdateTaskOptions): Upda
       to,
       message: `workload must be one of ${workloadSchema.options.join("|")}; got "${suppliedWorkload}"`
     };
+  }
+  // T-127: validated before the write transaction opens, like every other
+  // enum/format gate here -- a malformed link must never reach the journal.
+  // `null` clears the list; anything else must be an array of URIs.
+  const suppliedLinks: unknown = options.patch?.externalLinks;
+  if (suppliedLinks !== undefined) {
+    if (suppliedLinks !== null && !Array.isArray(suppliedLinks)) {
+      return { ok: false, reason: "invalid-external-links", to, message: "externalLinks must be an array of URIs (or null to clear)" };
+    }
+    for (const link of (suppliedLinks as unknown[] | null) ?? []) {
+      const problem = invalidExternalLink(link);
+      if (problem) return { ok: false, reason: "invalid-external-links", to, message: problem };
+    }
   }
   const suppliedEffort = options.detailPatch?.estimatedEffort as string | null | undefined;
   const suppliedWaitReason = options.detailPatch?.waitReason;
@@ -350,6 +400,12 @@ export function updateTask(store: StoreHandle, options: UpdateTaskOptions): Upda
     const detailPatch: Partial<TaskDetailRecord> = { ...(options.detailPatch ?? {}) };
     if (typeof patch.workload === "string") {
       patch.workload = patch.workload.trim() || null;
+    }
+    // T-127: the column is a JSON array, never null -- `--set externalLinks=null`
+    // means "no links", so it normalizes to [] before the event is journaled
+    // instead of leaving a null for the projection to coerce silently.
+    if ((patch as { externalLinks?: unknown }).externalLinks === null) {
+      patch.externalLinks = [];
     }
     // Editing an estimate after the T-099 convention is an explicit new
     // declaration, not a reinterpretation of the legacy value it replaces.
