@@ -123,6 +123,56 @@ test("privacy CLI dispatch receipt warns but still accepts schema-valid Artifact
   assert.equal(accepted.mode, "dry-run");
 });
 
+// T-131: the lint must promise a cure for receipt.failure.message and each
+// receipt.changedFiles element, and never for receipt.failure.category or
+// receipt.outcome -- cross-tested via the CLI subprocess, extracting the
+// printed fieldPaths and feeding them straight back into `redact --field`.
+test("privacy CLI dispatch receipt warns on failure.message and changedFiles; category/outcome refuse by name", t => {
+  const f = fixture(t);
+  f.success(["task", "update", "T-101", "--set", "workload=Normal", "--actor", "test"]);
+  f.success(["task", "claim", "T-101", "--actor", "test"]);
+  const dispatch = f.success(["dispatch", "create", "T-101", "--actor", "test"]);
+  const receipt = {
+    schemaVersion: 1, dispatchId: dispatch.dispatchId, attempt: 1, outcome: "failed",
+    startedAt: "2026-10-09T10:00:00.000Z", endedAt: "2026-10-09T10:05:00.000Z",
+    changedFiles: [`clients/${SECRET}/report.md`], usageEvents: [], evidence: [],
+    failure: { category: "executor-error", message: `boom ${SECRET}`, retryable: true }
+  };
+  fs.writeFileSync(path.join(f.repoDir, "receipt.json"), JSON.stringify(receipt));
+  const result = f.cli(["dispatch", "receipt", dispatch.dispatchId, "--receipt", "receipt.json", "--actor", "test", "--json"]);
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, String(result.stderr));
+  const stderr = String(result.stderr);
+  assert.ok(!stderr.includes(SECRET), "stderr must never echo full match");
+
+  const fieldPaths = [...stderr.matchAll(/field "([^"]+)"/g)].map(m => m[1]);
+  assert.deepEqual(new Set(fieldPaths), new Set(["receipt.failure.message", "receipt.changedFiles.0"]), stderr);
+  for (const fieldPath of fieldPaths) {
+    assert.match(stderr, new RegExp(`field "${fieldPath.replace(/\./g, "\\.")}"[^\\n]*redact it after the fact`), stderr);
+  }
+
+  const candidates = f.success(["redact", "list", "--json"]).candidates as Array<{ nodeId: string; sequence: number; eventType: string; redactableFieldPaths: string[] }>;
+  const receiptCandidate = candidates.find(c => c.eventType === "run.receipt-recorded");
+  assert.ok(receiptCandidate, JSON.stringify(candidates));
+  for (const fieldPath of fieldPaths) {
+    assert.ok(receiptCandidate!.redactableFieldPaths.includes(fieldPath), JSON.stringify(receiptCandidate));
+    const accepted = f.success(["redact", "--node", receiptCandidate!.nodeId, "--sequence", String(receiptCandidate!.sequence),
+      "--field", fieldPath, "--reason", "T-131 cross-check", "--actor", "dpo"]);
+    assert.equal(accepted.mode, "dry-run");
+  }
+
+  // receipt.failure.category and receipt.outcome are structural: the lint
+  // must not warn on them at all if they happen to match (they don't here,
+  // "executor-error"/"failed" don't match the secret pattern), but redact
+  // must refuse them by name regardless of what the lint says.
+  for (const fieldPath of ["receipt.failure.category", "receipt.outcome"]) {
+    const refused = f.cli(["redact", "--node", receiptCandidate!.nodeId, "--sequence", String(receiptCandidate!.sequence),
+      "--field", fieldPath, "--reason", "should refuse", "--actor", "dpo", "--json"]);
+    assert.notEqual(refused.status, 0);
+    assert.match(String(refused.stderr), /not-redactable/);
+  }
+});
+
 test("privacy CLI task create/update warn that the field is NOT redactable afterwards and never promise a cure", t => {
   const f = fixture(t);
   const createResult = f.cli(["task", "create", "--title", `Handle ${SECRET}`, "--summary", "fixture", "--actor", "test", "--json"]);

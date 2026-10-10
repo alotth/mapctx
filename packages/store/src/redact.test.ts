@@ -4,14 +4,14 @@ import * as fs from "fs"
 import * as path from "path"
 import { createHash } from "node:crypto"
 import { DatabaseSync } from "node:sqlite"
-import { canonicalJson, runReceiptSchema, type EventLogEntry } from "@mapctx/protocol"
+import { canonicalJson, runEventSchema, runReceiptSchema, type EventLogEntry, type RunEvent } from "@mapctx/protocol"
 import { commitNodeAttestation, draftNodeAttestation, loadNodeAttestations } from "./attestation"
 import { claimTask } from "./claims"
-import { recordDispatchAttempt } from "./dispatch"
+import { recordDispatchAttempt, recordRunEvent } from "./dispatch"
 import { journalEntryPath, payloadSha256, readJournalEntry } from "./journal"
-import { getAcceptance, getRunReceipt, listHistoryEvidence, listRedactions } from "./projections"
+import { getAcceptance, getRunEvent, getRunReceipt, listHistoryEvidence, listRedactions } from "./projections"
 import {
-  listRedactionCandidates, reconcileRedactionsFromLedger, redactEvidence, REDACTED_SENTINEL,
+  isRedactableFieldPath, listRedactionCandidates, reconcileRedactionsFromLedger, redactEvidence, REDACTED_SENTINEL,
   verifyRedactions, verifyRedactionsFromLedger, type RedactionCommitResult, type RedactionTarget
 } from "./redact"
 import { repairStore } from "./repair"
@@ -433,7 +433,9 @@ test("receipt redaction scrubs only uri/promotedPath, preserves ArtifactRef stru
     startedAt: AT, endedAt: "2026-10-09T10:05:00.000Z", changedFiles: ["src/x.ts"], usageEvents: [], evidence: [artifact], failure: null };
   const target = f.handle.appendEvent({ eventType: "run.receipt-recorded", actor: "test", payload: { receipt } });
   const candidates = listRedactionCandidates(f.handle.db);
-  assert.deepEqual(candidates[0].redactableFieldPaths, ["receipt.evidence.0.promotedPath", "receipt.evidence.0.uri"]);
+  // T-131 widened receipt.changedFiles to redactable too, so the fixture's
+  // changedFiles entry now shows up alongside the ArtifactRef leaves.
+  assert.deepEqual(candidates[0].redactableFieldPaths, ["receipt.evidence.0.promotedPath", "receipt.evidence.0.uri", "receipt.changedFiles.0"]);
   const refused = redactEvidence(f.handle, { target, fieldPath: "receipt.evidence.0.artifactId", reason: "x", actor: "dpo", commit: true });
   assert.ok(!refused.ok);
   assert.equal(refused.reason, "not-redactable");
@@ -807,4 +809,204 @@ test("a DB-only row whose payload_json does not hash to its own payload_sha256 c
   try { StoreHandle.open(f.dir).close(); } catch (error) { threw = (error as Error).message; }
   assert.match(threw, /redaction verification failed/);
   assert.equal(repairStore(f.dir).status, "gap");
+});
+
+// ---- T-131: receipt.failure.message, receipt.changedFiles and run event
+// payloads are the three free-text sinks the T-126 review left out of scope.
+// ----
+
+function withDispatch(handle: StoreHandle): void {
+  seed(handle);
+  assert.ok(claimTask(handle, { taskId: "T-001", actor: "test" }).ok);
+  assert.ok(recordDispatchAttempt(handle, {
+    dispatchId: DISPATCH_ID, taskId: "T-001", executorKind: "test", attempt: 1, contextHash: "hash", status: "claimed"
+  }, "test").ok);
+}
+
+test("receipt.failure.message and individual changedFiles elements are redactable; category/retryable/outcome are not", t => {
+  const f = fixture(t);
+  withDispatch(f.handle);
+  const receipt = {
+    schemaVersion: 1, dispatchId: DISPATCH_ID, attempt: 1, outcome: "failed", startedAt: AT, endedAt: "2026-10-09T10:05:00.000Z",
+    changedFiles: ["src/ok.ts", `clients/${OTHER_SECRET}/report.md`], usageEvents: [], evidence: [],
+    failure: { category: "executor-error", message: `boom while handling ${SECRET}`, retryable: true }
+  };
+  const target = f.handle.appendEvent({ eventType: "run.receipt-recorded", actor: "test", payload: { receipt } });
+
+  // Order is grouped by REDACTABLE_ROOTS declaration order, leaves sorted
+  // within each root -- deterministic, not alphabetical across roots.
+  const candidates = listRedactionCandidates(f.handle.db);
+  assert.deepEqual(candidates[0].redactableFieldPaths, ["receipt.failure.message", "receipt.changedFiles.0", "receipt.changedFiles.1"]);
+  assert.ok(!JSON.stringify(candidates).includes(SECRET) && !JSON.stringify(candidates).includes(OTHER_SECRET));
+
+  const refusedEnum = redactEvidence(f.handle, { target, fieldPath: "receipt.failure.category", reason: "x", actor: "dpo", commit: true });
+  assert.ok(!refusedEnum.ok);
+  assert.equal(refusedEnum.reason, "not-redactable");
+  // retryable is a boolean, not a string leaf at all, so the refusal is
+  // "nothing-to-redact" (no string content), not "not-redactable" -- the
+  // leaf allowlist is never even consulted for a non-string value.
+  const refusedBool = redactEvidence(f.handle, { target, fieldPath: "receipt.failure.retryable", reason: "x", actor: "dpo", commit: true });
+  assert.ok(!refusedBool.ok);
+  assert.equal(refusedBool.reason, "nothing-to-redact");
+  const refusedOutcome = redactEvidence(f.handle, { target, fieldPath: "receipt.outcome", reason: "x", actor: "dpo", commit: true });
+  assert.ok(!refusedOutcome.ok);
+  assert.equal(refusedOutcome.reason, "not-redactable");
+
+  const r1 = commit(f.handle, target, "receipt.failure");
+  assert.deepEqual(r1.plan.fieldPaths, ["receipt.failure.message"]);
+  const r2 = commit(f.handle, target, "receipt.changedFiles.1", "second removal");
+  assert.deepEqual(r2.plan.fieldPaths, ["receipt.changedFiles.1"]);
+
+  const expected = {
+    ...receipt,
+    changedFiles: ["src/ok.ts", REDACTED_SENTINEL],
+    failure: { category: "executor-error", message: REDACTED_SENTINEL, retryable: true }
+  };
+  const entry = journal(f.dir, target);
+  assert.deepEqual(entry.payload.receipt, expected);
+  assert.ok(runReceiptSchema.safeParse(expected).success, "a redacted receipt remains schema-valid");
+  // The untouched sibling element survives verbatim.
+  assert.equal(entry.payload.receipt.changedFiles[0], "src/ok.ts");
+
+  const row = f.handle.db.prepare(
+    "SELECT changed_files_json, failure_json, receipt_json FROM run_receipt_projection WHERE dispatch_id = ? AND attempt = 1"
+  ).get(DISPATCH_ID) as { changed_files_json: string; failure_json: string; receipt_json: string };
+  assert.equal(canonicalJson(JSON.parse(row.changed_files_json)), canonicalJson(expected.changedFiles));
+  assert.equal(canonicalJson(JSON.parse(row.failure_json)), canonicalJson(expected.failure));
+  assert.equal(canonicalJson(JSON.parse(row.receipt_json)), canonicalJson(expected));
+
+  assertAbsent(f.dir);
+  assertAbsent(f.dir, OTHER_SECRET);
+  f.close();
+  assert.equal(repairStore(f.dir).status, "ok");
+  f.open();
+  assert.deepEqual(getRunReceipt(f.handle.db, DISPATCH_ID, 1)!.changedFiles, expected.changedFiles);
+  assert.deepEqual(getRunReceipt(f.handle.db, DISPATCH_ID, 1)!.failure, expected.failure);
+  assertAbsent(f.dir);
+  assertAbsent(f.dir, OTHER_SECRET);
+});
+
+test("receipt.failure_json must be scrubbed too, not only receipt_json -- a self-consistent edit of a redacted failure still refuses open and repair", t => {
+  const f = fixture(t);
+  withDispatch(f.handle);
+  const receipt = {
+    schemaVersion: 1, dispatchId: DISPATCH_ID, attempt: 1, outcome: "failed", startedAt: AT, endedAt: "2026-10-09T10:05:00.000Z",
+    changedFiles: ["a.ts"], usageEvents: [], evidence: [],
+    failure: { category: "timeout", message: SECRET, retryable: false }
+  };
+  const target = f.handle.appendEvent({ eventType: "run.receipt-recorded", actor: "test", payload: { receipt } });
+  commit(f.handle, target, "receipt.failure");
+  // The column-level scrub (failure_json) is what A9/A10 of the probe checks
+  // directly; here the end-to-end guarantee is that no projection column, not
+  // just the journal, ever holds the plaintext.
+  const row = f.handle.db.prepare("SELECT failure_json FROM run_receipt_projection WHERE dispatch_id = ? AND attempt = 1").get(DISPATCH_ID) as { failure_json: string };
+  assert.ok(!row.failure_json.includes(SECRET));
+  f.close();
+
+  const p = journalEntryPath(f.dir, target.nodeId, target.sequence);
+  const entry = JSON.parse(fs.readFileSync(p, "utf8"));
+  entry.payload.receipt.failure.message = "rewritten-after-the-fact";
+  entry.payloadSha256 = payloadSha256(entry.payload);
+  fs.writeFileSync(p, JSON.stringify(entry));
+  let threw = "";
+  try { StoreHandle.open(f.dir).close(); } catch (error) { threw = (error as Error).message; }
+  assert.match(threw, /redaction verification failed/);
+  assert.equal(repairStore(f.dir).status, "gap");
+});
+
+test("a run event's open payload is redactable leaf-by-leaf; dispatchId/attempt/sequence/type/timestamp are not", t => {
+  const f = fixture(t);
+  withDispatch(f.handle);
+  const event: RunEvent = {
+    schemaVersion: 1, dispatchId: DISPATCH_ID, attempt: 1, sequence: 0, type: "progress", timestamp: AT,
+    payload: { note: `retrying for ${SECRET}`, nested: { detail: OTHER_SECRET }, count: 3 }
+  };
+  const written = recordRunEvent(f.handle, event, "test");
+  assert.ok(written.ok, JSON.stringify(written));
+  const seq = (f.handle.db.prepare("SELECT MAX(sequence) m FROM event_log").get() as { m: number }).m;
+  const target: RedactionTarget = { nodeId: f.handle.nodeId, sequence: seq };
+
+  const candidates = listRedactionCandidates(f.handle.db).filter(c => c.eventType === "run.event-recorded");
+  assert.deepEqual(candidates[0].redactableFieldPaths, ["event.payload.nested.detail", "event.payload.note"]);
+  assert.equal(candidates[0].subject, DISPATCH_ID);
+  assert.ok(!JSON.stringify(candidates).includes(SECRET) && !JSON.stringify(candidates).includes(OTHER_SECRET));
+
+  for (const fieldPath of ["event.dispatchId", "event.attempt", "event.sequence", "event.type", "event.timestamp"]) {
+    const refused = redactEvidence(f.handle, { target, fieldPath, reason: "x", actor: "dpo", commit: true });
+    assert.ok(!refused.ok, fieldPath);
+    assert.equal(refused.reason, "not-redactable", fieldPath);
+  }
+
+  const r = commit(f.handle, target, "event.payload");
+  assert.deepEqual(r.plan.fieldPaths, ["event.payload.nested.detail", "event.payload.note"]);
+
+  const expectedEvent = { ...event, payload: { note: REDACTED_SENTINEL, nested: { detail: REDACTED_SENTINEL }, count: 3 } };
+  assert.deepEqual(journal(f.dir, target).payload.event, expectedEvent);
+  assert.ok(runEventSchema.safeParse(expectedEvent).success, "a redacted run event remains schema-valid");
+
+  const row = f.handle.db.prepare(
+    "SELECT payload_json, event_json FROM run_event_projection WHERE dispatch_id = ? AND attempt = 1 AND sequence = 0"
+  ).get(DISPATCH_ID) as { payload_json: string; event_json: string };
+  assert.equal(canonicalJson(JSON.parse(row.payload_json)), canonicalJson(expectedEvent.payload));
+  assert.equal(canonicalJson(JSON.parse(row.event_json)), canonicalJson(expectedEvent));
+  assert.equal((JSON.parse(row.payload_json) as { count: number }).count, 3, "a non-string payload member survives untouched");
+
+  assertAbsent(f.dir);
+  assertAbsent(f.dir, OTHER_SECRET);
+  f.close();
+  assert.equal(repairStore(f.dir).status, "ok");
+  f.open();
+  assert.deepEqual(getRunEvent(f.handle.db, DISPATCH_ID, 1, 0)!.payload, expectedEvent.payload);
+  assert.equal(verifyRedactionsFromLedger(f.dir, f.handle.db).problems.length, 0);
+  assertAbsent(f.dir);
+  assertAbsent(f.dir, OTHER_SECRET);
+});
+
+// MÉDIA-1 (carried forward): isRedactableFieldPath must agree, leaf by leaf,
+// with what redactEvidence actually accepts -- otherwise the lint can promise
+// a cure on a structural neighbour again, exactly the T-126 bug this closes.
+test("isRedactableFieldPath agrees leaf-by-leaf with redactEvidence for every T-131 root", () => {
+  assert.ok(isRedactableFieldPath("run.receipt-recorded", "receipt.failure.message"));
+  assert.ok(!isRedactableFieldPath("run.receipt-recorded", "receipt.failure.category"));
+  assert.ok(!isRedactableFieldPath("run.receipt-recorded", "receipt.failure.retryable"));
+  assert.ok(isRedactableFieldPath("run.receipt-recorded", "receipt.changedFiles.0"));
+  assert.ok(isRedactableFieldPath("run.event-recorded", "event.payload.note"));
+  assert.ok(!isRedactableFieldPath("run.event-recorded", "event.dispatchId"));
+  assert.ok(!isRedactableFieldPath("run.event-recorded", "event.timestamp"));
+  // ArtifactRef rules from T-126 are unchanged by the T-131 reshaping of
+  // REDACTABLE_LEAVES into a per-root map.
+  assert.ok(isRedactableFieldPath("run.receipt-recorded", "receipt.evidence.0.uri"));
+  assert.ok(!isRedactableFieldPath("run.receipt-recorded", "receipt.evidence.0.artifactId"));
+  assert.ok(!isRedactableFieldPath("run.receipt-recorded", "receipt.outcome"));
+  assert.ok(!isRedactableFieldPath("acceptance.approved", "criterionId"));
+});
+
+// ---- review BAIXA-7: an attestation file that cannot be PARSED is a
+// different condition from "no attestation covers this node", and the
+// advisory must name the read failure, not misdirect the operator. ----
+
+test("a malformed attestation file surfaces as a named read failure in the advisory, never as a missing attestation", t => {
+  const f = fixture(t);
+  seed(f.handle);
+  const target = approve(f.handle);
+  commit(f.handle, target);
+  const node = target.nodeId;
+  f.close();
+
+  fs.rmSync(path.join(f.dir, "events", node), { recursive: true, force: true });
+  const db = new DatabaseSync(StoreHandle.dbPathFor(f.dir));
+  db.exec(`UPDATE event_log SET journal_path = '' WHERE node_id = '${node}'`);
+  db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  db.close();
+  fs.writeFileSync(path.join(f.dir, "node-attestations.json"), "{ this is not json");
+
+  const ro = f.open(true);
+  ro.db.prepare("SELECT COUNT(*) FROM event_log").get();
+  const advisory = ro.maintenanceAdvisory();
+  assert.equal(advisory.length, 1, JSON.stringify(advisory));
+  assert.match(advisory[0], /attestation file could not be read/);
+  assert.ok(!/no reviewed attestation covers this node/.test(advisory[0]), advisory[0]);
+  assert.equal(ro.maintenanceNeeded(), null, "an unreadable attestation file must not brick the open");
+  assert.ok(!advisory.join("|").includes(SECRET));
+  f.close();
 });
