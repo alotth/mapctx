@@ -1373,10 +1373,44 @@ export function mapctxValidateCliCommand(options: MapctxOptions): void {
  * the task or when the lease lapses -- the two facts that decide whether to
  * wait or to escalate. The token is deliberately not among them.
  */
+/**
+ * Review F2: the first version rendered `JSON.stringify(holder)` verbatim and
+ * unbounded, which was wrong twice. The DEFAULT holder is `{pid, host}` --
+ * nobody opts into that -- so an internal hostname and pid were disclosed to
+ * anyone who merely tried to claim a busy task; and a 300-character holder
+ * echoed the whole thing (a secret-looking field included) into human stderr,
+ * putting raw JSON back in the channel T-126/T-127 kept it out of.
+ *
+ * So: only keys a holder uses to IDENTIFY itself, each clipped, joined without
+ * braces, with a total cap. `pid`/`host` are deliberately not among them --
+ * another agent's process id is not actionable, while `claimId` and
+ * `expiresAt` already answer "wait or escalate". The full holder stays in the
+ * `--json` payload, which is the structured channel and is the caller's own
+ * self-reported data.
+ */
+const HOLDER_IDENTITY_KEYS = ['provider', 'agent', 'actor', 'name', 'epic'] as const;
+const HOLDER_VALUE_LIMIT = 40;
+const HOLDER_RENDER_LIMIT = 100;
+
+export function renderHolder(holder: Record<string, unknown> | undefined): string {
+  const fields = Object.entries(holder ?? {});
+  if (fields.length === 0) return 'an unidentified holder';
+  const named = fields
+    .filter(([key]) => (HOLDER_IDENTITY_KEYS as readonly string[]).includes(key))
+    .map(([key, value]) => {
+      // Clip and strip, so neither a long value nor a brace/newline reaches
+      // the one-line human channel.
+      const text = String(value).replace(/[{}\r\n]/g, ' ').trim();
+      return `${key}=${text.length > HOLDER_VALUE_LIMIT ? `${text.slice(0, HOLDER_VALUE_LIMIT)}…` : text}`;
+    });
+  if (named.length === 0) return `an unidentified holder (${fields.length} field(s))`;
+  const joined = named.join(' ');
+  return joined.length > HOLDER_RENDER_LIMIT ? `${joined.slice(0, HOLDER_RENDER_LIMIT)}…` : joined;
+}
+
 function activeClaimSuffix(activeClaim: DisclosableClaimRecord | undefined): string {
   if (!activeClaim) return '';
-  const holder = JSON.stringify(activeClaim.holder ?? {});
-  return ` -- claim ${activeClaim.claimId} held by ${holder}, expires ${activeClaim.expiresAt}`;
+  return ` -- claim ${activeClaim.claimId} held by ${renderHolder(activeClaim.holder)}, expires ${activeClaim.expiresAt}`;
 }
 
 export function taskClaimCommand(taskId: string, options: MapctxOptions): void {

@@ -77,7 +77,7 @@ export function appendTaskClaim(
   if (!task) return { ok: false, reason: "unknown-task" };
 
   if (task.planningState === "done" || task.planningState === "cancelled" || task.planningState === "archived") {
-    return { ok: false, reason: "terminal-state" } as ClaimResult;
+    return { ok: false, reason: "terminal-state" };
   }
 
   // Containers do not execute. Every executable claim must carry both the
@@ -104,7 +104,7 @@ export function appendTaskClaim(
         ok: false,
         reason: invalidWorkload || invalidEstimate ? "invalid-workload-or-estimate" : "missing-workload-or-estimate",
         message: `Executable task planning invalid: ${issues.join("; ")}. Fix: ${fixes.join("; ")}`
-      } as ClaimResult;
+      };
     }
   }
 
@@ -168,7 +168,7 @@ export function appendTaskClaim(
 
   const claim = getClaim(store.db, claimId);
   if (!claim) throw new Error("Claim projection missing immediately after task.claimed.");
-  return { ok: true, claim, expiredPrevious, planningTransitionsTo: path.length > 0 ? "in-progress" : undefined } as ClaimResult;
+  return { ok: true, claim, expiredPrevious, planningTransitionsTo: path.length > 0 ? "in-progress" : undefined };
 }
 
 export type LeaseOptions = {

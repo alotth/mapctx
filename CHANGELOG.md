@@ -155,7 +155,13 @@ depended on the old channel.
   `expiresAt`, `state` and the journal coordinates, and in human mode the
   `Error:` line now names the claim, its holder and its expiry so you can
   decide to wait or escalate without `--json`. A holder still receives its own
-  token from a successful `task claim`/`task start` and from `task renew`
+  token from a successful `task claim`/`task start` and from `task renew`.
+  **This stops new disclosures but rotates nothing:** `task renew` extends a
+  lease without reissuing its token, so a token printed by any pre-0.4.0 build
+  stays valid until that lease expires or is released. If a pre-fix claim
+  refusal may have reached a CI log, a transcript or a shared terminal,
+  release those leases and re-claim them rather than waiting them out.
+  Rotating the token on renew is a separate change
 * **fix:** `externalLinks` refuses userinfo credentials (`https://user:pass@...`),
   caps each link at 2048 characters, and matches the `scheme:word:rest` provider
   form case-insensitively
