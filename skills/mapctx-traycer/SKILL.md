@@ -177,9 +177,13 @@ generated snapshots. Never hand-edit them; change them through the CLI and repai
 The `description:` block of `tasks/<ID>.md` is the single exception: it is **Git-authored prose**,
 owned by the repository and never by the store.
 
-- `mapctx task create --description "<text>"` / `--description-file <path>` seeds it once, at creation.
-- After that, edit `tasks/<ID>.md` in Git and commit the change. `mapctx task update` has no
-  `--set description`; the field is not patchable, and asking for it is refused.
+- `mapctx task create --description "<text>"` / `--description-file <path>` seeds it at creation.
+- To change it later, in any planning state (done/archived included), run
+  `mapctx task update <id> --description-file <path>` (or `--description "<text>"`), or edit
+  `tasks/<ID>.md` by hand; then commit. The CLI rewrites only the `description:` block and keeps the
+  store-owned `## Acceptance` checklist (criteria change via `mapctx task acceptance revise`).
+  Prefer `--description-file` for multi-line prose; a one-line `--description` with literal `\n` is
+  unescaped. `--set description` stays refused: the store never holds prose.
 - A snapshot regeneration (`mapctx export`, `mapctx task finish`) preserves the committed prose.
 
 Everything written through the CLI lands in an **append-only event log**: keep secrets, tokens and
