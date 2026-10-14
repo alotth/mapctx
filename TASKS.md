@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 11/21
+  - subIssueProgress: 11/22
   - priority: high
   - workload: null
   - tags: []
@@ -2820,7 +2820,7 @@
 ### [T-133] Planner: deduplicar a detecção de violações de claim e guardar o sentinela
 
   - id: T-133
-  - status: doing
+  - status: review
   - type: chore
   - parent: E-017
   - subIssueProgress: null
@@ -2953,7 +2953,7 @@
 ### [T-139] TaskProvider em código + LocalStoreProvider (store como provider local)
 
   - id: T-139
-  - status: doing
+  - status: review
   - type: feature
   - parent: E-018
   - subIssueProgress: null
@@ -2972,7 +2972,7 @@
 ### [T-140] C1: verdade de lease na leitura (getLiveActiveClaim) e sem release fictício em move done
 
   - id: T-140
-  - status: backlog
+  - status: doing
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3143,7 +3143,7 @@
 ### [T-149] Triagem do board antes do espelho no GitHub (proposta, sem aplicar)
 
   - id: T-149
-  - status: backlog
+  - status: doing
   - type: chore
   - parent: E-018
   - subIssueProgress: null
@@ -3291,6 +3291,25 @@
   - externalId: null
   - updated: 2026-10-14
   - detail: ./tasks/T-156.md
+
+### [T-157] Store: task update com uma lista de dependência não apaga a outra espécie nem diverge do detail
+
+  - id: T-157
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: [T-140]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-157.md
 
 ## Notes
 
