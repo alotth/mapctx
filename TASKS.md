@@ -3352,7 +3352,7 @@
 ### [T-160] Acceptance retroativo das 13 entregues sem critérios (autor + revisor independente)
 
   - id: T-160
-  - status: backlog
+  - status: doing
   - type: chore
   - parent: E-018
   - subIssueProgress: null
