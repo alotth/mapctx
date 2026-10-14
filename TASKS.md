@@ -2842,7 +2842,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 1/11
+  - subIssueProgress: 2/11
   - priority: null
   - workload: null
   - tags: []
@@ -3143,7 +3143,7 @@
 ### [T-149] Triagem do board antes do espelho no GitHub (proposta, sem aplicar)
 
   - id: T-149
-  - status: doing
+  - status: done
   - type: chore
   - parent: E-018
   - subIssueProgress: null
@@ -3154,7 +3154,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
   - updated: 2026-10-14
   - detail: ./tasks/T-149.md
