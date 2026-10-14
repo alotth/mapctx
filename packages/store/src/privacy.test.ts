@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import * as fs from "fs"
 import * as path from "path"
-import { readMapctxToml, serializeMapctxToml } from "./config"
+import { readMapctxToml, resolvePrivacyPatterns, serializeMapctxToml } from "./config"
 import { compilePrivacyPatterns, lintForPrivacy, replacePrivacyPatterns, scanForPrivacyPatterns } from "./privacy"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
 
@@ -290,3 +290,48 @@ for (const patterns of ['"cust-ctx-.*"', "42", "true", "[42]", '["valid", false]
     assert.throws(() => readMapctxToml(filename), /\[privacy\] patterns must be an array of regex strings/);
   });
 }
+
+// ---- T-151: resolvePrivacyPatterns unions mapctx.toml with the UNVERSIONED
+// local file and env-named file. Always a temporary storeDir and an injected
+// env, never ~/.mapctx or the process's real environment. ----
+
+test("resolvePrivacyPatterns unions local file, env file and mapctx.toml, unversioned sources first, deduplicated", t => {
+  const dir = mkTmpDir("mapctx-privacy-resolve-");
+  t.after(() => cleanupDir(dir));
+  fs.writeFileSync(path.join(dir, "privacy.toml"), '[privacy]\npatterns = ["AcmeOrg", "someone-mac-air"]\n');
+  const envFile = path.join(dir, "extra.toml");
+  fs.writeFileSync(envFile, '[privacy]\npatterns = ["ExtraCo"]\n');
+
+  const resolved = resolvePrivacyPatterns("00000000-0000-4000-8000-000000000000", ["FromPublicToml"], {
+    storeDir: dir, env: { MAPCTX_PRIVACY_PATTERNS_FILE: envFile }
+  });
+  assert.deepEqual(resolved.patterns, ["AcmeOrg", "someone-mac-air", "ExtraCo", "FromPublicToml"]);
+  assert.equal(resolved.hasUnversionedSource, true);
+  assert.equal(resolved.origins[0].origin, "local-file");
+  assert.ok(resolved.origins.some(o => o.origin === "env-file"));
+  assert.ok(resolved.origins.some(o => o.origin === "mapctx.toml"));
+
+  const deduped = resolvePrivacyPatterns("x", ["AcmeOrg"], { storeDir: dir, env: {} });
+  assert.equal(deduped.patterns.filter(p => p === "AcmeOrg").length, 1, "a pattern repeated across sources must collapse to one entry");
+});
+
+test("resolvePrivacyPatterns: a malformed local privacy file throws rather than reading as empty; missing sources yield an empty list with no error", t => {
+  const dir = mkTmpDir("mapctx-privacy-resolve-bad-");
+  t.after(() => cleanupDir(dir));
+  fs.writeFileSync(path.join(dir, "privacy.toml"), '[privacy]\npatterns = "notalist"\n');
+  assert.throws(() => resolvePrivacyPatterns("x", [], { storeDir: dir, env: {} }), /array of regex strings/);
+
+  const none = resolvePrivacyPatterns("x", [], { storeDir: path.join(dir, "missing-store"), env: {} });
+  assert.deepEqual(none.patterns, []);
+  assert.equal(none.hasUnversionedSource, false);
+  assert.deepEqual(none.origins, []);
+});
+
+test("resolvePrivacyPatterns: with no local or env file configured, mapctx.toml patterns alone are not an unversioned source", t => {
+  const dir = mkTmpDir("mapctx-privacy-resolve-public-only-");
+  t.after(() => cleanupDir(dir));
+  const resolved = resolvePrivacyPatterns("x", ["PublicOnly"], { storeDir: dir, env: {} });
+  assert.deepEqual(resolved.patterns, ["PublicOnly"]);
+  assert.equal(resolved.hasUnversionedSource, false);
+  assert.deepEqual(resolved.origins, [{ origin: "mapctx.toml", count: 1 }]);
+});
