@@ -5,6 +5,7 @@ import { checkIntegrity, openDatabase, writeMetaValue } from "./db"
 import { applyEventToProjections } from "./events"
 import { readStoreMetaFile } from "./identity"
 import { acquireMaintenanceLock, assertNotUnderMaintenance } from "./maintenance"
+import { autoSnapshot } from "./backup"
 import { listJournalNodeIds, listJournalSequences, readJournalEntry } from "./journal"
 import { attestedEntries, loadNodeAttestations, verifyAttestationAgainstDb, type NodeAttestation } from "./attestation"
 import { reconcilePendingRedactions } from "./redact"
@@ -16,9 +17,20 @@ export type RepairGap = {
   reason: string;
 };
 
+/**
+ * T-138 adds the pre-repair snapshot outcome to every result: the directory
+ * when one was taken, or the reason it was skipped. Reported, never silent --
+ * an operator about to read a gap report needs to know whether a rollback
+ * point exists.
+ */
+export type PreRepairSnapshot = {
+  preRepairBackupDir?: string | null;
+  preRepairBackupSkipped?: string | null;
+};
+
 export type RepairResult =
-  | { status: "ok"; dbWasCorrupt: boolean; eventsReplayed: number }
-  | { status: "gap"; dbWasCorrupt: boolean; gaps: RepairGap[] };
+  | ({ status: "ok"; dbWasCorrupt: boolean; eventsReplayed: number } & PreRepairSnapshot)
+  | ({ status: "gap"; dbWasCorrupt: boolean; gaps: RepairGap[] } & PreRepairSnapshot);
 
 /**
  * Rebuilds mapctx.db by validating the independent journal (per-event hash,
@@ -58,7 +70,23 @@ export function repairStore(storeDir: string): RepairResult {
   assertNotUnderMaintenance(storeDir);
   const maintenanceLock = acquireMaintenanceLock(storeDir);
   try {
-    return repairStoreUnderLock(storeDir);
+    // T-138: repair rebuilds the database and swaps the inode. Snapshot
+    // first, INSIDE the lock so no writer can move the store between the
+    // snapshot and the rebuild, and before anything is read or written.
+    //
+    // `createBackup` normally refuses to run under maintenance for exactly
+    // that reason, so this path passes the lock-holder flag: we ARE the
+    // maintenance holder, and this is the one caller allowed to snapshot
+    // while the lock is held.
+    //
+    // Best-effort on purpose. A store that cannot be snapshotted (no space,
+    // unreadable database) is precisely a store that needs repairing, so a
+    // failed snapshot must not block the repair -- it is reported instead.
+    const snapshot = autoSnapshot(storeDir, "pre-repair", { underMaintenanceLock: true });
+    const result = repairStoreUnderLock(storeDir);
+    return snapshot.ok
+      ? { ...result, preRepairBackupDir: snapshot.backupDir, preRepairBackupSkipped: null }
+      : { ...result, preRepairBackupDir: null, preRepairBackupSkipped: snapshot.skipped };
   } finally {
     maintenanceLock.release();
   }

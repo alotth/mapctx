@@ -19,7 +19,15 @@ function applyPragmas(db: DatabaseSync, options: OpenDatabaseOptions): void {
   db.exec("PRAGMA synchronous = FULL");
 }
 
-export function runMigrations(db: DatabaseSync): void {
+/**
+ * T-138: called once, before the first migration of a run actually applies,
+ * with the already-open database. Wired by `openDatabase` to the
+ * pre-migration auto-snapshot; `runMigrations` stays agnostic about what the
+ * hook does so this module keeps no dependency on the backup code.
+ */
+export type BeforeMigrationHook = (context: { db: DatabaseSync; pendingVersions: number[] }) => void
+
+export function runMigrations(db: DatabaseSync, beforeMigration?: BeforeMigrationHook): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       version INTEGER PRIMARY KEY,
@@ -30,6 +38,18 @@ export function runMigrations(db: DatabaseSync): void {
 
   const appliedStmt = db.prepare("SELECT version, checksum FROM schema_migrations WHERE version = ?");
   const insertStmt = db.prepare("INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (?, ?, ?)");
+
+  // The hook fires only when something is genuinely pending, and only once:
+  // every ordinary open runs this function, and snapshotting the store on
+  // each of them would be both useless and expensive. It also fires BEFORE
+  // the first `BEGIN IMMEDIATE` below, so the snapshot is of the last
+  // known-good schema rather than a half-migrated one.
+  if (beforeMigration) {
+    const pendingVersions = MIGRATIONS
+      .filter(migration => !appliedStmt.get(migration.version))
+      .map(migration => migration.version);
+    if (pendingVersions.length > 0) beforeMigration({ db, pendingVersions });
+  }
 
   for (const migration of MIGRATIONS) {
     const checksum = checksumOf(migration.sql);
@@ -55,11 +75,36 @@ export function runMigrations(db: DatabaseSync): void {
 }
 
 export function openDatabase(dbPath: string, options: OpenDatabaseOptions = {}): DatabaseSync {
+  const existedBefore = fs.existsSync(dbPath);
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
   applyPragmas(db, options);
-  runMigrations(db);
+  // T-138: a schema migration rewrites the store in place and has no undo.
+  // Snapshot first -- but only for a database that already existed, because
+  // creating one runs every migration and there is nothing yet to protect.
+  // The hook is injected rather than imported so db.ts keeps no dependency
+  // on the backup module (which depends on this one).
+  runMigrations(db, existedBefore ? beforeMigrationHook(dbPath) : undefined);
   return db;
+}
+
+/**
+ * Indirection so `openDatabase` can reach the auto-snapshot without db.ts
+ * importing backup.ts (which imports db.ts). Installed by backup.ts at load
+ * time through `setPreMigrationSnapshot`; absent in a build that never loads
+ * it, in which case migrations behave exactly as before.
+ */
+let preMigrationSnapshot: ((dbPath: string, db: DatabaseSync, pendingVersions: number[]) => void) | null = null;
+
+export function setPreMigrationSnapshot(
+  hook: ((dbPath: string, db: DatabaseSync, pendingVersions: number[]) => void) | null
+): void {
+  preMigrationSnapshot = hook;
+}
+
+function beforeMigrationHook(dbPath: string): BeforeMigrationHook | undefined {
+  if (!preMigrationSnapshot) return undefined;
+  return ({ db, pendingVersions }) => preMigrationSnapshot?.(dbPath, db, pendingVersions);
 }
 
 /**

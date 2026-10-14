@@ -4,7 +4,7 @@ import * as os from "os"
 import * as path from "path"
 import { DatabaseSync } from "node:sqlite"
 import { getMapctxHome } from "@mapctx/core/workspace"
-import { checkIntegrity, openDatabaseReadOnly, readMetaValue } from "./db"
+import { checkIntegrity, openDatabaseReadOnly, readMetaValue, setPreMigrationSnapshot } from "./db"
 import { JOURNAL_DIR_NAME, listJournalNodeIds, listJournalSequences } from "./journal"
 import { acquireMaintenanceLock, assertNotUnderMaintenance, MAINTENANCE_LOCK_FILENAME } from "./maintenance"
 import { MIGRATIONS } from "./schema"
@@ -161,6 +161,11 @@ export type CreateBackupOptions = {
    * never re-enters the migration runner).
    */
   db?: DatabaseSync
+  /**
+   * Set only by `repair`, which holds the maintenance lock and snapshots
+   * inside it. Every other caller must be refused under an active lock.
+   */
+  underMaintenanceLock?: boolean
 }
 
 export type CreateBackupResult = {
@@ -192,9 +197,11 @@ export function createBackup(options: CreateBackupOptions): CreateBackupResult {
   if (!fs.existsSync(dbPath)) {
     throw new Error(`Cannot back up: no store at ${storeDir} (expected ${dbPath}). Run "mapctx store init" first.`)
   }
-  // A backup must not run while repair is swapping the database inode: the
-  // copy would straddle the swap.
-  assertNotUnderMaintenance(storeDir)
+  // A backup must not run while SOMEONE ELSE is swapping the database inode:
+  // the copy would straddle the swap. `repair` is the one legitimate caller
+  // that already holds the lock and snapshots inside it, so it opts out of
+  // this check rather than deadlocking against itself.
+  if (!options.underMaintenanceLock) assertNotUnderMaintenance(storeDir)
 
   const reason: BackupReason = options.reason ?? "operator"
   const stamp = now().toISOString().replace(/[:.]/g, "-")
@@ -571,12 +578,12 @@ export function hasBackups(projectId: string): boolean {
 export function autoSnapshot(
   storeDir: string,
   reason: Exclude<BackupReason, "operator">,
-  options: { projectId?: string | null; db?: DatabaseSync; retention?: number } = {}
+  options: { projectId?: string | null; db?: DatabaseSync; retention?: number; underMaintenanceLock?: boolean } = {}
 ): { ok: true; backupDir: string; pruned: string[] } | { ok: false; skipped: string } {
   const projectId = options.projectId ?? inferProjectIdFromStoreDir(storeDir)
   if (!projectId) return { ok: false, skipped: "could not determine the projectId for the backups directory" }
   try {
-    const result = createBackup({ storeDir, projectId, reason, db: options.db })
+    const result = createBackup({ storeDir, projectId, reason, db: options.db, underMaintenanceLock: options.underMaintenanceLock })
     const pruned = options.retention === undefined
       ? result.pruned
       : pruneAutoBackups(projectId, options.retention)
@@ -603,3 +610,36 @@ export function inferProjectIdFromStoreDir(storeDir: string): string | null {
 export function makeTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix))
 }
+
+/**
+ * Where a pre-migration snapshot reports itself. `openDatabase` is deep
+ * inside every store open and has no reporting channel of its own, so the
+ * outcome is recorded here and the CLI drains it after the open.
+ */
+const pendingSnapshotNotices: string[] = []
+
+export function drainSnapshotNotices(): string[] {
+  return pendingSnapshotNotices.splice(0, pendingSnapshotNotices.length)
+}
+
+/**
+ * Installs the pre-migration snapshot into the database layer. Done at
+ * module load so any process that touches `@mapctx/store` gets the
+ * protection, without db.ts importing this module (it is the other way
+ * round). Importing the package is what arms it; a build that never loads
+ * backup.ts migrates exactly as it did before T-138.
+ */
+setPreMigrationSnapshot((dbPath, db, pendingVersions) => {
+  const storeDir = path.dirname(dbPath)
+  const result = autoSnapshot(storeDir, "pre-migration", { db })
+  if (result.ok) {
+    pendingSnapshotNotices.push(
+      `pre-migration snapshot of schema before migration(s) ${pendingVersions.join(", ")}: ${result.backupDir}`
+      + (result.pruned.length > 0 ? ` (pruned ${result.pruned.length} older auto-snapshot(s))` : "")
+    )
+  } else {
+    // Non-fatal by design: refusing to migrate because the snapshot failed
+    // would leave a store that no command can open.
+    pendingSnapshotNotices.push(`pre-migration snapshot SKIPPED (${result.skipped}); migration proceeded`)
+  }
+})
