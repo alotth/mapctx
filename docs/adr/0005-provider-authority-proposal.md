@@ -19,6 +19,13 @@ The operator chose a direction; the ADR stays **Proposed** until the gates in
   after it.
 - **First validation:** a read-only GitHub Projects spike that writes derived
   fields (wave, forecast, cost) to a test Project without removing the store.
+  First validation result: T-135 wrote all six derived fields to a private test
+  Project with the store untouched, and found no dependency-write API, no write
+  precondition of any kind, non-atomic batch writes, and a ceiling of 49
+  observable fields per project (36 custom after the defaults). Criteria 0 and 2
+  closed **partial**: the items are draft issues, not real issues, and every
+  issue reachable for the spike had zero dependency edges. See
+  [github-projects-spike.md](../engineering/github-projects-spike.md).
 - **Prerequisite:** claim refusals stop exposing the holder's `leaseToken`
   (T-124 C0). Claims stay MapCtx-owned under every provider, and cross-machine
   claims would make a leaked token reach other people.

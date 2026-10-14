@@ -1,0 +1,216 @@
+{
+  "startedAt": "2026-10-10T17:04:19.688Z",
+  "args": {
+    "account": "alotth",
+    "owner": "alotth",
+    "repo": "mapctx",
+    "projectTitle": "MapCtx provider spike (test)",
+    "cli": "<MAPCTX_CLI>",
+    "tasks": [
+      "T-116",
+      "T-117",
+      "T-118",
+      "T-119",
+      "T-120",
+      "T-126",
+      "T-127",
+      "T-128",
+      "T-129",
+      "T-131",
+      "T-133",
+      "T-134"
+    ],
+    "usdPerActiveHour": 0,
+    "projectNumber": 3
+  },
+  "viewsBefore": [
+    {
+      "id": "PVTV_lAHOAcgr-s4BmfENzgMAJ6c",
+      "name": "View 1",
+      "number": 1,
+      "layout": "TABLE_LAYOUT"
+    }
+  ],
+  "roadmapWithVisibleFields": {
+    "ok": false,
+    "error": {
+      "kind": "unsupported",
+      "message": "Roadmap views do not support visible fields.",
+      "graphqlTypes": [
+        "UNPROCESSABLE"
+      ]
+    },
+    "discoveredAtWrite": true
+  },
+  "createdView": {
+    "id": "PVTV_lAHOAcgr-s4BmfENzgMAKSg",
+    "name": "Forecast roadmap (T-135)",
+    "number": 2,
+    "layout": "ROADMAP_LAYOUT"
+  },
+  "tableView": {
+    "ok": true,
+    "view": {
+      "id": "PVTV_lAHOAcgr-s4BmfENzgMAKSk",
+      "name": "Derived fields (T-135)",
+      "number": 3,
+      "layout": "TABLE_LAYOUT"
+    },
+    "visibleFieldCount": 7
+  },
+  "tableViewUrl": "https://github.com/users/alotth/projects/3/views/3",
+  "viewAfter": {
+    "id": "PVTV_lAHOAcgr-s4BmfENzgMAKSg",
+    "name": "Forecast roadmap (T-135)",
+    "number": 2,
+    "layout": "ROADMAP_LAYOUT",
+    "filter": null,
+    "createdAt": "2026-10-10T17:04:21Z",
+    "updatedAt": "2026-10-10T17:04:21Z",
+    "configuration": {
+      "visibleFields": {
+        "nodes": []
+      }
+    },
+    "sortByFields": {
+      "nodes": []
+    },
+    "groupByFields": {
+      "nodes": []
+    }
+  },
+  "roadmapDateFieldConfigurable": false,
+  "roadmapDateFieldNote": "ProjectV2ViewConfigurationInput exposes visibleFieldIds only. A roadmap view's start/target date fields are not in the public schema, so the Forecast end P90 axis has to be picked in the web UI.",
+  "url": "https://github.com/users/alotth/projects/3/views/2",
+  "endedAt": "2026-10-10T17:04:22.838Z",
+  "metrics": [
+    {
+      "label": "getProject(fields,100)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 792,
+      "pointsCost": 1,
+      "pointsRemaining": 4803,
+      "headerUsed": "197",
+      "headerRemaining": "4803",
+      "requestId": "656D:33AC39:1100E23:1E49CBE:6ACA7013"
+    },
+    {
+      "label": "list views",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 452,
+      "pointsCost": 1,
+      "pointsRemaining": 4802,
+      "headerUsed": "198",
+      "headerRemaining": "4802",
+      "requestId": "656E:38787F:10DBB80:1E24137:6ACA7014"
+    },
+    {
+      "label": "createProjectV2View(ROADMAP+visibleFields)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 598,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "199",
+      "headerRemaining": "4801",
+      "requestId": "656D:33AC39:1100EFC:1E49E47:6ACA7014"
+    },
+    {
+      "label": "createProjectV2View(ROADMAP_LAYOUT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 388,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "200",
+      "headerRemaining": "4800",
+      "requestId": "656E:38787F:10DBC1C:1E24247:6ACA7014"
+    },
+    {
+      "label": "createProjectV2View(TABLE+visibleFields)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 510,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "201",
+      "headerRemaining": "4799",
+      "requestId": "656D:33AC39:1100F93:1E49F4A:6ACA7015"
+    },
+    {
+      "label": "read view configuration",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 407,
+      "pointsCost": 1,
+      "pointsRemaining": 4798,
+      "headerUsed": "202",
+      "headerRemaining": "4798",
+      "requestId": "656E:38787F:10DBCA1:1E24354:6ACA7015"
+    }
+  ],
+  "metricsSummary": [
+    {
+      "label": "getProject(fields,100)",
+      "api": "graphql",
+      "calls": 1,
+      "pointsTotal": 1,
+      "latencyMinMs": 792,
+      "latencyMaxMs": 792,
+      "latencyMeanMs": 792
+    },
+    {
+      "label": "list views",
+      "api": "graphql",
+      "calls": 1,
+      "pointsTotal": 1,
+      "latencyMinMs": 452,
+      "latencyMaxMs": 452,
+      "latencyMeanMs": 452
+    },
+    {
+      "label": "createProjectV2View(ROADMAP+visibleFields)",
+      "api": "graphql",
+      "calls": 1,
+      "pointsTotal": 0,
+      "latencyMinMs": 598,
+      "latencyMaxMs": 598,
+      "latencyMeanMs": 598
+    },
+    {
+      "label": "createProjectV2View(ROADMAP_LAYOUT)",
+      "api": "graphql",
+      "calls": 1,
+      "pointsTotal": 0,
+      "latencyMinMs": 388,
+      "latencyMaxMs": 388,
+      "latencyMeanMs": 388
+    },
+    {
+      "label": "createProjectV2View(TABLE+visibleFields)",
+      "api": "graphql",
+      "calls": 1,
+      "pointsTotal": 0,
+      "latencyMinMs": 510,
+      "latencyMaxMs": 510,
+      "latencyMeanMs": 510
+    },
+    {
+      "label": "read view configuration",
+      "api": "graphql",
+      "calls": 1,
+      "pointsTotal": 1,
+      "latencyMinMs": 407,
+      "latencyMaxMs": 407,
+      "latencyMeanMs": 407
+    }
+  ]
+}

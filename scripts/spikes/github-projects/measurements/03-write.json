@@ -1,0 +1,2365 @@
+{
+  "startedAt": "2026-10-10T17:13:35.476Z",
+  "args": {
+    "account": "alotth",
+    "owner": "alotth",
+    "repo": "mapctx",
+    "projectTitle": "MapCtx provider spike (test)",
+    "cli": "<MAPCTX_CLI>",
+    "tasks": [
+      "T-116",
+      "T-117",
+      "T-118",
+      "T-119",
+      "T-120",
+      "T-126",
+      "T-127",
+      "T-128",
+      "T-129",
+      "T-131",
+      "T-133",
+      "T-134"
+    ],
+    "usdPerActiveHour": 0,
+    "projectNumber": 3,
+    "usageFile": "scripts/spikes/github-projects/fixtures/store-usage-events.json"
+  },
+  "today": "2026-10-10",
+  "derivation": {
+    "statusMode": "provider",
+    "edgeSource": "store-fallback",
+    "providerEdgeCount": 0,
+    "fallbackEdgeCount": 9,
+    "plannerWaves": [
+      {
+        "wave": 1,
+        "taskIds": [
+          "T-116",
+          "T-126"
+        ]
+      },
+      {
+        "wave": 2,
+        "taskIds": [
+          "T-117",
+          "T-118",
+          "T-127"
+        ]
+      },
+      {
+        "wave": 3,
+        "taskIds": [
+          "T-119",
+          "T-128"
+        ]
+      },
+      {
+        "wave": 4,
+        "taskIds": [
+          "T-120",
+          "T-129"
+        ]
+      },
+      {
+        "wave": 5,
+        "taskIds": [
+          "T-131"
+        ]
+      },
+      {
+        "wave": 6,
+        "taskIds": [
+          "T-133",
+          "T-134"
+        ]
+      }
+    ],
+    "plannerBlocked": [],
+    "serializedPairs": [
+      {
+        "a": "T-126",
+        "b": "T-127",
+        "domains": []
+      },
+      {
+        "a": "T-126",
+        "b": "T-134",
+        "domains": []
+      },
+      {
+        "a": "T-127",
+        "b": "T-131",
+        "domains": []
+      },
+      {
+        "a": "T-127",
+        "b": "T-134",
+        "domains": []
+      },
+      {
+        "a": "T-128",
+        "b": "T-129",
+        "domains": []
+      },
+      {
+        "a": "T-128",
+        "b": "T-131",
+        "domains": []
+      },
+      {
+        "a": "T-128",
+        "b": "T-134",
+        "domains": []
+      },
+      {
+        "a": "T-129",
+        "b": "T-131",
+        "domains": []
+      },
+      {
+        "a": "T-129",
+        "b": "T-134",
+        "domains": []
+      },
+      {
+        "a": "T-131",
+        "b": "T-134",
+        "domains": []
+      }
+    ],
+    "storeWaveByTaskId": {
+      "T-116": null,
+      "T-117": 3,
+      "T-118": null,
+      "T-119": null,
+      "T-120": null,
+      "T-126": null,
+      "T-127": null,
+      "T-128": null,
+      "T-129": null,
+      "T-131": null,
+      "T-133": 1,
+      "T-134": null
+    },
+    "plannerWavesWithStoreStatus": [
+      {
+        "wave": 1,
+        "taskIds": [
+          "T-117",
+          "T-133"
+        ]
+      }
+    ],
+    "statusModeDivergence": [
+      {
+        "taskId": "T-116",
+        "storeStatus": "done",
+        "waveProviderStatus": 1,
+        "waveStoreStatus": null
+      },
+      {
+        "taskId": "T-117",
+        "storeStatus": "backlog",
+        "waveProviderStatus": 2,
+        "waveStoreStatus": 1
+      },
+      {
+        "taskId": "T-118",
+        "storeStatus": "done",
+        "waveProviderStatus": 2,
+        "waveStoreStatus": null
+      },
+      {
+        "taskId": "T-119",
+        "storeStatus": "done",
+        "waveProviderStatus": 3,
+        "waveStoreStatus": null
+      },
+      {
+        "taskId": "T-120",
+        "storeStatus": "done",
+        "waveProviderStatus": 4,
+        "waveStoreStatus": null
+      },
+      {
+        "taskId": "T-126",
+        "storeStatus": "done",
+        "waveProviderStatus": 1,
+        "waveStoreStatus": null
+      },
+      {
+        "taskId": "T-127",
+        "storeStatus": "done",
+        "waveProviderStatus": 2,
+        "waveStoreStatus": null
+      },
+      {
+        "taskId": "T-128",
+        "storeStatus": "done",
+        "waveProviderStatus": 3,
+        "waveStoreStatus": null
+      },
+      {
+        "taskId": "T-129",
+        "storeStatus": "in-progress",
+        "waveProviderStatus": 4,
+        "waveStoreStatus": null
+      },
+      {
+        "taskId": "T-131",
+        "storeStatus": "done",
+        "waveProviderStatus": 5,
+        "waveStoreStatus": null
+      },
+      {
+        "taskId": "T-133",
+        "storeStatus": "backlog",
+        "waveProviderStatus": 6,
+        "waveStoreStatus": 1
+      },
+      {
+        "taskId": "T-134",
+        "storeStatus": "done",
+        "waveProviderStatus": 6,
+        "waveStoreStatus": null
+      }
+    ],
+    "usageEventCount": 7
+  },
+  "plannedValues": [
+    {
+      "taskId": "T-116",
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E8s",
+      "wave": 1,
+      "waveOptionId": "f4d2d52f",
+      "forecast": {
+        "p50Hours": 0.13,
+        "p90Hours": 0.92,
+        "endP90": "2026-10-10",
+        "endP90Basis": "today",
+        "method": "historical-baseline",
+        "confidence": "medium",
+        "isPriorFallback": false,
+        "durationCoverage": "substituted",
+        "storeWave": null,
+        "storeStatus": "done",
+        "plannedDurationHours": 16
+      },
+      "cost": {
+        "estimateUsd": 0,
+        "estimateBasis": "no rate supplied (store has no plan period or budget)",
+        "actualUsd": null,
+        "actualBasis": "no usage event for this task -- field cleared",
+        "usageEventCount": 0,
+        "shadowMicros": 0
+      },
+      "writes": [
+        {
+          "key": "wave",
+          "dataType": "SINGLE_SELECT",
+          "value": 1,
+          "optionId": "f4d2d52f"
+        },
+        {
+          "key": "p50",
+          "dataType": "NUMBER",
+          "value": 0.13
+        },
+        {
+          "key": "p90",
+          "dataType": "NUMBER",
+          "value": 0.92
+        },
+        {
+          "key": "endP90",
+          "dataType": "DATE",
+          "value": "2026-10-10"
+        },
+        {
+          "key": "estCost",
+          "dataType": "NUMBER",
+          "value": 0
+        },
+        {
+          "key": "realCost",
+          "dataType": "NUMBER",
+          "value": null
+        }
+      ]
+    },
+    {
+      "taskId": "T-117",
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E9I",
+      "wave": 2,
+      "waveOptionId": "70306597",
+      "forecast": {
+        "p50Hours": 0.21,
+        "p90Hours": 0.8,
+        "endP90": "2026-10-05",
+        "endP90Basis": "approximateDate(dependency)",
+        "method": "historical-baseline",
+        "confidence": "medium",
+        "isPriorFallback": false,
+        "durationCoverage": "substituted",
+        "storeWave": 3,
+        "storeStatus": "backlog",
+        "plannedDurationHours": 16
+      },
+      "cost": {
+        "estimateUsd": 0,
+        "estimateBasis": "no rate supplied (store has no plan period or budget)",
+        "actualUsd": null,
+        "actualBasis": "no usage event for this task -- field cleared",
+        "usageEventCount": 0,
+        "shadowMicros": 0
+      },
+      "writes": [
+        {
+          "key": "wave",
+          "dataType": "SINGLE_SELECT",
+          "value": 2,
+          "optionId": "70306597"
+        },
+        {
+          "key": "p50",
+          "dataType": "NUMBER",
+          "value": 0.21
+        },
+        {
+          "key": "p90",
+          "dataType": "NUMBER",
+          "value": 0.8
+        },
+        {
+          "key": "endP90",
+          "dataType": "DATE",
+          "value": "2026-10-05"
+        },
+        {
+          "key": "estCost",
+          "dataType": "NUMBER",
+          "value": 0
+        },
+        {
+          "key": "realCost",
+          "dataType": "NUMBER",
+          "value": null
+        }
+      ]
+    },
+    {
+      "taskId": "T-118",
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E9g",
+      "wave": 2,
+      "waveOptionId": "70306597",
+      "forecast": {
+        "p50Hours": 0.12,
+        "p90Hours": 0.43,
+        "endP90": "2026-10-10",
+        "endP90Basis": "today",
+        "method": "historical-baseline",
+        "confidence": "medium",
+        "isPriorFallback": false,
+        "durationCoverage": "substituted",
+        "storeWave": null,
+        "storeStatus": "done",
+        "plannedDurationHours": 8
+      },
+      "cost": {
+        "estimateUsd": 0,
+        "estimateBasis": "no rate supplied (store has no plan period or budget)",
+        "actualUsd": 0,
+        "actualBasis": "1 usage event(s), all coverage=none/0 tokens -> shadow cost 0",
+        "usageEventCount": 1,
+        "shadowMicros": 0
+      },
+      "writes": [
+        {
+          "key": "wave",
+          "dataType": "SINGLE_SELECT",
+          "value": 2,
+          "optionId": "70306597"
+        },
+        {
+          "key": "p50",
+          "dataType": "NUMBER",
+          "value": 0.12
+        },
+        {
+          "key": "p90",
+          "dataType": "NUMBER",
+          "value": 0.43
+        },
+        {
+          "key": "endP90",
+          "dataType": "DATE",
+          "value": "2026-10-10"
+        },
+        {
+          "key": "estCost",
+          "dataType": "NUMBER",
+          "value": 0
+        },
+        {
+          "key": "realCost",
+          "dataType": "NUMBER",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "taskId": "T-119",
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E9o",
+      "wave": 3,
+      "waveOptionId": "ed968c92",
+      "forecast": {
+        "p50Hours": 0.15,
+        "p90Hours": 1.86,
+        "endP90": "2026-10-10",
+        "endP90Basis": "today",
+        "method": "historical-baseline",
+        "confidence": "medium",
+        "isPriorFallback": false,
+        "durationCoverage": "substituted",
+        "storeWave": null,
+        "storeStatus": "done",
+        "plannedDurationHours": 16
+      },
+      "cost": {
+        "estimateUsd": 0,
+        "estimateBasis": "no rate supplied (store has no plan period or budget)",
+        "actualUsd": 0,
+        "actualBasis": "3 usage event(s), all coverage=none/0 tokens -> shadow cost 0",
+        "usageEventCount": 3,
+        "shadowMicros": 0
+      },
+      "writes": [
+        {
+          "key": "wave",
+          "dataType": "SINGLE_SELECT",
+          "value": 3,
+          "optionId": "ed968c92"
+        },
+        {
+          "key": "p50",
+          "dataType": "NUMBER",
+          "value": 0.15
+        },
+        {
+          "key": "p90",
+          "dataType": "NUMBER",
+          "value": 1.86
+        },
+        {
+          "key": "endP90",
+          "dataType": "DATE",
+          "value": "2026-10-10"
+        },
+        {
+          "key": "estCost",
+          "dataType": "NUMBER",
+          "value": 0
+        },
+        {
+          "key": "realCost",
+          "dataType": "NUMBER",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "taskId": "T-120",
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E98",
+      "wave": 4,
+      "waveOptionId": "ab6c3723",
+      "forecast": {
+        "p50Hours": 0.95,
+        "p90Hours": 1.91,
+        "endP90": "2026-10-10",
+        "endP90Basis": "today",
+        "method": "expert-guess",
+        "confidence": "low",
+        "isPriorFallback": true,
+        "durationCoverage": "none",
+        "storeWave": null,
+        "storeStatus": "done",
+        "plannedDurationHours": 24
+      },
+      "cost": {
+        "estimateUsd": 0,
+        "estimateBasis": "no rate supplied (store has no plan period or budget)",
+        "actualUsd": null,
+        "actualBasis": "no usage event for this task -- field cleared",
+        "usageEventCount": 0,
+        "shadowMicros": 0
+      },
+      "writes": [
+        {
+          "key": "wave",
+          "dataType": "SINGLE_SELECT",
+          "value": 4,
+          "optionId": "ab6c3723"
+        },
+        {
+          "key": "p50",
+          "dataType": "NUMBER",
+          "value": 0.95
+        },
+        {
+          "key": "p90",
+          "dataType": "NUMBER",
+          "value": 1.91
+        },
+        {
+          "key": "endP90",
+          "dataType": "DATE",
+          "value": "2026-10-10"
+        },
+        {
+          "key": "estCost",
+          "dataType": "NUMBER",
+          "value": 0
+        },
+        {
+          "key": "realCost",
+          "dataType": "NUMBER",
+          "value": null
+        }
+      ]
+    },
+    {
+      "taskId": "T-126",
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E-M",
+      "wave": 1,
+      "waveOptionId": "f4d2d52f",
+      "forecast": {
+        "p50Hours": 0.21,
+        "p90Hours": 0.58,
+        "endP90": "2026-10-10",
+        "endP90Basis": "today",
+        "method": "historical-baseline",
+        "confidence": "low",
+        "isPriorFallback": false,
+        "durationCoverage": "substituted",
+        "storeWave": null,
+        "storeStatus": "done",
+        "plannedDurationHours": 8
+      },
+      "cost": {
+        "estimateUsd": 0,
+        "estimateBasis": "no rate supplied (store has no plan period or budget)",
+        "actualUsd": null,
+        "actualBasis": "no usage event for this task -- field cleared",
+        "usageEventCount": 0,
+        "shadowMicros": 0
+      },
+      "writes": [
+        {
+          "key": "wave",
+          "dataType": "SINGLE_SELECT",
+          "value": 1,
+          "optionId": "f4d2d52f"
+        },
+        {
+          "key": "p50",
+          "dataType": "NUMBER",
+          "value": 0.21
+        },
+        {
+          "key": "p90",
+          "dataType": "NUMBER",
+          "value": 0.58
+        },
+        {
+          "key": "endP90",
+          "dataType": "DATE",
+          "value": "2026-10-10"
+        },
+        {
+          "key": "estCost",
+          "dataType": "NUMBER",
+          "value": 0
+        },
+        {
+          "key": "realCost",
+          "dataType": "NUMBER",
+          "value": null
+        }
+      ]
+    },
+    {
+      "taskId": "T-127",
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E-o",
+      "wave": 2,
+      "waveOptionId": "70306597",
+      "forecast": {
+        "p50Hours": 0.48,
+        "p90Hours": 0.75,
+        "endP90": "2026-10-10",
+        "endP90Basis": "today",
+        "method": "historical-baseline",
+        "confidence": "medium",
+        "isPriorFallback": false,
+        "durationCoverage": "substituted",
+        "storeWave": null,
+        "storeStatus": "done",
+        "plannedDurationHours": 6
+      },
+      "cost": {
+        "estimateUsd": 0,
+        "estimateBasis": "no rate supplied (store has no plan period or budget)",
+        "actualUsd": null,
+        "actualBasis": "no usage event for this task -- field cleared",
+        "usageEventCount": 0,
+        "shadowMicros": 0
+      },
+      "writes": [
+        {
+          "key": "wave",
+          "dataType": "SINGLE_SELECT",
+          "value": 2,
+          "optionId": "70306597"
+        },
+        {
+          "key": "p50",
+          "dataType": "NUMBER",
+          "value": 0.48
+        },
+        {
+          "key": "p90",
+          "dataType": "NUMBER",
+          "value": 0.75
+        },
+        {
+          "key": "endP90",
+          "dataType": "DATE",
+          "value": "2026-10-10"
+        },
+        {
+          "key": "estCost",
+          "dataType": "NUMBER",
+          "value": 0
+        },
+        {
+          "key": "realCost",
+          "dataType": "NUMBER",
+          "value": null
+        }
+      ]
+    },
+    {
+      "taskId": "T-128",
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E-4",
+      "wave": 3,
+      "waveOptionId": "ed968c92",
+      "forecast": {
+        "p50Hours": 0.42,
+        "p90Hours": 0.54,
+        "endP90": "2026-10-10",
+        "endP90Basis": "today",
+        "method": "historical-baseline",
+        "confidence": "low",
+        "isPriorFallback": false,
+        "durationCoverage": "substituted",
+        "storeWave": null,
+        "storeStatus": "done",
+        "plannedDurationHours": 4
+      },
+      "cost": {
+        "estimateUsd": 0,
+        "estimateBasis": "no rate supplied (store has no plan period or budget)",
+        "actualUsd": null,
+        "actualBasis": "no usage event for this task -- field cleared",
+        "usageEventCount": 0,
+        "shadowMicros": 0
+      },
+      "writes": [
+        {
+          "key": "wave",
+          "dataType": "SINGLE_SELECT",
+          "value": 3,
+          "optionId": "ed968c92"
+        },
+        {
+          "key": "p50",
+          "dataType": "NUMBER",
+          "value": 0.42
+        },
+        {
+          "key": "p90",
+          "dataType": "NUMBER",
+          "value": 0.54
+        },
+        {
+          "key": "endP90",
+          "dataType": "DATE",
+          "value": "2026-10-10"
+        },
+        {
+          "key": "estCost",
+          "dataType": "NUMBER",
+          "value": 0
+        },
+        {
+          "key": "realCost",
+          "dataType": "NUMBER",
+          "value": null
+        }
+      ]
+    },
+    {
+      "taskId": "T-129",
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E_A",
+      "wave": 4,
+      "waveOptionId": "ab6c3723",
+      "forecast": {
+        "p50Hours": 0.3,
+        "p90Hours": 2.67,
+        "endP90": "2026-10-11",
+        "endP90Basis": "approximateDate(dependency)",
+        "method": "historical-baseline",
+        "confidence": "medium",
+        "isPriorFallback": false,
+        "durationCoverage": "substituted",
+        "storeWave": null,
+        "storeStatus": "in-progress",
+        "plannedDurationHours": 6
+      },
+      "cost": {
+        "estimateUsd": 0,
+        "estimateBasis": "no rate supplied (store has no plan period or budget)",
+        "actualUsd": null,
+        "actualBasis": "no usage event for this task -- field cleared",
+        "usageEventCount": 0,
+        "shadowMicros": 0
+      },
+      "writes": [
+        {
+          "key": "wave",
+          "dataType": "SINGLE_SELECT",
+          "value": 4,
+          "optionId": "ab6c3723"
+        },
+        {
+          "key": "p50",
+          "dataType": "NUMBER",
+          "value": 0.3
+        },
+        {
+          "key": "p90",
+          "dataType": "NUMBER",
+          "value": 2.67
+        },
+        {
+          "key": "endP90",
+          "dataType": "DATE",
+          "value": "2026-10-11"
+        },
+        {
+          "key": "estCost",
+          "dataType": "NUMBER",
+          "value": 0
+        },
+        {
+          "key": "realCost",
+          "dataType": "NUMBER",
+          "value": null
+        }
+      ]
+    },
+    {
+      "taskId": "T-131",
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E_I",
+      "wave": 5,
+      "waveOptionId": "b2ba54ac",
+      "forecast": {
+        "p50Hours": 0.37,
+        "p90Hours": 0.59,
+        "endP90": "2026-10-10",
+        "endP90Basis": "today",
+        "method": "historical-baseline",
+        "confidence": "medium",
+        "isPriorFallback": false,
+        "durationCoverage": "substituted",
+        "storeWave": null,
+        "storeStatus": "done",
+        "plannedDurationHours": 6
+      },
+      "cost": {
+        "estimateUsd": 0,
+        "estimateBasis": "no rate supplied (store has no plan period or budget)",
+        "actualUsd": null,
+        "actualBasis": "no usage event for this task -- field cleared",
+        "usageEventCount": 0,
+        "shadowMicros": 0
+      },
+      "writes": [
+        {
+          "key": "wave",
+          "dataType": "SINGLE_SELECT",
+          "value": 5,
+          "optionId": "b2ba54ac"
+        },
+        {
+          "key": "p50",
+          "dataType": "NUMBER",
+          "value": 0.37
+        },
+        {
+          "key": "p90",
+          "dataType": "NUMBER",
+          "value": 0.59
+        },
+        {
+          "key": "endP90",
+          "dataType": "DATE",
+          "value": "2026-10-10"
+        },
+        {
+          "key": "estCost",
+          "dataType": "NUMBER",
+          "value": 0
+        },
+        {
+          "key": "realCost",
+          "dataType": "NUMBER",
+          "value": null
+        }
+      ]
+    },
+    {
+      "taskId": "T-133",
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E_Q",
+      "wave": 6,
+      "waveOptionId": "7e5d1b33",
+      "forecast": {
+        "p50Hours": 0.3,
+        "p90Hours": 2.67,
+        "endP90": "2026-10-11",
+        "endP90Basis": "approximateDate(dependency)",
+        "method": "historical-baseline",
+        "confidence": "medium",
+        "isPriorFallback": false,
+        "durationCoverage": "substituted",
+        "storeWave": 1,
+        "storeStatus": "backlog",
+        "plannedDurationHours": 4
+      },
+      "cost": {
+        "estimateUsd": 0,
+        "estimateBasis": "no rate supplied (store has no plan period or budget)",
+        "actualUsd": null,
+        "actualBasis": "no usage event for this task -- field cleared",
+        "usageEventCount": 0,
+        "shadowMicros": 0
+      },
+      "writes": [
+        {
+          "key": "wave",
+          "dataType": "SINGLE_SELECT",
+          "value": 6,
+          "optionId": "7e5d1b33"
+        },
+        {
+          "key": "p50",
+          "dataType": "NUMBER",
+          "value": 0.3
+        },
+        {
+          "key": "p90",
+          "dataType": "NUMBER",
+          "value": 2.67
+        },
+        {
+          "key": "endP90",
+          "dataType": "DATE",
+          "value": "2026-10-11"
+        },
+        {
+          "key": "estCost",
+          "dataType": "NUMBER",
+          "value": 0
+        },
+        {
+          "key": "realCost",
+          "dataType": "NUMBER",
+          "value": null
+        }
+      ]
+    },
+    {
+      "taskId": "T-134",
+      "itemId": "PVTI_lAHOAcgr-s4BmfENzg_4E_g",
+      "wave": 6,
+      "waveOptionId": "7e5d1b33",
+      "forecast": {
+        "p50Hours": 0.39,
+        "p90Hours": 0.5,
+        "endP90": "2026-10-10",
+        "endP90Basis": "today",
+        "method": "historical-baseline",
+        "confidence": "low",
+        "isPriorFallback": false,
+        "durationCoverage": "substituted",
+        "storeWave": null,
+        "storeStatus": "done",
+        "plannedDurationHours": 2
+      },
+      "cost": {
+        "estimateUsd": 0,
+        "estimateBasis": "no rate supplied (store has no plan period or budget)",
+        "actualUsd": null,
+        "actualBasis": "no usage event for this task -- field cleared",
+        "usageEventCount": 0,
+        "shadowMicros": 0
+      },
+      "writes": [
+        {
+          "key": "wave",
+          "dataType": "SINGLE_SELECT",
+          "value": 6,
+          "optionId": "7e5d1b33"
+        },
+        {
+          "key": "p50",
+          "dataType": "NUMBER",
+          "value": 0.39
+        },
+        {
+          "key": "p90",
+          "dataType": "NUMBER",
+          "value": 0.5
+        },
+        {
+          "key": "endP90",
+          "dataType": "DATE",
+          "value": "2026-10-10"
+        },
+        {
+          "key": "estCost",
+          "dataType": "NUMBER",
+          "value": 0
+        },
+        {
+          "key": "realCost",
+          "dataType": "NUMBER",
+          "value": null
+        }
+      ]
+    }
+  ],
+  "pass1": {
+    "writes": 72,
+    "failures": []
+  },
+  "readBack": [
+    {
+      "taskId": "T-116",
+      "updatedAt": "2026-10-10T17:13:43Z",
+      "derived": {
+        "Wave": "1",
+        "Forecast P50 (h)": 0.13,
+        "Forecast P90 (h)": 0.92,
+        "Forecast end P90": "2026-10-10",
+        "Est. custo": 0,
+        "Custo real": null
+      }
+    },
+    {
+      "taskId": "T-117",
+      "updatedAt": "2026-10-10T17:13:46Z",
+      "derived": {
+        "Wave": "2",
+        "Forecast P50 (h)": 0.21,
+        "Forecast P90 (h)": 0.8,
+        "Forecast end P90": "2026-10-05",
+        "Est. custo": 0,
+        "Custo real": null
+      }
+    },
+    {
+      "taskId": "T-118",
+      "updatedAt": "2026-10-10T17:13:49Z",
+      "derived": {
+        "Wave": "2",
+        "Forecast P50 (h)": 0.12,
+        "Forecast P90 (h)": 0.43,
+        "Forecast end P90": "2026-10-10",
+        "Est. custo": 0,
+        "Custo real": 0
+      }
+    },
+    {
+      "taskId": "T-119",
+      "updatedAt": "2026-10-10T17:13:51Z",
+      "derived": {
+        "Wave": "3",
+        "Forecast P50 (h)": 0.15,
+        "Forecast P90 (h)": 1.86,
+        "Forecast end P90": "2026-10-10",
+        "Est. custo": 0,
+        "Custo real": 0
+      }
+    },
+    {
+      "taskId": "T-120",
+      "updatedAt": "2026-10-10T17:13:53Z",
+      "derived": {
+        "Wave": "4",
+        "Forecast P50 (h)": 0.95,
+        "Forecast P90 (h)": 1.91,
+        "Forecast end P90": "2026-10-10",
+        "Est. custo": 0,
+        "Custo real": null
+      }
+    },
+    {
+      "taskId": "T-126",
+      "updatedAt": "2026-10-10T17:13:55Z",
+      "derived": {
+        "Wave": "1",
+        "Forecast P50 (h)": 0.21,
+        "Forecast P90 (h)": 0.58,
+        "Forecast end P90": "2026-10-10",
+        "Est. custo": 0,
+        "Custo real": null
+      }
+    },
+    {
+      "taskId": "T-127",
+      "updatedAt": "2026-10-10T17:13:57Z",
+      "derived": {
+        "Wave": "2",
+        "Forecast P50 (h)": 0.48,
+        "Forecast P90 (h)": 0.75,
+        "Forecast end P90": "2026-10-10",
+        "Est. custo": 0,
+        "Custo real": null
+      }
+    },
+    {
+      "taskId": "T-128",
+      "updatedAt": "2026-10-10T17:14:00Z",
+      "derived": {
+        "Wave": "3",
+        "Forecast P50 (h)": 0.42,
+        "Forecast P90 (h)": 0.54,
+        "Forecast end P90": "2026-10-10",
+        "Est. custo": 0,
+        "Custo real": null
+      }
+    },
+    {
+      "taskId": "T-129",
+      "updatedAt": "2026-10-10T17:14:03Z",
+      "derived": {
+        "Wave": "4",
+        "Forecast P50 (h)": 0.3,
+        "Forecast P90 (h)": 2.67,
+        "Forecast end P90": "2026-10-11",
+        "Est. custo": 0,
+        "Custo real": null
+      }
+    },
+    {
+      "taskId": "T-131",
+      "updatedAt": "2026-10-10T17:14:05Z",
+      "derived": {
+        "Wave": "5",
+        "Forecast P50 (h)": 0.37,
+        "Forecast P90 (h)": 0.59,
+        "Forecast end P90": "2026-10-10",
+        "Est. custo": 0,
+        "Custo real": null
+      }
+    },
+    {
+      "taskId": "T-133",
+      "updatedAt": "2026-10-10T17:14:08Z",
+      "derived": {
+        "Wave": "6",
+        "Forecast P50 (h)": 0.3,
+        "Forecast P90 (h)": 2.67,
+        "Forecast end P90": "2026-10-11",
+        "Est. custo": 0,
+        "Custo real": null
+      }
+    },
+    {
+      "taskId": "T-134",
+      "updatedAt": "2026-10-10T17:14:11Z",
+      "derived": {
+        "Wave": "6",
+        "Forecast P50 (h)": 0.39,
+        "Forecast P90 (h)": 0.5,
+        "Forecast end P90": "2026-10-10",
+        "Est. custo": 0,
+        "Custo real": null
+      }
+    }
+  ],
+  "verification": [
+    {
+      "taskId": "T-116",
+      "ok": true,
+      "mismatches": []
+    },
+    {
+      "taskId": "T-117",
+      "ok": true,
+      "mismatches": []
+    },
+    {
+      "taskId": "T-118",
+      "ok": true,
+      "mismatches": []
+    },
+    {
+      "taskId": "T-119",
+      "ok": true,
+      "mismatches": []
+    },
+    {
+      "taskId": "T-120",
+      "ok": true,
+      "mismatches": []
+    },
+    {
+      "taskId": "T-126",
+      "ok": true,
+      "mismatches": []
+    },
+    {
+      "taskId": "T-127",
+      "ok": true,
+      "mismatches": []
+    },
+    {
+      "taskId": "T-128",
+      "ok": true,
+      "mismatches": []
+    },
+    {
+      "taskId": "T-129",
+      "ok": true,
+      "mismatches": []
+    },
+    {
+      "taskId": "T-131",
+      "ok": true,
+      "mismatches": []
+    },
+    {
+      "taskId": "T-133",
+      "ok": true,
+      "mismatches": []
+    },
+    {
+      "taskId": "T-134",
+      "ok": true,
+      "mismatches": []
+    }
+  ],
+  "idempotence": {
+    "taskId": "T-116",
+    "itemUpdatedAtBeforeRepeat": "2026-10-10T17:13:43Z",
+    "repeats": [
+      {
+        "field": "wave",
+        "ok": true,
+        "itemUpdatedAt": "2026-10-10T17:13:43Z"
+      },
+      {
+        "field": "p50",
+        "ok": true,
+        "itemUpdatedAt": "2026-10-10T17:14:13Z"
+      },
+      {
+        "field": "p90",
+        "ok": true,
+        "itemUpdatedAt": "2026-10-10T17:14:14Z"
+      },
+      {
+        "field": "endP90",
+        "ok": true,
+        "itemUpdatedAt": "2026-10-10T17:14:14Z"
+      },
+      {
+        "field": "estCost",
+        "ok": true,
+        "itemUpdatedAt": "2026-10-10T17:14:15Z"
+      },
+      {
+        "field": "realCost",
+        "ok": true,
+        "itemUpdatedAt": "2026-10-10T17:14:15Z"
+      }
+    ],
+    "sameValueRepeatChangedRevision": true
+  },
+  "clientMutationIdProbe": {
+    "taskId": "T-116",
+    "sentFirst": 11.13,
+    "sentSecond": 12.13,
+    "readBack": 12.13,
+    "deduplicated": false,
+    "note": "both mutations carried the same clientMutationId"
+  },
+  "batchWrite": {
+    "taskId": "T-117",
+    "aliases": 5,
+    "ok": true,
+    "metric": {
+      "label": "batchSetFields(5 aliases)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 634,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "515",
+      "headerRemaining": "4485",
+      "requestId": "655F:4FA81:110D9F4:1E6B514:6ACA7269"
+    }
+  },
+  "capabilitiesObserved": {
+    "fields": {
+      "wave": {
+        "read": true,
+        "write": true
+      },
+      "p50": {
+        "read": true,
+        "write": true
+      },
+      "p90": {
+        "read": true,
+        "write": true
+      },
+      "endP90": {
+        "read": true,
+        "write": true
+      },
+      "estCost": {
+        "read": true,
+        "write": true
+      },
+      "realCost": {
+        "read": true,
+        "write": true
+      }
+    },
+    "relations": {},
+    "comments": {
+      "read": false,
+      "write": false
+    },
+    "criteria": {
+      "read": false,
+      "write": false
+    },
+    "timeline": {
+      "read": false
+    }
+  },
+  "endedAt": "2026-10-10T17:14:18.037Z",
+  "metrics": [
+    {
+      "label": "getProject(fields,100)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 942,
+      "pointsCost": 1,
+      "pointsRemaining": 4572,
+      "headerUsed": "428",
+      "headerRemaining": "4572",
+      "requestId": "655D:244D02:10F47E8:1E5145D:6ACA723F"
+    },
+    {
+      "label": "listItems(project,first=100)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 680,
+      "pointsCost": 1,
+      "pointsRemaining": 4570,
+      "headerUsed": "430",
+      "headerRemaining": "4570",
+      "requestId": "655F:4FA81:110BF5E:1E68479:6ACA7240"
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 417,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "431",
+      "headerRemaining": "4569",
+      "requestId": "655D:244D02:10F4BBB:1E51B4A:6ACA7240"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 344,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "432",
+      "headerRemaining": "4568",
+      "requestId": "655F:4FA81:110C2A9:1E68A82:6ACA7241"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 502,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "433",
+      "headerRemaining": "4567",
+      "requestId": "655D:244D02:10F4C1A:1E51BFF:6ACA7246"
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 385,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "434",
+      "headerRemaining": "4566",
+      "requestId": "655F:4FA81:110C31A:1E68B4F:6ACA7246"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 366,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "435",
+      "headerRemaining": "4565",
+      "requestId": "655D:244D02:10F4C91:1E51CE9:6ACA7247"
+    },
+    {
+      "label": "clearProjectV2ItemFieldValue",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 323,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "436",
+      "headerRemaining": "4564",
+      "requestId": "655F:4FA81:110C39C:1E68C4E:6ACA7247"
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 360,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "437",
+      "headerRemaining": "4563",
+      "requestId": "655D:244D02:10F4D00:1E51DB3:6ACA7248"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 379,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "438",
+      "headerRemaining": "4562",
+      "requestId": "655F:4FA81:110C407:1E68D12:6ACA7248"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 448,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "439",
+      "headerRemaining": "4561",
+      "requestId": "655D:244D02:10F4D61:1E51E82:6ACA7248"
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 358,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "440",
+      "headerRemaining": "4560",
+      "requestId": "655F:4FA81:110C477:1E68DF1:6ACA7249"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 335,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "441",
+      "headerRemaining": "4559",
+      "requestId": "655D:244D02:10F4DF3:1E51F6B:6ACA7249"
+    },
+    {
+      "label": "clearProjectV2ItemFieldValue",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 368,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "442",
+      "headerRemaining": "4558",
+      "requestId": "655F:4FA81:110C4F0:1E68EDC:6ACA7249"
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 394,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "443",
+      "headerRemaining": "4557",
+      "requestId": "655D:244D02:10F4E4C:1E52019:6ACA724A"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 452,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "444",
+      "headerRemaining": "4556",
+      "requestId": "655F:4FA81:110C55E:1E68F88:6ACA724A"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 550,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "445",
+      "headerRemaining": "4555",
+      "requestId": "655D:244D02:10F4EC2:1E520F7:6ACA724A"
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 317,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "446",
+      "headerRemaining": "4554",
+      "requestId": "655F:4FA81:110C5D5:1E69052:6ACA724B"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 389,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "447",
+      "headerRemaining": "4553",
+      "requestId": "655D:244D02:10F4F41:1E521E1:6ACA724B"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 432,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "448",
+      "headerRemaining": "4552",
+      "requestId": "655F:4FA81:110C63B:1E69119:6ACA724C"
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 416,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "449",
+      "headerRemaining": "4551",
+      "requestId": "655D:244D02:10F4FED:1E522F1:6ACA724C"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 375,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "450",
+      "headerRemaining": "4550",
+      "requestId": "655F:4FA81:110C6DA:1E6924F:6ACA724D"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 439,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "451",
+      "headerRemaining": "4549",
+      "requestId": "655D:244D02:10F506B:1E523DB:6ACA724D"
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 314,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "452",
+      "headerRemaining": "4548",
+      "requestId": "655F:4FA81:110C773:1E6935C:6ACA724D"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 437,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "453",
+      "headerRemaining": "4547",
+      "requestId": "655D:244D02:10F50E6:1E52497:6ACA724E"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 369,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "454",
+      "headerRemaining": "4546",
+      "requestId": "655F:4FA81:110C7FE:1E69432:6ACA724E"
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 335,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "455",
+      "headerRemaining": "4545",
+      "requestId": "655D:244D02:10F5158:1E52590:6ACA724F"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 350,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "456",
+      "headerRemaining": "4544",
+      "requestId": "655F:4FA81:110C861:1E694F8:6ACA724F"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 412,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "457",
+      "headerRemaining": "4543",
+      "requestId": "655D:244D02:10F51BA:1E52643:6ACA724F"
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 389,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "458",
+      "headerRemaining": "4542",
+      "requestId": "655F:4FA81:110C8CC:1E695C5:6ACA7250"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 366,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "459",
+      "headerRemaining": "4541",
+      "requestId": "655D:244D02:10F5236:1E5276E:6ACA7250"
+    },
+    {
+      "label": "clearProjectV2ItemFieldValue",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 302,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "460",
+      "headerRemaining": "4540",
+      "requestId": "655F:4FA81:110C955:1E696CF:6ACA7250"
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 309,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "461",
+      "headerRemaining": "4539",
+      "requestId": "655D:244D02:10F52A7:1E5284F:6ACA7251"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 518,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "462",
+      "headerRemaining": "4538",
+      "requestId": "655F:4FA81:110C9C6:1E697AC:6ACA7251"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 338,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "463",
+      "headerRemaining": "4537",
+      "requestId": "655D:244D02:10F5342:1E52959:6ACA7251"
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 376,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "464",
+      "headerRemaining": "4536",
+      "requestId": "655F:4FA81:110CA3F:1E69898:6ACA7252"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 411,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "465",
+      "headerRemaining": "4535",
+      "requestId": "655D:244D02:10F53BD:1E52A3B:6ACA7252"
+    },
+    {
+      "label": "clearProjectV2ItemFieldValue",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 339,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "466",
+      "headerRemaining": "4534",
+      "requestId": "655F:4FA81:110CABE:1E6998C:6ACA7253"
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 522,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "467",
+      "headerRemaining": "4533",
+      "requestId": "655D:244D02:10F5446:1E52B2C:6ACA7253"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 430,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "468",
+      "headerRemaining": "4532",
+      "requestId": "655F:4FA81:110CB7D:1E69AE1:6ACA7253"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 308,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "469",
+      "headerRemaining": "4531",
+      "requestId": "655D:244D02:10F54D5:1E52C43:6ACA7254"
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 411,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "470",
+      "headerRemaining": "4530",
+      "requestId": "655F:4FA81:110CC02:1E69BC6:6ACA7254"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 534,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "471",
+      "headerRemaining": "4529",
+      "requestId": "655D:244D02:10F5547:1E52D2E:6ACA7255"
+    },
+    {
+      "label": "clearProjectV2ItemFieldValue",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 318,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "472",
+      "headerRemaining": "4528",
+      "requestId": "655F:4FA81:110CC8F:1E69CCC:6ACA7255"
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 531,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "473",
+      "headerRemaining": "4527",
+      "requestId": "655D:244D02:10F55D9:1E52E23:6ACA7256"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 572,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "474",
+      "headerRemaining": "4526",
+      "requestId": "655F:4FA81:110CD1B:1E69DFE:6ACA7256"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 344,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "475",
+      "headerRemaining": "4525",
+      "requestId": "655D:244D02:10F568B:1E52F75:6ACA7256"
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 648,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "476",
+      "headerRemaining": "4524",
+      "requestId": "655F:4FA81:110CDDE:1E69F6B:6ACA7257"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 359,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "477",
+      "headerRemaining": "4523",
+      "requestId": "655D:244D02:10F572F:1E530A1:6ACA7257"
+    },
+    {
+      "label": "clearProjectV2ItemFieldValue",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 334,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "478",
+      "headerRemaining": "4522",
+      "requestId": "655F:4FA81:110CE7D:1E6A09F:6ACA7258"
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 387,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "479",
+      "headerRemaining": "4521",
+      "requestId": "655D:244D02:10F579C:1E5316E:6ACA7258"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 398,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "480",
+      "headerRemaining": "4520",
+      "requestId": "655F:4FA81:110CF14:1E6A1C0:6ACA7259"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 625,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "481",
+      "headerRemaining": "4519",
+      "requestId": "655D:244D02:10F582D:1E5327A:6ACA7259"
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 427,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "482",
+      "headerRemaining": "4518",
+      "requestId": "655F:4FA81:110D00C:1E6A304:6ACA725A"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 448,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "483",
+      "headerRemaining": "4517",
+      "requestId": "655D:244D02:10F58F9:1E533DA:6ACA725A"
+    },
+    {
+      "label": "clearProjectV2ItemFieldValue",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 454,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "484",
+      "headerRemaining": "4516",
+      "requestId": "655F:4FA81:110D09D:1E6A410:6ACA725B"
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 336,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "485",
+      "headerRemaining": "4515",
+      "requestId": "655D:244D02:10F597A:1E534D9:6ACA725B"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 334,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "486",
+      "headerRemaining": "4514",
+      "requestId": "655F:4FA81:110D10C:1E6A4F3:6ACA725B"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 417,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "487",
+      "headerRemaining": "4513",
+      "requestId": "655D:244D02:10F59E5:1E53585:6ACA725C"
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 347,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "488",
+      "headerRemaining": "4512",
+      "requestId": "655F:4FA81:110D17F:1E6A5E0:6ACA725C"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 380,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "489",
+      "headerRemaining": "4511",
+      "requestId": "655D:244D02:10F5A6C:1E53682:6ACA725D"
+    },
+    {
+      "label": "clearProjectV2ItemFieldValue",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 531,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "490",
+      "headerRemaining": "4510",
+      "requestId": "655F:4FA81:110D203:1E6A6C7:6ACA725D"
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 518,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "491",
+      "headerRemaining": "4509",
+      "requestId": "655D:244D02:10F5B2B:1E537C8:6ACA725D"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 387,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "492",
+      "headerRemaining": "4508",
+      "requestId": "655F:4FA81:110D2A6:1E6A7F2:6ACA725E"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 416,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "493",
+      "headerRemaining": "4507",
+      "requestId": "655D:244D02:10F5BDE:1E53913:6ACA725E"
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 422,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "494",
+      "headerRemaining": "4506",
+      "requestId": "655F:4FA81:110D343:1E6A909:6ACA725F"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 520,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "495",
+      "headerRemaining": "4505",
+      "requestId": "655D:244D02:10F5C6C:1E53A4A:6ACA725F"
+    },
+    {
+      "label": "clearProjectV2ItemFieldValue",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 351,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "496",
+      "headerRemaining": "4504",
+      "requestId": "655F:4FA81:110D3F1:1E6AA42:6ACA7260"
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 359,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "497",
+      "headerRemaining": "4503",
+      "requestId": "655D:244D02:10F5CE9:1E53B33:6ACA7260"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 689,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "498",
+      "headerRemaining": "4502",
+      "requestId": "655F:4FA81:110D46D:1E6AB21:6ACA7260"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 411,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "499",
+      "headerRemaining": "4501",
+      "requestId": "655D:244D02:10F5DA9:1E53C78:6ACA7261"
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 403,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "500",
+      "headerRemaining": "4500",
+      "requestId": "655F:4FA81:110D51A:1E6AC6F:6ACA7261"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 585,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "501",
+      "headerRemaining": "4499",
+      "requestId": "655D:244D02:10F5E2B:1E53D84:6ACA7262"
+    },
+    {
+      "label": "clearProjectV2ItemFieldValue",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 345,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "502",
+      "headerRemaining": "4498",
+      "requestId": "655F:4FA81:110D5D6:1E6ADBD:6ACA7262"
+    },
+    {
+      "label": "listItems(project,first=100)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 884,
+      "pointsCost": 1,
+      "pointsRemaining": 4497,
+      "headerUsed": "503",
+      "headerRemaining": "4497",
+      "requestId": "655D:244D02:10F5EBD:1E53E8D:6ACA7263"
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 383,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "504",
+      "headerRemaining": "4496",
+      "requestId": "655F:4FA81:110D6CF:1E6AF4A:6ACA7263"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 935,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "505",
+      "headerRemaining": "4495",
+      "requestId": "655D:244D02:10F5F96:1E5400A:6ACA7264"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 356,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "506",
+      "headerRemaining": "4494",
+      "requestId": "655F:4FA81:110D7B2:1E6B0F4:6ACA7264"
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 410,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "507",
+      "headerRemaining": "4493",
+      "requestId": "655D:244D02:10F607A:1E5419D:6ACA7265"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 632,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "508",
+      "headerRemaining": "4492",
+      "requestId": "655F:4FA81:110D82C:1E6B1F2:6ACA7266"
+    },
+    {
+      "label": "clearProjectV2ItemFieldValue",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 471,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "509",
+      "headerRemaining": "4491",
+      "requestId": "655D:244D02:10F6113:1E5429E:6ACA7266"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 341,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "510",
+      "headerRemaining": "4490",
+      "requestId": "655F:4FA81:110D8E9:1E6B32A:6ACA7267"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 358,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "511",
+      "headerRemaining": "4489",
+      "requestId": "655D:244D02:10F6182:1E5437B:6ACA7267"
+    },
+    {
+      "label": "listItems(project,first=100)",
+      "api": "graphql",
+      "mutation": false,
+      "status": 200,
+      "latencyMs": 575,
+      "pointsCost": 1,
+      "pointsRemaining": 4488,
+      "headerUsed": "512",
+      "headerRemaining": "4488",
+      "requestId": "655F:4FA81:110D96C:1E6B41D:6ACA7268"
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 339,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "514",
+      "headerRemaining": "4486",
+      "requestId": "655D:244D02:10F6202:1E5447D:6ACA7268"
+    },
+    {
+      "label": "batchSetFields(5 aliases)",
+      "api": "graphql",
+      "mutation": true,
+      "status": 200,
+      "latencyMs": 634,
+      "pointsCost": null,
+      "pointsRemaining": null,
+      "headerUsed": "515",
+      "headerRemaining": "4485",
+      "requestId": "655F:4FA81:110D9F4:1E6B514:6ACA7269"
+    }
+  ],
+  "metricsSummary": [
+    {
+      "label": "getProject(fields,100)",
+      "api": "graphql",
+      "calls": 1,
+      "pointsTotal": 1,
+      "latencyMinMs": 942,
+      "latencyMaxMs": 942,
+      "latencyMeanMs": 942
+    },
+    {
+      "label": "listItems(project,first=100)",
+      "api": "graphql",
+      "calls": 3,
+      "pointsTotal": 3,
+      "latencyMinMs": 575,
+      "latencyMaxMs": 884,
+      "latencyMeanMs": 713
+    },
+    {
+      "label": "setField(SINGLE_SELECT)",
+      "api": "graphql",
+      "calls": 13,
+      "pointsTotal": 0,
+      "latencyMinMs": 309,
+      "latencyMaxMs": 531,
+      "latencyMeanMs": 405
+    },
+    {
+      "label": "setField(NUMBER)",
+      "api": "graphql",
+      "calls": 44,
+      "pointsTotal": 0,
+      "latencyMinMs": 308,
+      "latencyMaxMs": 935,
+      "latencyMeanMs": 439
+    },
+    {
+      "label": "setField(DATE)",
+      "api": "graphql",
+      "calls": 13,
+      "pointsTotal": 0,
+      "latencyMinMs": 314,
+      "latencyMaxMs": 648,
+      "latencyMeanMs": 401
+    },
+    {
+      "label": "clearProjectV2ItemFieldValue",
+      "api": "graphql",
+      "calls": 11,
+      "pointsTotal": 0,
+      "latencyMinMs": 302,
+      "latencyMaxMs": 531,
+      "latencyMeanMs": 376
+    },
+    {
+      "label": "batchSetFields(5 aliases)",
+      "api": "graphql",
+      "calls": 1,
+      "pointsTotal": 0,
+      "latencyMinMs": 634,
+      "latencyMaxMs": 634,
+      "latencyMeanMs": 634
+    }
+  ]
+}
