@@ -26,7 +26,7 @@
 ### [T-001] Harden session-start sync hooks and OpenCode plugin integration
 
   - id: T-001
-  - status: paused
+  - status: archived
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -39,13 +39,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-001.md
 
 ### [T-002] Add task log timeline sync using GitHub issue comments
 
   - id: T-002
-  - status: paused
+  - status: cancelled
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -58,13 +58,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-002.md
 
 ### [T-003] Add iteration and assignees with backward compatibility
 
   - id: T-003
-  - status: paused
+  - status: cancelled
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -77,13 +77,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-003.md
 
 ### [T-004] Map sub-issue progress from GitHub Projects GraphQL
 
   - id: T-004
-  - status: paused
+  - status: cancelled
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -96,13 +96,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-004.md
 
 ### [T-005] Add migration docs and regression coverage for new fields
 
   - id: T-005
-  - status: paused
+  - status: cancelled
   - type: chore
   - parent: null
   - subIssueProgress: null
@@ -115,13 +115,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-005.md
 
 ### [E-007] Epic: Obsidian vault sync (future)
 
   - id: E-007
-  - status: paused
+  - status: archived
   - type: epic
   - parent: null
   - subIssueProgress: null
@@ -134,7 +134,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/E-007.md
 
 ### [E-008] Epic: Clean and organize new repository
@@ -464,7 +464,7 @@
 ### [E-003] Isolated generator/evaluator execution model
 
   - id: E-003
-  - status: paused
+  - status: archived
   - type: epic
   - parent: null
   - subIssueProgress: 0/5
@@ -477,13 +477,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/E-003.md
 
 ### [T-022] Define evaluator handoff contract and evidence bundle
 
   - id: T-022
-  - status: paused
+  - status: archived
   - type: task
   - parent: E-003
   - subIssueProgress: null
@@ -496,13 +496,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-022.md
 
 ### [T-023] Implement isolated evaluator flow in task execution skill
 
   - id: T-023
-  - status: paused
+  - status: archived
   - type: feature
   - parent: E-003
   - subIssueProgress: null
@@ -515,13 +515,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-023.md
 
 ### [T-024] Add optional parallel evaluator mode with `auto` fallback
 
   - id: T-024
-  - status: paused
+  - status: archived
   - type: feature
   - parent: E-003
   - subIssueProgress: null
@@ -534,13 +534,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-024.md
 
 ### [T-025] Standardize evaluation verdict model and status transitions
 
   - id: T-025
-  - status: paused
+  - status: archived
   - type: task
   - parent: E-003
   - subIssueProgress: null
@@ -553,13 +553,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-025.md
 
 ### [T-026] Add regression coverage for isolated evaluation behavior
 
   - id: T-026
-  - status: paused
+  - status: archived
   - type: task
   - parent: E-003
   - subIssueProgress: null
@@ -572,7 +572,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-026.md
 
 ### [E-004] Validation and execution-order tooling
@@ -787,7 +787,7 @@
 ### [E-006] Workflow layer inspired by GSD/BMAD
 
   - id: E-006
-  - status: paused
+  - status: archived
   - type: epic
   - parent: null
   - subIssueProgress: 2/5
@@ -800,7 +800,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/E-006.md
 
 ### [T-036] Create `mapctx-enrich-task` skill for context enrichment
@@ -825,7 +825,7 @@
 ### [T-037] Create `mapctx-sprint-status` workflow and recommendations
 
   - id: T-037
-  - status: paused
+  - status: archived
   - type: feature
   - parent: E-006
   - subIssueProgress: null
@@ -838,13 +838,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-037.md
 
 ### [T-038] Implement `mapctx-next` next-best-action flow
 
   - id: T-038
-  - status: paused
+  - status: archived
   - type: feature
   - parent: E-006
   - subIssueProgress: null
@@ -857,7 +857,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-038.md
 
 ### [T-039] Implement `mapctx-correct-course` workflow
@@ -882,7 +882,7 @@
 ### [T-040] Add wave-based task execution support to operational loop
 
   - id: T-040
-  - status: paused
+  - status: archived
   - type: feature
   - parent: E-006
   - subIssueProgress: null
@@ -895,7 +895,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-040.md
 
 ### [T-041] Sync Project date fields from TASKS.md on push
@@ -939,7 +939,7 @@
 ### [T-043] Configure real Project date field IDs and run first sync validation
 
   - id: T-043
-  - status: paused
+  - status: cancelled
   - type: task
   - parent: null
   - subIssueProgress: null
@@ -952,7 +952,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-043.md
 
 ### [T-044] Pull Project date fields back into local task model
@@ -977,7 +977,7 @@
 ### [T-045] Add optional Project field sync for priority and workload
 
   - id: T-045
-  - status: paused
+  - status: cancelled
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -990,13 +990,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-045.md
 
 ### [T-046] Add automated tests for Project field date operations
 
   - id: T-046
-  - status: paused
+  - status: cancelled
   - type: task
   - parent: null
   - subIssueProgress: null
@@ -1009,7 +1009,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-046.md
 
 ### [T-047] Add full support for custom status workflows and configurable completion states
@@ -1227,7 +1227,7 @@
   - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 4/9
+  - subIssueProgress: 5/9
   - priority: high
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
@@ -1360,7 +1360,7 @@
   - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 1/5
+  - subIssueProgress: 2/5
   - priority: medium
   - workload: Hard
   - tags: [vnext, migration, cli, skills, github]
@@ -1376,7 +1376,7 @@
 ### [T-057] Unify CLI, consolidate skills, and define GitHub source modes
 
   - id: T-057
-  - status: review
+  - status: done
   - type: feature
   - parent: E-012
   - subIssueProgress: null
@@ -1387,15 +1387,15 @@
   - dependsOn: [T-050, T-052, T-056, T-065]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-09-23
+  - updated: 2026-10-14
   - detail: ./tasks/T-057.md
 
 ### [T-058] Prove walking-skeleton dispatch through Traycer before waves and forecast
 
   - id: T-058
-  - status: review
+  - status: done
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1406,9 +1406,9 @@
   - dependsOn: [T-048, T-049, T-052]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-09-23
+  - updated: 2026-10-14
   - detail: ./tasks/T-058.md
 
 ### [T-060] Persist dispatch and receipt state in the external store
@@ -1927,7 +1927,7 @@
 ### Add archived as terminal planning status
 
   - id: T-090
-  - status: review
+  - status: done
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -1938,9 +1938,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-090.md
 
 ### [T-091] Add cancelled planning status end-to-end
@@ -2003,7 +2003,7 @@
 ### [T-094] Migrate workspaceV2 kanban to store-backed data via CLI
 
   - id: T-094
-  - status: review
+  - status: done
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -2014,9 +2014,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-094.md
 
 ### [T-095] Bare mapctx launches workspace UI and heals stale active target
@@ -2177,7 +2177,7 @@
   - status: doing
   - type: epic
   - parent: null
-  - subIssueProgress: 7/13
+  - subIssueProgress: 11/13
   - priority: null
   - workload: null
   - tags: [time, history, roadmap]
@@ -2212,7 +2212,7 @@
 ### [T-103] Test Task
 
   - id: T-103
-  - status: backlog
+  - status: archived
   - type: task
   - parent: null
   - subIssueProgress: null
@@ -2225,13 +2225,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-103.md
 
 ### [T-104] Test Task 2
 
   - id: T-104
-  - status: backlog
+  - status: archived
   - type: task
   - parent: null
   - subIssueProgress: null
@@ -2244,13 +2244,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-10-14
   - detail: ./tasks/T-104.md
 
 ### [T-105] Test Task 3
 
   - id: T-105
-  - status: backlog
+  - status: archived
   - type: task
   - parent: null
   - subIssueProgress: null
@@ -2263,7 +2263,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-10-14
   - detail: ./tasks/T-105.md
 
 ### [T-106] [T-A] Comando task start atomico: claim + dispatch em uma transacao
@@ -2364,7 +2364,7 @@
 ### [T-111] Wave header periodo e progresso
 
   - id: T-111
-  - status: review
+  - status: done
   - type: feature
   - parent: E-014
   - subIssueProgress: null
@@ -2375,15 +2375,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-02
+  - updated: 2026-10-14
   - detail: ./tasks/T-111.md
 
 ### [T-112] Backfill sintetico de periodo para done sem historico + limpeza de targets
 
   - id: T-112
-  - status: review
+  - status: done
   - type: feature
   - parent: E-014
   - subIssueProgress: null
@@ -2394,15 +2394,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-02
+  - updated: 2026-10-14
   - detail: ./tasks/T-112.md
 
 ### [T-113] Sidebar counts do banco por target + faixa do epico por tasks relacionadas
 
   - id: T-113
-  - status: review
+  - status: done
   - type: feature
   - parent: E-014
   - subIssueProgress: null
@@ -2413,15 +2413,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-02
+  - updated: 2026-10-14
   - detail: ./tasks/T-113.md
 
 ### [T-114] Auditar reviews stale: cancelar pausadas mortas e fechar epicos E-001/E-002/E-004/E-005
 
   - id: T-114
-  - status: review
+  - status: done
   - type: chore
   - parent: E-014
   - subIssueProgress: null
@@ -2432,9 +2432,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-02
+  - updated: 2026-10-14
   - detail: ./tasks/T-114.md
 
 ### Carryover dos epicos v3 (trabalho restante)
@@ -3162,7 +3162,7 @@
 ### [T-150] Adapter GitHub de leitura atrás da TaskProvider
 
   - id: T-150
-  - status: backlog
+  - status: doing
   - type: feature
   - parent: E-018
   - subIssueProgress: null
@@ -3181,7 +3181,7 @@
 ### [T-151] Sanitização para publicar tasks num repo público
 
   - id: T-151
-  - status: backlog
+  - status: doing
   - type: feature
   - parent: E-018
   - subIssueProgress: null
@@ -3314,7 +3314,7 @@
 ### [T-158] Aplicar a triagem do board antes do espelho (decisões do operador de 2026-10-14)
 
   - id: T-158
-  - status: backlog
+  - status: doing
   - type: chore
   - parent: E-018
   - subIssueProgress: null

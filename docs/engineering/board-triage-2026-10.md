@@ -296,3 +296,64 @@ Two further observations, outside this task's scope, that the operator should kn
   2026-10-13. The E-017 orchestration notes still warn that running an integration-built
   CLI would migrate the real store from v10 — that warning is out of date, and the
   reason the migration was applied is not recorded anywhere this task could read.
+
+## Applied (T-158, 2026-10-14)
+
+T-158 applied this triage against the live board under the operator's decisions of
+2026-10-14: the 2026-09-23 bulk reopen is treated as maintenance (close what has evidence,
+leave the rest as work with a note); the 2026-10-05 imported approvals stay exactly as they
+are; the mirror publishes every row with its `Status` except the three test rows; T-113's
+criterion naming a third party is rewritten and re-approved.
+
+**30 rows applied, 23 held.** Every approval carries evidence in the store
+(`task acceptance show <id>` prints it); the imported approvals were left untouched.
+
+| Outcome | Rows |
+| --- | --- |
+| Closed `done` with newly approved, evidence-backed criteria | 5 — T-057 (5 criteria), T-058 (1), T-090 (6), T-111 (4), T-113 (6 at revision 2) |
+| Closed `done` on the imported approvals, kept as they are | 3 — T-094, T-112, T-114 |
+| Cancelled (superseded) | 7 — T-002, T-003, T-004, T-005, T-043, T-045, T-046 |
+| Archived (will not proceed) | 15 — T-001, E-003, T-022, T-023, T-024, T-025, T-026, E-006, T-037, T-038, T-040, E-007, T-103, T-104, T-105 |
+| Held with a note on the task | 6 — T-049, T-065, T-077, T-084, T-096, T-136 |
+| Held, blocked by the done gate | 14 — T-067, T-068, T-069, T-070, T-071, T-072, T-073, T-074, T-075, T-076, T-078, T-083, T-095, E-013 |
+| Kept as is, as proposed | 3 — E-014, E-015, E-016 |
+
+### The done gate blocks 14 rows that the triage expected to close
+
+The triage assumed a task with no acceptance criteria would pass the `done` gate trivially.
+It does not. `packages/store/src/tasks.ts` refuses `done` when the store holds **no
+acceptance revision at all**, when the revision is **explicitly empty**, and when any
+criterion is pending. By design, no task reaches `done` without at least one approved
+criterion, and declaring acceptance empty is not an escape hatch.
+
+Thirteen delivered tasks — T-067, T-068, T-069, T-070, T-071, T-072, T-073, T-074, T-075,
+T-076, T-078, T-083, T-095 — have no acceptance revision, and `mapctx acceptance import`
+reports `importable: 0`: there is no authored checklist anywhere to import either. E-013 is
+the fourteenth, blocked both by the same gate and by T-076 and T-077 still being open under
+it, so T-077's re-parenting was left with the E-013 decision rather than half-applied.
+
+Closing these needs criteria **authored** for work already shipped and then approved in the
+same motion. T-158 stopped rather than do that: a measure written to fit a result it has
+already seen is the failure mode this board exists to prevent, and it is not "applying a
+triage". Three ways out, all the operator's call:
+
+1. Author criteria for each task from the pre-existing `description` intent — which was
+   written before the work — and have a reviewer who is not the author approve them.
+2. Accept these thirteen as permanently `review`: delivered, never formally accepted.
+3. Change the gate so a task may close with an explicit, auditable "no acceptance
+   criteria" declaration. That is a contract change, and ADR territory.
+
+Until then the mirror will publish thirteen delivered tasks as `Review`.
+
+### Side effects worth knowing
+
+- **Criterion 4 of T-158 is only partly satisfied.** No test row is open (all three are
+  archived) and eight of the ten old-sync rows are closed, but T-076 and E-013 remain in
+  review under the gate blocker above.
+- **T-113 was sanitized in two places**, not one: the store-owned criterion (revision 2)
+  and the Git-authored prose. T-058, T-072 and T-073 still carry machine-local paths in
+  their prose; those stay with T-151, which owns the sanitization pipeline.
+- **`mapctx validate` fails on this store for an unrelated reason**: 21 `invalid-domain`
+  errors for the domain key `CODE`, which the CLI built from `main` does not know. It is a
+  CLI-vocabulary gap, not board corruption — `CODE` is newer than `main`. Snapshot drift is
+  reported for the same reason plus the store having moved past the committed snapshots.
