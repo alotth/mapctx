@@ -416,7 +416,31 @@ async function checkPreconditions(ctx: ContractContext, checks: ContractCheck[])
     (candidate) => candidate !== "planningState" && provider.capabilities.fields[candidate]?.write === true && ctx.sampleValues[candidate] !== undefined
   )
   if (field === undefined) {
-    checks.push(skip("precondition.handling", group, "no writable field with a sample value to test a precondition against"))
+    // A read-only provider still has to get this right, and skipping here left
+    // the rule unexercised for exactly the providers most likely to break it.
+    // The refusal may be for the precondition or for the unwritable field --
+    // both are `unsupported`, and what must never happen is success, which
+    // would tell the caller its write was guarded when nothing was.
+    const unwritable = (Object.keys(provider.capabilities.fields) as ProviderOwnedField[])[0]
+    if (unwritable === undefined) {
+      checks.push(skip("precondition.handling", group, "the provider declares no fields at all"))
+      return
+    }
+    const refused = await provider.setField({
+      ...fieldWriteFor(ctx, unwritable, ctx.sampleValues[unwritable] ?? "contract-suite"),
+      clientOperationId: "contract-precondition-read-only",
+      precondition: { expectedRevision: "contract-suite-stale-revision" }
+    })
+    const readOnlyError = errorOf(refused)
+    checks.push(
+      check(
+        "precondition.handling",
+        group,
+        readOnlyError?.kind === "unsupported",
+        `no field is writable, so a write carrying a precondition must be refused as unsupported, got ${describe(refused)}`
+      )
+    )
+    if (readOnlyError) auditError(checks, "precondition.read-only", group, readOnlyError)
     return
   }
 

@@ -17,7 +17,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && rm -rf dist/github/fixtures && mkdir -p dist/github/fixtures && cp src/github/fixtures/*.json dist/github/fixtures/",
     "test": "npm run build && node --test dist/**/*.test.js",
     "clean": "rm -rf dist"
   },
