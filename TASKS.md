@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 11/22
+  - subIssueProgress: 12/23
   - priority: high
   - workload: null
   - tags: []
@@ -2820,7 +2820,7 @@
 ### [T-133] Planner: deduplicar a detecção de violações de claim e guardar o sentinela
 
   - id: T-133
-  - status: review
+  - status: done
   - type: chore
   - parent: E-017
   - subIssueProgress: null
@@ -2831,7 +2831,7 @@
   - dependsOn: [T-131]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
   - updated: 2026-10-14
   - detail: ./tasks/T-133.md
@@ -2842,7 +2842,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 2/11
+  - subIssueProgress: 3/12
   - priority: null
   - workload: null
   - tags: []
@@ -2953,7 +2953,7 @@
 ### [T-139] TaskProvider em código + LocalStoreProvider (store como provider local)
 
   - id: T-139
-  - status: review
+  - status: done
   - type: feature
   - parent: E-018
   - subIssueProgress: null
@@ -2964,7 +2964,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
   - updated: 2026-10-14
   - detail: ./tasks/T-139.md
@@ -2972,7 +2972,7 @@
 ### [T-140] C1: verdade de lease na leitura (getLiveActiveClaim) e sem release fictício em move done
 
   - id: T-140
-  - status: doing
+  - status: review
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3310,6 +3310,44 @@
   - externalId: null
   - updated: 2026-10-14
   - detail: ./tasks/T-157.md
+
+### [T-158] Aplicar a triagem do board antes do espelho (decisões do operador de 2026-10-14)
+
+  - id: T-158
+  - status: backlog
+  - type: chore
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: [T-149]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-158.md
+
+### [T-159] Planner: overbroad falso por caixa/.. e rótulo de exibição usado como path (T-133 MÉDIA-1/2)
+
+  - id: T-159
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-159.md
 
 ## Notes
 
