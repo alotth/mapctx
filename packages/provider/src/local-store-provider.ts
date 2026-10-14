@@ -32,7 +32,7 @@ import {
   type TaskRecord
 } from "@mapctx/store"
 
-import { err, ok, page, preconditionUnsupported, summariseBatch, unsupported } from "./results"
+import { err, ok, page, preconditionUnsupported, skippedOutcome, summariseBatch, unsupported } from "./results"
 import type {
   AddCommentInput,
   ProviderError,
@@ -437,6 +437,7 @@ export class LocalStoreProvider implements TaskProvider {
     // successful batch containing a failure: callers of setField expect the
     // error at the top level.
     if (outcome.status === "failed" || outcome.status === "unknown") return { ok: false, error: outcome.error }
+    if (outcome.status === "skipped") return err("transient", "single-write batch reported its only write as skipped")
     return ok(outcome)
   }
 
@@ -448,6 +449,12 @@ export class LocalStoreProvider implements TaskProvider {
    * application for no gain. The outcomes already applied are returned with
    * `partiallyApplied` set, which is the signal to read back rather than
    * resend.
+   *
+   * Every submitted write gets an outcome, including the ones never attempted,
+   * which are reported as `skipped`. Shortening the array would make the
+   * caller infer what happened from its length, and that inference differs by
+   * provider — GitHub applies every valid alias and fails at the top, which is
+   * the opposite shape from stopping at the first failure.
    */
   async applyFieldWrites(
     input: { writes: readonly FieldWrite[] } & WriteOptions
@@ -456,15 +463,19 @@ export class LocalStoreProvider implements TaskProvider {
     if (input.writes.length === 0) return err("invalid", "applyFieldWrites needs at least one write")
 
     const outcomes: FieldWriteOutcome[] = []
+    let stopped = false
     for (const write of input.writes) {
+      if (stopped) {
+        outcomes.push(skippedOutcome(write))
+        continue
+      }
       const outcome = this.applyOne(write)
       outcomes.push(outcome)
-      if (outcome.status === "failed" || outcome.status === "unknown") break
+      if (outcome.status === "failed" || outcome.status === "unknown") stopped = true
     }
-    // Writes never attempted are not reported as outcomes: claiming a result
-    // for a write that did not run would be the same lie in the other
-    // direction. `applied + failed + unknown < writes.length` says the rest
-    // were skipped.
+    // `verified: false` is the truth here: the store's own write result is
+    // trusted, and nothing is read back. A provider that sets this true owes
+    // the caller an actual re-read.
     return ok(summariseBatch(outcomes, false))
   }
 

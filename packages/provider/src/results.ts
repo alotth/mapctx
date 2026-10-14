@@ -99,6 +99,11 @@ export function failedOutcome(write: FieldWrite, error: ProviderError): FieldWri
   return { status: "failed", write, error }
 }
 
+/** A write the provider never attempted, because an earlier one failed. */
+export function skippedOutcome(write: FieldWrite): FieldWriteOutcome {
+  return { status: "skipped", write }
+}
+
 /**
  * Summarise a batch.
  *
@@ -106,17 +111,20 @@ export function failedOutcome(write: FieldWrite, error: ProviderError): FieldWri
  * including the `unknown` case, where the caller must read back rather than
  * resend. A batch where everything failed is not partially applied; a batch
  * where one write failed and four landed is, and the distinction is what tells
- * a caller whether a resend is safe.
+ * a caller whether a resend is safe. A skipped write is neither applied nor
+ * failed, so it never makes a batch partial on its own.
  */
 export function summariseBatch(outcomes: FieldWriteOutcome[], verified: boolean): BatchOutcome {
   const applied = outcomes.filter((o) => o.status === "applied" || o.status === "cleared" || o.status === "unchanged").length
   const failed = outcomes.filter((o) => o.status === "failed").length
   const unknown = outcomes.filter((o) => o.status === "unknown").length
+  const skipped = outcomes.filter((o) => o.status === "skipped").length
   return {
     outcomes,
     applied,
     failed,
     unknown,
+    skipped,
     partiallyApplied: applied > 0 && failed + unknown > 0,
     verified
   }

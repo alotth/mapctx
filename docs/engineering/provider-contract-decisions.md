@@ -16,6 +16,8 @@ sketch and why, so the GitHub adapter does not have to rediscover it.
 | 1 | New package `@mapctx/provider`, depending on `@mapctx/protocol` and `@mapctx/store`. Nothing depends on it yet. | A leaf package cannot create a cycle. The store must not know about providers, and the CLI is explicitly out of scope for this task, so nothing is wired in — which also leaves `sync-engine`'s `bundleDependencies` and the pack smoke test untouched. |
 | 2 | `expectedRevision` is **not** a parameter on every write. It is an optional `precondition`, legal only when `capabilities.preconditions.revision` is true, and a provider that cannot honour it must refuse with `unsupported`. | The spike found no write precondition anywhere on GitHub, and ten concurrent writes to one field all succeeded last-write-wins. A contract where every write *accepts* `expectedRevision` invites a caller to believe its write was guarded. Refusing is the only honest option: silently dropping a precondition converts a safety mechanism into a lie. |
 | 3 | The batch is the primitive: `applyFieldWrites` returns a per-write `BatchOutcome` with an explicit `partiallyApplied`. `setField` is a one-write convenience. | 50 aliased writes cost one rate-limit point, and a failing batch still applied its valid writes. A caller that sees `partiallyApplied` must re-read rather than resend, and that state has to be reportable rather than inferred. |
+| 3a | **The batch path is verified by read-back**, with values only the batch could have produced. | Review of attempt 1: the batch was checked only for internal self-consistency, and two batch implementations — one applying nothing while claiming `verified: true`, one applying every value into `summary` — scored a clean pass. The verified path was the single-write one; the unverified path is the one the cost model tells every adapter to write *everything* through. Reading back the same samples an earlier `setField` already wrote proves nothing, so each batch value is derived to be distinct (`"… [batch]"`, a shifted date, an extra array element) and fields with no derivable distinct value are left out rather than guessed at. |
+| 3b | **`outcomes` carries one entry per submitted write**, with `status: "skipped"` for the ones never attempted, plus a `skipped` count. | The local provider stops at the first failure; GitHub applies every valid alias and reports the failure at the top. A short array would mean the opposite thing on each, so a caller learning one would be wrong against the other. The suite checks the length, and puts the unsupported write first in the mixed batch so a stop-at-first-failure provider has to account for the trailing one. |
 | 4 | `capabilities.batch.singleOperation` says whether a batch reaches the provider as one operation — not whether `applyFieldWrites` exists. | The local provider emulates a batch write-by-write. The method must still work there; what differs is the cost, and conflating "no cost win" with "unavailable" would force callers to branch on the provider. |
 | 5 | Idempotence is declared per field (`idempotentRewrite`) and defined in terms of the **reported outcome**, not the revision. | The spike measured a same-value rewrite as a no-op for a single select and as a revision-moving write for a number. And a provider's revision marker can be too coarse to show a write at all — the local provider's is a date — so "the revision did not move" proves nothing. |
 | 6 | `ProviderError.retryable` is derived from the kind in one place (`results.ts`), never set by hand. | Two providers that each decide whether `auth` is retryable will eventually disagree, and the caller is the one who pays. |
@@ -78,6 +80,21 @@ A related guard came out of the same review: a field declared writable that
 neither patch map knows how to route now fails with `unsupported` saying the
 capability record has drifted, instead of building a patch around an undefined
 key and reporting success.
+
+## What the suite does not verify
+
+Worth knowing before trusting a green run.
+
+- **`freshness.source` and `freshness.stale` are advisory.** Nothing outside a
+  provider can tell whether a page came from a cache or how stale that cache is,
+  so the suite checks `partial` and `fetchedAt` and leaves these two as the
+  provider's self-report. A wrapper claiming `source: "cache"` while serving
+  live data passes. Do not build a cache-invalidation policy on them.
+- **The read-modify-write window on dependency writes is declared, not closed.**
+  Two concurrent edge writers — provider and CLI, or two provider calls — lose
+  one edge silently, and the loser gets `ok`. The store offers no precondition
+  to close it. This becomes a real problem the moment anything writes edges
+  concurrently with a human running `mapctx task update`.
 
 ## Open, and deliberately not settled here
 

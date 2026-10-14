@@ -25,7 +25,6 @@
     "node": ">=22.5.0"
   },
   "dependencies": {
-    "@mapctx/protocol": "file:../protocol",
     "@mapctx/store": "file:../store"
   },
   "devDependencies": {

@@ -203,6 +203,12 @@ export type ProviderResult<T> = { ok: true; value: T } | { ok: false; error: Pro
  * or a nested connection was truncated. The spike's read path hit exactly that:
  * a cut-off `blockedBy` list must never read as "no dependencies", so a
  * truncated nested collection sets `partial` and names what was dropped.
+ *
+ * `source` and `stale` are **advisory and unverified**. Nothing outside the
+ * provider can tell whether a page came from a cache or how old that cache is,
+ * so the contract suite does not check them and a caller must not build a
+ * cache-invalidation policy on them. `partial` and `fetchedAt` are checked;
+ * these two are a provider's self-report.
  */
 export type PageFreshness = {
   fetchedAt: string
@@ -310,6 +316,11 @@ export type FieldWriteOutcome =
   | { status: "failed"; write: FieldWrite; error: ProviderError }
   /** The provider could not say whether this write landed. Read it back. */
   | { status: "unknown"; write: FieldWrite; error: ProviderError }
+  /**
+   * Never attempted, because an earlier write in the batch failed. Reported
+   * explicitly rather than left out: see `BatchOutcome.outcomes`.
+   */
+  | { status: "skipped"; write: FieldWrite }
 
 /**
  * The result of one batch.
@@ -317,14 +328,27 @@ export type FieldWriteOutcome =
  * `partiallyApplied` is explicit because the spike proved a provider can
  * return a top-level error while some writes have already landed. A caller
  * seeing it must re-read the affected fields; it may not resend the batch.
+ *
+ * `outcomes` carries **one entry per submitted write, in order** — a provider
+ * may not shorten the array. Two providers would otherwise mean opposite
+ * things by a short array: the local provider stops at the first failure, while
+ * GitHub applies every valid alias and reports the failure at the top, so
+ * "fewer outcomes than writes" would be an inference the caller has to make
+ * per provider. `status: "skipped"` says it instead.
  */
 export type BatchOutcome = {
   outcomes: FieldWriteOutcome[]
   applied: number
   failed: number
   unknown: number
+  skipped: number
   partiallyApplied: boolean
-  /** True only when the provider re-read the values after writing them. */
+  /**
+   * True only when the provider re-read the values after writing them.
+   *
+   * Claiming it without reading back is a contract violation the suite checks
+   * by writing values only the batch could have produced and reading them.
+   */
   verified: boolean
 }
 

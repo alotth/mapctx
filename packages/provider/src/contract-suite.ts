@@ -126,6 +126,33 @@ function fieldWriteFor(ctx: ContractContext, field: ProviderOwnedField, value: u
   return { item: ctx.writableItem, field: { semantic: field, surface: "work-item" }, value }
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * A value provably different from the sample, in the sample's own shape.
+ *
+ * Used so a batch readback can only pass if the BATCH wrote it. Returns
+ * `undefined` when no distinct value can be derived without guessing at the
+ * provider's accepted format — a date gets a different date rather than a
+ * suffixed string, and an unknown shape is left alone rather than corrupted.
+ */
+function distinctValue(sample: unknown): unknown {
+  if (typeof sample === "string") {
+    if (ISO_DATE.test(sample)) {
+      const shifted = new Date(`${sample}T00:00:00Z`)
+      if (Number.isNaN(shifted.getTime())) return undefined
+      shifted.setUTCDate(shifted.getUTCDate() + 1)
+      return shifted.toISOString().slice(0, 10)
+    }
+    return `${sample} [batch]`
+  }
+  if (typeof sample === "number") return sample + 1
+  if (Array.isArray(sample) && sample.every((entry) => typeof entry === "string")) {
+    return [...(sample as string[]), "batch"]
+  }
+  return undefined
+}
+
 // ---- groups ---------------------------------------------------------------
 
 async function checkReads(ctx: ContractContext, checks: ContractCheck[]): Promise<void> {
@@ -439,10 +466,22 @@ async function checkBatch(ctx: ContractContext, checks: ContractCheck[]): Promis
     (field) => provider.capabilities.fields[field]?.write === false
   )
 
-  if (writable.length < 1) {
-    checks.push(skip("batch.all-applied", group, "no writable fields with sample values"))
+  // Values only the BATCH could have produced.
+  //
+  // The whole point is that reading back the same sample an earlier `setField`
+  // already wrote proves nothing: the read finds the right value because an
+  // honest earlier write put it there, and a batch that applies nothing still
+  // scores clean. So each batch value is derived to be distinct from the
+  // sample, and fields where no provably distinct value can be built are left
+  // out of the readback rather than guessed at.
+  const batchable = writable.filter((field) => distinctValue(ctx.sampleValues[field]) !== undefined)
+
+  if (batchable.length < 1) {
+    checks.push(skip("batch.all-applied", group, "no writable field has a sample a distinct batch value can be derived from"))
   } else {
-    const writes = writable.slice(0, 3).map((field) => fieldWriteFor(ctx, field, ctx.sampleValues[field]))
+    const writes = batchable
+      .slice(0, 3)
+      .map((field) => fieldWriteFor(ctx, field, distinctValue(ctx.sampleValues[field])))
     const result = await provider.applyFieldWrites({ writes, clientOperationId: "contract-batch-valid" })
     checks.push(check("batch.all-applied", group, result.ok, `a batch of valid writes must succeed, got ${describe(result)}`))
     if (result.ok) {
@@ -451,8 +490,18 @@ async function checkBatch(ctx: ContractContext, checks: ContractCheck[]): Promis
         check(
           "batch.counts-consistent",
           group,
-          outcome.applied + outcome.failed + outcome.unknown === outcome.outcomes.length,
-          `applied+failed+unknown (${outcome.applied}+${outcome.failed}+${outcome.unknown}) must equal the ${outcome.outcomes.length} reported outcomes`
+          outcome.applied + outcome.failed + outcome.unknown + outcome.skipped === outcome.outcomes.length,
+          `applied+failed+unknown+skipped (${outcome.applied}+${outcome.failed}+${outcome.unknown}+${outcome.skipped}) must equal the ${outcome.outcomes.length} reported outcomes`
+        )
+      )
+      // One outcome per submitted write: without this, a short array means
+      // "stopped early" on one provider and "the rest succeeded" on another.
+      checks.push(
+        check(
+          "batch.outcome-per-write",
+          group,
+          outcome.outcomes.length === writes.length,
+          `a batch must report one outcome per submitted write: sent ${writes.length}, got ${outcome.outcomes.length}`
         )
       )
       checks.push(
@@ -467,10 +516,54 @@ async function checkBatch(ctx: ContractContext, checks: ContractCheck[]): Promis
         check(
           "batch.failed-count",
           group,
-          outcome.failed === 0 && outcome.unknown === 0,
-          `a batch of valid writes must report no failures, got failed=${outcome.failed} unknown=${outcome.unknown}`
+          outcome.failed === 0 && outcome.unknown === 0 && outcome.skipped === 0,
+          `a batch of valid writes must report no failures and skip nothing, got failed=${outcome.failed} unknown=${outcome.unknown} skipped=${outcome.skipped}`
         )
       )
+
+      // The verification the batch path was missing entirely. `applyFieldWrites`
+      // is the primitive the cost model pushes every adapter write through, so
+      // leaving it checked only for internal self-consistency let a batch that
+      // applied nothing -- or applied every value to the wrong field -- score a
+      // clean pass.
+      const after = await provider.getItem({ ref: ctx.writableItem })
+      const mismatched: string[] = []
+      if (!after.ok) {
+        checks.push(check("batch.readback", group, false, `could not read the item back after a batch: ${describe(after)}`))
+      } else {
+        for (const write of writes) {
+          const field = write.field.semantic
+          if (provider.capabilities.fields[field]?.read !== true) continue
+          const got = after.value.fields[field]
+          const matches = JSON.stringify(got) === JSON.stringify(write.value)
+          if (!matches) mismatched.push(field)
+          checks.push(
+            check(
+              `batch.readback.${field}`,
+              group,
+              matches,
+              `the batch wrote ${JSON.stringify(write.value)} to ${field}; the item holds ${JSON.stringify(got)}`
+            )
+          )
+        }
+      }
+
+      // A provider may report `verified: false` and be trusted on its own write
+      // result. Claiming `true` is a promise it re-read the values, and a
+      // mismatch proves it did not.
+      // No check is emitted when `verified` is false: that is not a claim, and
+      // a skip entry here would fire the suite's own "nothing was skipped"
+      // guard for every honest provider that does not re-read.
+      if (outcome.verified) {
+        checks.push(
+          check(
+            "batch.verified-claim",
+            group,
+            after.ok && mismatched.length === 0,
+            `the batch reported verified: true, so every value must read back; ${mismatched.join(", ") || "the item could not be read"} did not`
+          )
+        )
+      }
     }
   }
 
@@ -478,9 +571,12 @@ async function checkBatch(ctx: ContractContext, checks: ContractCheck[]): Promis
   // do. The interesting part is not that it fails -- it is whether the provider
   // tells the caller that something landed anyway.
   if (writable.length >= 1 && unwritable !== undefined) {
+    // The unsupported write goes FIRST, so a stop-at-first-failure provider has
+    // to report the trailing valid write as `skipped` rather than omitting it.
+    const trailing = writable[0] as ProviderOwnedField
     const writes = [
-      fieldWriteFor(ctx, writable[0] as ProviderOwnedField, ctx.sampleValues[writable[0] as ProviderOwnedField]),
-      fieldWriteFor(ctx, unwritable, ctx.sampleValues[unwritable] ?? "contract-suite")
+      fieldWriteFor(ctx, unwritable, ctx.sampleValues[unwritable] ?? "contract-suite"),
+      fieldWriteFor(ctx, trailing, ctx.sampleValues[trailing])
     ]
     const result = await provider.applyFieldWrites({ writes, clientOperationId: "contract-batch-mixed" })
     if (result.ok) {
@@ -493,6 +589,28 @@ async function checkBatch(ctx: ContractContext, checks: ContractCheck[]): Promis
           group,
           broke,
           "a batch containing a write the provider declared unsupported must report it as failed"
+        )
+      )
+      checks.push(
+        check(
+          "batch.mixed-outcome-per-write",
+          group,
+          outcome.outcomes.length === writes.length,
+          `a failing batch must still report one outcome per submitted write: sent ${writes.length}, got ${outcome.outcomes.length}`
+        )
+      )
+      // Whatever a provider does with the writes after a failure -- skip them
+      // or apply them -- it must say which. An outcome that is neither applied,
+      // failed, unknown nor skipped is not an answer.
+      checks.push(
+        check(
+          "batch.mixed-trailing-accounted",
+          group,
+          outcome.outcomes.length === writes.length &&
+            ["applied", "cleared", "unchanged", "failed", "unknown", "skipped"].includes(
+              outcome.outcomes[outcome.outcomes.length - 1]?.status ?? ""
+            ),
+          `the write after a failure must carry a status, got ${String(outcome.outcomes[outcome.outcomes.length - 1]?.status)}`
         )
       )
       checks.push(
