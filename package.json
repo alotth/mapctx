@@ -5,7 +5,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build:sync-engine && npm run build --workspace @mapctx/adapter-traycer",
+    "build": "npm run build:sync-engine && npm run build --workspace @mapctx/provider && npm run build --workspace @mapctx/adapter-traycer",
     "test": "npm run build && npm run test --workspaces --if-present",
     "check-types": "npm run build",
     "dev:workspace-v2": "npm run build:sync-engine && node packages/sync-engine/dist/mapctx-cli.js workspace",
@@ -19,6 +19,8 @@
     "build:planner": "npm run build:protocol && npm run build --workspace @mapctx/planner",
     "test:planner": "npm run build:protocol && npm run test --workspace @mapctx/planner",
     "build:forecast": "npm run build:store && npm run build --workspace @mapctx/forecast",
-    "test:forecast": "npm run test:store && npm run test --workspace @mapctx/forecast"
+    "test:forecast": "npm run test:store && npm run test --workspace @mapctx/forecast",
+    "build:provider": "npm run build:store && npm run build --workspace @mapctx/provider",
+    "test:provider": "npm run build:provider && npm run test --workspace @mapctx/provider"
   }
 }
