@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import * as fs from "fs"
 import * as path from "path"
-import { readMapctxToml, resolvePrivacyPatterns, serializeMapctxToml } from "./config"
+import { PRIVACY_PATTERNS_FILE_ENV, readMapctxToml, resolvePrivacyPatterns, serializeMapctxToml } from "./config"
 import { compilePrivacyPatterns, lintForPrivacy, replacePrivacyPatterns, scanForPrivacyPatterns } from "./privacy"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
 
@@ -48,6 +48,23 @@ test("invalid privacy regex is reported and skipped while valid later patterns s
   assert.match(report.warnings[1], /task create field "title".*patterns\[1\]/);
   assert.ok(!JSON.stringify(report).includes(SECRET));
   assert.deepEqual(lintForPrivacy("task update", SECRET, ["("]).findings, []);
+});
+
+// T-151 ALTO-4: a pattern's compile-error message must never quote the
+// pattern back. V8 formats it as `Invalid regular expression: /<source>/:
+// <reason>`, so the raw message carries the source; since patterns may now
+// come from an unversioned privacy.toml, the pattern IS the secret (a third
+// party's name, a hostname), and echoing it into a lint warning or a
+// sanitize refusal would leak exactly what it was written to hide.
+test("compilePrivacyPatterns: an invalid pattern's reason never quotes the pattern source, and is non-empty", () => {
+  const SOURCE = "Acme(Bank";
+  const compiled = compilePrivacyPatterns([SOURCE]);
+  assert.equal(compiled.invalid.length, 1);
+  assert.ok(!compiled.invalid[0].message.includes(SOURCE), compiled.invalid[0].message);
+  assert.ok(compiled.invalid[0].message.length > 0);
+  // The lint warning built from it must not leak the source either.
+  const report = lintForPrivacy("task create", { title: "x" }, [SOURCE]);
+  assert.ok(!report.warnings.join("\n").includes(SOURCE), report.warnings.join("\n"));
 });
 
 test("privacy lint disables cleanly for absent/empty patterns and ignores non-string or unmatched values", () => {
@@ -334,4 +351,41 @@ test("resolvePrivacyPatterns: with no local or env file configured, mapctx.toml 
   assert.deepEqual(resolved.patterns, ["PublicOnly"]);
   assert.equal(resolved.hasUnversionedSource, false);
   assert.deepEqual(resolved.origins, [{ origin: "mapctx.toml", count: 1 }]);
+});
+
+// T-151 MEDIA-2: three silent degradations in the resolver -- a typo'd key,
+// an empty-but-present file, and a broken MAPCTX_PRIVACY_PATTERNS_FILE --
+// must all refuse (or at least be visible) rather than quietly reading as
+// "no patterns configured".
+
+test("resolvePrivacyPatterns: a mis-keyed privacy.toml (\"pattern\" instead of \"patterns\") refuses instead of reading as empty", t => {
+  const dir = mkTmpDir("mapctx-privacy-media2-");
+  t.after(() => cleanupDir(dir));
+  fs.writeFileSync(path.join(dir, "privacy.toml"), '[privacy]\npattern = ["typo"]\n');
+  assert.throws(() => resolvePrivacyPatterns("x", [], { storeDir: dir, env: {} }), /unknown key "pattern"/);
+});
+
+test("resolvePrivacyPatterns: an existing-but-empty local file is reported in origins with count 0, and still counts as unversioned", t => {
+  const dir = mkTmpDir("mapctx-privacy-media2-empty-");
+  t.after(() => cleanupDir(dir));
+  fs.writeFileSync(path.join(dir, "privacy.toml"), "[privacy]\n");
+  const resolved = resolvePrivacyPatterns("x", [], { storeDir: dir, env: {} });
+  assert.deepEqual(resolved.origins, [{ origin: "local-file", path: path.join(dir, "privacy.toml"), count: 0 }]);
+  assert.equal(resolved.hasUnversionedSource, true, "an empty file is still a present unversioned source, not silence");
+});
+
+test("resolvePrivacyPatterns: MAPCTX_PRIVACY_PATTERNS_FILE pointing at a missing file, or set but empty, both refuse; unset stays silent", t => {
+  const dir = mkTmpDir("mapctx-privacy-media2-env-");
+  t.after(() => cleanupDir(dir));
+  assert.throws(
+    () => resolvePrivacyPatterns("x", [], { storeDir: dir, env: { [PRIVACY_PATTERNS_FILE_ENV]: "/nope/missing.toml" } }),
+    /does not exist/
+  );
+  assert.throws(
+    () => resolvePrivacyPatterns("x", [], { storeDir: dir, env: { [PRIVACY_PATTERNS_FILE_ENV]: "   " } }),
+    /set but empty/
+  );
+  const unset = resolvePrivacyPatterns("x", [], { storeDir: path.join(dir, "missing-store"), env: {} });
+  assert.deepEqual(unset.patterns, []);
+  assert.deepEqual(unset.origins, [], "an unset env var is simply not using this source, no error, no origin entry");
 });

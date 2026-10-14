@@ -359,6 +359,59 @@ test("ALTO-3: sanitizeDryRun with no patterns configured refuses every task and 
   assert.notEqual(run.refused, 0, "an unconfigured run must never present as zero refusals")
 })
 
+// ---- ALTO-4: the gate must count EFFECTIVE (compiled) patterns, not the
+// supplied list, or a single typo can disarm it while reporting itself
+// armed. An invalid pattern refuses publication by name, never excused by
+// patternsReviewedAsAbsent, and the refusal names the index -- never the
+// pattern source, which may itself be the secret (an operator-written
+// third-party name or hostname). ----
+
+test("ALTO-4: a lone invalid pattern refuses as patterns-invalid, publishes nothing, and reports privacyPatternsConfigured: false", () => {
+  const SECRET = "AcmeBank"
+  const task: PublishableTask = { taskId: "T-INV", title: `work for ${SECRET}`, body: "packages/a.ts" }
+  const result = sanitizeTaskForPublication(task, { privacyPatterns: ["Acme(Bank"] })
+  assert.equal(result.ok, false)
+  assert.ok(!result.ok)
+  assert.equal(result.reason, "patterns-invalid")
+  assert.equal(result.report.privacyPatternsConfigured, false, "a pattern that did not compile is not an effective pattern")
+  assert.match(result.message, /patterns\[0\]/)
+  assert.ok(!result.message.includes("Acme(Bank"), "the refusal must never echo the pattern source")
+})
+
+test("ALTO-4: one invalid pattern beside one valid still refuses, naming the invalid index, and reports privacyPatternsConfigured: true", () => {
+  const task: PublishableTask = { taskId: "T-INV2", title: "work for AcmeBank", body: "packages/a.ts" }
+  const result = sanitizeTaskForPublication(task, { privacyPatterns: ["\\bELA\\b", "Acme(Bank"] })
+  assert.equal(result.ok, false)
+  assert.ok(!result.ok)
+  assert.equal(result.reason, "patterns-invalid")
+  assert.match(result.message, /patterns\[1\]/)
+  assert.ok(!result.message.includes("Acme(Bank"))
+  assert.equal(result.report.privacyPatternsConfigured, true, "a valid pattern exists among the configured ones")
+})
+
+test("ALTO-4: patternsReviewedAsAbsent does not excuse a broken pattern", () => {
+  const task: PublishableTask = { taskId: "T-INV3", title: "work for AcmeBank", body: "x" }
+  const result = sanitizeTaskForPublication(task, { privacyPatterns: ["Acme(Bank"], patternsReviewedAsAbsent: true })
+  assert.equal(result.ok, false)
+  assert.ok(!result.ok)
+  assert.equal(result.reason, "patterns-invalid", "reviewedAsAbsent means nothing to configure, not a broken configuration")
+})
+
+test("ALTO-4: a valid pattern alongside the fix still publishes normally with the secret gone", () => {
+  const SECRET = "AcmeBank"
+  const result = sanitizeTaskForPublication({ taskId: "T-INV4", title: `work for ${SECRET}`, body: "packages/a.ts" }, { privacyPatterns: [SECRET] })
+  assert.ok(result.ok)
+  assert.ok(!JSON.stringify(result.task).includes(SECRET))
+})
+
+test("ALTO-4: sanitizeDryRun with an invalid pattern refuses the task and reports privacyPatternsConfigured: false", () => {
+  const task: PublishableTask = { taskId: "T-INV5", title: "work for AcmeBank", body: "x" }
+  const run = sanitizeDryRun([task], { privacyPatterns: ["Acme(Bank"] })
+  assert.equal(run.refused, 1)
+  assert.equal(run.publishable, 0)
+  assert.equal(run.privacyPatternsConfigured, false)
+})
+
 // ---- MEDIA-1: credential shapes are removed as <credential>; ordinary
 // prose that merely looks similar must survive. ----
 
