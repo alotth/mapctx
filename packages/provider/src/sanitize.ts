@@ -26,6 +26,25 @@
  * and the direction is stated here. T-152 publishes the RESULT and keeps
  * writing the INPUT.
  *
+ * WHERE THE PATTERNS LIVE, AND WHY NOT IN mapctx.toml
+ * The context-dependent category -- a third party's name, this machine's
+ * hostname, a customer identifier -- cannot be expressed as a built-in rule;
+ * only the operator knows the strings. The obvious home for them,
+ * `[privacy] patterns` in mapctx.toml, is the one place they must not go:
+ * that file is committed, and it is about to be committed to the PUBLIC
+ * repo. Writing the third party's name there to keep it out of public issues
+ * would publish it on the way in. So `resolvePrivacyPatterns` (store
+ * config.ts) unions mapctx.toml with an unversioned `privacy.toml` beside the
+ * store and with a file named by MAPCTX_PRIVACY_PATTERNS_FILE, and this
+ * module takes the resolved list.
+ *
+ * An EMPTY list refuses (review ALTO-3). With no pattern configured the
+ * category is inert, and a run then reports `refused=0`, which reads as
+ * "clean" but means "I did not look" -- the most dangerous possible output
+ * for a tool whose job is to decide what becomes public. `patternsReviewedAsAbsent`
+ * lets an operator say they looked and there is nothing; it is recorded in
+ * the report, never assumed.
+ *
  * FAIL-CLOSED, AND "UNFINISHED" IS NOT "CLEAN"
  * After rewriting, the output is scanned again with the same rules. Anything
  * that still matches refuses publication for that task, naming the field and
@@ -42,8 +61,14 @@
  * links publishes something useless. So every rule is anchored on something
  * that is unambiguously machine-local or internal:
  *
- *   - paths must start at `/Users`, `/home`, `/root`, a Windows drive, or `~/`
- *     -- `packages/...` and `docs/...` are untouched;
+ *   - paths must start at one of a named list of machine-local roots
+ *     (`/Users`, `/home`, `/root`, `/tmp`, `/private/tmp`, `/private/var`,
+ *     `/var/folders`, `/Volumes`, `/mnt`, a Windows drive, or `~/`) --
+ *     `packages/...` and `docs/...` are untouched. The first cut listed only
+ *     the first four and let four more families through as PUBLISHABLE,
+ *     including `/private/tmp/claude-<uid>/-Users-<user>-...`, the scratchpad
+ *     every agent in this epic writes to, carrying the uid and the username
+ *     twice (review ALTO-2);
  *   - `~/.mapctx` and `~/.claude` are explicitly KEPT. The triage flagged them
  *     as generic, documented in the public README, and revealing nothing about
  *     a particular machine. `/Users/<name>/.mapctx` is still removed, because
@@ -54,7 +79,18 @@
  *   - hostnames are matched only on private suffixes (`.local`, `.lan`,
  *     `.internal`, `.home.arpa`) and private IPv4 ranges. A general hostname
  *     rule would strip `github.com` out of every link. A site-specific host
- *     belongs in `[privacy] patterns`, where the operator can name it.
+ *     belongs in the pattern list, where the operator can name it.
+ *
+ *     A SUFFIX-LESS machine name (`someone-mac-air`) stays delegated too, and
+ *     that is a deliberate choice rather than an oversight (review ALTO-2).
+ *     Any rule general enough to catch it -- `*-mac*`, `*-macbook*`, "two
+ *     hyphenated words that look like a hostname" -- is a guess about English
+ *     prose, and this board is full of hyphenated identifiers that must
+ *     survive (`t058-walking-skeleton`, `board-triage-2026-10`,
+ *     `ready-for-do`). Guessing there trades a certain, measurable loss of
+ *     meaning for an uncertain gain. What made the delegation unacceptable
+ *     was not the delegation: it was that an unconfigured pattern list said
+ *     nothing. ALTO-3 removes the silence, so the delegation now holds.
  *
  * IDEMPOTENT
  * The mirror re-publishes on every sync, so sanitizing twice must equal
@@ -77,6 +113,7 @@ export type SanitizeCategory =
   | "artifact-link"
   | "absolute-path"
   | "internal-id"
+  | "credential"
   | "email"
   | "private-host"
   | "privacy-pattern"
@@ -85,10 +122,32 @@ export const SANITIZE_TOKENS = {
   "artifact-link": "<internal-artifact>",
   "absolute-path": "<local-path>",
   "internal-id": "<internal-id>",
+  credential: "<credential>",
   email: "<email>",
   "private-host": "<host>",
   "privacy-pattern": "<redacted>"
 } as const satisfies Record<SanitizeCategory, string>
+
+/**
+ * Wall-clock ceiling for the STRUCTURAL pass, mirroring the privacy budget.
+ *
+ * The structural rules are ours and are linear by construction (ALTO-1
+ * removed the one that was not, and bounding the email and host quantifiers
+ * removed two more of the same shape), so this is not the primary defence --
+ * it is the backstop that keeps a future rule from reintroducing an unbounded
+ * hang in the one pass that does not run in the sandbox. Exhausting it
+ * refuses the task exactly like an exhausted privacy budget: an unfinished
+ * sweep is not a clean one.
+ *
+ * Deliberately looser than the privacy budget. Because the pass is linear,
+ * time here tracks document size, and a budget tight enough to be a throttle
+ * would refuse big-but-honest task bodies -- a false refusal blocks a clean
+ * task from being published, which is a worse outcome than catching a future
+ * bad rule a few hundred milliseconds later. Measured: 80 KB of worst-case
+ * unbroken text sweeps in ~140 ms, so this leaves roughly an order of
+ * magnitude of headroom over anything a task body plausibly holds.
+ */
+export const STRUCTURAL_BUDGET_MS = 1000
 
 /** What happened to one field, by category. The value is never carried. */
 export type SanitizeSubstitution = {
@@ -119,8 +178,18 @@ export type SanitizeReport = {
   totals: Record<SanitizeCategory, number>
   /** Field names that were scanned, so an empty report is distinguishable from an unscanned task. */
   scannedFields: string[]
+  /**
+   * Whether any `[privacy] pattern` was in force. False means the
+   * context-dependent category was NOT checked -- the difference between
+   * "found nothing" and "did not look" (review ALTO-3).
+   */
+  privacyPatternsConfigured: boolean
+  /** The operator declared the absent pattern list reviewed and intentional. */
+  patternsReviewedAsAbsent?: boolean
   /** Set when the privacy budget ran out; the task is refused when it is. */
   aborted?: PrivacyScanAbort
+  /** Set when the structural budget ran out; the task is refused when it is. */
+  structuralExhausted?: { rule: string; budgetMs: number }
 }
 
 export type PublishableTask = {
@@ -134,17 +203,35 @@ export type PublishableTask = {
   fields?: Readonly<Record<string, string>>
 }
 
-export type SanitizeRefusalReason = "residual-match" | "scan-incomplete"
+export type SanitizeRefusalReason = "residual-match" | "scan-incomplete" | "patterns-unconfigured"
 
 export type SanitizeResult =
   | { ok: true; task: PublishableTask; report: SanitizeReport }
   | { ok: false; reason: SanitizeRefusalReason; message: string; residues: SanitizeResidue[]; report: SanitizeReport }
 
 export type SanitizeOptions = {
-  /** `[privacy] patterns` from mapctx.toml, as the lint reads them. */
+  /**
+   * The resolved pattern list. For this project it must come from
+   * `resolvePrivacyPatterns`, which unions mapctx.toml with an UNVERSIONED
+   * local file -- mapctx.toml is committed to the public repo, so the
+   * patterns that matter most (a third party's name, the operator's
+   * hostname) cannot live there without publishing themselves.
+   */
   privacyPatterns?: readonly string[]
+  /**
+   * Publish with no pattern configured. Review ALTO-3: an empty list makes
+   * the one category that covers context-dependent content inert, and the
+   * run then reports `refused=0`, which reads as "clean" but means "I did
+   * not look". So an empty list REFUSES by default, and this flag is the
+   * operator saying, deliberately and visibly, that they looked and there is
+   * nothing to configure. It is recorded in the report rather than silently
+   * honoured.
+   */
+  patternsReviewedAsAbsent?: boolean
   /** Wall-clock ceiling for the untrusted privacy regexes. */
   budgetMs?: number
+  /** Wall-clock ceiling for the structural pass (review ALTO-1). */
+  structuralBudgetMs?: number
 }
 
 type StructuralCategory = Exclude<SanitizeCategory, "privacy-pattern">
@@ -154,7 +241,24 @@ type StructuralRule = {
   regex: RegExp
   /** Token for one match. A rule may keep a safe capture (the artifact slug). */
   tokenFor: (match: RegExpExecArray) => string
+  /**
+   * Extend the match leftwards over path characters, in linear code.
+   *
+   * Review ALTO-1: the artifact rule used to do this with a leading
+   * `[A-Za-z0-9._~:\\/-]*` before the `epics/` literal, which is a star
+   * followed by a required literal -- on a long run of matching characters
+   * that has no `epics/` in it, the engine consumes the run, fails, and
+   * backtracks one character per starting position. Measured at 1 min 50 s
+   * for 60 KB of unbroken text, in the host realm, with no budget and no
+   * refusal: the exact failure class T-126's sandbox exists to prevent,
+   * reachable here by CONTENT (a pasted stack trace, a base64 blob, a
+   * minified line) rather than by configuration. The scan below is O(n).
+   */
+  expandLeft?: boolean
 }
+
+/** The characters a local path prefix may be built from, for `expandLeft`. */
+const PATH_PREFIX_CHARACTER = /[A-Za-z0-9._~:\\/-]/
 
 /**
  * Order matters. The artifact rule runs FIRST because the link it matches
@@ -166,14 +270,22 @@ type StructuralRule = {
 const STRUCTURAL_RULES: readonly StructuralRule[] = [
   {
     category: "artifact-link",
-    // An optional path-ish prefix (never bracket or paren, so a Markdown
-    // `[text](...)` keeps its syntax), then the epic/artifact shape itself.
-    regex: /[A-Za-z0-9._~:\\/-]*epics\/[0-9a-fA-F][0-9a-fA-F-]{7,}\/artifacts\/([A-Za-z0-9._-]+)(?:\/[A-Za-z0-9._-]+)*/g,
-    tokenFor: match => `<internal-artifact:${match[1]}>`
+    // Anchored on the literal shape only. Any path prefix in front of it is
+    // absorbed by `expandLeft`, in linear code -- never by a regex star.
+    regex: /epics\/[0-9a-fA-F][0-9a-fA-F-]{7,}\/artifacts\/([A-Za-z0-9._-]+)(?:\/[A-Za-z0-9._-]+)*/g,
+    tokenFor: match => `<internal-artifact:${match[1]}>`,
+    expandLeft: true
   },
   {
     category: "absolute-path",
-    regex: /(?:\/Users|\/home|\/root)(?:\/[^\s"'`)\]<>]+)+/g,
+    // Review ALTO-2: the first cut anchored only on /Users, /home, /root, a
+    // Windows drive and `~/`, so four more families of machine-local path
+    // passed through AND were declared publishable. The worst was
+    // `/private/tmp/claude-<uid>/-Users-<user>--traycer-...`: the scratchpad
+    // every agent in this epic writes to, carrying the uid and the username
+    // twice. None of these can appear as a repository-relative path, so
+    // adding them as literal alternatives costs no over-removal risk.
+    regex: /(?:\/Users|\/home|\/root|\/private\/tmp|\/private\/var|\/var\/folders|\/tmp|\/Volumes|\/mnt)(?:\/[^\s"'`)\]<>]+)+/g,
     tokenFor: () => SANITIZE_TOKENS["absolute-path"]
   },
   {
@@ -194,13 +306,49 @@ const STRUCTURAL_RULES: readonly StructuralRule[] = [
     tokenFor: () => SANITIZE_TOKENS["internal-id"]
   },
   {
+    // Review MEDIA-1. The corpus carries none today, and the destination is
+    // GitHub, where a leaked PAT is actionable the moment it is indexed.
+    // Cheapest possible insurance, and the shapes are unambiguous enough
+    // that there is no prose they could eat.
+    category: "credential",
+    regex: /\bgh[pousr]_[A-Za-z0-9]{16,}\b/g,
+    tokenFor: () => SANITIZE_TOKENS.credential
+  },
+  {
+    category: "credential",
+    regex: /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g,
+    tokenFor: () => SANITIZE_TOKENS.credential
+  },
+  {
+    category: "credential",
+    regex: /\bsk-[A-Za-z0-9_-]{20,}\b/g,
+    tokenFor: () => SANITIZE_TOKENS.credential
+  },
+  {
+    category: "credential",
+    regex: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g,
+    tokenFor: () => SANITIZE_TOKENS.credential
+  },
+  {
+    // Every quantifier here is BOUNDED, and that is load-bearing, not
+    // tidiness. An unbounded `[A-Za-z0-9._%+-]+` before the required `@` is
+    // the same shape as the artifact prefix ALTO-1 removed: on a long
+    // unbroken alphanumeric run (a base64 blob, a data URI) the engine
+    // consumes the run, fails on `@`, and backtracks a character at a time
+    // from every starting position. Measured here at 3.3 s for 60 KB before
+    // the bounds went in -- the review found this shape in one rule, and it
+    // was in three. 64 is the RFC 5321 local-part maximum and 255 the
+    // domain maximum, so the bound costs nothing real and caps the work per
+    // position at a constant.
     category: "email",
-    regex: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
+    regex: /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,24}/g,
     tokenFor: () => SANITIZE_TOKENS.email
   },
   {
     category: "private-host",
-    regex: /\b[A-Za-z0-9][A-Za-z0-9-]*\.(?:local|lan|internal|home\.arpa)\b/g,
+    // Bounded for the same reason as the email rule above; 63 is the DNS
+    // label maximum.
+    regex: /\b[A-Za-z0-9][A-Za-z0-9-]{0,62}\.(?:local|lan|internal|home\.arpa)\b/g,
     tokenFor: () => SANITIZE_TOKENS["private-host"]
   },
   {
@@ -228,21 +376,49 @@ function collectFields(task: PublishableTask): FieldText[] {
   return fields
 }
 
-type StructuralOutcome = { text: string; hits: Array<{ category: StructuralCategory; occurrences: number }> }
+type StructuralOutcome = {
+  text: string
+  hits: Array<{ category: StructuralCategory; occurrences: number }>
+  /** The budget ran out partway; the text is NOT safe to publish. */
+  exhausted?: { rule: string; afterMs: number; budgetMs: number }
+}
 
-function applyStructuralRules(text: string): StructuralOutcome {
+/** Applies one rule across one text, left-expanding where the rule asks. */
+function applyRule(text: string, rule: StructuralRule): { text: string; occurrences: number } {
+  // A fresh regex per application: the shared literal carries `g`, so its
+  // `lastIndex` would otherwise leak between fields.
+  const regex = new RegExp(rule.regex.source, rule.regex.flags)
+  let out = ""
+  let copiedTo = 0
+  let occurrences = 0
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(text)) !== null) {
+    if (match[0].length === 0) { regex.lastIndex += 1; continue }
+    let start = match.index
+    if (rule.expandLeft) {
+      while (start > copiedTo && PATH_PREFIX_CHARACTER.test(text[start - 1])) start -= 1
+    }
+    out += text.slice(copiedTo, start) + rule.tokenFor(match)
+    copiedTo = regex.lastIndex
+    occurrences += 1
+  }
+  return { text: occurrences === 0 ? text : out + text.slice(copiedTo), occurrences }
+}
+
+function applyStructuralRules(text: string, deadline: { endsAt: number; budgetMs: number }): StructuralOutcome {
   const perCategory = new Map<StructuralCategory, number>()
   let current = text
   for (const rule of STRUCTURAL_RULES) {
-    // A fresh regex per application: the shared literal carries `g`, so its
-    // `lastIndex` would otherwise leak between fields.
-    const regex = new RegExp(rule.regex.source, rule.regex.flags)
-    current = current.replace(regex, (...args) => {
-      const match = args.slice(0, -2) as unknown as RegExpExecArray
-      if (match[0].length === 0) return match[0]
-      perCategory.set(rule.category, (perCategory.get(rule.category) ?? 0) + 1)
-      return rule.tokenFor(match)
-    })
+    if (Date.now() > deadline.endsAt) {
+      return {
+        text: current,
+        hits: [...perCategory.entries()].map(([category, occurrences]) => ({ category, occurrences })),
+        exhausted: { rule: rule.category, afterMs: deadline.budgetMs, budgetMs: deadline.budgetMs }
+      }
+    }
+    const applied = applyRule(current, rule)
+    current = applied.text
+    if (applied.occurrences > 0) perCategory.set(rule.category, (perCategory.get(rule.category) ?? 0) + applied.occurrences)
   }
   return {
     text: current,
@@ -255,14 +431,24 @@ function emptyTotals(): Record<SanitizeCategory, number> {
     "artifact-link": 0,
     "absolute-path": 0,
     "internal-id": 0,
+    credential: 0,
     email: 0,
     "private-host": 0,
     "privacy-pattern": 0
   }
 }
 
-/** Structural residues in one already-sanitized string. */
-function structuralResidues(field: string, text: string): SanitizeResidue[] {
+/**
+ * Structural residues in one already-sanitized string.
+ *
+ * Exported because it is half of the fail-closed gate and had no test of its
+ * own (review BAIXA-1): gutting it to return `[]` broke nothing, since no
+ * reachable input produces a structural residue today -- the tokens are built
+ * not to re-trigger a rule. It is defence in depth against a future rule or
+ * token that overlaps, so it is tested directly on leaky text rather than
+ * through an end-to-end case that cannot currently exist.
+ */
+export function findStructuralResidues(field: string, text: string): SanitizeResidue[] {
   const residues: SanitizeResidue[] = []
   const perCategory = new Map<StructuralCategory, number>()
   for (const rule of STRUCTURAL_RULES) {
@@ -286,13 +472,42 @@ function structuralResidues(field: string, text: string): SanitizeResidue[] {
  */
 export function sanitizeTaskForPublication(task: PublishableTask, options: SanitizeOptions = {}): SanitizeResult {
   const budgetMs = options.budgetMs ?? PRIVACY_LINT_BUDGET_MS
-  const compiled: CompiledPrivacyPatterns = compilePrivacyPatterns(options.privacyPatterns ?? [])
+  const structuralBudgetMs = options.structuralBudgetMs ?? STRUCTURAL_BUDGET_MS
+  const configuredPatterns = options.privacyPatterns ?? []
+  const compiled: CompiledPrivacyPatterns = compilePrivacyPatterns(configuredPatterns)
   const fields = collectFields(task)
   const substitutions: SanitizeSubstitution[] = []
   const totals = emptyTotals()
+  const privacyPatternsConfigured = configuredPatterns.length > 0
 
+  // Review ALTO-3. Refused BEFORE any work: there is nothing to report about
+  // a category that was never checked, and a report that looks complete is
+  // the whole hazard. The operator can declare the absence reviewed, which is
+  // recorded rather than silently honoured.
+  if (!privacyPatternsConfigured && options.patternsReviewedAsAbsent !== true) {
+    const bare: SanitizeReport = {
+      taskId: task.taskId,
+      substitutions: [],
+      totals,
+      scannedFields: fields.map(field => field.field),
+      privacyPatternsConfigured: false
+    }
+    return {
+      ok: false,
+      reason: "patterns-unconfigured",
+      message: `${task.taskId} will not be published: no [privacy] patterns are configured, so the one category that covers context-dependent content (a third party's name, this machine's hostname, a customer identifier) was not checked at all. "Nothing found" and "did not look" are not the same answer. Add patterns to the UNVERSIONED ${"privacy.toml"} beside the store (never to the public mapctx.toml), or pass patternsReviewedAsAbsent to record that you looked and there is nothing to configure.`,
+      residues: [],
+      report: bare
+    }
+  }
+
+  const structuralDeadline = { endsAt: Date.now() + structuralBudgetMs, budgetMs: structuralBudgetMs }
+  let structuralExhausted: { rule: string; budgetMs: number } | undefined
   const afterStructural = fields.map(field => {
-    const outcome = applyStructuralRules(field.text)
+    const outcome = applyStructuralRules(field.text, structuralDeadline)
+    if (outcome.exhausted && !structuralExhausted) {
+      structuralExhausted = { rule: outcome.exhausted.rule, budgetMs: outcome.exhausted.budgetMs }
+    }
     for (const hit of outcome.hits) {
       totals[hit.category] += hit.occurrences
       substitutions.push({
@@ -329,7 +544,20 @@ export function sanitizeTaskForPublication(task: PublishableTask, options: Sanit
     substitutions,
     totals,
     scannedFields: fields.map(field => field.field),
-    ...(privacy.aborted ? { aborted: privacy.aborted } : {})
+    privacyPatternsConfigured,
+    ...(options.patternsReviewedAsAbsent === true ? { patternsReviewedAsAbsent: true } : {}),
+    ...(privacy.aborted ? { aborted: privacy.aborted } : {}),
+    ...(structuralExhausted ? { structuralExhausted } : {})
+  }
+
+  if (structuralExhausted) {
+    return {
+      ok: false,
+      reason: "scan-incomplete",
+      message: `Sanitization of ${task.taskId} did not finish: the structural budget (${structuralExhausted.budgetMs}ms) ran out at the "${structuralExhausted.rule}" rule. Text that was not fully swept is not clean text, so publication is refused.`,
+      residues: [],
+      report
+    }
   }
 
   if (privacy.aborted) {
@@ -357,7 +585,7 @@ export function sanitizeTaskForPublication(task: PublishableTask, options: Sanit
     if (field.kind === "link" && field.changed) continue
     publishedTexts.push({ field: field.field, text: field.text, kind: field.kind })
   }
-  for (const field of publishedTexts) residues.push(...structuralResidues(field.field, field.text))
+  for (const field of publishedTexts) residues.push(...findStructuralResidues(field.field, field.text))
 
   const rescan = scanForPrivacyPatterns(
     Object.fromEntries(publishedTexts.map(field => [field.field, field.text])),
@@ -420,6 +648,14 @@ export type DryRunReport = {
   refused: number
   /** Per-category totals across every task in the run. */
   totals: Record<SanitizeCategory, number>
+  /**
+   * Whether the context-dependent category was checked at all. When false,
+   * `refused` counts refusals for that very reason and NO task is
+   * publishable -- read it before reading any other number (review ALTO-3).
+   */
+  privacyPatternsConfigured: boolean
+  /** Operator declared the absent pattern list reviewed and intentional. */
+  patternsReviewedAsAbsent: boolean
 }
 
 /**
@@ -450,5 +686,12 @@ export function sanitizeDryRun(tasks: readonly PublishableTask[], options: Sanit
       report: result.report
     })
   }
-  return { entries, publishable, refused, totals }
+  return {
+    entries,
+    publishable,
+    refused,
+    totals,
+    privacyPatternsConfigured: (options.privacyPatterns ?? []).length > 0,
+    patternsReviewedAsAbsent: options.patternsReviewedAsAbsent === true
+  }
 }
