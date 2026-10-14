@@ -1,0 +1,35 @@
+{
+  "name": "@mapctx/provider",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TaskProvider contract (ADR 0005 option B) plus the store-backed local provider and a reusable contract suite",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/**/*.test.js",
+    "clean": "rm -rf dist"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "@mapctx/protocol": "file:../protocol",
+    "@mapctx/store": "file:../store"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.2"
+  }
+}
