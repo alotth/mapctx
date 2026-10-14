@@ -155,6 +155,50 @@ additive there and no existing caller breaks. The batch-only shape applies to
 `--index` with a list and to `--all`, both of which are new in this release and
 never had the old shape. No consumer in this repository read either field.
 
+### Public contract: closing a task expires a dead lease instead of "releasing" it
+
+`task move --status done` (and `cancelled`/`archived`) used to journal a
+`task.claim-released` for whatever claim row the task still had marked
+`active`, without looking at the lease. A claim row stays `active` until
+something re-claims the task or a sweeper touches it, so a task whose lease
+expired days earlier was closed with a release event for a lease nobody held —
+a fiction in an append-only log, attributed to whoever ran the close.
+
+Closing a task now reads the lease and journals what is true of it:
+
+| At close time | Journaled | Result field |
+| --- | --- | --- |
+| live claim | `task.claim-released` by the closing actor (unchanged) | `releasedClaimId` |
+| expired claim | `task.claim-expired` by `system` | `expiredClaimId` |
+| no claim | nothing (unchanged) | neither |
+
+`task.claim-expired` is the same event claim admission already journals when it
+reclaims over a dead lease, so a closed task ends in the same state a reclaim
+would have left it in: the row moves to `expired` and `executionState` leaves
+`claimed`. Both events are appended in the same transaction as the planning
+move, so a close is still all-or-nothing.
+
+For a consumer, a close over a dead lease stops reporting a release and starts
+reporting an expiry: pair a close with **either** event, not with
+`task.claim-released` alone.
+
+Both fields are reported by every closing path — `task move --status
+done|cancelled|archived` and `task finish`, the latter including
+`--no-snapshot` and the checkpoint-failure result, whose job is to make a split
+state explicit and so has to name the claim effect too. Each field is present
+only when it happened, so `"releasedClaimId" in result` is now an honest test;
+it used to be an always-present `undefined`, answering `true` for a close that
+released nothing. `--json` output is unchanged by that detail, since
+`JSON.stringify` already dropped the undefined — the difference is visible to
+an in-process caller.
+
+Why the event rather than silence: `task.claim-expired` is also what clears
+`executionState` and moves the row out of `active`, so journaling nothing would
+leave a closed task reading `executionState: "claimed"` over a lease nobody
+holds, plus an `active` row that nothing could retire — claim admission refuses
+a terminal task before reaching its own expiry branch, so for an
+already-closed task reclaim is not a cleanup path at all.
+
 ### Features
 
 * **feature:** `mapctx --help` prints an "Enumerated values" table for every

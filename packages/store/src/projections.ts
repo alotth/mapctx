@@ -386,10 +386,63 @@ export function updateClaimState(db: DatabaseSync, claimId: string, state: Resou
   }
 }
 
+/**
+ * The claim row a task holds, whatever its lease says. This is the ADMISSION
+ * getter: `appendTaskClaim` and `dispatch create` must see an expired row to
+ * journal `task.claim-expired` for it before inserting the replacement, which
+ * is what makes reclaim work in one call with no sweeper
+ * (`claims.ts:111-124`). Filtering it by expiry would make the insert collide
+ * with the still-`active` row's partial unique index instead.
+ *
+ * `moveTask`'s closing branch uses it the same way, and for the same reason:
+ * after `getLiveActiveClaim` reports no live claim, the stale row still has to
+ * be *seen* to be expired. Readers that only want to know whether a lease is
+ * held want the opposite -- see `getLiveActiveClaim`. (C5 retires this one
+ * when shared review claims make a single-row getter return the wrong lane.)
+ */
 export function getActiveClaimForTask(db: DatabaseSync, taskId: string): ResourceClaimRecord | undefined {
   const row = db.prepare("SELECT * FROM resource_claim_projection WHERE task_id = ? AND state = 'active'").get(taskId) as Record<string, unknown> | undefined;
   if (!row) return undefined;
   return rowToClaim(row);
+}
+
+/**
+ * Read-time lease truth (T-140 / C1, D14): an `active` row whose lease has run
+ * out is not an active claim. `state='active'` only flips when something
+ * re-claims the task (admission-time expiry) or a sweeper touches the row, so
+ * between expiry and that touch the table holds ghosts -- and a reader that
+ * believes them records fiction. The one such reader today is `moveTask`'s
+ * `done`/`cancelled`/`archived` branch, which journaled a
+ * `task.claim-released` for leases that had expired days earlier; it now asks
+ * this getter whether there is anything to release, and journals
+ * `task.claim-expired` for the stale row instead.
+ *
+ * The boundary is the same one admission and renewal use (`claims.ts:115`,
+ * `:199`): `expiresAt <= now` is expired, so a claim read at the exact instant
+ * it expires is already not live.
+ *
+ * This function itself writes nothing -- it neither journals
+ * `task.claim-expired` nor updates the row. Retiring a ghost is the caller's
+ * decision, taken on a write path (claim admission, `moveTask`'s close, C9's
+ * sweeper), never a side effect of reading.
+ *
+ * `now` defaults to wall clock for the convenience of a one-off read, but a
+ * caller that has a clock of its own -- an injected `now`, or any instant it
+ * already took for the rest of its transaction -- **must pass it**. Otherwise
+ * this one comparison silently runs on a different clock from everything
+ * around it, which is how a test clock produces "live" while the surrounding
+ * code has already moved past expiry. `moveTask` passes the single instant it
+ * reads for the whole close; the display readers (C8) and the sweeper (C9)
+ * have to do the same.
+ */
+export function getLiveActiveClaim(
+  db: DatabaseSync,
+  taskId: string,
+  now: () => Date = () => new Date()
+): ResourceClaimRecord | undefined {
+  const claim = getActiveClaimForTask(db, taskId);
+  if (!claim) return undefined;
+  return new Date(claim.expiresAt).getTime() <= now().getTime() ? undefined : claim;
 }
 
 export function getClaim(db: DatabaseSync, claimId: string): ResourceClaimRecord | undefined {
