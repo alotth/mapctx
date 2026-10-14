@@ -295,3 +295,91 @@ test("replay: closing over a ghost reproduces from the journal alone -- the clai
     restoreEnv(); cleanupDir(repoDir);
   }
 });
+
+// ---------------------------------------------------------------------------
+// 43a3f67 (attempt 3): F2 -- one clock reading judges the lease AND stamps
+// the claim event, so a clock that advances between calls cannot date a
+// release after the very expiresAt it just read as live.
+// ---------------------------------------------------------------------------
+
+/** A clock that advances by `stepMs` on every call, starting at `startMs`. Returns the function and how many times it has been read so far. */
+function tickingClock(startMs: number, stepMs: number) {
+  let calls = 0;
+  const now = () => new Date(startMs + calls++ * stepMs);
+  return { now, callCount: () => calls };
+}
+
+test("F2 guard: closing a LIVE claim stamps task.claim-released with the exact instant that judged the lease live, never a later tick past expiresAt", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const claim = claimNormalTask(handle, "T-101", { now: () => new Date("2026-10-14T10:00:00.000Z"), leaseDurationMs: 1000 });
+    moveTask(handle, { taskId: "T-101", to: "in-progress", actor: "test" });
+    approveAllCriteria(handle, "T-101", ["Golden task acceptance is complete."]);
+
+    const expiresAtMs = new Date(claim.claim!.expiresAt).getTime();
+    const firstTickMs = expiresAtMs - 1; // 1ms before expiry: live
+    const clock = tickingClock(firstTickMs, 5);
+
+    const result = moveTask(handle, { taskId: "T-101", to: "done", actor: "test", now: clock.now });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    if (result.ok) assert.equal(result.releasedClaimId, claim.claim!.claimId, "sanity: the lease was read as live");
+    assert.ok(clock.callCount() > 1, "sanity: the clock was read more than once across the whole move (occurredAt/updatedOn/completedOn read it again afterward, on purpose)");
+
+    const released = claimReleasedEvents(handle, "T-101");
+    assert.equal(released.length, 1);
+    const occurredAtMs = new Date(released[0]!.occurredAt).getTime();
+    assert.equal(occurredAtMs, firstTickMs, "the release must be stamped with the exact instant that judged the lease live, not a later tick");
+    assert.ok(occurredAtMs < expiresAtMs, "and that instant must never be at or past the expiresAt it was just read as live against");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("F2 guard: closing a GHOST claim stamps task.claim-expired with the exact first instant the clock was read, the same one that judged the lease dead", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const claim = claimNormalTask(handle, "T-101", { now: () => new Date("2026-10-14T10:00:00.000Z"), leaseDurationMs: 1000 });
+    moveTask(handle, { taskId: "T-101", to: "in-progress", actor: "test" });
+    approveAllCriteria(handle, "T-101", ["Golden task acceptance is complete."]);
+
+    const expiresAtMs = new Date(claim.claim!.expiresAt).getTime();
+    const firstTickMs = expiresAtMs + 1; // 1ms after expiry: already dead
+    const clock = tickingClock(firstTickMs, 5);
+
+    const result = moveTask(handle, { taskId: "T-101", to: "done", actor: "test", now: clock.now });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    if (result.ok) assert.equal(result.expiredClaimId, claim.claim!.claimId, "sanity: the lease was read as already dead");
+    assert.ok(clock.callCount() > 1, "sanity: the clock keeps advancing for occurredAt/updatedOn/completedOn after the claim decision");
+
+    const expired = claimExpiredEvents(handle, "T-101");
+    assert.equal(expired.length, 1);
+    const occurredAtMs = new Date(expired[0]!.occurredAt).getTime();
+    assert.equal(occurredAtMs, firstTickMs, "the expiry must be stamped with the exact first instant read -- the same one `getLiveActiveClaim` used to call it dead");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// F4 -- both claim fields are present only when they happened, so `"…" in
+// result` is honest for a close with NO claim at all (never-claimed task).
+// ---------------------------------------------------------------------------
+
+test("F4 guard: closing a task that was never claimed carries neither releasedClaimId nor expiredClaimId as a key", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    moveTask(handle, { taskId: "T-101", to: "ready", actor: "test" });
+    moveTask(handle, { taskId: "T-101", to: "in-progress", actor: "test" });
+    approveAllCriteria(handle, "T-101", ["Golden task acceptance is complete."]);
+
+    const result = moveTask(handle, { taskId: "T-101", to: "done", actor: "test" });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    if (!result.ok) return;
+    assert.ok(!("releasedClaimId" in result), "no claim was ever taken, so no releasedClaimId key");
+    assert.ok(!("expiredClaimId" in result), "no claim was ever taken, so no expiredClaimId key");
+    assert.equal(claimReleasedEvents(handle, "T-101").length, 0);
+    assert.equal(claimExpiredEvents(handle, "T-101").length, 0);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
