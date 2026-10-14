@@ -1,7 +1,7 @@
 import * as crypto from "crypto"
 import { parseEstimatedEffortMs, predictedStartSchema, STATUS_TO_PLANNING, transitionPlanning, workloadSchema } from "@mapctx/protocol"
 import { buildFirstAcceptanceRevision } from "./acceptance"
-import { getAcceptance, getActiveClaimForTask, getTask, getTaskDetail } from "./projections"
+import { getAcceptance, getLiveActiveClaim, getTask, getTaskDetail } from "./projections"
 import type { StoreHandle } from "./store-handle"
 import type { AcceptanceCondition, DependencyRecord, TaskDetailRecord, TaskRecord } from "./types"
 
@@ -74,7 +74,14 @@ export function moveTask(store: StoreHandle, options: MoveTaskOptions): MoveTask
 
     let releasedClaimId: string | undefined;
     if (options.to === "done" || options.to === "cancelled" || options.to === "archived") {
-      const active = getActiveClaimForTask(store.db, options.taskId);
+      // T-140 (C1 / D14): the live getter, not the admission one. A row left
+      // `active` by a lease that expired days ago is a ghost, and releasing a
+      // ghost wrote a `task.claim-released` for a lease nobody held -- a
+      // fiction in an append-only log. Closing such a task now journals no
+      // release event and reports no `releasedClaimId`; the stale row is left
+      // for the admission path or the sweeper to expire, which is the only
+      // honest event for it.
+      const active = getLiveActiveClaim(store.db, options.taskId, now);
       if (active) {
         append({
           eventType: "task.claim-released",

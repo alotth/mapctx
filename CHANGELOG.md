@@ -125,6 +125,27 @@ additive there and no existing caller breaks. The batch-only shape applies to
 `--index` with a list and to `--all`, both of which are new in this release and
 never had the old shape. No consumer in this repository read either field.
 
+### Public contract: closing a task no longer releases an expired lease
+
+`task move --status done` (and `cancelled`/`archived`) used to journal a
+`task.claim-released` for whatever claim row the task still had marked
+`active`, without looking at the lease. A claim row stays `active` until
+something re-claims the task or a sweeper touches it, so a task whose lease
+expired days earlier was closed with a release event for a lease nobody held —
+a fiction in an append-only log, attributed to whoever ran the close.
+
+Closing a task now reads the lease: an **expired** claim journals **no**
+`task.claim-released`, and the `--json` result omits `releasedClaimId`. A
+**live** claim is still released exactly as before. The expired row is left
+alone for the only paths that can honestly retire it — reclaim, which journals
+`task.claim-expired` for it, or a future sweeper.
+
+This is one fewer event in the journal for a close over an expired lease, which
+is an observable change to the semantics of an existing event even though the
+event it stops emitting was false. A consumer that counted on a
+`task.claim-released` to pair with every close will see no release event for
+closes over expired leases (and never saw one for a task with no claim at all).
+
 ### Features
 
 * **feature:** `mapctx --help` prints an "Enumerated values" table for every

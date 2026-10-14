@@ -386,10 +386,48 @@ export function updateClaimState(db: DatabaseSync, claimId: string, state: Resou
   }
 }
 
+/**
+ * The claim row a task holds, whatever its lease says. This is the ADMISSION
+ * getter: `appendTaskClaim` and `dispatch create` must see an expired row to
+ * journal `task.claim-expired` for it before inserting the replacement, which
+ * is what makes reclaim work in one call with no sweeper
+ * (`claims.ts:111-124`). Filtering it by expiry would make the insert collide
+ * with the still-`active` row's partial unique index instead.
+ *
+ * Readers want the opposite -- see `getLiveActiveClaim`. (C5 retires this one
+ * when shared review claims make a single-row getter return the wrong lane.)
+ */
 export function getActiveClaimForTask(db: DatabaseSync, taskId: string): ResourceClaimRecord | undefined {
   const row = db.prepare("SELECT * FROM resource_claim_projection WHERE task_id = ? AND state = 'active'").get(taskId) as Record<string, unknown> | undefined;
   if (!row) return undefined;
   return rowToClaim(row);
+}
+
+/**
+ * Read-time lease truth (T-140 / C1, D14): an `active` row whose lease has run
+ * out is not an active claim. `state='active'` only flips when something
+ * re-claims the task (admission-time expiry) or a sweeper touches the row, so
+ * between expiry and that touch the table holds ghosts -- and a reader that
+ * believes them records fiction. The one such reader today is
+ * `moveTask`'s `done`/`cancelled`/`archived` branch, which journaled a
+ * `task.claim-released` for leases that had expired days earlier.
+ *
+ * The boundary is the same one admission and renewal use (`claims.ts:115`,
+ * `:199`): `expiresAt <= now` is expired, so a claim read at the exact instant
+ * it expires is already not live.
+ *
+ * This is a read and writes nothing: it neither journals `task.claim-expired`
+ * nor updates the row. Expiring a ghost stays the job of the admission path
+ * and of the sweeper (C9).
+ */
+export function getLiveActiveClaim(
+  db: DatabaseSync,
+  taskId: string,
+  now: () => Date = () => new Date()
+): ResourceClaimRecord | undefined {
+  const claim = getActiveClaimForTask(db, taskId);
+  if (!claim) return undefined;
+  return new Date(claim.expiresAt).getTime() <= now().getTime() ? undefined : claim;
 }
 
 export function getClaim(db: DatabaseSync, claimId: string): ResourceClaimRecord | undefined {
