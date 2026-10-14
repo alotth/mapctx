@@ -18,7 +18,7 @@ non-empty graph.
 
 The three results that change the adapter design are: GitHub has **no
 dependency write API**, **no write precondition of any kind**, and a **hard
-ceiling of 50 fields per project**.
+ceiling of 49 observable fields per project**.
 
 ## Environment
 
@@ -30,7 +30,7 @@ ceiling of 50 fields per project**.
 | Items | 12 draft issues, one per corpus task |
 | Corpus | T-116..T-120, T-126..T-129, T-131, T-133, T-134 — chosen for a real depth-4 store dependency chain |
 | Store access | prebuilt CLI from `main` only (`mapctx task show`, `plan --json`, `gantt --json`) |
-| Measured calls | 221 (GraphQL queries, GraphQL mutations, REST) |
+| Measured calls | 223 (GraphQL queries, GraphQL mutations, REST) |
 
 ### Data available, and what that cost the experiment
 
@@ -61,62 +61,80 @@ primary GraphQL budget is 5,000 points/hour; REST has its own separate
 | `getProject` + `fields(first: 100)` | 1 | field page size is irrelevant to cost |
 | `listItems(project, first: 100)` with 30 field values per item | 1 | |
 | `listRepoItems+deps(first: 50)` with four nested 50-connections | **3** | `blockedBy`, `blocking`, `relatesTo`, `subIssues` each requested at 50 |
-| any single mutation (`setField`, `createProjectV2Field`, `addProjectV2DraftIssue`, …) | 1 | mutations cannot select `rateLimit`; read from the `x-ratelimit-used` delta |
-| **one mutation document with 50 aliased `setField` calls** | **1** | 50 field writes for the price of one |
+| any single mutation (`setField`, `createProjectV2Field`, `addProjectV2DraftIssue`, …) | 1 | see below — mutations cannot select `rateLimit`, so the cost is the `x-ratelimit-used` step |
+| **one mutation document with 50 aliased `setField` calls** | **1** | 50 field writes for one step |
 | REST `GET /issues/{n}/dependencies/{blocked_by,blocking}` | — | REST budget, 1 request each |
 
-The alias result is the single most important cost fact: batching collapses N
-field writes into one point.
+Queries report their own cost in the payload, so those rows are exact.
+Mutations do not, and the header is not a reliable per-call meter: across 179
+measured mutation transitions the step was **1 in 169 of them**, 2–4 in nine
+(clustered where calls overlapped, including the ten concurrent writes), and
+two outliers of 199 and 234 straddle an hourly window reset, with four negative
+steps discarded as resets. So "1 point per mutation" is the right planning
+figure, and anyone extrapolating from the header should know it drifts under
+concurrency.
 
-### Latency (ms, measured over 221 calls)
+The alias result is the single most important cost fact: batching collapses N
+field writes into one step.
+
+### Latency (ms, measured over 223 calls)
+
+Median is the mean of the two middle values; p90 is nearest-rank, no
+interpolation. Regenerate with
+`node scripts/spikes/github-projects/bin/aggregate-metrics.mjs`.
 
 | Operation | n | min | median | p90 | max |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `setField` NUMBER | 55 | 306 | 449 | 626 | 959 |
-| `setField` SINGLE_SELECT | 14 | 322 | 381 | 444 | 504 |
-| `setField` DATE | 13 | 305 | 391 | 578 | 597 |
-| `clearProjectV2ItemFieldValue` | 11 | 296 | 327 | 435 | 721 |
-| `createProjectV2Field` TEXT | 31 | 320 | 392 | 607 | 773 |
-| `deleteProjectV2Field` | 30 | 509 | 655 | 901 | 1181 |
+| `setField` NUMBER | 55 | 308 | 432 | 673 | 935 |
+| `setField` SINGLE_SELECT | 14 | 309 | 390.5 | 522 | 531 |
+| `setField` DATE | 13 | 314 | 389 | 427 | 648 |
+| `clearProjectV2ItemFieldValue` | 11 | 302 | 345 | 471 | 531 |
+| `createProjectV2Field` TEXT | 31 | 292 | 411 | 554 | 742 |
+| `deleteProjectV2Field` | 30 | 481 | 644.5 | 732 | 1066 |
 | `addProjectV2DraftIssue` | 12 | 329 | 413 | 661 | 1023 |
-| `getProject(fields: 100)` | 8 | 413 | 597 | 754 | 792 |
-| `listItems(first: 100)` | 5 | 439 | 766 | 1039 | 1039 |
+| `getProject(fields: 100)` | 8 | 460 | 772 | 942 | 942 |
+| `listItems(first: 100)` | 5 | 439 | 584 | 884 | 884 |
 | `listRepoItems+deps(first: 50)` | 3 | 353 | 484 | 501 | 501 |
-| REST dependency read | 4 | 252 | 267 | 284 | 284 |
+| REST `dependencies/blocked_by` | 2 | 254 | 267 | 280 | 280 |
+| REST `dependencies/blocking` | 2 | 252 | 268 | 284 | 284 |
 
-Alias batching, two runs of the same probe (`04-limits.json`), one point each:
+Alias batching (`04-limits.json → batchProbe`), one step each:
 
 | Aliases in one mutation document | 1 | 5 | 10 | 25 | 50 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| run A (ms) | 407 | 568 | 1946 | 1681 | 2871 |
-| run B (ms) | 375 | 693 | 783 | 1804 | 4178 |
+| latency (ms) | 375 | 693 | 783 | 1804 | 4178 |
 
-A 50-alias batch takes 2.9–4.2 s — under 10× a single write for 50× the work,
-and one point instead of fifty. REST dependency reads are the fastest calls
-measured (median 267 ms).
+A 50-alias batch takes 4.2 s — under 10× a single write for 50× the work, and
+one step instead of fifty. The two REST dependency reads are the fastest calls
+measured, 252–284 ms.
 
 ### Limits
 
 | Limit | Measured value | Evidence |
 | --- | --- | --- |
-| Fields per project | **50, including the 13 default fields** | creating the 50th: `"Projects cannot have more than 50 fields, including default and custom fields"`. 13 default + 6 derived + 30 probe = 49 reached. |
+| Fields per project | **49 observable** — see below | `fieldLimitProbe`: 19 before the probe (13 default + 6 derived) + 30 created = `fieldCountReached: 49`, and the next creation was refused with `"Projects cannot have more than 50 fields, including default and custom fields"` |
 | Connection page size | **100** | `first: 101` → `"Requesting 101 records on the connection exceeds the first limit of 100 records."` |
-| Field pagination | never needed | with a 50-field ceiling, `fields(first: 100)` cannot have a next page |
+| Field pagination | never needed | at this ceiling, `fields(first: 100)` cannot have a next page (`fieldsPageHasNextAt100: false`) |
 | Item pagination | works | 12 items walked in 6 pages at `first: 2`, 1 point per page |
-| Concurrency | 10 parallel writes to the same field/item: 10/10 succeeded in 648 ms | no secondary limit, no conflict, last write wins |
+| Concurrency | 10 parallel writes to the same field/item: 10/10 succeeded in **789 ms** | no secondary limit, no conflict, last write wins |
 | Introspection | `__Type.inputFields` max 2 per query | `INTROSPECTION_LIMIT_EXCEEDED` |
 
-**The field ceiling is the hard planning constraint.** 50 total minus 13 default
-fields leaves **37 custom fields** for everything MapCtx wants on a provider:
-six derived fields today, plus workload, domains, spec mode, effort provenance,
-wait reason, per-criterion state, and whatever comes later. There is no second
-project to spill into without splitting task identity.
+**The field ceiling is the hard planning constraint, and the measured number is
+one below the published one.** GitHub's refusal message says 50, but
+`fields(first: 100)` never returned more than **49**, so the project's own
+enumeration and GitHub's enforcement disagree by one — either a field is counted
+without being listed, or it is an off-by-one in the limit check. Planning has to
+use what is observable: **49 fields, of which 13 are defaults, leaving 36
+custom** for everything MapCtx wants on a provider — six derived fields today,
+plus workload, domains, spec mode, effort provenance, wait reason, per-criterion
+state, and whatever comes later. There is no second project to spill into
+without splitting task identity.
 
 ### Write semantics
 
 | Question | Answer | Evidence |
 | --- | --- | --- |
-| Is a repeated identical write a no-op? | **NUMBER: no. SINGLE_SELECT: yes.** | isolated probe, nothing else writing: re-sending the same number moved `updatedAt` 17:00:40 → 17:01:10; re-sending the same option id left it at 17:01:10 |
+| Is a repeated identical write a no-op? | **NUMBER: no. SINGLE_SELECT: yes.** | isolated probe, nothing else writing: re-sending the same number moved `updatedAt` 17:02:47Z → 17:09:15Z (`revisionMoved: true`); re-sending the same option id left it at 17:09:15Z (`revisionMoved: false`) |
 | Does `clientMutationId` deduplicate? | **No.** | same `clientMutationId`, two different values (11.13 then 12.13); read-back returned 12.13 |
 | Is there a write precondition? | **No.** | `UpdateProjectV2ItemFieldValueInput` is `{clientMutationId, projectId, itemId, fieldId, value}` — no expected revision, no ETag |
 | What revision signal exists? | `ProjectV2Item.updatedAt`, second granularity | and it moves for reasons unrelated to the field being written |
@@ -178,7 +196,7 @@ takes `--usd-per-active-hour`, which defaults to 0 and was left at 0: inventing
 a rate would have made an unmeasured number look measured. `Custo real` is 0
 for the two corpus tasks that have usage events (T-118, T-119) and **cleared**
 for the other ten — which also exercises `clearProjectV2ItemFieldValue`, 11
-calls, median 327 ms.
+calls, median 345 ms.
 
 **Cost on a provider is blocked on MapCtx-side data, not on GitHub.** E-018 can
 write cost fields the day the store has a cost basis; nothing in the provider
@@ -193,15 +211,20 @@ exactly two (`OPEN`/`CLOSED`):
 | | provider statuses | store statuses |
 | --- | --- | --- |
 | Waves produced | 6 | 1 |
-| Tasks placed in a wave | 12 | 3 (T-117, T-129, T-133) |
+| Tasks placed in a wave | 12 | 2 (T-117, T-133) |
 
-All 12 tasks diverge. The eight `done` tasks and the one `review` task are
-schedulable under the provider reading and correctly excluded under the store
-reading; T-117/T-129/T-133 move wave because the terminal tasks are in the
-graph with them. MapCtx's planning states (`paused`, `review`,
-`ready-for-do`, `blocked`, `cancelled`, `archived`) have no native
-representation — they need a `Status` single-select the adapter owns, which is
-also what `mapctx.toml [github.statusMap]` already does for the push path.
+All 12 tasks diverge (`statusModeDivergence`, 12 rows). At the moment of the
+committed run the store held nine of them `done` and one `in-progress`; all ten
+are schedulable under the provider reading and correctly excluded under the
+store reading. Only the two `backlog` tasks survive the store reading, and they
+still change wave because the excluded ten sit in the graph with them.
+
+Those store statuses are a snapshot — the board moves — so the point is the
+shape, not the exact split: MapCtx's planning states (`paused`, `review`,
+`in-progress`, `ready-for-do`, `blocked`, `cancelled`, `archived`) have no
+native representation in a provider with two issue states and none at all for a
+draft. They need a `Status` single-select the adapter owns, which is also what
+`mapctx.toml [github.statusMap]` already does for the push path.
 
 ### Dependency reads
 
@@ -280,7 +303,7 @@ else, and the mechanism is unverified.
 | `filesAffected` / resource claims | no field kind for it. The planner's collision model (10 serialized pairs in this run) is MapCtx-side by necessity |
 | Per-criterion approval evidence | no criteria object to attach it to |
 | Claims, dispatches, receipts, history | out of contract by design — and they stay MapCtx-side under every provider |
-| `workload` / `estimatedEffort` provenance | representable only by spending more of the 37-field budget |
+| `workload` / `estimatedEffort` provenance | representable only by spending more of the 36-field custom budget |
 | Write preconditions | see above; this is what makes a provider-side atomic claim impossible |
 
 ## Risks
@@ -289,9 +312,9 @@ else, and the mechanism is unverified.
 | --- | --- | --- |
 | **No write precondition** | 10 concurrent writes to one field all succeeded, last wins, no conflict | **High.** `expectedRevision` in the contract has no backing. Concurrent agents silently overwrite each other's derived fields, and a provider-side claim is impossible — ADR 0005's claim-CAS question stays open and GitHub does not answer it |
 | **No dependency write API** | GraphQL mutation list | **High.** The planning graph cannot be pushed to the provider over the main transport; a REST side-channel needs its own error model, retry policy and verification |
-| **50-field ceiling** | API refusal at the 50th field | **High.** 37 custom fields for all of MapCtx's non-planning data, forever. Field budget becomes a design constraint on day one |
+| **Field ceiling** | 49 observable fields, next creation refused | **High.** 36 custom fields for all of MapCtx's non-planning data, forever. Field budget becomes a design constraint on day one |
 | **Draft issues are second-class** | no deps, no sub-issues, no open/closed | **Medium.** Anything MapCtx creates on the provider must be a real issue in a real repository, which means a writable repository is a prerequisite, not a detail |
-| Rate limit with N agents | 1 point per mutation; 50 writes per point when batched; 5,000 points/hour | **Low.** All 136 tasks × 6 fields = 816 points unbatched, **17 points batched**. 221 calls over ~25 minutes never approached a limit, primary or secondary |
+| Rate limit with N agents | 1 point per mutation; 50 writes per point when batched; 5,000 points/hour | **Low.** All 136 tasks × 6 fields = 816 points unbatched, **17 points batched**. 223 calls never approached a limit, primary or secondary |
 | **Batch writes partially apply on failure** | three aliases, one invalid: the request returned a top-level `VALIDATION` error and the two valid aliases were still written | **High.** A GraphQL document is not a transaction. A failed batch leaves the item in a mixed state with no indication of which aliases landed, so "retry the whole batch" is not safe without reading every field back first |
 | Eventual consistency | `items.totalCount` read 0 right after creating 12 items | **Medium.** Read-after-write must tolerate a stale count; `freshness.stale` needs to be set from observation, not assumed false |
 | Public-repository exposure | the bound repository is public | **Medium.** Writing issues/comments to carry planning data publishes it. The private Project is safe; the issues behind it are not |
@@ -312,12 +335,13 @@ Build it, with these five decisions taken up front.
    applied, so recovery means re-reading every field in that batch, not
    resending it blind. Drop `expectedRevision` from the GitHub capability map
    rather than pretending it is honoured.
-3. **Treat the 37-field budget as a schema.** Decide now which MapCtx concepts
+3. **Treat the 36-field budget as a schema.** Decide now which MapCtx concepts
    get a provider field and which stay MapCtx-side. The six derived fields plus
-   an adapter-owned `Status` single-select is seven; that leaves 30. A
-   `Forecast start P50` date field is an eighth, and it is needed — a roadmap
-   view needs a start and a target date to be legible, and the default field set
-   has neither.
+   an adapter-owned `Status` single-select is seven; that leaves 29. A
+   `Forecast start P50` date field is an eighth, leaving 28, and it is needed —
+   a roadmap view needs a start and a target date to be legible, and the default
+   field set has neither. Budget against the 49 fields that are observable, not
+   the 50 the refusal message names.
 4. **Dependencies: read from GraphQL, write through a separate, explicitly
    capability-gated path.** `getDependencies` is cheap and complete (3 points
    for 50 issues with all relation kinds). `addDependency`/`removeDependency`
@@ -348,16 +372,41 @@ the screenshot was optional.
   state be read back reliably?
 - What does `timeline` cost and does it carry enough to reconstruct field-change
   history, or must MapCtx keep its own event log regardless?
-- Does the 50-field ceiling apply per project only, or is there an org-level
+- Does the field ceiling apply per project only, or is there an org-level
   budget as well?
 
 ## Reproduction
 
-Commands, flags and the store-copy procedure are in
+Commands and flags are in
 [`scripts/spikes/github-projects/README.md`](../../scripts/spikes/github-projects/README.md).
+
 Every number in this document comes from
 `scripts/spikes/github-projects/measurements/01-setup.json` through
-`05-view.json`.
+`05-view.json`, and the tables are generated from those files rather than
+transcribed:
+
+```sh
+node scripts/spikes/github-projects/bin/aggregate-metrics.mjs
+```
+
+The committed captures record `"cli": "<MAPCTX_CLI>"` instead of the resolved
+path, so re-running on another machine changes no published value.
 
 The test project is left in place, unarchived, with its 12 items and six
 derived fields populated: <https://github.com/users/alotth/projects/3>.
+
+## Closure
+
+Closed with two criteria **partial**, by operator decision, for one shared
+reason: no writable repository with issues was in scope.
+
+| Criterion | Verdict | Why |
+| --- | --- | --- |
+| 0 — a test Project receives the six derived fields computed by MapCtx **from real issues**, without altering the store | **partial** | All six fields were written and verified, and the store was never opened by spike code. But the 12 items are **draft issues, not real issues**, so the "from real issues" half is unmet. |
+| 1 — the doc carries measured rate limit, latency and limits, with reproduction commands | pass | |
+| 2 — the `TaskProvider` mapping lists what works, what is missing, and dependencies read for real | **partial** | All 14 contract members are mapped and the dependency read path runs against the live API, but all 16 reachable issues have zero edges, so it is proved in shape and cost only. |
+| 3 — no production file in `packages/` changes; the spike code stays isolated | pass | |
+
+Neither partial is a defect in the harness: the read path is parameterised, so
+validating it against seeded edges is a flag change. Both are recorded here so
+that later readers do not take criterion 0 as fully satisfied.
