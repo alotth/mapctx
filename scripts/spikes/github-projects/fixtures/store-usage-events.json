@@ -1,86 +1,90 @@
-[
-  {
-    "usageEventId": "5f2f7c3e-8d24-4b1a-9c6e-1a2b3c4d5e6f",
-    "dispatchId": "e01bbfaf-e306-44e7-8eac-3fdd840970e0",
-    "provider": "zai",
-    "model": "glm-5.3-flash",
-    "inputTokens": 0,
-    "cacheTokens": 0,
-    "outputTokens": 0,
-    "source": "absent",
-    "coverage": "none",
-    "taskId": "T-095"
-  },
-  {
-    "usageEventId": "7f8e9d0c-1a2b-4c3d-8e4f-5a6b7c8d9e0f",
-    "dispatchId": "0e976792-705a-4892-8f3a-7d350ae1322d",
-    "provider": "zai",
-    "model": "glm-5.3-flash",
-    "inputTokens": 0,
-    "cacheTokens": 0,
-    "outputTokens": 0,
-    "source": "absent",
-    "coverage": "none",
-    "taskId": "T-118"
-  },
-  {
-    "usageEventId": "960f79c5-cadb-4e76-857a-1ff9cdcdc0d5",
-    "dispatchId": "e5f1eedc-e0a1-4ed1-9bd7-7c58516da017",
-    "provider": "zai",
-    "model": "glm-5.3-flash",
-    "inputTokens": 0,
-    "cacheTokens": 0,
-    "outputTokens": 0,
-    "source": "absent",
-    "coverage": "none",
-    "taskId": "T-119"
-  },
-  {
-    "usageEventId": "a38d363a-80c4-48d0-981f-cd1a999b8fc1",
-    "dispatchId": "e5f1eedc-e0a1-4ed1-9bd7-7c58516da017",
-    "provider": "zai",
-    "model": "glm-5.3-flash",
-    "inputTokens": 0,
-    "cacheTokens": 0,
-    "outputTokens": 0,
-    "source": "absent",
-    "coverage": "none",
-    "taskId": "T-119"
-  },
-  {
-    "usageEventId": "b4c9d2e7-8f3a-4b16-9a5d-2c7e18093f4a",
-    "dispatchId": "e5f1eedc-e0a1-4ed1-9bd7-7c58516da017",
-    "provider": "zai",
-    "model": "glm-5.3-flash",
-    "inputTokens": 0,
-    "cacheTokens": 0,
-    "outputTokens": 0,
-    "source": "absent",
-    "coverage": "none",
-    "taskId": "T-119"
-  },
-  {
-    "usageEventId": "c5f13309-ef75-40bb-b61a-f8358f90981e",
-    "dispatchId": "c8adf88f-bc41-41ed-8719-5eadbbe2c844",
-    "provider": "zai",
-    "model": "zai-coding-plan:glm-5.3-flash",
-    "inputTokens": 0,
-    "cacheTokens": 0,
-    "outputTokens": 0,
-    "source": "absent",
-    "coverage": "none",
-    "taskId": "T-121"
-  },
-  {
-    "usageEventId": "ca3c00f5-2a3e-4be5-b899-a28d991848a1",
-    "dispatchId": "c8adf88f-bc41-41ed-8719-5eadbbe2c844",
-    "provider": "zai",
-    "model": "zai-coding-plan:glm-5.3-flash",
-    "inputTokens": 0,
-    "cacheTokens": 0,
-    "outputTokens": 0,
-    "source": "absent",
-    "coverage": "none",
-    "taskId": "T-121"
-  }
-]
+{
+  "note": "Shape-preserving SYNTHETIC rows derived from the store's seven real usage_event_projection rows. The usageEventId and dispatchId values are generated placeholders, not store identifiers. Everything the spike's cost path reads is preserved exactly: the row count, the task binding, the provider/model pair, the zero token counts, and source/coverage. The provider/model pair is kept because the measured finding is that it is absent from the vendored PRICE_TABLE, which is why lookupRate returns undefined regardless of tokens.",
+  "derivedFrom": "usage_event_projection joined to dispatch_projection, read-only, 2026-10-10",
+  "rows": [
+    {
+      "usageEventId": "00000000-0000-4000-8000-000000000000",
+      "dispatchId": "00000000-0000-4000-8000-000000000100",
+      "provider": "zai",
+      "model": "glm-5.3-flash",
+      "inputTokens": 0,
+      "cacheTokens": 0,
+      "outputTokens": 0,
+      "source": "absent",
+      "coverage": "none",
+      "taskId": "T-095"
+    },
+    {
+      "usageEventId": "00000000-0000-4000-8000-000000000001",
+      "dispatchId": "00000000-0000-4000-8000-000000000101",
+      "provider": "zai",
+      "model": "glm-5.3-flash",
+      "inputTokens": 0,
+      "cacheTokens": 0,
+      "outputTokens": 0,
+      "source": "absent",
+      "coverage": "none",
+      "taskId": "T-118"
+    },
+    {
+      "usageEventId": "00000000-0000-4000-8000-000000000002",
+      "dispatchId": "00000000-0000-4000-8000-000000000102",
+      "provider": "zai",
+      "model": "glm-5.3-flash",
+      "inputTokens": 0,
+      "cacheTokens": 0,
+      "outputTokens": 0,
+      "source": "absent",
+      "coverage": "none",
+      "taskId": "T-119"
+    },
+    {
+      "usageEventId": "00000000-0000-4000-8000-000000000003",
+      "dispatchId": "00000000-0000-4000-8000-000000000102",
+      "provider": "zai",
+      "model": "glm-5.3-flash",
+      "inputTokens": 0,
+      "cacheTokens": 0,
+      "outputTokens": 0,
+      "source": "absent",
+      "coverage": "none",
+      "taskId": "T-119"
+    },
+    {
+      "usageEventId": "00000000-0000-4000-8000-000000000004",
+      "dispatchId": "00000000-0000-4000-8000-000000000102",
+      "provider": "zai",
+      "model": "glm-5.3-flash",
+      "inputTokens": 0,
+      "cacheTokens": 0,
+      "outputTokens": 0,
+      "source": "absent",
+      "coverage": "none",
+      "taskId": "T-119"
+    },
+    {
+      "usageEventId": "00000000-0000-4000-8000-000000000005",
+      "dispatchId": "00000000-0000-4000-8000-000000000103",
+      "provider": "zai",
+      "model": "zai-coding-plan:glm-5.3-flash",
+      "inputTokens": 0,
+      "cacheTokens": 0,
+      "outputTokens": 0,
+      "source": "absent",
+      "coverage": "none",
+      "taskId": "T-121"
+    },
+    {
+      "usageEventId": "00000000-0000-4000-8000-000000000006",
+      "dispatchId": "00000000-0000-4000-8000-000000000103",
+      "provider": "zai",
+      "model": "zai-coding-plan:glm-5.3-flash",
+      "inputTokens": 0,
+      "cacheTokens": 0,
+      "outputTokens": 0,
+      "source": "absent",
+      "coverage": "none",
+      "taskId": "T-121"
+    }
+  ]
+}

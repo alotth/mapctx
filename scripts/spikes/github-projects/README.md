@@ -29,14 +29,17 @@ nothing in `packages/` is touched. Results and analysis live in
 | `bin/write-derived.mjs` | Computes and writes the six fields, verifies by read-back, probes idempotence and `clientMutationId` |
 | `bin/measure-limits.mjs` | Page-size, idempotence, alias-batch, concurrency and field-count ceilings |
 | `bin/make-roadmap-view.mjs` | Whether a Roadmap view can be built through the API |
+| `bin/aggregate-metrics.mjs` | Re-derives every table the report publishes, from the committed captures |
 | `lib/pure.test.mjs` | Unit tests for the pure logic (error classification, id parsing, status mapping, edge handling) |
 | `measurements/*.json` | Raw captured output of each run (the numbers quoted in the doc) |
-| `fixtures/store-usage-events.json` | The store's seven real usage rows, for the cost path |
+| `fixtures/store-usage-events.json` | Shape-preserving **synthetic** usage rows for the cost path (see below) |
 
 ## Tests
 
-No network, no `gh`, no store. Not wired into `npm test`, which builds and tests
-`packages/` only:
+24 tests over the pure logic — error classification, id parsing, status mapping,
+edge handling. No network, no `gh`, no store. **CI does not run them**: the root
+script is `npm run build && npm run test --workspaces --if-present` and
+`scripts/` is not a workspace, so this is the only way they execute:
 
 ```sh
 TZ=UTC node --test scripts/spikes/github-projects/lib/pure.test.mjs
@@ -58,6 +61,9 @@ node $S/write-derived.mjs       --project-number 3 \
                                 --out measurements/03-write.json
 node $S/measure-limits.mjs      --project-number 3 --max-field-probe 60 --out measurements/04-limits.json
 node $S/make-roadmap-view.mjs   --project-number 3 --out measurements/05-view.json
+
+# Re-derive the report's tables from the captures above (read-only, no network):
+node $S/aggregate-metrics.mjs
 ```
 
 Flags: `--owner`, `--repo`, `--dep-repos` (comma separated), `--project-number`,
@@ -73,18 +79,33 @@ against non-empty edges needs no code change, only a repository that has them:
 node $S/read-provider.mjs --owner <owner> --dep-repos <repo-with-seeded-edges> --project-number 3
 ```
 
-### Regenerating the usage fixture
+### The usage fixture is synthetic
 
-Read-only, from a **copy** of the store, never from `~/.mapctx` directly:
+`fixtures/store-usage-events.json` holds **shape-preserving synthetic rows**
+derived from the store's seven real `usage_event_projection` rows. The
+`usageEventId` and `dispatchId` values are generated placeholders, not store
+identifiers. Everything the cost path reads is preserved exactly: row count,
+task binding, provider/model pair, the zero token counts, and
+`source`/`coverage`. The file's own `note` field says the same.
+
+**Never commit a raw store dump here.** This directory is published in a public
+repository, and a dump carries internal identifiers — harmless only while the
+rows happen to be empty. If you need real rows to check the cost path on your
+own machine, dump them to a path **outside the repository** and point
+`--usage-file` at that:
 
 ```sh
-cp ~/.mapctx/projects/<project-id>/mapctx.db /tmp/store-copy.db
-sqlite3 -json "file:/tmp/store-copy.db?mode=ro" "
+cp ~/.mapctx/projects/<project-id>/mapctx.db "$TMPDIR/store-copy.db"
+sqlite3 -json "file:$TMPDIR/store-copy.db?mode=ro" "
   select u.usage_event_id as usageEventId, u.dispatch_id as dispatchId, u.provider, u.model,
          u.input_tokens as inputTokens, u.cache_tokens as cacheTokens, u.output_tokens as outputTokens,
          u.source, u.coverage, d.task_id as taskId
   from usage_event_projection u
   left join dispatch_projection d on d.dispatch_id = u.dispatch_id
   group by u.usage_event_id order by u.usage_event_id;" \
-  > scripts/spikes/github-projects/fixtures/store-usage-events.json
+  > "$TMPDIR/store-usage-events.json"
+
+node $S/write-derived.mjs --project-number 3 --usage-file "$TMPDIR/store-usage-events.json"
 ```
+
+A bare array and the committed `{note, rows}` object are both accepted.
