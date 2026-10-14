@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 12/23
+  - subIssueProgress: 13/23
   - priority: high
   - workload: null
   - tags: []
@@ -2909,7 +2909,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-13
+  - updated: 2026-10-14
   - detail: ./tasks/T-136.md
 
 ### [T-137] Editar título, descrição e metadados de task pela workspace UI
@@ -2972,7 +2972,7 @@
 ### [T-140] C1: verdade de lease na leitura (getLiveActiveClaim) e sem release fictício em move done
 
   - id: T-140
-  - status: review
+  - status: done
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -2983,7 +2983,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
   - updated: 2026-10-14
   - detail: ./tasks/T-140.md
@@ -3352,7 +3352,7 @@
 ### [T-160] Acceptance retroativo das 13 entregues sem critérios (autor + revisor independente)
 
   - id: T-160
-  - status: doing
+  - status: review
   - type: chore
   - parent: E-018
   - subIssueProgress: null
