@@ -24,17 +24,22 @@
  *
  *   G1 alone off                     RED    G1 + G3-final off          RED
  *   G2 alone off                     RED    pair-filter + G3-final off RED
- *   G3-final alone off               green
+ *   G3-final alone off               RED    (independent review, T-133)
  *   serializedPairs pair-filter off  green
  *
  * So G2 is individually load-bearing -- it is the SOLE guard of the
  * serialized-pair route, where G1 cannot help because that route reads
  * non-intersection as evidence. The final `isRedactedPath` filter on the
- * return is a redundant SIBLING: it pairs with G1 on the collision route and
- * with the per-route filter on the overbroad route, so removing either member
- * of a pair is invisible and removing both brings the fabricated violation
- * straight back. Do not delete the final filter because a single mutation
- * shows it dead -- it is dead only while its sibling lives.
+ * return is ALSO individually load-bearing: a plan path spelled
+ * `./mapctx:redacted` (or `mapctx:redacted/`, `.\mapctx:redacted`) passes the
+ * per-route filter, because the raw value is not the sentinel, and only
+ * normalizePath turns it INTO the sentinel -- so only the final filter catches
+ * it. (An earlier version of this comment measured it green; the review's
+ * fixture with a normalizable spelling proved otherwise.) The per-route filter
+ * is the redundant member: it pairs with the final filter on the overbroad
+ * route, so removing it alone is invisible and removing both brings the
+ * fabricated violation back. Do not delete either guard because a single
+ * mutation shows one dead.
  *
  * WHAT THIS STILL IS NOT. The store's recordClaimViolations is the version
  * that JOURNALS violations, with idempotent re-detection and a declared
