@@ -22,7 +22,7 @@ import { checkProviderContract, formatContractFailures, type ContractContext } f
 import { LocalStoreProvider } from "./local-store-provider"
 import { ok, page } from "./results"
 import { createProviderFixture, FIXTURE_EPIC, FIXTURE_MISSING, FIXTURE_SECOND, FIXTURE_WRITABLE } from "./__test-helpers__"
-import type { ListItemsInput, ProviderItemRef, TaskProvider } from "./types"
+import type { FieldWrite, FieldWriteOutcome, ListItemsInput, ProviderItemRef, TaskProvider } from "./types"
 
 const ref = (id: string): ProviderItemRef => ({ provider: "local", workItem: { id, key: id } })
 
@@ -222,6 +222,145 @@ test("mutation: a dropped precondition succeeds instead of refusing", async () =
     assert.ok(
       report.failures.some((f) => f.id === "precondition.refused-when-unsupported"),
       `expected precondition.refused-when-unsupported among failures:\n${formatContractFailures(report)}`
+    )
+  } finally {
+    fixture.teardown()
+  }
+})
+
+test("mutation: applyFieldWrites claims verified:true without writing anything", async () => {
+  const fixture = createProviderFixture()
+  try {
+    const ctx = buildContractContext(fixture)
+    const inner = ctx.provider
+    // The bug `batch.verified-claim` exists to catch: every write reports
+    // "applied" and the batch claims `verified: true`, but nothing actually
+    // lands in the store. Delegate the empty-batch case honestly so
+    // `batch.rejects-empty` stays clean noise-free.
+    const liar = wrapProvider(inner, {
+      applyFieldWrites: async (input) => {
+        if (input.writes.length === 0) return inner.applyFieldWrites(input)
+        const outcomes: FieldWriteOutcome[] = input.writes.map((write) => ({ status: "applied", write }))
+        return ok({
+          outcomes,
+          applied: outcomes.length,
+          failed: 0,
+          unknown: 0,
+          skipped: 0,
+          partiallyApplied: false,
+          verified: true
+        })
+      }
+    })
+
+    const report = await checkProviderContract({ ...ctx, provider: liar })
+    assert.ok(report.failed > 0, "a batch that applies nothing but claims verified:true must fail the suite")
+    assert.ok(
+      report.failures.some((f) => f.id === "batch.verified-claim"),
+      `expected batch.verified-claim among failures:\n${formatContractFailures(report)}`
+    )
+    const readbackFailures = report.failures.filter((f) => f.id.startsWith("batch.readback."))
+    assert.ok(
+      readbackFailures.length >= 3,
+      `expected at least three batch.readback.* failures, got ${readbackFailures.length}:\n${formatContractFailures(report)}`
+    )
+  } finally {
+    fixture.teardown()
+  }
+})
+
+test("mutation: applyFieldWrites applies every value into the wrong field", async () => {
+  const fixture = createProviderFixture()
+  try {
+    const ctx = buildContractContext(fixture)
+    const inner = ctx.provider
+    // The bug: every write that is declared writable lands on `summary`
+    // instead of the field actually requested, while the outcome reported
+    // back still names the original write. `applyFieldWrites` is checked only
+    // for internal self-consistency elsewhere, so this passes everywhere
+    // except the batch readback -- the one place that actually looks at what
+    // the store ended up holding.
+    const liar = wrapProvider(inner, {
+      applyFieldWrites: async (input) => {
+        if (input.writes.length === 0) return inner.applyFieldWrites(input)
+        const outcomes: FieldWriteOutcome[] = []
+        for (const write of input.writes) {
+          if (inner.capabilities.fields[write.field.semantic]?.write !== true) {
+            // Declared unwritable: delegate honestly so this stays reported
+            // as `failed`, same as the real provider -- otherwise
+            // `batch.mixed-reports-failure` would fire as noise alongside
+            // the readback failures this mutation is meant to trip.
+            const single = await inner.setField({ ...write, clientOperationId: input.clientOperationId })
+            outcomes.push(single.ok ? single.value : { status: "failed", write, error: single.error })
+            continue
+          }
+          const misdirected = await inner.setField({
+            item: write.item,
+            field: { semantic: "summary", surface: "work-item" },
+            value: write.value,
+            clientOperationId: input.clientOperationId
+          })
+          if (!misdirected.ok) {
+            outcomes.push({ status: "failed", write, error: misdirected.error })
+            continue
+          }
+          // Report success against the ORIGINAL write even though the value
+          // landed in `summary` instead.
+          const status = misdirected.value.status === "cleared" ? "cleared" : "applied"
+          outcomes.push({ status, write, ...("revision" in misdirected.value ? { revision: misdirected.value.revision } : {}) } as FieldWriteOutcome)
+        }
+        const failed = outcomes.filter((o) => o.status === "failed").length
+        const unknown = outcomes.filter((o) => o.status === "unknown").length
+        const applied = outcomes.length - failed - unknown
+        return ok({
+          outcomes,
+          applied,
+          failed,
+          unknown,
+          skipped: 0,
+          partiallyApplied: applied > 0 && failed + unknown > 0,
+          verified: false
+        })
+      }
+    })
+
+    const report = await checkProviderContract({ ...ctx, provider: liar })
+    assert.ok(report.failed > 0, "a batch that writes every value to the wrong field must fail the suite")
+    const readbackFailures = report.failures.filter((f) => f.id.startsWith("batch.readback."))
+    assert.ok(
+      readbackFailures.length >= 3,
+      `expected at least three batch.readback.* failures, got ${readbackFailures.length}:\n${formatContractFailures(report)}`
+    )
+  } finally {
+    fixture.teardown()
+  }
+})
+
+test("mutation: applyFieldWrites strips skipped outcomes from a failing batch", async () => {
+  const fixture = createProviderFixture()
+  try {
+    const ctx = buildContractContext(fixture)
+    const inner = ctx.provider
+    // The bug (F4): outcomes the honest provider reported as "skipped" are
+    // filtered out of the array and the skipped count zeroed, so a batch that
+    // stopped early after a failure looks like it reported one outcome per
+    // write when it did not. Only fires on the MIXED batch -- the all-valid
+    // batch never produces a skipped outcome to strip.
+    const liar = wrapProvider(inner, {
+      applyFieldWrites: async (input) => {
+        const result = await inner.applyFieldWrites(input)
+        if (!result.ok) return result
+        const outcome = result.value
+        const outcomes = outcome.outcomes.filter((o) => o.status !== "skipped")
+        return ok({ ...outcome, outcomes, skipped: 0 })
+      }
+    })
+
+    const report = await checkProviderContract({ ...ctx, provider: liar })
+    assert.ok(report.failed > 0, "a batch that strips skipped outcomes must fail the suite")
+    assert.ok(
+      report.failures.some((f) => f.id === "batch.mixed-outcome-per-write"),
+      `expected batch.mixed-outcome-per-write among failures:\n${formatContractFailures(report)}`
     )
   } finally {
     fixture.teardown()
