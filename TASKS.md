@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 14/23
+  - subIssueProgress: 14/25
   - priority: high
   - workload: null
   - tags: []
@@ -3367,6 +3367,44 @@
   - externalId: null
   - updated: 2026-10-14
   - detail: ./tasks/T-160.md
+
+### [T-161] Store: fechar as outras portas de divergência entre arestas e lista de detail
+
+  - id: T-161
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [STORE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-161.md
+
+### [T-162] Teste intermitente: claim-redaction 'reading open' de undefined
+
+  - id: T-162
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [STORE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-162.md
 
 ## Notes
 
