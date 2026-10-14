@@ -1,7 +1,7 @@
 import * as crypto from "crypto"
 import { parseEstimatedEffortMs, predictedStartSchema, STATUS_TO_PLANNING, transitionPlanning, workloadSchema } from "@mapctx/protocol"
 import { buildFirstAcceptanceRevision } from "./acceptance"
-import { getAcceptance, getLiveActiveClaim, getTask, getTaskDetail } from "./projections"
+import { getAcceptance, getActiveClaimForTask, getLiveActiveClaim, getTask, getTaskDetail } from "./projections"
 import type { StoreHandle } from "./store-handle"
 import type { AcceptanceCondition, DependencyRecord, TaskDetailRecord, TaskRecord } from "./types"
 
@@ -22,7 +22,7 @@ export type MoveTaskOptions = {
 };
 
 export type MoveTaskResult =
-  | { ok: true; from: string; to: string; releasedClaimId?: string }
+  | { ok: true; from: string; to: string; releasedClaimId?: string; expiredClaimId?: string }
   | {
       ok: false;
       reason: "unknown-task" | "illegal-transition" | "unknown-state" | "state-not-exportable" | "acceptance-incomplete";
@@ -73,23 +73,51 @@ export function moveTask(store: StoreHandle, options: MoveTaskOptions): MoveTask
     }
 
     let releasedClaimId: string | undefined;
+    let expiredClaimId: string | undefined;
     if (options.to === "done" || options.to === "cancelled" || options.to === "archived") {
-      // T-140 (C1 / D14): the live getter, not the admission one. A row left
-      // `active` by a lease that expired days ago is a ghost, and releasing a
-      // ghost wrote a `task.claim-released` for a lease nobody held -- a
-      // fiction in an append-only log. Closing such a task now journals no
-      // release event and reports no `releasedClaimId`; the stale row is left
-      // for the admission path or the sweeper to expire, which is the only
-      // honest event for it.
-      const active = getLiveActiveClaim(store.db, options.taskId, now);
-      if (active) {
+      // T-140 (C1 / D14): which event this journals depends on the lease, not
+      // on the row's `state` alone. A row left `active` by a lease that
+      // expired days ago is a ghost, and releasing a ghost wrote a
+      // `task.claim-released` for a lease nobody held -- a fiction in an
+      // append-only log, attributed to whoever ran the close.
+      //
+      // A LIVE claim is released, exactly as before. An expired one is
+      // retired with the event that is actually true of it:
+      // `task.claim-expired`, the same event claim admission journals when it
+      // reclaims over a dead lease (`claims.ts:115-124`), by the same `system`
+      // actor, in this same transaction.
+      //
+      // Journaling *nothing* was the first version of this fix and it left
+      // the state wrong rather than merely incomplete: `task.claim-expired`
+      // is also what clears `executionState` and moves the row out of
+      // `active` (`events.ts:286-292`). Without it a closed task kept reading
+      // `executionState: "claimed"` over a lease nobody held, and kept a
+      // ghost row that no admission path could ever retire -- claim admission
+      // refuses a terminal task (`claims.ts:79-81`) before it reaches its own
+      // expiry branch, so for an already-closed task reclaim is not a
+      // cleanup path at all.
+      const live = getLiveActiveClaim(store.db, options.taskId, now);
+      if (live) {
         append({
           eventType: "task.claim-released",
           actor: options.actor,
           occurredAt: now().toISOString(),
-          payload: { claimId: active.claimId, taskId: options.taskId }
+          payload: { claimId: live.claimId, taskId: options.taskId }
         });
-        releasedClaimId = active.claimId;
+        releasedClaimId = live.claimId;
+      } else {
+        // The unfiltered getter on purpose, used the way admission uses it:
+        // the stale row has to be seen in order to be expired.
+        const stale = getActiveClaimForTask(store.db, options.taskId);
+        if (stale) {
+          append({
+            eventType: "task.claim-expired",
+            actor: "system",
+            occurredAt: now().toISOString(),
+            payload: { claimId: stale.claimId, taskId: options.taskId }
+          });
+          expiredClaimId = stale.claimId;
+        }
       }
     }
 
@@ -109,7 +137,9 @@ export function moveTask(store: StoreHandle, options: MoveTaskOptions): MoveTask
       }
     });
 
-    return { ok: true, from: task.planningState, to: options.to, releasedClaimId };
+    // `expiredClaimId` is added only when there was one, so a close that
+    // releases a live claim keeps the result shape it has always had.
+    return { ok: true, from: task.planningState, to: options.to, releasedClaimId, ...(expiredClaimId ? { expiredClaimId } : {}) };
   });
 }
 

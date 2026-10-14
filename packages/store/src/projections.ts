@@ -394,7 +394,10 @@ export function updateClaimState(db: DatabaseSync, claimId: string, state: Resou
  * (`claims.ts:111-124`). Filtering it by expiry would make the insert collide
  * with the still-`active` row's partial unique index instead.
  *
- * Readers want the opposite -- see `getLiveActiveClaim`. (C5 retires this one
+ * `moveTask`'s closing branch uses it the same way, and for the same reason:
+ * after `getLiveActiveClaim` reports no live claim, the stale row still has to
+ * be *seen* to be expired. Readers that only want to know whether a lease is
+ * held want the opposite -- see `getLiveActiveClaim`. (C5 retires this one
  * when shared review claims make a single-row getter return the wrong lane.)
  */
 export function getActiveClaimForTask(db: DatabaseSync, taskId: string): ResourceClaimRecord | undefined {
@@ -408,17 +411,20 @@ export function getActiveClaimForTask(db: DatabaseSync, taskId: string): Resourc
  * out is not an active claim. `state='active'` only flips when something
  * re-claims the task (admission-time expiry) or a sweeper touches the row, so
  * between expiry and that touch the table holds ghosts -- and a reader that
- * believes them records fiction. The one such reader today is
- * `moveTask`'s `done`/`cancelled`/`archived` branch, which journaled a
- * `task.claim-released` for leases that had expired days earlier.
+ * believes them records fiction. The one such reader today is `moveTask`'s
+ * `done`/`cancelled`/`archived` branch, which journaled a
+ * `task.claim-released` for leases that had expired days earlier; it now asks
+ * this getter whether there is anything to release, and journals
+ * `task.claim-expired` for the stale row instead.
  *
  * The boundary is the same one admission and renewal use (`claims.ts:115`,
  * `:199`): `expiresAt <= now` is expired, so a claim read at the exact instant
  * it expires is already not live.
  *
- * This is a read and writes nothing: it neither journals `task.claim-expired`
- * nor updates the row. Expiring a ghost stays the job of the admission path
- * and of the sweeper (C9).
+ * This function itself writes nothing -- it neither journals
+ * `task.claim-expired` nor updates the row. Retiring a ghost is the caller's
+ * decision, taken on a write path (claim admission, `moveTask`'s close, C9's
+ * sweeper), never a side effect of reading.
  */
 export function getLiveActiveClaim(
   db: DatabaseSync,
