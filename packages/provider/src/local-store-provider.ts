@@ -83,6 +83,30 @@ const DETAIL_PATCH_FIELD: Partial<Record<ProviderOwnedField, keyof TaskDetailRec
 
 const DEFAULT_PAGE_SIZE = 100
 
+/**
+ * Fields `createTask` can carry in the creating transaction.
+ *
+ * Deliberately smaller than the set of writable fields: `iteration`,
+ * `assignees` and `milestone` are patchable later but have no `createTask`
+ * parameter, so accepting them at creation would mean discarding them.
+ */
+const CREATE_SETTABLE_FIELDS = new Set<ProviderOwnedField>([
+  "title",
+  "type",
+  "parent",
+  "planningState",
+  "priority",
+  "tags",
+  "startDate",
+  "dueDate",
+  "summary",
+  "role",
+  "impact"
+])
+
+/** Planning states that mean the item is closed, for `includeClosed: false`. */
+const CLOSED_PLANNING_STATES = new Set(["done", "cancelled", "archived"])
+
 export const LOCAL_STORE_CAPABILITIES: ProviderCapabilities = {
   fields: {
     // Writable through updateTask's whitelist. A store write is a journalled
@@ -236,7 +260,7 @@ export class LocalStoreProvider implements TaskProvider {
       return err("not-found", `this provider serves project ${this.projectId}, not ${input.project}`)
     }
     const all = listTasks(this.store.db)
-      .filter((task) => (input.includeClosed === false ? task.planningState !== "done" && task.planningState !== "archived" : true))
+      .filter((task) => (input.includeClosed === false ? !CLOSED_PLANNING_STATES.has(task.planningState) : true))
       .filter((task) => (input.updatedAfter === undefined ? true : (task.updatedOn ?? "") > input.updatedAfter))
       .sort((a, b) => a.positionKey - b.positionKey || a.taskId.localeCompare(b.taskId))
 
@@ -341,10 +365,21 @@ export class LocalStoreProvider implements TaskProvider {
     if (typeof title !== "string" || title.trim() === "") {
       return err("invalid", "createItem needs a non-empty title")
     }
+    // `createTask` carries a narrower set of fields than `updateTask` accepts,
+    // so a field that is writable in general is not necessarily settable AT
+    // CREATION. Anything outside the set is refused rather than dropped: a
+    // create that returns ok while quietly discarding `iteration` is the
+    // accept-and-drop lie this contract exists to prevent, and the caller can
+    // follow the create with setField.
     const unsupportedField = (Object.keys(fields) as ProviderOwnedField[]).find(
-      (field) => field !== "title" && this.capabilities.fields[field]?.write !== true && field !== "planningState"
+      (field) => !CREATE_SETTABLE_FIELDS.has(field)
     )
-    if (unsupportedField) return unsupported(`fields.${unsupportedField}.write`)
+    if (unsupportedField) {
+      return unsupported(
+        `createItem.initialFields.${unsupportedField}`,
+        `the store cannot set ${unsupportedField} at creation; create the item and then write the field`
+      )
+    }
 
     const created = createTask(this.store, {
       title,
@@ -479,6 +514,22 @@ export class LocalStoreProvider implements TaskProvider {
 
     const taskField = TASK_PATCH_FIELD[semantic]
     const detailField = DETAIL_PATCH_FIELD[semantic]
+    // A field declared writable that neither patch map knows how to route is a
+    // capability record that has drifted from the code. Refusing says so;
+    // building a patch around an undefined key would write to a field named
+    // "undefined" and report success.
+    if (taskField === undefined && detailField === undefined) {
+      return {
+        status: "failed",
+        write,
+        error: {
+          kind: "unsupported",
+          message: `${semantic} is declared writable but has no store mapping; the capability record is wrong`,
+          retryable: false,
+          capability: `fields.${semantic}.write`
+        }
+      }
+    }
     const options =
       taskField !== undefined
         ? { taskId, patch: { [taskField]: write.value } as Partial<TaskRecord>, actor: this.actor, now: this.now }

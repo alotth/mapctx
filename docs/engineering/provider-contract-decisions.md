@@ -47,7 +47,7 @@ around the store's own rules.
 | preconditions | **not supported** | `updateTask` takes no expected revision. Declaring it supported because *acceptance* has a revision would promise a guarantee that covers one surface out of many. |
 | batch | emulated, non-atomic | Sequential, stopping at the first failure. |
 
-### Three things the mapping turned up
+### Four things the mapping turned up
 
 - **The store's edge lists replace, they do not append.** `updateTask` rebuilds a
   task's edges from whichever lists the patch carries and drops the other kind,
@@ -63,6 +63,21 @@ around the store's own rules.
   contract does not require a created item to echo its input verbatim; it
   requires that the requested text survives somewhere in the title, and that
   what `createItem` reports matches what a later read shows.
+- **Creation is narrower than patching, and the first version of this provider
+  lied about it.** `iteration`, `assignees` and `milestone` are patchable through
+  `updateTask` but have no `createTask` parameter, so `createItem` accepted them
+  and returned `ok` with the values discarded — the exact accept-and-drop
+  failure the contract is built to prevent, shipped in the thing built to
+  prevent it. It now refuses them as `unsupported` and tells the caller to
+  create then write. The suite gained the check that catches it for any
+  provider: a writable field passed to `createItem` must be **stored or
+  refused, never swallowed**. That check is why the lifecycle group grew from 5
+  checks to 26.
+
+A related guard came out of the same review: a field declared writable that
+neither patch map knows how to route now fails with `unsupported` saying the
+capability record has drifted, instead of building a patch around an undefined
+key and reporting success.
 
 ## Open, and deliberately not settled here
 

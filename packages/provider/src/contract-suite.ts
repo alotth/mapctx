@@ -805,6 +805,49 @@ async function checkLifecycle(ctx: ContractContext, checks: ContractCheck[]): Pr
     )
   )
 
+  // Creation is narrower than patching on some providers -- the local store can
+  // patch `iteration` but has no way to set it in the creating transaction. The
+  // rule is not "create must accept every writable field"; it is that create
+  // must never accept a field and then discard it. Stored, or refused. Never
+  // swallowed.
+  for (const field of Object.keys(provider.capabilities.fields) as ProviderOwnedField[]) {
+    // `title` is canonicalised by design and covered above; `planningState` is
+    // a state machine whose initial value a provider may normalise.
+    if (field === "title" || field === "planningState") continue
+    if (provider.capabilities.fields[field]?.write !== true) continue
+    const sample = ctx.sampleValues[field]
+    if (sample === undefined) {
+      checks.push(skip(`lifecycle.create-honours.${field}`, group, `no sample value supplied for ${field}`))
+      continue
+    }
+    const attempt = await provider.createItem({
+      project: ctx.project,
+      initialFields: { title: `Contract suite create ${field}`, [field]: sample },
+      clientOperationId: `contract-create-${field}`
+    })
+    if (!attempt.ok) {
+      checks.push(
+        check(
+          `lifecycle.create-honours.${field}`,
+          group,
+          attempt.error.kind === "unsupported",
+          `createItem refused ${field}; a refusal is fine but it must be unsupported, got ${describe(attempt)}`
+        )
+      )
+      auditError(checks, `lifecycle.create-honours.${field}`, group, attempt.error)
+      continue
+    }
+    const stored = attempt.value.fields[field]
+    checks.push(
+      check(
+        `lifecycle.create-honours.${field}`,
+        group,
+        JSON.stringify(stored) === JSON.stringify(sample),
+        `createItem accepted ${field}=${JSON.stringify(sample)} but the created item holds ${JSON.stringify(stored)}; accept it or refuse it, never drop it`
+      )
+    )
+  }
+
   const closed = await provider.closeOrReopen({
     item: created.value.ref,
     state: "closed",
