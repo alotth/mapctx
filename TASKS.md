@@ -2842,7 +2842,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 1/1
+  - subIssueProgress: 1/3
   - priority: null
   - workload: null
   - tags: []
@@ -2930,6 +2930,44 @@
   - externalId: null
   - updated: null
   - detail: ./tasks/T-137.md
+
+### [T-138] Store: backup e restore próprios, snapshot automático antes de migração
+
+  - id: T-138
+  - status: backlog
+  - type: feature
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-138.md
+
+### [T-139] TaskProvider em código + LocalStoreProvider (store como provider local)
+
+  - id: T-139
+  - status: backlog
+  - type: feature
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Hard
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-139.md
 
 ## Notes
 
