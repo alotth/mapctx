@@ -9,7 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createClient, RATE_LIMIT_SELECTION } from '../lib/gh.mjs'
 import { createGithubProvider } from '../lib/provider.mjs'
-import { DERIVED_FIELDS, SPIKE_DIR, parseArgs } from '../lib/config.mjs'
+import { DERIVED_FIELDS, SPIKE_DIR, parseArgs, redactArgs } from '../lib/config.mjs'
 
 const VIEW_NAME = 'Forecast roadmap (T-135)'
 
@@ -17,7 +17,7 @@ async function main() {
   const args = parseArgs()
   const client = createClient({ account: args.account })
   const provider = createGithubProvider(client)
-  const out = { startedAt: new Date().toISOString(), args: { ...args, _: undefined } }
+  const out = { startedAt: new Date().toISOString(), args: redactArgs(args) }
 
   const project = await provider.getProject({ owner: args.owner, number: args.projectNumber })
   if (!project.ok) throw new Error(`getProject failed: ${JSON.stringify(project.error)}`)

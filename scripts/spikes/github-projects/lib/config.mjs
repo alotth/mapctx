@@ -64,6 +64,25 @@ export function parseArgs(argv = process.argv.slice(2)) {
   return out
 }
 
+/**
+ * Strip local filesystem paths out of the args snapshot before it is persisted.
+ *
+ * The measurement files are committed to a public repository, so a resolved
+ * `--cli` or `--usage-file` would publish the operator's home directory and
+ * username. The placeholder keeps the capture self-describing without
+ * disclosing the machine it ran on.
+ */
+export function redactArgs(args) {
+  const out = {}
+  for (const [key, value] of Object.entries(args)) {
+    if (key === '_') continue
+    if (key === 'cli') out[key] = '<MAPCTX_CLI>'
+    else if (typeof value === 'string' && value.startsWith('/')) out[key] = `<ABS_PATH:${path.basename(value)}>`
+    else out[key] = value
+  }
+  return out
+}
+
 export function writeJson(file, value) {
   return { file, body: `${JSON.stringify(value, null, 2)}\n` }
 }

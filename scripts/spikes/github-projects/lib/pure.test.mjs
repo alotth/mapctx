@@ -6,7 +6,33 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { classifyError } from './gh.mjs'
+import { redactArgs } from './config.mjs'
 import { taskIdFromTitle, statusFromProvider, wavesFromProvider } from './derive.mjs'
+
+// ---- redactArgs ---------------------------------------------------------
+//
+// The args snapshot is persisted into measurements/ and committed to a public
+// repository, so no resolved local path may survive it.
+
+test('redactArgs: the resolved cli path becomes a placeholder', () => {
+  const out = redactArgs({ cli: '/home/someone/repos/mapctx/packages/sync-engine/dist/mapctx-cli.js' })
+  assert.equal(out.cli, '<MAPCTX_CLI>')
+})
+
+test('redactArgs: any other absolute path keeps only its basename', () => {
+  const out = redactArgs({ usageFile: '/home/someone/secret-dir/store-usage-events.json' })
+  assert.equal(out.usageFile, '<ABS_PATH:store-usage-events.json>')
+})
+
+test('redactArgs: relative paths, numbers and flags pass through, `_` is dropped', () => {
+  const out = redactArgs({
+    out: 'measurements/02-read.json',
+    projectNumber: 3,
+    dryRun: true,
+    _: ['positional'],
+  })
+  assert.deepEqual(out, { out: 'measurements/02-read.json', projectNumber: 3, dryRun: true })
+})
 
 // ---- classifyError -----------------------------------------------------
 

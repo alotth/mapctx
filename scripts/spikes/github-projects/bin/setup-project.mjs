@@ -11,7 +11,7 @@ import path from 'node:path'
 import { createClient, RATE_LIMIT_SELECTION } from '../lib/gh.mjs'
 import { createGithubProvider } from '../lib/provider.mjs'
 import { readCorpus } from '../lib/store-input.mjs'
-import { DEFAULTS, DERIVED_FIELDS, REPO_ROOT, SPIKE_DIR, parseArgs } from '../lib/config.mjs'
+import { DEFAULTS, DERIVED_FIELDS, REPO_ROOT, SPIKE_DIR, parseArgs, redactArgs } from '../lib/config.mjs'
 import { taskIdFromTitle } from '../lib/derive.mjs'
 
 const SHORT_DESCRIPTION =
@@ -21,7 +21,7 @@ async function main() {
   const args = parseArgs()
   const client = createClient({ account: args.account, dryRun: Boolean(args.dryRun) })
   const provider = createGithubProvider(client)
-  const log = { startedAt: new Date().toISOString(), args: { ...args, _: undefined }, steps: [] }
+  const log = { startedAt: new Date().toISOString(), args: redactArgs(args), steps: [] }
 
   // Owner + repository node ids, and the project if a previous run made it.
   const ids = await client.graphql(

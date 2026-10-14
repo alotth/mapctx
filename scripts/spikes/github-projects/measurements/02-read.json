@@ -5,7 +5,7 @@
     "owner": "alotth",
     "repo": "mapctx",
     "projectTitle": "MapCtx provider spike (test)",
-    "cli": "/Users/alt/repos/mapctx/packages/sync-engine/dist/mapctx-cli.js",
+    "cli": "<MAPCTX_CLI>",
     "tasks": [
       "T-116",
       "T-117",

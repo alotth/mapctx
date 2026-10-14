@@ -11,13 +11,18 @@ import path from 'node:path'
 import { createClient } from '../lib/gh.mjs'
 import { createGithubProvider } from '../lib/provider.mjs'
 import { readCorpus } from '../lib/store-input.mjs'
-import { DERIVED_FIELDS, REPO_ROOT, SPIKE_DIR, parseArgs } from '../lib/config.mjs'
+import { DERIVED_FIELDS, REPO_ROOT, SPIKE_DIR, parseArgs, redactArgs } from '../lib/config.mjs'
 import { costForTask, forecastForTask, readStoreSnapshot, taskIdFromTitle, wavesFromProvider } from '../lib/derive.mjs'
 
-/** Real store usage rows, captured read-only from a COPY of the store (see README). */
+/**
+ * Usage rows for the cost path. The committed fixture is a `{note, rows}`
+ * object holding shape-preserving synthetic rows; a bare array is accepted too,
+ * so a run against a locally dumped file needs no reshaping.
+ */
 function loadUsageEvents(file) {
   if (!file) return []
-  return JSON.parse(fs.readFileSync(file, 'utf8'))
+  const parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+  return Array.isArray(parsed) ? parsed : (parsed.rows ?? [])
 }
 
 /**
@@ -56,7 +61,7 @@ async function main() {
   const client = createClient({ account: args.account, dryRun: Boolean(args.dryRun) })
   const provider = createGithubProvider(client)
   const today = new Date().toISOString().slice(0, 10)
-  const out = { startedAt: new Date().toISOString(), args: { ...args, _: undefined }, today }
+  const out = { startedAt: new Date().toISOString(), args: redactArgs(args), today }
 
   const project = await provider.getProject({ owner: args.owner, number: args.projectNumber })
   if (!project.ok) throw new Error(`getProject failed: ${JSON.stringify(project.error)}`)
