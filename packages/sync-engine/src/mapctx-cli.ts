@@ -2079,7 +2079,6 @@ export function taskCreateCommand(options: MapctxOptions): void {
   warnPrivacy('task create', {
     title: options.title,
     summary: options.summary,
-    description: options.description,
     tags: options.tags,
     domains: options.domains
   }, cwd);
@@ -2094,6 +2093,10 @@ export function taskCreateCommand(options: MapctxOptions): void {
   // Resolved here, before the writable open, so a bad source file refuses
   // without having created anything.
   const description = readDescriptionInput(options, cwd, { verb: 'Create' });
+  // T-136 review F3: the description is linted as resolved, so prose from
+  // --description-file (headed for a public Git file) is covered too, not
+  // only the raw --description flag value.
+  if (description !== undefined) warnPrivacy('task create', { description }, cwd);
   let acceptance: { condition: 'criteria' | 'empty'; texts: string[] } | undefined;
   let acceptanceNote: string | undefined;
   if (options.acceptanceFile) {

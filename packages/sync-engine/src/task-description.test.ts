@@ -160,3 +160,21 @@ test("an empty or whitespace-only description is refused on update and create, a
   assert.equal(f.detail("T-101"), before);
   assert.equal(f.eventCount(), events, "nothing reached the store");
 });
+
+// Review F3: prose goes to a public Git file, so the T-126 [privacy] lint must
+// see the description on every entry point -- not only the --set fields.
+test("[privacy] patterns warn on the description of update and create, from --description and --description-file", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  fs.appendFileSync(path.join(f.repoDir, "mapctx.toml"), "\n[privacy]\npatterns = ['SECRET-[0-9]+']\n");
+  const warnsOnDescription = (stderr: string) =>
+    assert.match(stderr, /privacy: .*field "description" matches \[privacy\] patterns\[0\]/, stderr);
+
+  warnsOnDescription(f.success(["task", "update", "T-101", "--description", "token SECRET-1 pasted", "--actor", "test"]).stderr);
+  warnsOnDescription(f.success(["task", "update", "T-101", "--description-file", f.write("leak.md", "## Scope\n\nSECRET-2\n"), "--actor", "test"]).stderr);
+  warnsOnDescription(f.success(["task", "create", "--title", "Leaky", "--workload", "Easy", "--effort", "1h", "--description", "SECRET-3", "--actor", "test"]).stderr);
+  warnsOnDescription(f.success(["task", "create", "--title", "Leaky file", "--workload", "Easy", "--effort", "1h", "--description-file", f.write("leak2.md", "SECRET-4\n"), "--actor", "test"]).stderr);
+
+  // Clean prose stays quiet, so the assertion above is about the value.
+  assert.doesNotMatch(f.success(["task", "update", "T-101", "--description", "nothing here", "--actor", "test"]).stderr, /privacy:/);
+});
