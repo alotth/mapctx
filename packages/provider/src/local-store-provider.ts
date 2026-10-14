@@ -33,6 +33,7 @@ import {
 } from "@mapctx/store"
 
 import { err, ok, page, preconditionUnsupported, skippedOutcome, summariseBatch, unsupported } from "./results"
+import { PROVIDER_OWNED_FIELDS } from "./types"
 import type {
   AddCommentInput,
   ProviderError,
@@ -48,6 +49,9 @@ import type {
   ProviderComment,
   ProviderCriterion,
   ProviderDependency,
+  ProviderFieldDataType,
+  ProviderFieldDescriptor,
+  ProviderFieldOption,
   ProviderItem,
   ProviderItemRef,
   ProviderOwnedField,
@@ -107,6 +111,50 @@ const CREATE_SETTABLE_FIELDS = new Set<ProviderOwnedField>([
 /** Planning states that mean the item is closed, for `includeClosed: false`. */
 const CLOSED_PLANNING_STATES = new Set(["done", "cancelled", "archived"])
 
+/** The store holds tasks and nothing else. */
+export const LOCAL_SPECIES = "task"
+
+/**
+ * The legal planning states, as `describeFields` options.
+ *
+ * Mirrored from `planningStateSchema` in @mapctx/protocol rather than imported:
+ * this package deliberately depends only on @mapctx/store, and a drifting copy
+ * is caught by `local-store-provider.test.ts`, which asserts the option set
+ * against a state the store actually accepts.
+ *
+ * `id` equals `name` because the store addresses a state by its name. GitHub
+ * does not, and keeping the two concepts separate here is what lets one caller
+ * resolve an option id against either provider.
+ */
+export const LOCAL_PLANNING_STATES: readonly string[] = [
+  "backlog",
+  "ready",
+  "blocked",
+  "in-progress",
+  "review",
+  "paused",
+  "done",
+  "cancelled",
+  "archived"
+]
+
+const LOCAL_PLANNING_STATE_OPTIONS: readonly ProviderFieldOption[] = LOCAL_PLANNING_STATES.map((state) => ({
+  id: state,
+  name: state
+}))
+
+/** Value shapes the store accepts, so a caller can format before writing. */
+const LOCAL_FIELD_DATA_TYPES: Partial<Record<ProviderOwnedField, ProviderFieldDataType>> = {
+  planningState: "single-select",
+  // Free text, not an option set: the store accepts any tag and any assignee
+  // name, so there is no option id to resolve and none is promised.
+  tags: "text-list",
+  assignees: "text-list",
+  startDate: "date",
+  dueDate: "date",
+  completedOn: "date"
+}
+
 export const LOCAL_STORE_CAPABILITIES: ProviderCapabilities = {
   fields: {
     // Writable through updateTask's whitelist. A store write is a journalled
@@ -154,7 +202,14 @@ export const LOCAL_STORE_CAPABILITIES: ProviderCapabilities = {
   // a different concept and is used internally by setCriterionState; exposing
   // it as a general write precondition would promise more than it covers.
   preconditions: { revision: false },
-  batch: { singleOperation: false, atomic: false }
+  batch: { singleOperation: false, atomic: false },
+  // The store has one kind of thing in it, so there is no narrower species and
+  // no `capabilitiesForItem`: this record is the whole truth for every item.
+  primarySpecies: LOCAL_SPECIES,
+  // No quota to report. A local SQLite write is bounded by the disk, and
+  // inventing a balance here would let a caller's batch-sizing logic believe it
+  // had consulted something.
+  rateLimit: { reportable: false }
 }
 
 export type LocalStoreProviderOptions = {
@@ -188,6 +243,7 @@ function itemFor(task: TaskRecord, detail: TaskDetailRecord | undefined): Provid
   return {
     ref: refFor(task.taskId),
     revision: revisionFor(task),
+    species: LOCAL_SPECIES,
     fields: {
       title: task.title,
       planningState: task.planningState,
@@ -282,6 +338,54 @@ export class LocalStoreProvider implements TaskProvider {
     const task = getTask(this.store.db, input.ref.workItem.id)
     if (!task) return err("not-found", `unknown task ${input.ref.workItem.id}`)
     return ok(itemFor(task, getTaskDetail(this.store.db, task.taskId)))
+  }
+
+  /**
+   * Here the key IS the id, so resolution is a lookup. The method exists for
+   * the providers where it is not — a caller must not have to branch on which
+   * provider it holds.
+   */
+  async findByKey(input: { project: string; keys: readonly string[] }): Promise<ProviderResult<Page<ProviderItem>>> {
+    if (input.project !== this.projectId) {
+      return err("not-found", `this provider serves project ${this.projectId}, not ${input.project}`)
+    }
+    const found: ProviderItem[] = []
+    for (const key of input.keys) {
+      const task = getTask(this.store.db, key)
+      // A missing key is absent, not an error: during a migration most keys are.
+      if (task) found.push(itemFor(task, getTaskDetail(this.store.db, task.taskId)))
+    }
+    return ok(page(found))
+  }
+
+  /**
+   * The store's fields, described.
+   *
+   * `planningState` is the only enumerated one, and its options are the legal
+   * planning states — the same shape GitHub's `Status` single select has, which
+   * is what lets a caller resolve an option id without knowing which provider
+   * it is talking to. The option id and the name are equal here because the
+   * store addresses a state by its name; that they are separate concepts is
+   * exactly what GitHub forces.
+   */
+  async describeFields(input: { project: string }): Promise<ProviderResult<ProviderFieldDescriptor[]>> {
+    if (input.project !== this.projectId) {
+      return err("not-found", `this provider serves project ${this.projectId}, not ${input.project}`)
+    }
+    const descriptors: ProviderFieldDescriptor[] = []
+    for (const field of PROVIDER_OWNED_FIELDS) {
+      const declared = LOCAL_STORE_CAPABILITIES.fields[field]
+      if (declared === undefined) continue
+      descriptors.push({
+        semantic: field,
+        name: field,
+        providerFieldId: field,
+        surface: "work-item",
+        dataType: LOCAL_FIELD_DATA_TYPES[field] ?? "text",
+        ...(field === "planningState" ? { options: LOCAL_PLANNING_STATE_OPTIONS } : {})
+      })
+    }
+    return ok(descriptors)
   }
 
   async getProject(input: { project: string }): Promise<ProviderResult<ProviderProject>> {
