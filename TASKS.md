@@ -1227,7 +1227,7 @@
   - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 5/9
+  - subIssueProgress: 8/9
   - priority: high
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
@@ -1284,7 +1284,7 @@
   - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 4/7
+  - subIssueProgress: 5/7
   - priority: high
   - workload: Hard
   - tags: [vnext, forecast, cost, gantt]
@@ -1360,7 +1360,7 @@
   - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 2/5
+  - subIssueProgress: 5/5
   - priority: medium
   - workload: Hard
   - tags: [vnext, migration, cli, skills, github]
@@ -1471,7 +1471,7 @@
 ### [T-067] Update README and docs for store authority and the CLI write path
 
   - id: T-067
-  - status: review
+  - status: done
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1482,15 +1482,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-067.md
 
 ### [T-068] Update mapctx-tasks and mapctx-traycer skills for the CLI write path
 
   - id: T-068
-  - status: review
+  - status: done
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1501,15 +1501,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-068.md
 
 ### [T-069] Align docs site and thread-substrate.md with post-cutover framing
 
   - id: T-069
-  - status: review
+  - status: done
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1520,9 +1520,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-069.md
 
 ### [T-070] Budget and value ledger: planned budget consumed by actuals, with learning forecast and value estimates
@@ -1547,7 +1547,7 @@
 ### [T-071] Workload re-attribution: record planned vs discovered difficulty, pool by discovered, measure estimation error
 
   - id: T-071
-  - status: review
+  - status: done
   - type: feature
   - parent: E-011
   - subIssueProgress: null
@@ -1558,9 +1558,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-071.md
 
 ### [T-072] Fix PR1 P1 findings: journal atomicity, recovery locks, create races, export cycles, cutover prose, currency
@@ -1585,7 +1585,7 @@
 ### [T-073] Fix PR1 P2 findings: money safety, drift bypass, blocked receipts, read-only opens, repair locking, legacy sync authority
 
   - id: T-073
-  - status: review
+  - status: done
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1596,15 +1596,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-073.md
 
 ### [T-074] Publish @mapctx packages to npm with the vNext (sync-engine bump, bundled deps, mapcs deprecation ships)
 
   - id: T-074
-  - status: review
+  - status: done
   - type: chore
   - parent: E-010
   - subIssueProgress: null
@@ -1615,15 +1615,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-074.md
 
 ### [T-075] Post-T-073 review hardening: maintenance-lock staleness, guard scope, crash-dirty read-only opens
 
   - id: T-075
-  - status: review
+  - status: done
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1634,18 +1634,18 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-075.md
 
 ### [E-013] GitHub push store-backed
 
   - id: E-013
-  - status: backlog
+  - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 0/1
+  - subIssueProgress: 1/1
   - priority: null
   - workload: null
   - tags: []
@@ -1653,15 +1653,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-09-08
+  - updated: 2026-10-14
   - detail: ./tasks/E-013.md
 
 ### [T-076] mapctx push reads store projections (fail-closed)
 
   - id: T-076
-  - status: review
+  - status: done
   - type: feature
   - parent: E-013
   - subIssueProgress: null
@@ -1672,9 +1672,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-076.md
 
 ### [T-077] executorModel wiring in CLI/adapter
@@ -1699,7 +1699,7 @@
 ### [T-078] Long-range roadmap timeline with day/week/month scales
 
   - id: T-078
-  - status: review
+  - status: done
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -1710,9 +1710,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-078.md
 
 ### [T-079] Calibrated forecast range and honest baselines in Roadmap
@@ -1794,7 +1794,7 @@
 ### [T-083] CLI: task search para checagem anti-duplicata
 
   - id: T-083
-  - status: review
+  - status: done
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -1805,9 +1805,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-083.md
 
 ### [T-084] Add financial cost and budget view to Workspace V2
@@ -2022,7 +2022,7 @@
 ### [T-095] Bare mapctx launches workspace UI and heals stale active target
 
   - id: T-095
-  - status: review
+  - status: done
   - type: task
   - parent: null
   - subIssueProgress: null
@@ -2033,9 +2033,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-095.md
 
 ### Ingest harness usage by dispatch
