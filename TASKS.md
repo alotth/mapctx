@@ -2808,13 +2808,13 @@
   - priority: null
   - workload: Easy
   - tags: []
-  - domains: [CODE]
+  - domains: [PLANNER]
   - dependsOn: []
   - start: null
   - due: null
   - completed: 2026-10-10
   - externalId: null
-  - updated: 2026-10-10
+  - updated: 2026-10-14
   - detail: ./tasks/T-132.md
 
 ### [T-133] Planner: deduplicar a detecção de violações de claim e guardar o sentinela
@@ -2827,7 +2827,7 @@
   - priority: null
   - workload: Normal
   - tags: []
-  - domains: [CODE]
+  - domains: [PLANNER, STORE]
   - dependsOn: [T-131]
   - start: null
   - due: null
@@ -2865,13 +2865,13 @@
   - priority: null
   - workload: Easy
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE, CLI]
   - dependsOn: []
   - start: null
   - due: null
   - completed: 2026-10-10
   - externalId: null
-  - updated: 2026-10-10
+  - updated: 2026-10-14
   - detail: ./tasks/T-134.md
 
 ### [T-135] Spike: ler GitHub Projects e escrever campos derivados num Project de teste
@@ -2884,7 +2884,7 @@
   - priority: null
   - workload: Normal
   - tags: []
-  - domains: [CODE, DOCS]
+  - domains: [GITHUB, PROJECT, DOCS]
   - dependsOn: []
   - start: null
   - due: null
@@ -2941,7 +2941,7 @@
   - priority: null
   - workload: Normal
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE, CLI]
   - dependsOn: []
   - start: null
   - due: null
@@ -2960,7 +2960,7 @@
   - priority: null
   - workload: Hard
   - tags: []
-  - domains: [CODE]
+  - domains: [ADAPTER, STORE]
   - dependsOn: []
   - start: null
   - due: null
@@ -2979,7 +2979,7 @@
   - priority: null
   - workload: Easy
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE]
   - dependsOn: []
   - start: null
   - due: null
@@ -2998,7 +2998,7 @@
   - priority: null
   - workload: Normal
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE, CLI]
   - dependsOn: [T-140]
   - start: null
   - due: null
@@ -3017,7 +3017,7 @@
   - priority: null
   - workload: Normal
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE, CLI]
   - dependsOn: [T-141]
   - start: null
   - due: null
@@ -3036,7 +3036,7 @@
   - priority: null
   - workload: Normal
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE, CLI, TELEMETRY, FORECAST]
   - dependsOn: [T-142]
   - start: null
   - due: null
@@ -3055,7 +3055,7 @@
   - priority: null
   - workload: Hard
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE, PROTOCOL, CLI]
   - dependsOn: [T-143]
   - start: null
   - due: null
@@ -3074,7 +3074,7 @@
   - priority: null
   - workload: Normal
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE, FORECAST]
   - dependsOn: [T-144]
   - start: null
   - due: null
@@ -3093,7 +3093,7 @@
   - priority: null
   - workload: Normal
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE, CLI]
   - dependsOn: []
   - start: null
   - due: null
@@ -3131,7 +3131,7 @@
   - priority: null
   - workload: Easy
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE]
   - dependsOn: []
   - start: null
   - due: null
@@ -3169,7 +3169,7 @@
   - priority: null
   - workload: Hard
   - tags: []
-  - domains: [CODE]
+  - domains: [GITHUB, PROJECT, ADAPTER]
   - dependsOn: [T-139]
   - start: null
   - due: null
@@ -3188,7 +3188,7 @@
   - priority: null
   - workload: Normal
   - tags: []
-  - domains: [CODE]
+  - domains: [GITHUB, STORE]
   - dependsOn: [T-139]
   - start: null
   - due: null
@@ -3207,7 +3207,7 @@
   - priority: null
   - workload: Hard
   - tags: []
-  - domains: [CODE]
+  - domains: [GITHUB, PROJECT, CLI]
   - dependsOn: [T-138, T-150, T-151]
   - start: null
   - due: null
@@ -3245,7 +3245,7 @@
   - priority: null
   - workload: Normal
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE, CLI]
   - dependsOn: [T-138]
   - start: null
   - due: null
@@ -3264,7 +3264,7 @@
   - priority: null
   - workload: Hard
   - tags: []
-  - domains: [CODE]
+  - domains: [GITHUB, STORE]
   - dependsOn: [T-153]
   - start: null
   - due: null
@@ -3302,7 +3302,7 @@
   - priority: null
   - workload: Easy
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE]
   - dependsOn: [T-140]
   - start: null
   - due: null
@@ -3314,7 +3314,7 @@
 ### [T-158] Aplicar a triagem do board antes do espelho (decisões do operador de 2026-10-14)
 
   - id: T-158
-  - status: doing
+  - status: review
   - type: chore
   - parent: E-018
   - subIssueProgress: null
@@ -3340,7 +3340,7 @@
   - priority: null
   - workload: Easy
   - tags: []
-  - domains: [CODE]
+  - domains: [PLANNER]
   - dependsOn: []
   - start: null
   - due: null
