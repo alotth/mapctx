@@ -150,9 +150,17 @@ move, so a close is still all-or-nothing.
 
 For a consumer, a close over a dead lease stops reporting a release and starts
 reporting an expiry: pair a close with **either** event, not with
-`task.claim-released` alone. `expiredClaimId` is additive and absent unless an
-expired claim was retired, so the result shape of every close that was already
-honest is unchanged.
+`task.claim-released` alone.
+
+Both fields are reported by every closing path — `task move --status
+done|cancelled|archived` and `task finish`, the latter including
+`--no-snapshot` and the checkpoint-failure result, whose job is to make a split
+state explicit and so has to name the claim effect too. Each field is present
+only when it happened, so `"releasedClaimId" in result` is now an honest test;
+it used to be an always-present `undefined`, answering `true` for a close that
+released nothing. `--json` output is unchanged by that detail, since
+`JSON.stringify` already dropped the undefined — the difference is visible to
+an in-process caller.
 
 Why the event rather than silence: `task.claim-expired` is also what clears
 `executionState` and moves the row out of `active`, so journaling nothing would

@@ -425,6 +425,15 @@ export function getActiveClaimForTask(db: DatabaseSync, taskId: string): Resourc
  * `task.claim-expired` nor updates the row. Retiring a ghost is the caller's
  * decision, taken on a write path (claim admission, `moveTask`'s close, C9's
  * sweeper), never a side effect of reading.
+ *
+ * `now` defaults to wall clock for the convenience of a one-off read, but a
+ * caller that has a clock of its own -- an injected `now`, or any instant it
+ * already took for the rest of its transaction -- **must pass it**. Otherwise
+ * this one comparison silently runs on a different clock from everything
+ * around it, which is how a test clock produces "live" while the surrounding
+ * code has already moved past expiry. `moveTask` passes the single instant it
+ * reads for the whole close; the display readers (C8) and the sweeper (C9)
+ * have to do the same.
  */
 export function getLiveActiveClaim(
   db: DatabaseSync,

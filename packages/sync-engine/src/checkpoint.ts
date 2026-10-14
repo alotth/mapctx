@@ -210,18 +210,30 @@ export function sha256Hex(content: string): string {
  */
 export type FinishSnapshotMode = "full" | "none";
 
+/**
+ * What the close did to the task's claim, carried through from `moveTask`
+ * (T-140): `releasedClaimId` when a live lease was released,
+ * `expiredClaimId` when a dead one was retired with `task.claim-expired`.
+ * Each field is present only when it happened, and `finish` reports them on
+ * every result where the move ran -- including a checkpoint failure, whose
+ * whole point is to make the split state explicit, claim effect included.
+ * `finish` is the closing path the skills prescribe, so a consumer reading
+ * the CHANGELOG must find the field here and not only on `task move`.
+ */
+type FinishMoveSummary = { performed: boolean; from: string; to: string; releasedClaimId?: string; expiredClaimId?: string };
+
 export type FinishTaskResult =
   | {
       ok: true;
       taskId: string;
-      move: { performed: boolean; from: string; to: string; releasedClaimId?: string };
+      move: FinishMoveSummary;
       checkpoint: PublishedCheckpoint;
       snapshot: "published";
     }
   | {
       ok: true;
       taskId: string;
-      move: { performed: boolean; from: string; to: string; releasedClaimId?: string };
+      move: FinishMoveSummary;
       /**
        * Deliberately absent, not merely missing: nothing was published, so
        * there is no checkpoint to report. A caller that needs a checkpoint
@@ -231,7 +243,7 @@ export type FinishTaskResult =
       snapshot: "skipped";
     }
   | { ok: false; stage: "move"; taskId: string; move: Extract<ReturnType<typeof moveTask>, { ok: false }> }
-  | { ok: false; stage: "checkpoint"; taskId: string; move: { performed: boolean; from: string; to: string }; checkpoint: FailedCheckpoint };
+  | { ok: false; stage: "checkpoint"; taskId: string; move: FinishMoveSummary; checkpoint: FailedCheckpoint };
 
 /**
  * T-120 final-boundary flow for a single task or epic: the SAME canonical
@@ -267,6 +279,7 @@ export function finishTask(
   let movePerformed = false;
   let fromState = existing.planning_state;
   let releasedClaimId: string | undefined;
+  let expiredClaimId: string | undefined;
   // A revision can be edited after a task became done. Check again before a
   // checkpoint-only retry, so that path cannot bypass the current gate.
   if (existing.planning_state === "done") {
@@ -286,6 +299,7 @@ export function finishTask(
     movePerformed = true;
     fromState = move.from;
     releasedClaimId = move.releasedClaimId;
+    expiredClaimId = move.expiredClaimId;
   }
 
   // T-128: with the snapshot suppressed there is nothing left to publish, so
@@ -297,7 +311,7 @@ export function finishTask(
     return {
       ok: true,
       taskId: options.taskId,
-      move: { performed: movePerformed, from: fromState, to: "done", ...(releasedClaimId ? { releasedClaimId } : {}) },
+      move: { performed: movePerformed, from: fromState, to: "done", ...(releasedClaimId ? { releasedClaimId } : {}), ...(expiredClaimId ? { expiredClaimId } : {}) },
       snapshot: "skipped"
     };
   }
@@ -318,14 +332,14 @@ export function finishTask(
       ok: false,
       stage: "checkpoint",
       taskId: options.taskId,
-      move: { performed: movePerformed, from: fromState, to: "done" },
+      move: { performed: movePerformed, from: fromState, to: "done", ...(releasedClaimId ? { releasedClaimId } : {}), ...(expiredClaimId ? { expiredClaimId } : {}) },
       checkpoint
     };
   }
   return {
     ok: true,
     taskId: options.taskId,
-    move: { performed: movePerformed, from: fromState, to: "done", ...(releasedClaimId ? { releasedClaimId } : {}) },
+    move: { performed: movePerformed, from: fromState, to: "done", ...(releasedClaimId ? { releasedClaimId } : {}), ...(expiredClaimId ? { expiredClaimId } : {}) },
     checkpoint,
     snapshot: "published"
   };

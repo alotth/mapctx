@@ -96,12 +96,21 @@ export function moveTask(store: StoreHandle, options: MoveTaskOptions): MoveTask
       // refuses a terminal task (`claims.ts:79-81`) before it reaches its own
       // expiry branch, so for an already-closed task reclaim is not a
       // cleanup path at all.
-      const live = getLiveActiveClaim(store.db, options.taskId, now);
+      //
+      // One clock reading for the whole decision, like admission
+      // (`claims.ts:113`): the instant that judges the lease is the instant
+      // the event is stamped with. Calling `now()` again for `occurredAt`
+      // let a release be dated after the very `expiresAt` it had just read as
+      // live -- a sub-millisecond window in practice, but this is the code
+      // whose whole purpose is to not journal fiction.
+      const closedAt = now();
+      const atClosedAt = () => closedAt;
+      const live = getLiveActiveClaim(store.db, options.taskId, atClosedAt);
       if (live) {
         append({
           eventType: "task.claim-released",
           actor: options.actor,
-          occurredAt: now().toISOString(),
+          occurredAt: closedAt.toISOString(),
           payload: { claimId: live.claimId, taskId: options.taskId }
         });
         releasedClaimId = live.claimId;
@@ -113,7 +122,7 @@ export function moveTask(store: StoreHandle, options: MoveTaskOptions): MoveTask
           append({
             eventType: "task.claim-expired",
             actor: "system",
-            occurredAt: now().toISOString(),
+            occurredAt: closedAt.toISOString(),
             payload: { claimId: stale.claimId, taskId: options.taskId }
           });
           expiredClaimId = stale.claimId;
@@ -137,9 +146,18 @@ export function moveTask(store: StoreHandle, options: MoveTaskOptions): MoveTask
       }
     });
 
-    // `expiredClaimId` is added only when there was one, so a close that
-    // releases a live claim keeps the result shape it has always had.
-    return { ok: true, from: task.planningState, to: options.to, releasedClaimId, ...(expiredClaimId ? { expiredClaimId } : {}) };
+    // Both claim fields are present only when they happened, so `"…" in
+    // result` is an honest test for either one. `releasedClaimId` used to be
+    // an always-present `undefined`, which answered `true` for a close that
+    // released nothing; `JSON.stringify` hid that from `--json` consumers but
+    // not from an in-process one.
+    return {
+      ok: true,
+      from: task.planningState,
+      to: options.to,
+      ...(releasedClaimId ? { releasedClaimId } : {}),
+      ...(expiredClaimId ? { expiredClaimId } : {})
+    };
   });
 }
 
