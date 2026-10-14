@@ -296,6 +296,17 @@ for (const [name, fixturePath] of Object.entries(PATH_FAMILIES)) {
     assert.ok(result.ok)
     assert.ok(!result.task.body!.includes(fixturePath), `${name}: path must not survive`)
     assert.ok(result.task.body!.includes("<local-path>"), `${name}: must be replaced with the local-path token`)
+    if (name === "scratchpad" || name === "privatevar") {
+      // Both of these start with `/private/...`, which is ALSO the literal
+      // this family's own rule anchors on. A rule that dropped just the
+      // `/private/tmp` (or `/private/var`) alternative but kept a shorter
+      // overlapping one (`/tmp`) would still remove the match -- but would
+      // leave the unconsumed `/private` segment sitting in front of the
+      // token as residue. Checking for the absence of the fixture path alone
+      // cannot see that: this is what makes the literal load-bearing rather
+      // than redundant.
+      assert.ok(!result.task.body!.includes("/private"), `${name}: no "/private" prefix residue may survive in front of the token`)
+    }
   })
 }
 
