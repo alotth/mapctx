@@ -2842,7 +2842,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 0/1
+  - subIssueProgress: 1/1
   - priority: null
   - workload: null
   - tags: []
@@ -2877,7 +2877,7 @@
 ### [T-135] Spike: ler GitHub Projects e escrever campos derivados num Project de teste
 
   - id: T-135
-  - status: review
+  - status: done
   - type: task
   - parent: E-018
   - subIssueProgress: null
@@ -2888,10 +2888,48 @@
   - dependsOn: []
   - start: null
   - due: null
+  - completed: 2026-10-14
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-135.md
+
+### Editar descrição de task pela CLI em qualquer estado (task update --description)
+
+  - id: T-136
+  - status: review
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: P2
+  - workload: Normal
+  - tags: []
+  - domains: [CLI]
+  - dependsOn: []
+  - start: null
+  - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-10
-  - detail: ./tasks/T-135.md
+  - updated: 2026-10-13
+  - detail: ./tasks/T-136.md
+
+### [T-137] Editar título, descrição e metadados de task pela workspace UI
+
+  - id: T-137
+  - status: backlog
+  - type: feature
+  - parent: null
+  - subIssueProgress: null
+  - priority: P2
+  - workload: Normal
+  - tags: []
+  - domains: [CLI]
+  - dependsOn: [T-136]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/T-137.md
 
 ## Notes
 
