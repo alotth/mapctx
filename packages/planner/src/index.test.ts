@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { pathsOverlap } from "@mapctx/protocol";
 import { planExecution } from "./index";
 
 const claim = (claimId: string, taskId: string, paths: string[], mode: "read" | "write" = "write") => ({
@@ -467,4 +468,29 @@ test("executor capacity limits each wave without changing collision explanation"
   });
   assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-1"], ["T-2"]]);
   assert.deepEqual(report.serializedPairs, []);
+});
+
+// ---- T-133 point 6: this file's own (unexported) normalizePath compares
+// DECLARED claims before any work runs and case-folds for macOS/Windows
+// default filesystems, erring toward serializing. @mapctx/protocol's
+// normalizePath (used by claim-violation detection, via pathsOverlap) compares
+// OBSERVED paths a receipt actually reported, where case is meaningful. The
+// two are deliberately NOT merged (see the normalizePath doc comment above
+// pathOverlap in index.ts) -- this test exists so nobody "simplifies" that
+// apparent duplication later without re-reading why it is not one. Since this
+// file's normalizePath is not exported, it is exercised by the behaviour it
+// causes in planExecution, not by calling it directly. ----
+test("T-133 point 6: the scheduler's normalizePath case-folds declared claims; protocol's pathsOverlap does not fold observed paths", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", status: "backlog", type: "task", domains: ["CODE"], filesAffected: ["SRC/a.ts"] },
+      { id: "T-B", status: "backlog", type: "task", domains: ["CODE"], filesAffected: ["src/a.ts"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "the scheduler must fold case and serialize these as the same declared file");
+  assert.equal(report.serializedPairs.length, 1);
+
+  assert.equal(pathsOverlap("SRC/a.ts", "src/a.ts"), false,
+    "protocol's observed-path comparison is case-sensitive: these are different files on a case-sensitive filesystem");
 });

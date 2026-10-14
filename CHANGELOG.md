@@ -107,6 +107,36 @@ Migration: read stderr's first line (or split stderr on `"\nError:"`) instead
 of stdout. Check the exit code first, as before. No consumer in this repository
 depended on the old channel.
 
+### Breaking (library contract): `@mapctx/planner` no longer derives violations from redacted receipts
+
+`@mapctx/planner` and `@mapctx/store` each carried their own copy of the same
+claim-path comparison and violation-id derivation, and only the store's copy
+had been hardened against redacted evidence (T-133, from the T-131 review).
+There is now one definition, in `@mapctx/protocol`, and the planner behaves
+like the store:
+
+* `pathsOverlap` returns `false` when either side is the redaction sentinel
+  (`mapctx:redacted`) — including when **both** are. It used to report two
+  sentinels as the same path, which made two receipts with entirely disjoint
+  files "collide".
+* `detectClaimViolations` no longer emits a `collision` whose path is the
+  sentinel, no longer emits `overbroad` for a serialized pair when either
+  receipt holds a redacted path (non-intersection cannot be established, and
+  claiming it asserts two tasks did *not* conflict when they may have), and
+  drops caller-supplied sentinel paths from `serializedPairs`.
+* Detecting over a redacted receipt now raises a process warning: an empty
+  result there means "cannot tell", not "no collision".
+
+Names, arities and return types are unchanged — `detectClaimViolations` and
+its `deriveClaimViolations` / `detectViolations` / `detectWaveClaimViolations`
+aliases, and `pathsOverlap`. Violation **ids are unchanged**: the shared
+derivation uses the same field order both copies already used.
+
+Migration: none for callers that never pass redacted receipts. A caller that
+relied on the old output over redacted receipts was reading fabricated audit
+facts; to get the blind spot as data rather than a warning, use
+`@mapctx/store`'s `detectClaimViolationsWithCoverage`.
+
 ### Public contract: `task acceptance approve --json` output shape
 
 `approve` now routes every selection through the batch path, so its result
