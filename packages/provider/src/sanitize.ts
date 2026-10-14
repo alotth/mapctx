@@ -38,6 +38,13 @@
  * store and with a file named by MAPCTX_PRIVACY_PATTERNS_FILE, and this
  * module takes the resolved list.
  *
+ * An INVALID pattern refuses too (review ALTO-4). The gate counts patterns
+ * that COMPILED, never patterns that were supplied: one unbalanced
+ * parenthesis used to leave the report saying "configured" with zero live
+ * regexes, which is the gate disarming itself while claiming to be armed.
+ * The refusal names the index and not the pattern, because a pattern from
+ * the unversioned file is itself a secret.
+ *
  * An EMPTY list refuses (review ALTO-3). With no pattern configured the
  * category is inert, and a run then reports `refused=0`, which reads as
  * "clean" but means "I did not look" -- the most dangerous possible output
@@ -203,7 +210,7 @@ export type PublishableTask = {
   fields?: Readonly<Record<string, string>>
 }
 
-export type SanitizeRefusalReason = "residual-match" | "scan-incomplete" | "patterns-unconfigured"
+export type SanitizeRefusalReason = "residual-match" | "scan-incomplete" | "patterns-unconfigured" | "patterns-invalid"
 
 export type SanitizeResult =
   | { ok: true; task: PublishableTask; report: SanitizeReport }
@@ -478,7 +485,35 @@ export function sanitizeTaskForPublication(task: PublishableTask, options: Sanit
   const fields = collectFields(task)
   const substitutions: SanitizeSubstitution[] = []
   const totals = emptyTotals()
-  const privacyPatternsConfigured = configuredPatterns.length > 0
+  // Review ALTO-4: count what COMPILED, not what was supplied. A single
+  // unbalanced parenthesis used to leave `configured = true` with zero live
+  // regexes -- the gate ALTO-3 installed, disarmed by a typo, reporting
+  // itself as armed.
+  const privacyPatternsConfigured = compiled.regexes.length > 0
+
+  // An invalid pattern is NOT "one pattern less". The operator wrote it to
+  // catch something, so the coverage they believe they have does not exist,
+  // and `patternsReviewedAsAbsent` cannot excuse it either -- that flag means
+  // "there is nothing to configure", and a broken pattern is the opposite.
+  // The index is named; the pattern SOURCE deliberately is not, because it
+  // may come from the unversioned privacy.toml where the pattern is itself
+  // the secret.
+  if (compiled.invalid.length > 0) {
+    const named = compiled.invalid.map(entry => `patterns[${entry.index}] (${entry.message})`).join(", ")
+    return {
+      ok: false,
+      reason: "patterns-invalid",
+      message: `${task.taskId} will not be published: ${compiled.invalid.length} of ${configuredPatterns.length} [privacy] pattern(s) did not compile -- ${named}. A pattern that does not compile covers nothing, so the gate would report "configured" while checking less than the operator thinks. Fix the pattern; its text is not reproduced here because it may itself be the sensitive string.`,
+      residues: [],
+      report: {
+        taskId: task.taskId,
+        substitutions: [],
+        totals,
+        scannedFields: fields.map(field => field.field),
+        privacyPatternsConfigured
+      }
+    }
+  }
 
   // Review ALTO-3. Refused BEFORE any work: there is nothing to report about
   // a category that was never checked, and a report that looks complete is
@@ -691,7 +726,8 @@ export function sanitizeDryRun(tasks: readonly PublishableTask[], options: Sanit
     publishable,
     refused,
     totals,
-    privacyPatternsConfigured: (options.privacyPatterns ?? []).length > 0,
+    // Same correction as the per-task gate (ALTO-4): effective, not supplied.
+    privacyPatternsConfigured: compilePrivacyPatterns(options.privacyPatterns ?? []).regexes.length > 0,
     patternsReviewedAsAbsent: options.patternsReviewedAsAbsent === true
   }
 }

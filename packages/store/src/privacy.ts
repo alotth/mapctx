@@ -103,6 +103,25 @@ export type PrivacyScanOptions = {
   budgetMs?: number;
 };
 
+/**
+ * Why a pattern did not compile, WITHOUT quoting the pattern back.
+ *
+ * V8 formats the error as `Invalid regular expression: /<source>/: <reason>`,
+ * so the raw message carries the source. That was harmless while patterns
+ * only came from the committed mapctx.toml. Since T-151 they may also come
+ * from an unversioned `privacy.toml`, where the pattern IS the secret -- it
+ * exists precisely to name a third party or a hostname. Echoing it into a
+ * warning on a board write, or into a publication refusal, would leak the
+ * thing the pattern was written to hide. The operator gets the index and the
+ * compiler's reason; the index is enough to find the line.
+ */
+function compilerReason(error: Error, source: string): string {
+  const marker = "/: "
+  const at = error.message.lastIndexOf(marker)
+  const reason = at >= 0 ? error.message.slice(at + marker.length) : error.message
+  return reason.length > 0 && !reason.includes(source) ? reason : "it does not compile"
+}
+
 export function compilePrivacyPatterns(patterns: readonly string[]): CompiledPrivacyPatterns {
   const regexes: CompiledPrivacyPatterns["regexes"] = []
   const invalid: CompiledPrivacyPatterns["invalid"] = []
@@ -110,7 +129,7 @@ export function compilePrivacyPatterns(patterns: readonly string[]): CompiledPri
     try {
       regexes.push({ index, source, regex: new RegExp(source) })
     } catch (error) {
-      invalid.push({ index, source, message: (error as Error).message })
+      invalid.push({ index, source, message: compilerReason(error as Error, source) })
     }
   })
   return { regexes, invalid }

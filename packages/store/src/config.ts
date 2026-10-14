@@ -214,6 +214,15 @@ function readPrivacyPatternsFile(filePath: string): string[] {
   if (typeof table !== "object" || table === null || Array.isArray(table)) {
     throw new Error(`Invalid privacy patterns file at ${filePath}: [privacy] must be a table.`);
   }
+  // A typo is the failure mode this file cannot afford. `pattern = [...]`
+  // parses fine and yields nothing, and "nothing" is indistinguishable from
+  // "no secrets here" at every later layer (review MEDIA-2). Refuse the key
+  // we do not know instead.
+  for (const key of Object.keys(table as Record<string, unknown>)) {
+    if (key !== "patterns") {
+      throw new Error(`Invalid privacy patterns file at ${filePath}: unknown key "${key}" under [privacy]; the only supported key is "patterns". A typo here reads as "no patterns configured", which is exactly what this file exists to prevent.`);
+    }
+  }
   const patterns = (table as Record<string, unknown>).patterns;
   if (patterns === undefined) return [];
   if (!Array.isArray(patterns) || !patterns.every(item => typeof item === "string")) {
@@ -232,7 +241,12 @@ export function resolvePrivacyPatterns(
   const origins: ResolvedPrivacyPatterns["origins"] = [];
   const patterns: string[] = [];
   const seen = new Set<string>();
-  const take = (source: readonly string[], origin: PrivacyPatternOrigin, sourcePath?: string): void => {
+  // `report` is separate from `source.length > 0` on purpose (review
+  // MEDIA-2): a file that EXISTS and yields nothing must still appear in
+  // `origins`, with count 0. Otherwise an empty or mis-keyed privacy file is
+  // indistinguishable from no file at all, and the operator reads silence as
+  // "configured and clean".
+  const take = (source: readonly string[], origin: PrivacyPatternOrigin, options: { report: boolean; path?: string }): void => {
     let added = 0;
     for (const pattern of source) {
       if (seen.has(pattern)) continue;
@@ -240,14 +254,28 @@ export function resolvePrivacyPatterns(
       patterns.push(pattern);
       added++;
     }
-    if (source.length > 0) origins.push({ origin, ...(sourcePath ? { path: sourcePath } : {}), count: added });
+    if (options.report) origins.push({ origin, ...(options.path ? { path: options.path } : {}), count: added });
   };
 
   const localPath = path.join(storeDir, LOCAL_PRIVACY_FILENAME);
-  if (fs.existsSync(localPath)) take(readPrivacyPatternsFile(localPath), "local-file", localPath);
+  if (fs.existsSync(localPath)) take(readPrivacyPatternsFile(localPath), "local-file", { report: true, path: localPath });
+
+  // An env var that is SET is an intention. Pointing it at nothing is a
+  // broken intention -- a typo in a path, or a file that moved -- and
+  // ignoring it silently would disarm the control the operator thought they
+  // had turned on. An unset variable is simply not using this source.
   const envPath = env[PRIVACY_PATTERNS_FILE_ENV];
-  if (envPath && fs.existsSync(envPath)) take(readPrivacyPatternsFile(envPath), "env-file", envPath);
-  take(configPatterns, "mapctx.toml");
+  if (envPath !== undefined) {
+    if (envPath.trim() === "") {
+      throw new Error(`${PRIVACY_PATTERNS_FILE_ENV} is set but empty. Unset it, or point it at a privacy patterns file.`);
+    }
+    if (!fs.existsSync(envPath)) {
+      throw new Error(`${PRIVACY_PATTERNS_FILE_ENV} points at ${envPath}, which does not exist. Refusing to continue with a privacy source the operator asked for and the filesystem does not have.`);
+    }
+    take(readPrivacyPatternsFile(envPath), "env-file", { report: true, path: envPath });
+  }
+
+  take(configPatterns, "mapctx.toml", { report: configPatterns.length > 0 });
 
   return {
     patterns,
