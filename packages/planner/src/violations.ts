@@ -18,6 +18,24 @@
  * store implements them. The ids are unchanged: the shared derivation uses
  * the same key order this file's object literals always used.
  *
+ * WHICH GUARD IS LOAD-BEARING HERE, measured the way the store measured its
+ * own (mutation matrix over claim-paths.test.ts, violations.test.ts and the
+ * store's violations.test.ts):
+ *
+ *   G1 alone off                     RED    G1 + G3-final off          RED
+ *   G2 alone off                     RED    pair-filter + G3-final off RED
+ *   G3-final alone off               green
+ *   serializedPairs pair-filter off  green
+ *
+ * So G2 is individually load-bearing -- it is the SOLE guard of the
+ * serialized-pair route, where G1 cannot help because that route reads
+ * non-intersection as evidence. The final `isRedactedPath` filter on the
+ * return is a redundant SIBLING: it pairs with G1 on the collision route and
+ * with the per-route filter on the overbroad route, so removing either member
+ * of a pair is invisible and removing both brings the fabricated violation
+ * straight back. Do not delete the final filter because a single mutation
+ * shows it dead -- it is dead only while its sibling lives.
+ *
  * WHAT THIS STILL IS NOT. The store's recordClaimViolations is the version
  * that JOURNALS violations, with idempotent re-detection and a declared
  * blind-spot report. This one is pure: it derives from receipts handed to it
