@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 13/23
+  - subIssueProgress: 14/23
   - priority: high
   - workload: null
   - tags: []
@@ -2991,7 +2991,7 @@
 ### [T-141] C2: duração do lease derivada de workload/esforço, --lease e [coordination]
 
   - id: T-141
-  - status: backlog
+  - status: review
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3295,7 +3295,7 @@
 ### [T-157] Store: task update com uma lista de dependência não apaga a outra espécie nem diverge do detail
 
   - id: T-157
-  - status: backlog
+  - status: done
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3306,7 +3306,7 @@
   - dependsOn: [T-140]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
   - updated: 2026-10-14
   - detail: ./tasks/T-157.md
