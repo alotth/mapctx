@@ -12,10 +12,13 @@
  * equality are two chances to disagree, and the first disagreement already
  * cost a leak. Anything that needs to decide "are these the same path?" imports
  * it from here.
+ *
+ * T-133 took that argument one package further. The same comparison was also
+ * written out inside packages/planner/src/violations.ts, so "one definition"
+ * held within the store and not across the two packages that both derive claim
+ * violations. The definition now lives in @mapctx/protocol (claim-paths.ts),
+ * which both packages already depend on, and this module re-exports it so
+ * every store-side importer is unchanged.
  */
 
-/** Windows separators to POSIX, no leading `./`, no doubled or trailing slash. */
-export function normalizePath(value: string): string {
-  const path = value.replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/+/g, "/")
-  return path.length > 1 ? path.replace(/\/$/, "") : path
-}
+export { normalizePath } from "@mapctx/protocol"

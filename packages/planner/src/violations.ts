@@ -1,24 +1,45 @@
 /**
- * NOTE (T-131 review MEDIA-3): this is a STRUCTURAL TWIN of
- * packages/store/src/violations.ts -- normalizePath, pathsOverlap,
- * actualIntersection, claimCovers and the stable violation id are duplicated
- * here -- and it does NOT carry the redaction guards the store version has.
+ * Post-hoc claim feedback, derived from receipts a caller already holds.
  *
- * Concretely, with a redacted `changedFiles` this version would still
- * fabricate both kinds of false audit fact that T-131 fixed in the store: a
- * `collision` on the redaction sentinel (positive use of actualIntersection)
- * and an `overbroad` "these tasks did not conflict" (negative use), plus it
- * takes plan-declared paths without filtering the sentinel. Nothing in the
- * repo calls this version today except its own test, so it is not a live
- * leak -- but it is published API.
+ * T-133 (from T-131 review MEDIA-3): this file used to be a STRUCTURAL TWIN of
+ * packages/store/src/violations.ts -- its own normalizePath, pathsOverlap,
+ * actualIntersection, claimCovers and stable id -- and it carried none of the
+ * redaction guards T-131 added to the store copy. With a redacted
+ * `changedFiles` it would fabricate both kinds of false audit fact: a
+ * `collision` on the sentinel (actualIntersection used positively) and an
+ * `overbroad` "these tasks did not conflict" (used negatively), and it took
+ * plan-declared paths without filtering the sentinel.
  *
- * The safe path is the store's: recordClaimViolations /
- * detectClaimViolationsWithCoverage in @mapctx/store, which refuse to compare
- * or journal anything derived from redacted evidence and report the resulting
- * blind spot. Deduping the two is T-133; do not add callers here meanwhile.
+ * All five primitives now come from @mapctx/protocol/claim-paths, the one
+ * package both this and the store already depend on, so there is a single
+ * definition of path comparison and of violation identity. G1 (a redacted
+ * path is incomparable) therefore arrives with the import; G2 and G3 are
+ * decisions about receipts, so they are implemented below exactly as the
+ * store implements them. The ids are unchanged: the shared derivation uses
+ * the same key order this file's object literals always used.
+ *
+ * WHAT THIS STILL IS NOT. The store's recordClaimViolations is the version
+ * that JOURNALS violations, with idempotent re-detection and a declared
+ * blind-spot report. This one is pure: it derives from receipts handed to it
+ * and returns them. When a receipt is redacted it now refuses to guess, and
+ * says so through a process warning -- the array return is published API, so
+ * the blind spot cannot be returned as data here without a second name, and a
+ * second name shared with the store at a different safety level is the exact
+ * problem T-133 exists to remove. Callers that need that as data use
+ * @mapctx/store's detectClaimViolationsWithCoverage.
  */
-import { createHash } from "node:crypto";
 import type { ClaimViolation, ResourceClaim, RunReceipt } from "@mapctx/protocol";
+import {
+  claimCovers, intersectPaths, isRedactedPath, normalizePath,
+  redactedPathCount, makeClaimViolation as makeViolation
+} from "@mapctx/protocol";
+
+/**
+ * Published since the first version of this module, and now the shared
+ * definition rather than a local twin of it. Behaviour change in 0.4.0: a
+ * redaction sentinel no longer overlaps anything, including another sentinel.
+ */
+export { pathsOverlap } from "@mapctx/protocol";
 
 /** A receipt paired with task identity. Store builds these from its projections. */
 export type TaskReceipt = { taskId: string; receipt: RunReceipt };
@@ -49,63 +70,22 @@ export type ClaimViolationInput = {
   detectedAt?: string;
 };
 
-function normalizePath(value: string): string {
-  const path = value.replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/+/g, "/");
-  return path.length > 1 ? path.replace(/\/$/, "") : path;
-}
-
-function staticPrefix(value: string): string {
-  const wildcard = value.search(/[?*\[]/);
-  return normalizePath(wildcard < 0 ? value : value.slice(0, wildcard)).replace(/\/$/, "");
-}
-
-/** Glob-ish path overlap, deliberately matching planner scheduling semantics. */
-export function pathsOverlap(left: string, right: string): boolean {
-  const a = normalizePath(left);
-  const b = normalizePath(right);
-  if (!a || !b) return false;
-  if (a === b) return true;
-  const aPrefix = staticPrefix(a);
-  const bPrefix = staticPrefix(b);
-  if (aPrefix === bPrefix || aPrefix.startsWith(`${bPrefix}/`) || bPrefix.startsWith(`${aPrefix}/`)) return true;
-  const aDir = a.endsWith("/**") || a.endsWith("/*") || a.endsWith("/");
-  const bDir = b.endsWith("/**") || b.endsWith("/*") || b.endsWith("/");
-  if (aDir && b.startsWith(`${a.slice(0, a.lastIndexOf("/"))}/`)) return true;
-  if (bDir && a.startsWith(`${b.slice(0, b.lastIndexOf("/"))}/`)) return true;
-  return false;
-}
-
-function stableUuid(seed: string): string {
-  const hex = createHash("sha256").update(seed).digest("hex").slice(0, 32).split("");
-  hex[12] = "5";
-  hex[16] = ((Number.parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
-  return [hex.slice(0, 8).join(""), hex.slice(8, 12).join(""), hex.slice(12, 16).join(""), hex.slice(16, 20).join(""), hex.slice(20).join("")].join("-");
-}
-
 function actualIntersection(a: TaskReceipt, b: TaskReceipt): string[] {
-  return [...new Set(a.receipt.changedFiles.flatMap(left => b.receipt.changedFiles.filter(right => pathsOverlap(left, right)).map(normalizePath)))].sort();
-}
-
-function claimCovers(claims: readonly ResourceClaim[], taskId: string, actualPath: string): boolean {
-  return claims.some(claim => claim.taskId === taskId && claim.mode === "write" && claim.paths.some(path => pathsOverlap(path, actualPath)));
+  return intersectPaths(a.receipt.changedFiles, b.receipt.changedFiles);
 }
 
 function pairKey(a: string, b: string): string {
   return a.localeCompare(b) <= 0 ? `${a}:${b}` : `${b}:${a}`;
 }
 
-function violationId(input: Omit<ClaimViolation, "id">): string {
-  return stableUuid(`mapctx:claim-violation:${JSON.stringify(input)}`);
-}
-
-function makeViolation(input: Omit<ClaimViolation, "id">): ClaimViolation {
-  return { ...input, id: violationId(input) };
-}
-
 /**
  * Derive post-hoc claim feedback. Incomplete or failed receipts produce no
  * output for their wave. Function is deterministic for fixed receipts and
  * detection timestamp; no recalibration occurs here.
+ *
+ * Redacted receipts make detection INCOMPLETE rather than clean: an empty
+ * result over them means "cannot tell", not "no collision". That is reported
+ * as a process warning (see the module header for why it is not returned).
  */
 export function detectClaimViolations(input: ClaimViolationInput): ClaimViolation[] {
   const waves = input.waves ?? (input.waveId && input.taskIds ? [{ waveId: input.waveId, taskIds: input.taskIds }] : []);
@@ -138,18 +118,34 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
     const left = receiptsByTask.get(pair.taskAId);
     const right = receiptsByTask.get(pair.taskBId);
     if (!left || !right || left.receipt.outcome !== "completed" || right.receipt.outcome !== "completed") continue;
+    // Guard G2. This route reads non-intersection as proof that serializing
+    // the pair was unnecessary -- a positive claim about the past built on an
+    // ABSENCE. With a redacted path on either side the absence is unknown, and
+    // emitting anyway fabricates the inverse of the sentinel collision: two
+    // tasks that really did fight over a file get a permanent record saying
+    // they did not. G1 does not cover this one; nothing else does either.
+    if (redactedPathCount(left.receipt.changedFiles) > 0 || redactedPathCount(right.receipt.changedFiles) > 0) continue;
     if (actualIntersection(left, right).length > 0) continue;
     const wave = waves.find(candidate => candidate.taskIds.includes(pair.taskAId)) ?? waves[0];
     if (!wave) continue;
-    const paths = [...new Set([...(pair.paths ?? []), ...(pair.causes ?? []).flatMap(cause => cause.paths)])].map(normalizePath).filter(Boolean).sort();
+    // A caller-supplied path can be a redacted one too; a violation whose path
+    // is the sentinel asserts nothing about any file.
+    const paths = [...new Set([...(pair.paths ?? []), ...(pair.causes ?? []).flatMap(cause => cause.paths)])]
+      .filter(path => !isRedactedPath(path))
+      .map(normalizePath).filter(Boolean).sort();
     for (const path of paths) {
       const [taskAId, taskBId] = [pair.taskAId, pair.taskBId].sort();
       violations.push(makeViolation({ waveId: wave.waveId, kind: "overbroad", taskAId, taskBId, path, detectedAt, source: "derived-from-receipts" }));
     }
   }
 
+  warnOnIncompleteDetection(receiptItems);
+
   const seen = new Set<string>();
   return violations
+    // Guard G3: belt and braces for the fabricated-fact class -- nothing with
+    // a sentinel path is ever returned, whatever route produced it.
+    .filter(item => !isRedactedPath(item.path))
     .filter(item => {
       const key = `${item.waveId}:${item.kind}:${pairKey(item.taskAId, item.taskBId)}:${item.path}`;
       if (seen.has(key)) return false;
@@ -157,6 +153,22 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
       return true;
     })
     .sort((a, b) => a.waveId.localeCompare(b.waveId) || a.kind.localeCompare(b.kind) || a.taskAId.localeCompare(b.taskAId) || a.taskBId.localeCompare(b.taskBId) || a.path.localeCompare(b.path));
+}
+
+/**
+ * "No violations" and "could not look" are different answers and only one of
+ * them is safe to act on, so a redacted receipt is never silently treated as
+ * clean evidence.
+ */
+function warnOnIncompleteDetection(receipts: readonly TaskReceipt[]): void {
+  for (const item of receipts) {
+    const redacted = redactedPathCount(item.receipt.changedFiles);
+    if (redacted === 0) continue;
+    process.emitWarning(
+      `claim-violation detection over ${item.taskId} is INCOMPLETE: ${redacted} of ${item.receipt.changedFiles.length} changed-file path(s) are redacted and cannot be compared. ` +
+      `An empty result may mean "cannot tell" rather than "no collision". Use @mapctx/store's detectClaimViolationsWithCoverage to get this as data.`
+    );
+  }
 }
 
 export const deriveClaimViolations = detectClaimViolations;

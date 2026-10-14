@@ -1,8 +1,9 @@
-import { createHash } from "node:crypto";
 import type { ClaimViolation, ResourceClaim, RunReceipt } from "@mapctx/protocol";
+import {
+  claimCovers, intersectPaths, isRedactedPath, normalizePath,
+  redactedPathCount, makeClaimViolation as makeViolation, violationIdFor
+} from "@mapctx/protocol";
 import { getDispatchAttempt, getRunReceipt, listClaimViolations } from "./projections";
-import { normalizePath } from "./paths";
-import { REDACTED_SENTINEL } from "./redact";
 import type { StoreHandle } from "./store-handle";
 
 export type WaveDispatchRef = { waveId: string; dispatchId: string; attempt: number; taskId?: string };
@@ -32,6 +33,13 @@ export type ClaimViolationPlan = {
  * `redactedChangedFileCount` below is what keeps the resulting blind spot
  * declared instead of silent.
  *
+ * T-133: G1 (the comparison itself), the normalization, the coverage test and
+ * the id derivation now live in @mapctx/protocol/claim-paths, because
+ * @mapctx/planner derives the same violations and had its own unguarded copy
+ * of all four. G2 and G3 below stay here: they are decisions about receipts
+ * and plans, not about a pair of strings, and the planner carries its own
+ * equivalents.
+ *
  * HOW THE THREE GUARDS RELATE, as measured rather than assumed. The same
  * invariant -- never journal a claim derived from redacted evidence -- is
  * enforced at three places: G1 here at the comparison, G2 at the
@@ -55,67 +63,9 @@ export type ClaimViolationPlan = {
  * because a single mutation shows it "dead" -- it is dead only while the
  * other lives.
  */
-function isRedactedPath(value: string): boolean {
-  return value === REDACTED_SENTINEL;
-}
-
-function pathsOverlap(left: string, right: string): boolean {
-  if (isRedactedPath(left) || isRedactedPath(right)) return false;
-  const a = normalizePath(left);
-  const b = normalizePath(right);
-  if (!a || !b) return false;
-  if (a === b) return true;
-  const prefix = (value: string) => {
-    const wildcard = value.search(/[?*\[]/);
-    return normalizePath(wildcard < 0 ? value : value.slice(0, wildcard)).replace(/\/$/, "");
-  };
-  const aPrefix = prefix(a);
-  const bPrefix = prefix(b);
-  if (aPrefix === bPrefix || aPrefix.startsWith(`${bPrefix}/`) || bPrefix.startsWith(`${aPrefix}/`)) return true;
-  const aDir = a.endsWith("/**") || a.endsWith("/*") || a.endsWith("/");
-  const bDir = b.endsWith("/**") || b.endsWith("/*") || b.endsWith("/");
-  if (aDir && b.startsWith(`${a.slice(0, a.lastIndexOf("/"))}/`)) return true;
-  if (bDir && a.startsWith(`${b.slice(0, b.lastIndexOf("/"))}/`)) return true;
-  return false;
-}
-
+/** The receipt-shaped wrapper over the shared path intersection. */
 function actualIntersection(left: RunReceipt, right: RunReceipt): string[] {
-  return [...new Set(left.changedFiles.flatMap(a => right.changedFiles.filter(b => pathsOverlap(a, b)).map(normalizePath)))].sort();
-}
-
-function claimCovers(claims: readonly ResourceClaim[], taskId: string, path: string): boolean {
-  return claims.some(claim => claim.taskId === taskId && claim.mode === "write" && claim.paths.some(claimPath => pathsOverlap(claimPath, path)));
-}
-
-function stableUuid(seed: string): string {
-  const hex = createHash("sha256").update(seed).digest("hex").slice(0, 32).split("");
-  hex[12] = "5";
-  hex[16] = ((Number.parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
-  return [hex.slice(0, 8).join(""), hex.slice(8, 12).join(""), hex.slice(12, 16).join(""), hex.slice(16, 20).join(""), hex.slice(20).join("")].join("-");
-}
-
-/**
- * THE id derivation, in one place so a lookup can reproduce it exactly.
- *
- * The key order below is the order the two call sites always used, and it is
- * load-bearing: the seed is `JSON.stringify(fields)`, so reordering these
- * keys would change every id and orphan every row already recorded.
- */
-function violationIdFor(fields: Omit<ClaimViolation, "id">): string {
-  const ordered = {
-    waveId: fields.waveId,
-    kind: fields.kind,
-    taskAId: fields.taskAId,
-    taskBId: fields.taskBId,
-    path: fields.path,
-    detectedAt: fields.detectedAt,
-    source: fields.source
-  };
-  return stableUuid(`mapctx:claim-violation:${JSON.stringify(ordered)}`);
-}
-
-function makeViolation(fields: Omit<ClaimViolation, "id">): ClaimViolation {
-  return { ...fields, id: violationIdFor(fields) };
+  return intersectPaths(left.changedFiles, right.changedFiles);
 }
 
 /**
@@ -196,7 +146,7 @@ export type ClaimViolationDetectionResult = {
 };
 
 function redactedChangedFileCount(receipt: RunReceipt): number {
-  return receipt.changedFiles.filter(isRedactedPath).length;
+  return redactedPathCount(receipt.changedFiles);
 }
 
 /**
