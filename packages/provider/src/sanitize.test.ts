@@ -236,7 +236,13 @@ test("ALTO-1: pathological bodies (base64, path-like runs, near-misses, data URI
     const started = Date.now()
     const result = sanitizeTaskForPublication({ taskId: "T-ALTO1", title: "x", body }, OK)
     const elapsed = Date.now() - started
-    assert.ok(elapsed < 500, `${name} took ${elapsed}ms, expected linear-time sanitization`)
+    // Deliberately loose: real detection of a quadratic regression is the
+    // scaling test below (t(80k) < 6x t(40k)), not this absolute value. This
+    // ceiling only needs to fail a catastrophic rule, and 3000ms still does
+    // that with ~5x margin -- a mutated quadratic artifact rule measured 16s
+    // here, the quadratic email rule 9.6s. Kept generous so disk I/O jitter
+    // on a reviewer's first run (right after npm ci) can't flake it.
+    assert.ok(elapsed < 3000, `${name} took ${elapsed}ms, expected linear-time sanitization`)
     assert.ok(result.ok, `${name}: ${JSON.stringify(result.ok ? undefined : result.message)}`)
   }
 })
