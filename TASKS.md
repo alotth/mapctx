@@ -1645,7 +1645,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 0/2
+  - subIssueProgress: 0/1
   - priority: null
   - workload: null
   - tags: []
@@ -1682,7 +1682,7 @@
   - id: T-077
   - status: review
   - type: feature
-  - parent: E-013
+  - parent: E-015
   - subIssueProgress: null
   - priority: null
   - workload: Normal
@@ -1693,7 +1693,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-077.md
 
 ### [T-078] Long-range roadmap timeline with day/week/month scales
@@ -2196,7 +2196,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 0/4
+  - subIssueProgress: 0/5
   - priority: null
   - workload: null
   - tags: [cost, budget, telemetry]
@@ -2842,7 +2842,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 3/12
+  - subIssueProgress: 3/13
   - priority: null
   - workload: null
   - tags: []
@@ -3162,7 +3162,7 @@
 ### [T-150] Adapter GitHub de leitura atrás da TaskProvider
 
   - id: T-150
-  - status: doing
+  - status: review
   - type: feature
   - parent: E-018
   - subIssueProgress: null
@@ -3181,7 +3181,7 @@
 ### [T-151] Sanitização para publicar tasks num repo público
 
   - id: T-151
-  - status: doing
+  - status: review
   - type: feature
   - parent: E-018
   - subIssueProgress: null
@@ -3348,6 +3348,25 @@
   - externalId: null
   - updated: 2026-10-14
   - detail: ./tasks/T-159.md
+
+### [T-160] Acceptance retroativo das 13 entregues sem critérios (autor + revisor independente)
+
+  - id: T-160
+  - status: backlog
+  - type: chore
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: [T-158]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-160.md
 
 ## Notes
 
