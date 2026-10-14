@@ -246,6 +246,54 @@ test("serializedPairs: a real collision redacted on one side must not fabricate 
   } finally { cleanupDir(treatedDir); }
 });
 
+// T-133 AC2, non-suppression direction: the serializedPairs route's other
+// control. The treatment tests above show redaction suppressing a would-be
+// "overbroad" claim; this is the baseline that it is still emitted when
+// nothing is redacted and the two tasks genuinely never conflicted -- the
+// guards must not swallow a legitimate claim along with the fabricated one.
+test("serializedPairs: a legitimate overbroad claim (both receipts intact, genuinely disjoint) is still emitted", () => {
+  const dir = mkTmpDir("mapctx-store-violations-overbroad-legit-");
+  try {
+    const handle = StoreHandle.open(dir);
+    seed(handle, "T-001"); seed(handle, "T-002");
+    dispatchAndReceipt(handle, "T-001", uuid("1"), ["src/a.ts"]);
+    dispatchAndReceipt(handle, "T-002", uuid("2"), ["docs/b.md"]);
+    const plan = {
+      waves: [{ waveId: uuid("3"), dispatches: [
+        { waveId: uuid("3"), dispatchId: uuid("1"), attempt: 1, taskId: "T-001" },
+        { waveId: uuid("3"), dispatchId: uuid("2"), attempt: 1, taskId: "T-002" }
+      ] }],
+      claims: [],
+      serializedPairs: [{ taskAId: "T-001", taskBId: "T-002", paths: ["src/a.ts"] }],
+      detectedAt: "2026-08-17T10:02:00.000Z"
+    };
+    const result = detectClaimViolationsWithCoverage(handle, plan);
+    assert.deepEqual(result.violations.map(v => v.kind), ["overbroad"], "G2/G3 must not suppress a legitimate claim when nothing is redacted");
+    assert.equal(result.violations[0].path, "src/a.ts");
+    assert.deepEqual(result.incompleteDetection, []);
+    handle.close();
+  } finally { cleanupDir(dir); }
+});
+
+// ---- T-133 AC1: the two packages' detectors must call the SAME path
+// primitives, not two copies that happen to agree today. @mapctx/store does
+// not re-publish the shared primitives under their own names (only
+// REDACTED_SENTINEL and, internally, normalizePath via ./paths), so identity
+// is checked at the two seams that ARE published or directly reachable: the
+// store's internal ./paths re-export, and the planner's published
+// pathsOverlap. Both must be @mapctx/protocol's exact function. ----
+
+test("AC1: the store's internal normalizePath and the planner's published pathsOverlap are @mapctx/protocol's own functions, by reference", () => {
+  const protocolModule = require("@mapctx/protocol") as Record<string, unknown>;
+  const storePaths = require("./paths") as Record<string, unknown>;
+  const plannerIndex = require("../../planner/dist/index") as Record<string, unknown>;
+  assert.equal(storePaths.normalizePath, protocolModule.normalizePath, "store/src/paths.ts must re-export, not re-implement");
+  assert.equal(plannerIndex.pathsOverlap, protocolModule.pathsOverlap, "planner/src/violations.ts must re-export, not re-implement");
+  // @mapctx/store publishes REDACTED_SENTINEL directly (via redact.ts).
+  const storeIndex = require("./index") as Record<string, unknown>;
+  assert.equal(storeIndex.REDACTED_SENTINEL, protocolModule.REDACTED_SENTINEL);
+});
+
 function bytesContaining(dir: string, needle: string): string[] {
   const hits: string[] = [];
   const walk = (current: string): void => {
@@ -373,6 +421,15 @@ test("MÉDIA-3: no exported function name is shared between @mapctx/store and @m
   const shared = storeNames.filter(name => plannerNames.includes(name) && typeof storeIndex[name] === "function");
   const mismatched = shared.filter(name => storeIndex[name] !== plannerIndex[name]);
   assert.deepEqual(mismatched, [], `these function names are exported by both packages with different identities: ${JSON.stringify(mismatched)}`);
+
+  // T-133 strengthening: the shared primitives now come from @mapctx/protocol
+  // specifically, not merely from "whatever the two packages happen to
+  // agree on" -- so the comparison above could in principle pass with two
+  // fresh twin re-implementations that are merely identical BY VALUE at
+  // different reference. Nail the actual primitive to its source.
+  const protocolModule = require("@mapctx/protocol") as Record<string, unknown>;
+  assert.equal(plannerIndex.pathsOverlap, protocolModule.pathsOverlap, "planner's pathsOverlap must be protocol's, not a re-implementation");
+  assert.equal(typeof protocolModule.pathsOverlap, "function");
 });
 
 // ---- T-131 attempt 4, review ALTO-4 (self-found): switching semanticExists
