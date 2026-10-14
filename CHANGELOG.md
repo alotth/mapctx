@@ -140,6 +140,22 @@ Closing a task now reads the lease: an **expired** claim journals **no**
 alone for the only paths that can honestly retire it — reclaim, which journals
 `task.claim-expired` for it, or a future sweeper.
 
+Two consequences worth knowing before you read a closed task's state, because
+the fictitious event had real side effects:
+
+- `task.claim-released` is also what moves `executionState` from `claimed` back
+  to `unclaimed`, so a task closed over an **expired** lease now reads
+  `executionState: "claimed"` in `task show --json` while its planning state is
+  `done`/`cancelled`/`archived`. That combination is the ghost showing through
+  rather than a new kind of state: nothing holds that lease. Closing over a
+  live claim still ends `unclaimed`. The generated snapshots are unaffected
+  (`TASKS.md` and `tasks/*.md` carry no `executionState`) and `mapctx validate`
+  reports nothing new.
+- Claim admission refuses a terminal task by `terminal-state` *before* it would
+  expire a stale row, so for a task that is already closed, reclaim is not
+  available as the cleanup path either — such a row stays `active` until a
+  sweeper retires it.
+
 This is one fewer event in the journal for a close over an expired lease, which
 is an observable change to the semantics of an existing event even though the
 event it stops emitting was false. A consumer that counted on a
