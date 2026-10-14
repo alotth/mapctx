@@ -567,7 +567,15 @@ export function updateTask(store: StoreHandle, options: UpdateTaskOptions): Upda
 
     let edges: DependencyRecord[] | undefined;
     if (options.dependsOn !== undefined || options.blocking !== undefined) {
-      edges = listOutgoingEdges(store, to).filter(edge => edge.kind !== "depends-on" && edge.kind !== "blocks");
+      // T-157: drop only the kind this patch actually replaces. Dropping both
+      // while re-adding only the supplied one wiped the other kind's EDGES and
+      // left its DETAIL list behind -- the two surfaces diverged, which is the
+      // one thing `--depends-on`/`--blocking` promise cannot happen. Under
+      // plansAuthority=store, `plan`/`gantt` read the edges, so the lost
+      // relation stopped serializing while tasks/<ID>.md still advertised it.
+      edges = listOutgoingEdges(store, to).filter(edge =>
+        (options.dependsOn === undefined || edge.kind !== "depends-on") &&
+        (options.blocking === undefined || edge.kind !== "blocks"));
       if (options.dependsOn !== undefined) {
         for (const target of options.dependsOn) {
           if (!getTask(store.db, target)) {

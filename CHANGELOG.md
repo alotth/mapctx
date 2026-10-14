@@ -294,3 +294,19 @@ already-closed task reclaim is not a cleanup path at all.
 * **fix:** list elements may not contain a comma, and a `{...}` group split
   across a comma is refused: the generated snapshots cannot represent either,
   and the resulting drift did not converge
+* **fix:** `task update --depends-on a,b` with no `--blocking` (and the mirror
+  case) no longer deletes the other kind's dependency edges. Supplying one list
+  used to drop BOTH the `depends-on` and the `blocks` edges and re-add only the
+  kind the patch carried, while the detail list was rewritten only for the list
+  supplied — so the edges lost a real `blocks` relation while
+  `detail.blocking` still advertised it, which is the one thing these flags
+  exist to prevent. Under `plansAuthority: store` the loss is silent: `plan`
+  and `gantt` read the edges, and `export` rebuilds both detail lists FROM the
+  edges, so the regenerated `tasks/<ID>.md` looks self-consistent and the next
+  export erases the orphaned list for good. Each flag now replaces exactly its
+  own kind and an omitted flag leaves its kind untouched. `mapctx validate`
+  reports an existing divergence per task and kind as
+  `dependency-detail-divergence`; **repair an affected task by replaying BOTH
+  lists through one update** — `mapctx task update <id> --depends-on a,b
+  --blocking x,y`, spelling an empty list as `""` (omitting the flag is now a
+  no-op on that kind, so it would leave the divergence in place)

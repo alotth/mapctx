@@ -2,7 +2,7 @@ import * as crypto from "crypto"
 import { resolveMapctxToml, resolveProjectStoreDir, isStoreMaterialized } from "./config"
 import { checkDrift, type DriftReport } from "./drift"
 import { StoreHandle } from "./store-handle"
-import { getSingleProject, listDependencies, listTasks } from "./projections"
+import { getSingleProject, getTaskDetail, listDependencies, listTasks } from "./projections"
 import { checkTaskAcceptance } from "./tasks"
 
 export type StoreSemanticIssue = {
@@ -54,6 +54,16 @@ function isIsoDate(value: string | null | undefined): boolean {
 function compareIsoDates(a?: string | null, b?: string | null): number | null {
   if (!isIsoDate(a) || !isIsoDate(b)) return null;
   return (a as string) < (b as string) ? -1 : (a as string) > (b as string) ? 1 : 0;
+}
+
+/**
+ * T-157: renders a list the way `mapctx task update` reads it back. An empty
+ * list is `""`, not an omitted flag -- omitting the flag is now a no-op on that
+ * kind, so a repair command that drops it would leave the divergence in place.
+ */
+function repairList(ids: readonly string[]): string {
+  const unique = [...new Set(ids)].sort()
+  return unique.length === 0 ? '""' : unique.join(",")
 }
 
 export function validateCanonicalStore(handle: StoreHandle): CanonicalStoreReport {
@@ -207,6 +217,40 @@ export function validateCanonicalStore(handle: StoreHandle): CanonicalStoreRepor
   if (visited !== tasks.length) {
     const cycleIds = tasks.map(task => task.taskId).filter(id => (indegree.get(id) ?? 0) > 0)
     issues.push({ severity: "error", code: "dependency-cycle", message: `Dependency cycle detected: ${cycleIds.join(", ")}` })
+  }
+
+  // T-157: a dependency exists on two surfaces -- the edge in
+  // dependency_projection and the id in the detail list -- and `task update
+  // --depends-on/--blocking` promises they can never disagree. Until the
+  // T-157 fix, supplying one list deleted the other kind's edges and left its
+  // detail list behind, so a store written before it can carry a divergence
+  // that nothing else diagnoses: `plan`/`gantt` read only the edges, and
+  // `export` rebuilds BOTH detail lists from the edges, so the snapshot looks
+  // correct and the next export quietly erases the orphaned list for good.
+  // Error severity, because either surface is a real planning input and the
+  // store cannot tell which one is the truth.
+  for (const task of tasks) {
+    const detail = getTaskDetail(handle.db, task.taskId)
+    if (!detail) continue
+    for (const surface of [
+      { kind: "depends-on" as const, flag: "--depends-on", list: detail.prerequisites, field: "prerequisites" },
+      { kind: "blocks" as const, flag: "--blocking", list: detail.blocking, field: "blocking" }
+    ]) {
+      const fromDetail = [...new Set(surface.list)].sort()
+      const fromEdges = [...new Set(
+        dependencies.filter(edge => edge.fromTaskId === task.taskId && edge.kind === surface.kind).map(edge => edge.toTaskId)
+      )].sort()
+      if (fromDetail.length === fromEdges.length && fromDetail.every((id, index) => id === fromEdges[index])) continue
+      issues.push({
+        severity: "error",
+        code: "dependency-detail-divergence",
+        message: `detail ${surface.field} ${JSON.stringify(fromDetail)} does not match the ${surface.kind} edges ${JSON.stringify(fromEdges)}.`
+          + ` Repair by replaying BOTH lists through one update, which rewrites each surface from the other:`
+          + ` mapctx task update ${task.taskId} --depends-on ${repairList(detail.prerequisites)} --blocking ${repairList(detail.blocking)}`
+          + ` (substitute the list you consider authoritative; omitting a flag now leaves that kind untouched).`,
+        taskId: task.taskId
+      })
+    }
   }
 
   const counts = new Map<string, number>()

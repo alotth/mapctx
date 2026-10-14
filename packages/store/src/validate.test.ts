@@ -191,6 +191,91 @@ test("F2: canonical validate restores domain/date/specMode/state/title/type and 
   }
 })
 
+/**
+ * T-157: validateCanonicalStore must diagnose a dependency edge diverging
+ * from the detail prerequisites/blocking list it mirrors. Poisoned the way
+ * the pre-fix updateTask actually wrote one -- a raw task.patched event
+ * whose outgoingEdges replaces the FULL edge set while detailPatch only
+ * updates the list it names -- never by hand-editing dependency_projection.
+ */
+test("dependency-detail-divergence: clean store has none; a pre-fix-style patch poisons one surface; one updateTask replay repairs it", () => {
+  const fixture = openCanonicalFixture()
+  try {
+    const t2 = createTask(fixture.handle, { title: "dep target", actor: "test" })
+    const t3 = createTask(fixture.handle, { title: "block target", actor: "test" })
+    const t4 = createTask(fixture.handle, { title: "extra dep target", actor: "test" })
+    const t5 = createTask(fixture.handle, { title: "extra block target", actor: "test" })
+    assert.ok(t2.ok && t3.ok && t4.ok && t5.ok)
+    if (!t2.ok || !t3.ok || !t4.ok || !t5.ok) return
+
+    assert.equal(
+      updateTask(fixture.handle, { taskId: fixture.taskId, dependsOn: [t2.taskId], blocking: [t3.taskId], actor: "test" }).ok,
+      true
+    )
+    assert.ok(!codesOf(validateCanonicalStore(fixture.handle)).includes("dependency-detail-divergence"), "consistent store reports none")
+
+    // Pre-fix recipe: detailPatch adds t4 to prerequisites but outgoingEdges
+    // only re-lists the depends-on edge to t2 -- the full-replace semantics
+    // of outgoingEdges silently drop the blocks edge to t3 too, so detail
+    // ends up holding MORE than the edges on both surfaces.
+    fixture.handle.appendEvent({
+      eventType: "task.patched",
+      actor: "pre-fix-fixture",
+      payload: {
+        taskId: fixture.taskId,
+        patch: {},
+        detailPatch: { prerequisites: [t2.taskId, t4.taskId] },
+        outgoingEdges: [{ fromTaskId: fixture.taskId, toTaskId: t2.taskId, kind: "depends-on" }]
+      }
+    })
+    const poisoned = validateCanonicalStore(fixture.handle)
+    const divergences = poisoned.issues.filter(issue => issue.code === "dependency-detail-divergence")
+    assert.equal(divergences.length, 2, JSON.stringify(poisoned.issues))
+    for (const issue of divergences) {
+      assert.equal(issue.severity, "error")
+      assert.equal(issue.taskId, fixture.taskId)
+      assert.ok(issue.message.includes("--depends-on") && issue.message.includes("--blocking"), issue.message)
+    }
+
+    // Repair: replay BOTH lists through one updateTask, as the message prescribes.
+    assert.equal(
+      updateTask(fixture.handle, { taskId: fixture.taskId, dependsOn: [t2.taskId, t4.taskId], blocking: [t3.taskId], actor: "test" }).ok,
+      true
+    )
+    assert.ok(!codesOf(validateCanonicalStore(fixture.handle)).includes("dependency-detail-divergence"), "repair clears both surfaces")
+
+    // Opposite direction: edges hold MORE than the detail list. Raw
+    // outgoingEdges adds a second blocks edge (t5) without a matching
+    // detailPatch, so detail.blocking stays behind.
+    fixture.handle.appendEvent({
+      eventType: "task.patched",
+      actor: "pre-fix-fixture",
+      payload: {
+        taskId: fixture.taskId,
+        patch: {},
+        outgoingEdges: [
+          { fromTaskId: fixture.taskId, toTaskId: t2.taskId, kind: "depends-on" },
+          { fromTaskId: fixture.taskId, toTaskId: t4.taskId, kind: "depends-on" },
+          { fromTaskId: fixture.taskId, toTaskId: t3.taskId, kind: "blocks" },
+          { fromTaskId: fixture.taskId, toTaskId: t5.taskId, kind: "blocks" }
+        ]
+      }
+    })
+    const edgesAhead = validateCanonicalStore(fixture.handle)
+    const edgesAheadIssue = edgesAhead.issues.find(issue => issue.code === "dependency-detail-divergence")
+    assert.ok(edgesAheadIssue, JSON.stringify(edgesAhead.issues))
+    assert.equal(edgesAheadIssue?.taskId, fixture.taskId)
+
+    assert.equal(
+      updateTask(fixture.handle, { taskId: fixture.taskId, blocking: [t3.taskId, t5.taskId], actor: "test" }).ok,
+      true
+    )
+    assert.ok(!codesOf(validateCanonicalStore(fixture.handle)).includes("dependency-detail-divergence"), "repair clears the edges-ahead case too")
+  } finally {
+    fixture.close()
+  }
+})
+
 test("F2: domains without declared project work domains are an error", () => {
   const fixture = openCanonicalFixture({ workDomains: [] })
   try {
