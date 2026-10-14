@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process"
 import * as fs from "fs"
 import * as path from "path"
 import test, { type TestContext } from "node:test"
+import { getClaim, readMapctxToml, StoreHandle } from "@mapctx/store"
 
 /**
  * T-141 / C2 (29b35fe): `--lease` on `task claim`/`task start`, precedence
@@ -72,6 +73,18 @@ function assertLeaseCloseTo(actualMs: number, expectedMs: number, label: string)
 
 function appendCoordination(repoDir: string, tomlBody: string): void {
   fs.appendFileSync(path.join(repoDir, "mapctx.toml"), `\n[coordination]\n${tomlBody}\n`, "utf8");
+}
+
+/** Reads a claim row directly from the store, bypassing the CLI entirely -- for asserting that a refused command changed nothing. */
+function readClaimDirectly(f: ReturnType<typeof fixture>, claimId: string) {
+  const toml = readMapctxToml(path.join(f.repoDir, "mapctx.toml"));
+  const storeDir = path.join(f.mapctxHome, "projects", toml.projectId);
+  const handle = StoreHandle.openReadOnly(storeDir);
+  try {
+    return getClaim(handle.db, claimId);
+  } finally {
+    handle.close();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +178,95 @@ test("task start --lease 1d sets the lease to 1d, the same resolution as task cl
 });
 
 // ---------------------------------------------------------------------------
+// fcb2720 (attempt 2), B1: --lease is refused on renew, not silently dropped
+// -- and nothing renews when it is.
+// ---------------------------------------------------------------------------
+
+test("B1: task renew --claim --token --lease 15m refuses (lease-not-accepted-on-renew), citing the re-derivation, and renews NOTHING", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const taskId = createClaimableTask(f, "renew flag task", "4h");
+
+  const claimed = f.success(["task", "claim", taskId, "--actor", "test"]);
+  assert.equal(claimed.ok, true, JSON.stringify(claimed));
+  const claimId: string = claimed.claim.claimId;
+  const token: string = claimed.claim.leaseToken;
+  const expiresAtBefore: string = claimed.claim.expiresAt;
+
+  const { payload, stderr } = f.refused(["task", "renew", taskId, "--claim", claimId, "--token", token, "--lease", "15m"]);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.reason, "lease-not-accepted-on-renew");
+  assert.equal(payload.lease, "15m");
+  assert.match(stderr, /re-derives the lease from the task plan/);
+
+  // The point of the finding this fixes: before, the flag was discarded and
+  // the renewal happened anyway with the derived duration. Now nothing moves.
+  const claimRow = readClaimDirectly(f, claimId);
+  assert.ok(claimRow, "the claim row must still exist");
+  assert.equal(claimRow!.state, "active", "not touched by the refused attempt");
+  assert.equal(claimRow!.expiresAt, expiresAtBefore, "expiresAt must be byte-identical to before the refused renew -- nothing was renewed");
+});
+
+test("B1, order: task renew --lease 15m WITHOUT --claim/--token still refuses by the flag's own name, not the missing-claim/token message", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const taskId = createClaimableTask(f, "renew flag order task", "4h");
+  f.success(["task", "claim", taskId, "--actor", "test"]);
+
+  const { payload, stderr } = f.refused(["task", "renew", taskId, "--lease", "15m"]);
+  assert.equal(payload.reason, "lease-not-accepted-on-renew", "the --lease refusal must win even with --claim/--token also missing");
+  assert.ok(!/requires --claim/.test(stderr), `must not instead report the missing --claim/--token: ${stderr}`);
+});
+
+// ---------------------------------------------------------------------------
+// fcb2720, B3: --lease is still not clamped by maxLease, but it IS bounded
+// by the 24h absolute ceiling -- refused above it, not shrunk. Exact boundary.
+// ---------------------------------------------------------------------------
+
+test("B3 boundary: --lease 24h is accepted at exactly 24h; --lease 1441m (24h+1m) and --lease 9999w are refused with lease-above-ceiling, citing 24h", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+
+  const atCeiling = createClaimableTask(f, "lease at ceiling", "1h");
+  const claimed = f.success(["task", "claim", atCeiling, "--lease", "24h", "--actor", "test"]);
+  assert.equal(claimed.ok, true, JSON.stringify(claimed));
+  assertLeaseCloseTo(leaseMsOfClaim(claimed), 24 * 60 * 60 * 1000, "--lease 24h: exactly at the ceiling, must be accepted");
+
+  const overByAMinute = createClaimableTask(f, "lease one minute over ceiling", "1h");
+  const { payload: minutePayload, stderr: minuteStderr } = f.refused(["task", "claim", overByAMinute, "--lease", "1441m", "--actor", "test"]);
+  assert.equal(minutePayload.reason, "lease-above-ceiling");
+  assert.equal(minutePayload.lease, "1441m");
+  assert.equal(minutePayload.ceilingMs, 24 * 60 * 60 * 1000);
+  assert.match(minuteStderr, /24h/);
+
+  const wayOver = createClaimableTask(f, "lease 9999 weeks", "1h");
+  const { payload: weekPayload } = f.refused(["task", "claim", wayOver, "--lease", "9999w", "--actor", "test"]);
+  assert.equal(weekPayload.reason, "lease-above-ceiling");
+  assert.equal(weekPayload.ceilingMs, 24 * 60 * 60 * 1000);
+});
+
+test("B3 boundary on task start too: --lease 1441m is refused the same way, proving claim and start share one resolution", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const taskId = createClaimableTask(f, "start lease over ceiling", "1h");
+
+  const { payload } = f.refused(["task", "start", taskId, "--lease", "1441m", "--actor", "test"]);
+  assert.equal(payload.reason, "lease-above-ceiling");
+  assert.equal(payload.ceilingMs, 24 * 60 * 60 * 1000);
+});
+
+test("B3: nothing changed below the 24h ceiling -- --lease above maxLease but under 24h is still accepted unclamped (the new ceiling is not a disguised clamp)", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  appendCoordination(f.repoDir, 'maxLease = "8h"\n');
+  const taskId = createClaimableTask(f, "below ceiling above maxLease task", "1h");
+
+  const claimed = f.success(["task", "claim", taskId, "--lease", "12h", "--actor", "test"]);
+  assert.equal(claimed.ok, true, JSON.stringify(claimed));
+  assertLeaseCloseTo(leaseMsOfClaim(claimed), 12 * 60 * 60 * 1000, "--lease 12h with maxLease=8h: still unclamped, well under the 24h ceiling");
+});
+
+// ---------------------------------------------------------------------------
 // 12. An invalid [coordination] refuses ANY command that opens the project,
 // naming the key and the mapctx.toml path.
 // ---------------------------------------------------------------------------
@@ -189,7 +291,7 @@ test("an invalid [coordination] in mapctx.toml refuses any command that opens th
 // so pinned by a test rather than left to manual inspection.
 // ---------------------------------------------------------------------------
 
-test("--help documents --lease on task claim and task start, and the [coordination] block", t => {
+test("--help documents --lease on task claim and task start, the [coordination] block, the 24h ceiling, --lease's refusal on renew, and the estimatedEffort coupling", t => {
   const f = fixture(t);
   const help = f.cli(["--help"]).stdout;
   const claimLine = help.split("\n").find(line => line.includes("mapctx task claim"));
@@ -200,4 +302,16 @@ test("--help documents --lease on task claim and task start, and the [coordinati
   assert.match(startLine!, /--lease/);
   assert.match(help, /\[coordination\]/);
   assert.match(help, /leaseFactor/);
+
+  // fcb2720 (attempt 2): the 24h absolute ceiling, documented near claim/start.
+  assert.match(help, /24h absolute ceiling/);
+
+  // B1: task renew's help states the flag is refused, not silently dropped.
+  const renewLine = help.split("\n").find(line => line.includes("mapctx task renew"));
+  assert.ok(renewLine, help);
+  assert.match(help, /--lease. is refused here/);
+
+  // B2: the known estimatedEffort coupling is stated, not left to be discovered.
+  assert.match(help, /detail\.estimatedEffort/);
+  assert.match(help, /nothing requires.*holder|requires the editor to be the holder/);
 });
