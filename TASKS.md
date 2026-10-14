@@ -2285,7 +2285,7 @@
   - updated: 2026-10-04
   - detail: ./tasks/T-106.md
 
-### [T-107] [T-B] Plan mostra executionState e lease; validate rebaixa bulk-timestamp para info
+### [T-107] C8: plan --show-execution com faixa de claims (implement e revisão)
 
   - id: T-107
   - status: backlog
@@ -2296,15 +2296,15 @@
   - workload: Normal
   - tags: []
   - domains: [CLI]
-  - dependsOn: []
+  - dependsOn: [T-144]
   - start: null
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-04
+  - updated: 2026-10-14
   - detail: ./tasks/T-107.md
 
-### [T-108] [T-C] Comando stale scan: fantasmas planning-vs-execution com commit auditavel
+### [T-108] C9: stale scan --dry-run/--commit, sweeper de claims fantasmas
 
   - id: T-108
   - status: backlog
@@ -2315,12 +2315,12 @@
   - workload: Hard
   - tags: []
   - domains: [CLI, FORECAST]
-  - dependsOn: [T-101]
+  - dependsOn: [T-140, T-143]
   - start: null
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-04
+  - updated: 2026-10-14
   - detail: ./tasks/T-108.md
 
 ### [T-109] Planner: distinguish started work from unscheduled
@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 11/12
+  - subIssueProgress: 11/21
   - priority: high
   - workload: null
   - tags: []
@@ -2820,7 +2820,7 @@
 ### [T-133] Planner: deduplicar a detecção de violações de claim e guardar o sentinela
 
   - id: T-133
-  - status: backlog
+  - status: doing
   - type: chore
   - parent: E-017
   - subIssueProgress: null
@@ -2833,7 +2833,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-10
+  - updated: 2026-10-14
   - detail: ./tasks/T-133.md
 
 ### [E-018] Provider authority (ADR 0005, opção B com provider local)
@@ -2842,7 +2842,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 1/3
+  - subIssueProgress: 1/11
   - priority: null
   - workload: null
   - tags: []
@@ -2934,7 +2934,7 @@
 ### [T-138] Store: backup e restore próprios, snapshot automático antes de migração
 
   - id: T-138
-  - status: backlog
+  - status: doing
   - type: feature
   - parent: E-018
   - subIssueProgress: null
@@ -2953,7 +2953,7 @@
 ### [T-139] TaskProvider em código + LocalStoreProvider (store como provider local)
 
   - id: T-139
-  - status: backlog
+  - status: doing
   - type: feature
   - parent: E-018
   - subIssueProgress: null
@@ -2968,6 +2968,329 @@
   - externalId: null
   - updated: 2026-10-14
   - detail: ./tasks/T-139.md
+
+### [T-140] C1: verdade de lease na leitura (getLiveActiveClaim) e sem release fictício em move done
+
+  - id: T-140
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-140.md
+
+### [T-141] C2: duração do lease derivada de workload/esforço, --lease e [coordination]
+
+  - id: T-141
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: [T-140]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-141.md
+
+### [T-142] C3: renewToken (segunda capacidade por claimId) e task renew --dispatch
+
+  - id: T-142
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: [T-141]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-142.md
+
+### [T-143] C4: mapctx run event renova o claim; heartbeats fora da medição de tempo ativo
+
+  - id: T-143
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: [T-142]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-143.md
+
+### [T-144] C5: dispatch kind e claim de revisão compartilhado (migração + troca do índice único)
+
+  - id: T-144
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Hard
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: [T-143]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-144.md
+
+### [T-145] C6: receipt de revisão não move planning; forecast exclui kind != implement
+
+  - id: T-145
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: [T-144]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-145.md
+
+### [T-146] C7: mapctx task split e aviso de cadeia de attempts
+
+  - id: T-146
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-146.md
+
+### [T-147] C11: docs, skills e rules da coordenação v2
+
+  - id: T-147
+  - status: backlog
+  - type: chore
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: [T-107, T-108, T-145, T-146]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-147.md
+
+### [T-148] validate: bulk-updated-timestamp passa de erro para info
+
+  - id: T-148
+  - status: backlog
+  - type: chore
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-148.md
+
+### [T-149] Triagem do board antes do espelho no GitHub (proposta, sem aplicar)
+
+  - id: T-149
+  - status: backlog
+  - type: chore
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-149.md
+
+### [T-150] Adapter GitHub de leitura atrás da TaskProvider
+
+  - id: T-150
+  - status: backlog
+  - type: feature
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Hard
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: [T-139]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-150.md
+
+### [T-151] Sanitização para publicar tasks num repo público
+
+  - id: T-151
+  - status: backlog
+  - type: feature
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: [T-139]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-151.md
+
+### [T-152] Espelho store → GitHub: issues, Project, dependências e campos derivados
+
+  - id: T-152
+  - status: backlog
+  - type: feature
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Hard
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: [T-138, T-150, T-151]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-152.md
+
+### [T-153] Publicar o board do MapCtx no GitHub Projects (execução do espelho)
+
+  - id: T-153
+  - status: backlog
+  - type: chore
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: [T-149, T-152]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-153.md
+
+### [T-154] A0: store local sem snapshots TASKS.md/tasks/*.md no Git
+
+  - id: T-154
+  - status: backlog
+  - type: feature
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: [T-138]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-154.md
+
+### [T-155] Virada de autoridade: GitHub dono das tasks, store como cache
+
+  - id: T-155
+  - status: backlog
+  - type: feature
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Hard
+  - tags: []
+  - domains: [CODE]
+  - dependsOn: [T-153]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-155.md
+
+### [T-156] ADR 0005 de Proposed para Accepted
+
+  - id: T-156
+  - status: backlog
+  - type: chore
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: [T-155]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-156.md
 
 ## Notes
 
