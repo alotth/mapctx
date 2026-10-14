@@ -133,3 +133,30 @@ test("a store refusal leaves the description file untouched", t => {
   assert.notEqual(result.status, 0);
   assert.equal(f.detail("T-101"), before);
 });
+
+// Review F4: an empty value (usually an unset shell variable) must not erase
+// Git-authored prose. Refused through the T-127 channel, before any write.
+test("an empty or whitespace-only description is refused on update and create, and writes nothing", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const before = f.detail("T-101");
+  const events = f.eventCount();
+  const refusedJson = (args: string[]) => {
+    const result = f.cli([...args, "--json"]);
+    assert.notEqual(result.status, 0, "expected a refusal");
+    assert.equal(String(result.stdout).trim(), "", "a refusal is not a result");
+    const lines = String(result.stderr).split("\n").filter(line => line.length > 0);
+    assert.match(lines[1], /^Error: (Update|Create) refused: empty-description -- /);
+    return JSON.parse(lines[0]);
+  };
+
+  assert.deepEqual(refusedJson(["task", "update", "T-101", "--description", "", "--actor", "test"]), { ok: false, reason: "empty-description", to: "T-101" });
+  assert.equal(refusedJson(["task", "update", "T-101", "--description", " \n\t ", "--actor", "test"]).reason, "empty-description");
+  assert.equal(refusedJson(["task", "update", "T-101", "--description-file", f.write("blank.md", "\n  \n"), "--actor", "test"]).reason, "empty-description");
+  // Riding along with --set does not slip the store change through.
+  assert.equal(refusedJson(["task", "update", "T-101", "--set", "title=Never applied", "--description", "", "--actor", "test"]).reason, "empty-description");
+  assert.deepEqual(refusedJson(["task", "create", "--title", "No prose", "--workload", "Easy", "--effort", "1h", "--description", "", "--actor", "test"]), { ok: false, reason: "empty-description" });
+
+  assert.equal(f.detail("T-101"), before);
+  assert.equal(f.eventCount(), events, "nothing reached the store");
+});

@@ -491,7 +491,8 @@ function printHelp(): void {
   console.log('    --description / --description-file rewrite only that block of the file (structured fields,');
   console.log('    an epic budget section and the store-owned ## Acceptance checklist are kept), in any');
   console.log('    planning state including done/archived. A one-line --description with literal \\n is');
-  console.log('    unescaped to line breaks; --description-file is read verbatim. Commit the file change.');
+  console.log('    unescaped to line breaks; --description-file is read verbatim. An empty or whitespace-only');
+  console.log('    description is refused (empty-description). Commit the file change.');
   console.log('  mapctx dispatch create <task-id> [--dispatch-id id] [--status claimed|running] (default claimed) [--executor kind] [--context-hash hash] [--json] [--actor name]');
   console.log('    New dispatch (fresh id, attempt 1) or --dispatch-id to append attempt max+1 to an existing one.');
   console.log('    Prints the dispatchId/attempt to feed `mapctx dispatch receipt`.');
@@ -2030,7 +2031,24 @@ export function splitList(value?: string, label = 'list value'): string[] | unde
  * "## Scope\n\nbody" -- stored verbatim it becomes a single unreadable line
  * -- so it is unescaped, and the caller is told. A file is read verbatim.
  */
-function readDescriptionInput(options: MapctxOptions, cwd: string): string | undefined {
+function readDescriptionInput(options: MapctxOptions, cwd: string, refusal: { verb: 'Create' | 'Update'; taskId?: string }): string | undefined {
+  const description = readRawDescription(options, cwd);
+  // Review F4: an empty value is the usual shell accident (`--description
+  // "$NOTES"` with NOTES unset), and on update it would silently erase
+  // Git-authored prose -- the one CLI path that destroys it. Refused, not
+  // flagged: a task without prose is invalid anyway (import's
+  // missing-description), and clearing it on purpose is a hand edit.
+  if (description !== undefined && description.trim() === '') {
+    const flag = options.description !== undefined ? '--description' : `--description-file ${options.descriptionFile}`;
+    refuse(
+      { ok: false, reason: 'empty-description', ...(refusal.taskId ? { to: refusal.taskId } : {}) },
+      `${refusal.verb} refused: empty-description -- ${flag} is empty or whitespace-only, which would leave ${refusal.taskId ?? 'the task'} with no description. An unset shell variable is the usual cause; pass the text, or edit tasks/<ID>.md by hand.`
+    );
+  }
+  return description;
+}
+
+function readRawDescription(options: MapctxOptions, cwd: string): string | undefined {
   if (options.description !== undefined) {
     const raw = options.description;
     if (raw.includes('\n') || !raw.includes('\\n')) return raw;
@@ -2075,7 +2093,7 @@ export function taskCreateCommand(options: MapctxOptions): void {
   // ---- T-129 criterion 0: acceptance in the SAME command ----
   // Resolved here, before the writable open, so a bad source file refuses
   // without having created anything.
-  const description = readDescriptionInput(options, cwd);
+  const description = readDescriptionInput(options, cwd, { verb: 'Create' });
   let acceptance: { condition: 'criteria' | 'empty'; texts: string[] } | undefined;
   let acceptanceNote: string | undefined;
   if (options.acceptanceFile) {
@@ -2199,7 +2217,7 @@ export function taskUpdateCommand(taskId: string, options: MapctxOptions): void 
   const dependsOn = splitList(options.dependsOn, '--depends-on');
   const blocking = splitList(options.blocking, '--blocking');
   const cwd = process.cwd();
-  const description = readDescriptionInput(options, cwd);
+  const description = readDescriptionInput(options, cwd, { verb: 'Update', taskId });
   warnPrivacy(`task update ${taskId}`, { patch, detail: detailPatch, ...(description === undefined ? {} : { description }) }, cwd);
   const storeChange = setPairs.length > 0 || dependsOn !== undefined || blocking !== undefined;
   const { handle, tasksRoot } = requireStoreAuthority(cwd);
