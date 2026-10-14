@@ -3,7 +3,7 @@ import test from "node:test"
 import * as fs from "fs"
 import * as path from "path"
 import { readMapctxToml, serializeMapctxToml } from "./config"
-import { compilePrivacyPatterns, lintForPrivacy, scanForPrivacyPatterns } from "./privacy"
+import { compilePrivacyPatterns, lintForPrivacy, replacePrivacyPatterns, scanForPrivacyPatterns } from "./privacy"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
 
 const SECRET = "cust-ctx-9f31a778421"
@@ -211,6 +211,43 @@ test("a non-finite privacy lint budget is named as not a duration, distinct from
   assert.equal(zero.findings.length, 0);
   assert.ok(zero.warnings.some(w => /0ms budget is too small/.test(w)), JSON.stringify(zero.warnings));
   assert.ok(!zero.warnings.some(w => /not a finite number of milliseconds/.test(w)), JSON.stringify(zero.warnings));
+});
+
+// T-151: replacePrivacyPatterns is sanitize.ts's building block for actually
+// REWRITING a configured pattern's match, not merely reporting it. Covered
+// directly here, at the module that implements the vm sandbox + budget.
+test("replacePrivacyPatterns counts occurrences per pattern/text, leaves zero-length matches untouched, and never echoes a value", () => {
+  const compiled = compilePrivacyPatterns([PATTERN]);
+  const result = replacePrivacyPatterns([`ctx ${SECRET} and ${SECRET}`, "clean"], compiled, { replacement: "<redacted>" });
+  assert.equal(result.texts[0], "ctx <redacted> and <redacted>");
+  assert.equal(result.texts[1], "clean");
+  assert.equal(result.aborted, undefined);
+  assert.deepEqual(result.counts, [{ subject: 0, patternIndex: 0, occurrences: 2 }]);
+  assert.ok(!JSON.stringify(result).includes(SECRET));
+
+  // A pattern whose only reachable match is zero-length (no "q" anywhere)
+  // must not pepper the text with the replacement token.
+  const zeroLength = replacePrivacyPatterns(["no cue letter in here at all"], compilePrivacyPatterns(["q*"]), { replacement: "<redacted>" });
+  assert.equal(zeroLength.texts[0], "no cue letter in here at all");
+  assert.deepEqual(zeroLength.counts, []);
+
+  // No configured patterns: passthrough, not an abort.
+  assert.deepEqual(replacePrivacyPatterns(["x"], compilePrivacyPatterns([]), { replacement: "<redacted>" }), { texts: ["x"], counts: [] });
+});
+
+test("replacePrivacyPatterns on budget exhaustion: the subject it ran out on (and anything after) is undefined, never half-rewritten; an earlier subject already finished is kept", () => {
+  const long = `${"a".repeat(60)}b`;
+  const compiled = compilePrivacyPatterns(["^(a+)+$"]);
+  const started = Date.now();
+  const result = replacePrivacyPatterns(["clean text", long, "never reached"], compiled, { replacement: "<redacted>", budgetMs: 60 });
+  const elapsed = Date.now() - started;
+  assert.ok(elapsed < 2000, `expected the replace to abort quickly, took ${elapsed}ms`);
+  assert.ok(result.aborted);
+  assert.equal(result.aborted!.patternIndex, 0);
+  assert.equal(result.texts[0], "clean text", "a subject fully processed before the abort is not discarded");
+  assert.equal(result.texts[1], undefined, "the subject the budget ran out on must not be half-rewritten");
+  assert.equal(result.texts[2], undefined, "a subject never reached must not be emitted either");
+  assert.ok(!JSON.stringify(result).includes(long));
 });
 
 const CONFIG = 'schemaVersion = 1\nprojectId = "11111111-1111-4111-8111-111111111111"\nplansAuthority = "store"\n';
