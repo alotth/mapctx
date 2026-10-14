@@ -233,8 +233,26 @@ New `--lease <duration>` on `task claim`/`task start` takes `30m`, `4h`, `1d`,
 derived value**. It is not clamped by `maxLease`: the flag is the operator's
 explicit choice, and silently shrinking `--lease 12h` to 8 h is the sort of
 quiet adjustment this CLI refuses elsewhere. An unparseable value is refused
-with the accepted formats. (The bound on a very long lease is C4's 24 h
-absolute renewal ceiling, which lands with the heartbeat path.)
+with the accepted formats.
+
+Not clamped is not unbounded, though: **above 24 hours `--lease` is refused**
+(exit non-zero, naming the ceiling), rather than shrunk. That is D4's absolute
+ceiling, declared once as `ABSOLUTE_LEASE_CEILING_MS` and enforced here on the
+only surface that can currently exceed it; C4 extends the same number to the
+renewal paths. `--lease 9999w` used to be accepted and wrote an expiry in 2072.
+
+`task renew` **refuses `--lease`** instead of ignoring it. The flag has to live
+in the CLI's single flag table for claim/start to accept it, so the parser took
+it on `renew` too and dropped it on the floor while this file said it "is not
+offered" — a reader takes that for a refusal, and it now is one.
+
+**Known coupling, by design and worth stating:** a renewal re-reads
+`detail.estimatedEffort`, and nothing requires whoever edits that field to hold
+the claim. So a third party raising it lengthens the holder's next renewal, and
+lowering it pins their renewals to `defaultLease`. That is the price of
+honouring a mid-flight re-classification, which is the behaviour the skills
+ask for; whether editing the estimate under a live claim should require being
+the holder is a C3/C5 decision, not a C2 one.
 
 Optional tuning in `mapctx.toml`, absent by default:
 

@@ -15,6 +15,20 @@ import type { DisclosableClaimRecord, ResourceClaimRecord } from "./types"
 export const DEFAULT_LEASE_DURATION_MS = 30 * 60 * 1000;
 
 /**
+ * D4's absolute ceiling on a lease: 24 hours. C4 will enforce it on every
+ * renewal path, where its purpose is to stop a wedged-but-still-heartbeating
+ * agent from renewing forever. T-141 declares the number here and applies it
+ * to the one surface that can already exceed it -- an explicit `--lease` --
+ * so C4 extends the reach of one constant instead of inventing a second.
+ *
+ * It bounds the *explicit* lease only. A derived lease cannot reach it
+ * (`maxLease` defaults to 8 h and is itself the clamp), and a caller passing
+ * `leaseDurationMs` in-process is trusted the way every in-process caller of
+ * this store is.
+ */
+export const ABSOLUTE_LEASE_CEILING_MS = 24 * 60 * 60 * 1000;
+
+/**
  * T-141 (C2 / D3, D10): the lease is read from the plan instead of from a
  * constant. `appendTaskClaim` already refuses an executable task without both
  * `workload` and a parseable `estimatedEffort`, so the inputs for a sensible

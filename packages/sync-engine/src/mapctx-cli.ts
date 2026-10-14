@@ -14,6 +14,7 @@ import {
 } from '@mapctx/core/workspace';
 import { generateTaskDetailFile, parseBareAcceptanceChecklist, parseTaskDetailFile, parseTasksFile, readTaskDetailFile } from '@mapctx/core';
 import {
+  ABSOLUTE_LEASE_CEILING_MS,
   buildExport,
   claimTask,
   startTask,
@@ -448,10 +449,13 @@ function printHelp(): void {
   console.log('    Lease duration is derived from the plan, not fixed: clamp(estimatedEffort x leaseFactor, defaultLease, maxLease),');
   console.log('    so an Easy/30m task and a Hard/2d task no longer get the same window. Defaults: leaseFactor 0.5, defaultLease 30m, maxLease 8h.');
   console.log('    `--lease <duration>` (30m, 4h, 1d, 1w) overrides both config and the derived value, and is NOT clamped -- it is an explicit choice.');
+  console.log('    It is still bounded: above the 24h absolute ceiling it is refused, not shrunk. A lane held longer than a day is a stuck lane.');
   console.log('    A task with no parseable estimate (an epic) gets defaultLease whole. Tune with [coordination] in mapctx.toml:');
   console.log('      [coordination]  leaseFactor = 0.5  defaultLease = "30m"  maxLease = "8h"   (an invalid value or defaultLease > maxLease is refused on read)');
   console.log('  mapctx task renew <task-id> --claim id --token token [--json] [--actor name]');
   console.log('    Extends by the same derived duration as the claim (re-read from the plan, so a mid-flight re-classification applies), never a fixed 30m.');
+  console.log('    `--lease` is refused here, not ignored: the renewal size comes from the plan. Known coupling: editing detail.estimatedEffort changes');
+  console.log('    the next renewal of a live claim, and nothing requires the editor to be the holder -- lowering it pins renewals to defaultLease.');
   console.log('  mapctx task release <task-id> --claim id --token token [--json] [--actor name]');
   console.log('  mapctx task create --title "<title>" [--id T-###] [--type epic|feature|task|bug|chore] [--parent id] [--status planning-state]');
   console.log('    [--priority high|medium|low] [--workload Easy|Normal|Hard|Extreme] [--tags a,b] [--domains d,e]');
@@ -1491,6 +1495,19 @@ function leaseOverrideMs(options: MapctxOptions): number | undefined {
       + ' Omit it to use the lease derived from estimatedEffort and [coordination] in mapctx.toml.'
     );
   }
+  // B3: the flag is not clamped by `maxLease` on purpose (it is the operator's
+  // override), but "not clamped" is not "unbounded": `--lease 9999w` used to
+  // write an expiry in 2072 and hold the lane until somebody released it by
+  // hand. Refused, not silently shrunk, so the override keeps meaning exactly
+  // what it says -- against D4's 24 h ceiling, the same number C4 will enforce
+  // on the renewal paths.
+  if (parsed > ABSOLUTE_LEASE_CEILING_MS) {
+    refuse(
+      { ok: false, reason: 'lease-above-ceiling', lease: options.lease, ceilingMs: ABSOLUTE_LEASE_CEILING_MS },
+      `--lease ${options.lease} exceeds the absolute lease ceiling of 24h (D4).`
+      + ' A lane held longer than a day is a stuck lane, not a long task: split the task, or release and re-claim.'
+    );
+  }
   return parsed;
 }
 
@@ -1769,6 +1786,19 @@ export function mapctxBoardCommand(options: MapctxOptions): void {
 }
 
 function taskRenewCommand(taskId: string, options: MapctxOptions): void {
+  // B1: `--lease` lives in the global VALUE_FLAGS table (claim/start need it),
+  // so the parser accepts it here too -- and this command used to drop it in
+  // silence while the help and the CHANGELOG said it "is not offered", which
+  // a reader takes for a refusal. Refused before anything else, so passing it
+  // is answered by name even when the token is missing as well. Same shape as
+  // `acceptance unapprove --evidence`: refuse caller input, never discard it.
+  if (options.lease !== undefined) {
+    refuse(
+      { ok: false, reason: 'lease-not-accepted-on-renew', lease: options.lease },
+      '--lease is not accepted by task renew; a renewal re-derives the lease from the task plan.'
+      + ' Set the size when the lane opens (task claim/start --lease), or tune [coordination] in mapctx.toml.'
+    );
+  }
   if (!options.claimId || !options.leaseToken) throw new Error('task renew requires --claim <id> --token <token>');
   const cwd = process.cwd();
   const { handle } = openStoreOrFail(cwd);
