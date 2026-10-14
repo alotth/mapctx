@@ -48,6 +48,15 @@ function seedTask(handle: StoreHandle): void {
   });
 }
 
+/**
+ * T-141: these tests are about expiry and reclaim semantics, not about how
+ * long a lease lasts. The seeded task's `estimatedEffort: "1d"` now derives a
+ * 4-hour lease, so the one-hour clock advance below no longer expires
+ * anything. Pinning the lease keeps each test saying what it meant, and keeps
+ * it saying it after C4 re-calibrates the derivation.
+ */
+const SHORT_LEASE_MS = 30 * 60 * 1000;
+
 function receipt(outcome: "completed" | "failed" = "completed") {
   return {
     schemaVersion: 1,
@@ -205,7 +214,7 @@ test("older attempt-1 receipt rejected as stale after expiry, legal reclaim, and
     seedTask(handle);
     const now = () => new Date("2026-08-16T19:54:00.000Z");
     const later = () => new Date("2026-08-16T20:54:00.000Z");
-    const claim = claimTask(handle, { taskId: "T-001", actor: "test", now });
+    const claim = claimTask(handle, { taskId: "T-001", actor: "test", now, leaseDurationMs: SHORT_LEASE_MS });
     assert.ok(claim.ok);
     if (!claim.ok) return;
     assert.ok(recordDispatchAttempt(handle, { dispatchId: DISPATCH_ID, taskId: "T-001", executorKind: "test", attempt: 1, contextHash: "hash", status: "running" }).ok);
@@ -369,7 +378,7 @@ for (const action of ["release", "expire", "reclaim"] as const) {
       seedTask(handle);
       const now = () => new Date("2026-08-16T19:54:00.000Z");
       const later = () => new Date("2026-08-16T20:54:00.000Z");
-      const claim = claimTask(handle, { taskId: "T-001", actor: "test", now });
+      const claim = claimTask(handle, { taskId: "T-001", actor: "test", now, leaseDurationMs: SHORT_LEASE_MS });
       assert.ok(claim.ok);
       if (!claim.ok) return;
       assert.ok(recordDispatchAttempt(handle, { dispatchId: DISPATCH_ID, taskId: "T-001", executorKind: "test", attempt: 1, contextHash: "hash", status: "running" }).ok);
