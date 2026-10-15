@@ -461,7 +461,7 @@ function printHelp(): void {
   console.log('    Exactly one address and one credential. `--claim` names the claim; `--dispatch` LOOKS IT UP (dispatch -> task -> that task\'s active claim),');
   console.log('    so an orchestrator that holds only the dispatch id can keep the lane alive. With --dispatch the task id is checked, not used to find the claim.');
   console.log('    Two capabilities per claim, both minted at claim time and scoped to the claimId: `leaseToken` renews AND releases, `renewToken` only renews.');
-  console.log('    Hand `renewToken` to your orchestrator to keep your lease alive without granting it the power to take the lane away. Neither is echoed back.');
+  console.log('    Hand `renewToken` to your orchestrator to keep your lease alive without granting it the power to take the lane away. Renewing with --token returns the full claim (the holder already has both tokens); renewing with --renew-token returns the claim with no token at all.');
   console.log('    A claim made before this existed has no renewToken (it is refused by name, not compared): renew those with --token.');
   console.log('    `--dispatch` is refused once the dispatch\'s latest attempt has a receipt -- that lane is finished; admit a new attempt first.');
   console.log('    Extends by the same derived duration as the claim (re-read from the plan, so a mid-flight re-classification applies), never a fixed 30m.');
