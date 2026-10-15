@@ -420,7 +420,11 @@ function applyStructuralRules(text: string, deadline: { endsAt: number; budgetMs
       return {
         text: current,
         hits: [...perCategory.entries()].map(([category, occurrences]) => ({ category, occurrences })),
-        exhausted: { rule: rule.category, afterMs: deadline.budgetMs, budgetMs: deadline.budgetMs }
+        // T-138 review BAIXA-2: report the time actually spent, not the
+        // budget. The deadline is checked BETWEEN rules, so a single slow
+        // rule overshoots -- and a report that says "exhausted after 1000ms"
+        // when it took 3400ms misleads exactly the person investigating why.
+        exhausted: { rule: rule.category, afterMs: Date.now() - (deadline.endsAt - deadline.budgetMs), budgetMs: deadline.budgetMs }
       }
     }
     const applied = applyRule(current, rule)
