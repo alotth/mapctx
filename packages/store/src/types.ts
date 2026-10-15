@@ -88,6 +88,15 @@ export type ResourceClaimRecord = {
   claimId: string
   taskId: string
   leaseToken: string
+  /**
+   * T-142 (C3 / D2): the renew-only capability, minted independently of
+   * `leaseToken` and scoped to this `claimId`. `null` for a claim made before
+   * the capability existed (migration 12 adds the column with no backfill):
+   * such a claim renews with its `leaseToken` and nothing else. Explicitly
+   * `| null` rather than optional so a legacy row reads as a decision rather
+   * than as a field somebody forgot to select.
+   */
+  renewToken: string | null
   state: ResourceClaimState
   claimedAt: string
   expiresAt: string
@@ -126,6 +135,12 @@ export type DisclosableClaimRecord = {
    * token fail to compile here.
    */
   leaseToken?: never
+  /**
+   * T-142: the same structural guard for the second capability. A renewToken
+   * cannot release a claim, but it can keep somebody else's lane alive
+   * indefinitely, so a refusal must not hand it out either.
+   */
+  renewToken?: never
 }
 
 export type EventRevision = {
