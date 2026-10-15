@@ -506,13 +506,16 @@ function printHelp(): void {
   console.log('    [--description text | --description-file path] [--json] [--actor name]');
   console.log('    Whitelisted fields only (title,type,parentTaskId,priority,workload,tags,domains,startDate,dueDate,');
   console.log('    predictedStart,externalId,externalLinks,specMode,assignees,iteration,milestone; detail.* for');
-  console.log('    role,impact,estimatedEffort,filesAffected,testsRequired,summary,prerequisites,blocking;');
+  console.log('    role,impact,estimatedEffort,filesAffected,testsRequired,summary;');
   console.log('    waitReason=review|decision|parked|blocked-external as a shorthand for detail.waitReason).');
   console.log('    List fields take `--set detail.filesAffected=a,b` or `--set detail.filesAffected=["a","b"]`;');
   console.log('    `[a,b]` is refused with the correct syntax instead of storing the brackets. `=null` clears.');
   console.log('    --set externalLinks=https://…,github:issue:42 validates every entry as a URI.');
   console.log('    --depends-on/--blocking replace both');
   console.log('    the dependency edges and the detail prerequisites/blocking so the two surfaces never diverge.');
+  console.log('    They are the ONLY way to write those two lists: `--set detail.prerequisites`/`detail.blocking`');
+  console.log('    is refused, because it would move the list while the edges every planning read follows stayed put.');
+  console.log('    An omitted flag leaves its own edge kind untouched.');
   console.log('    The Git-authored `description:` prose of tasks/<ID>.md is NOT patchable here via --set.');
   console.log('    --description / --description-file rewrite only that block of the file (structured fields,');
   console.log('    an epic budget section and the store-owned ## Acceptance checklist are kept), in any');
