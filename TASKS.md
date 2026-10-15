@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 23/28
+  - subIssueProgress: 23/30
   - priority: high
   - workload: null
   - tags: []
@@ -3208,12 +3208,12 @@
   - workload: Hard
   - tags: []
   - domains: [GITHUB, PROJECT, CLI]
-  - dependsOn: [T-138, T-150, T-151]
+  - dependsOn: [T-138, T-150, T-151, T-166]
   - start: null
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-152.md
 
 ### [T-153] Publicar o board do MapCtx no GitHub Projects (execução do espelho)
@@ -3460,8 +3460,46 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-10-15
   - detail: ./tasks/T-165.md
+
+### [T-166] Scheduler: normalizar paths para NFC (NFC x NFD do macOS/Linux)
+
+  - id: T-166
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: medium
+  - workload: Normal
+  - tags: []
+  - domains: [PLANNER, TEST]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-15
+  - detail: ./tasks/T-166.md
+
+### [T-167] Snapshot pre-migracao pulado quando a migracao roda via store repair
+
+  - id: T-167
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: medium
+  - workload: Normal
+  - tags: []
+  - domains: [STORE, TEST]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-15
+  - detail: ./tasks/T-167.md
 
 ## Notes
 
