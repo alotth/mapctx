@@ -458,5 +458,31 @@ CREATE TABLE IF NOT EXISTS redaction_projection (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS idx_redaction_target ON redaction_projection(target_node, target_sequence, logical_clock, event_sequence);
 `.trim()
+  },
+  {
+    // T-142 (C3 / D2): a claim carries a second, independent capability --
+    // `renewToken` renews the lease, `leaseToken` renews AND releases it. The
+    // column is a NEW version because schema 11 is deployed: the real store
+    // is on 11, so 11 is frozen and this is additive on top of it.
+    //
+    // NULLABLE on purpose, and this is the whole legacy story. The column has
+    // no backfill and no default:
+    //   - a historical row (claimed before this migration) has no renewToken
+    //     and never will -- its holder was handed one token, and inventing a
+    //     second one now would mint a capability nobody was ever given;
+    //   - a DEFAULT would be worse than useless, it would be a universal key:
+    //     every legacy row would share one value, and presenting it would
+    //     renew any of them.
+    // So NULL means "this claim has no renew capability", `renewClaim`
+    // refuses a presented renewToken against such a row by name
+    // (`renew-token-unavailable`) instead of comparing against NULL, and the
+    // legacy holder keeps renewing with `--token` exactly as before.
+    //
+    // Downgrade-safe: a CLI that only knows versions <= 11 never selects the
+    // column, and `SELECT *` readers tolerate the extra field.
+    version: 12,
+    sql: `
+ALTER TABLE resource_claim_projection ADD COLUMN renew_token TEXT;
+`.trim()
   }
 ]

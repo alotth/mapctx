@@ -363,12 +363,15 @@ export function listExternalRefsForOwner(db: DatabaseSync, ownerKind: string, ow
 
 export function insertClaim(db: DatabaseSync, claim: ResourceClaimRecord): void {
   db.prepare(`
-    INSERT INTO resource_claim_projection (claim_id, task_id, lease_token, state, claimed_at, expires_at, holder_json, event_node, event_sequence)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO resource_claim_projection (claim_id, task_id, lease_token, renew_token, state, claimed_at, expires_at, holder_json, event_node, event_sequence)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     claim.claimId,
     claim.taskId,
     claim.leaseToken,
+    // T-142: NULL when the claim event carried no renewToken -- a claim from
+    // before the capability existed, replayed as it happened.
+    claim.renewToken,
     claim.state,
     claim.claimedAt,
     claim.expiresAt,
@@ -445,6 +448,25 @@ export function getLiveActiveClaim(
   return new Date(claim.expiresAt).getTime() <= now().getTime() ? undefined : claim;
 }
 
+/**
+ * Every `active` row a task holds, not just the first one SQLite happens to
+ * return. `getActiveClaimForTask` uses `.get()`, which is correct only while
+ * the partial unique index guarantees one active row per task -- true today,
+ * and precisely what C5 ends when shared review claims arrive.
+ *
+ * T-142 needs the plural form so the dispatch-addressed renewal can *refuse*
+ * an ambiguous lookup instead of silently renewing whichever row came first
+ * (§2). Today that refusal is unreachable by construction; writing the lookup
+ * against the real cardinality is what keeps it unreachable by the index
+ * rather than by luck.
+ */
+export function listActiveClaimsForTask(db: DatabaseSync, taskId: string): ResourceClaimRecord[] {
+  const rows = db.prepare(
+    "SELECT * FROM resource_claim_projection WHERE task_id = ? AND state = 'active' ORDER BY claimed_at ASC, claim_id ASC"
+  ).all(taskId) as Record<string, unknown>[];
+  return rows.map(rowToClaim);
+}
+
 export function getClaim(db: DatabaseSync, claimId: string): ResourceClaimRecord | undefined {
   const row = db.prepare("SELECT * FROM resource_claim_projection WHERE claim_id = ?").get(claimId) as Record<string, unknown> | undefined;
   if (!row) return undefined;
@@ -456,6 +478,10 @@ function rowToClaim(row: Record<string, unknown>): ResourceClaimRecord {
     claimId: row.claim_id as string,
     taskId: row.task_id as string,
     leaseToken: row.lease_token as string,
+    // `?? null` normalizes two different absences into the one the type
+    // declares: SQLite NULL for a pre-migration-12 row, and `undefined` for a
+    // row object produced before the column existed.
+    renewToken: (row.renew_token as string | null | undefined) ?? null,
     state: row.state as ResourceClaimState,
     claimedAt: row.claimed_at as string,
     expiresAt: row.expires_at as string,

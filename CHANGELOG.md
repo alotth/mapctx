@@ -275,6 +275,85 @@ another agent can reclaim a task whose holder died. That trade is why
 evidence-based liveness (C4) is designed alongside this change rather than
 after it.
 
+### Public contract: a claim carries two capabilities, and renewal has a dispatch address
+
+Renewal used to require `--claim <id> --token <leaseToken>`, and `leaseToken`
+is printed once, to whoever ran `task claim`/`task start`. An orchestrator that
+dispatched the work holds the `dispatchId` and not the token, so it could not
+keep the lane alive; the executing agent had to interrupt itself to do it by
+hand, and the measurement says it does not happen (26 renewals across 162
+claims; 8 % of claims ever renewed).
+
+A claim now carries **two independent capabilities**, both minted from the same
+CSPRNG at claim time and both scoped to the `claimId`:
+
+| Credential | Renews | Releases |
+| --- | --- | --- |
+| `leaseToken` | yes | yes |
+| `renewToken` | yes | **no** |
+
+`task claim` and `task start` return both to the holder — it already has the
+stronger one — so an agent can hand `renewToken` to its orchestrator and keep
+release authority to itself. The split is by **possession**, not by derivation:
+an earlier draft proposed `HMAC(leaseToken, …)`, which still requires reading
+the secret it was meant to avoid. Two random values compared for equality need
+no algorithm and no second lookup. Release has no `renewToken` branch at all,
+which is what makes the split real rather than checked. Both comparisons are
+constant-time.
+
+`task renew` takes **exactly one address and exactly one credential**:
+
+```
+mapctx task renew <task-id> (--claim id | --dispatch id) (--token leaseToken | --renew-token renewToken)
+```
+
+`--dispatch` is a **lookup**, not a scope: dispatch → task → that task's active
+claim. A claim carries no dispatch reference (`task claim` mints one with no
+dispatch at all, and one claim legitimately spans the attempts of a retry), so
+`task_id` is the only edge there is, and the token's lifetime stays the claim's.
+With `--dispatch` the task id in the command is checked rather than used, and a
+dispatch belonging to another task is refused. `--claim/--token` is unchanged
+and remains the only renewal path for a claim that has no dispatch.
+
+Two new refusals on that path, each by name: a dispatch whose **latest attempt
+already has a receipt** cannot renew (that lane reported itself finished — admit
+a new attempt first), and a lookup that resolves **more than one** active claim
+refuses and asks for `--claim` instead of picking one. The second is
+unreachable today, since the partial unique index allows one active claim per
+task; it exists so that stays an index guarantee rather than a coincidence when
+C5 introduces shared review claims.
+
+**A renewal discloses exactly what the presented credential already proves.**
+With `--token` the result is the claim record as before, tokens included — that
+caller holds the stronger capability already, and it stays the tested contract
+0.4.0 shipped. With `--renew-token` the result carries **no token at all**: an
+orchestrator that may renew must not be handed release authority as a reward for
+renewing, which would void the split. Either way `expiresAt` is the answer a
+renewal owes, so a consumer that reads only that works on both paths.
+
+`task renew` also **refuses `--dispatch-id`** by name, pointing at `--dispatch`.
+It is the spelling `task start` uses for the same identifier and a known global
+flag, so the parser would have accepted it and renewed nothing while exiting 0.
+
+**Legacy claims keep working and gain nothing.** Migration **12** adds a
+nullable `renew_token` column with no backfill and no default. A claim made
+before this release has no `renewToken` and never will — its holder was handed
+one token, and minting a second now would create a capability nobody was ever
+given. A `DEFAULT` would be worse: every legacy row would share one value, and
+presenting it would renew any of them. `--renew-token` against such a claim is
+refused as `renew-token-unavailable`, naming the remedy (`--token`), rather than
+compared against NULL. Schema 11 is deployed, so it is frozen; this is additive
+on top of it, and a CLI that knows only versions ≤ 11 never reads the column.
+
+**Editing the estimate under a live claim now says so.** A renewal re-derives
+the lease from `detail.estimatedEffort` (0.4.0, above) and nothing requires the
+editor to be the holder, so `task update --set detail.estimatedEffort=…` prints
+a note on stderr when the task has a live claim, naming the claim by id (never
+a token) and stating that the next renewal will use the new figure. The edit
+still lands: freezing the duration on the claim would undo the deliberate
+decision that a mid-flight re-classification is honoured, and requiring
+holdership is a role-aware question that belongs with C5.
+
 ### Features
 
 * **feature:** `mapctx --help` prints an "Enumerated values" table for every
