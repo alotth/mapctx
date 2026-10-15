@@ -480,6 +480,79 @@ test("executor capacity limits each wave without changing collision explanation"
 // apparent duplication later without re-reading why it is not one. Since this
 // file's normalizePath is not exported, it is exercised by the behaviour it
 // causes in planExecution, not by calling it directly. ----
+// ---- T-166: the scheduler's normalizePath (scheduler-paths.ts) folds Unicode
+// to NFC, so `planExecution` itself -- not just the violations.ts guard --
+// must agree that NFC and NFD spellings of one filename are the same
+// declared path, including through a glob and through dependency-free
+// scheduling into separate waves. A disjoint-accent control sits alongside
+// each positive case, same reasoning as the T-132/T-159 pairs above: a
+// scheduler that always serializes on any accented path would pass the
+// positive case for the wrong reason.
+//
+// Cause labels (`causes[].paths`) are built from the NORMALIZED (lowercased,
+// NFC) form on both sides (see `causePath` in index.ts), not the raw input
+// spelling -- so an NFC/NFD pair's cause label shows the same normalized
+// string on both sides of the arrow, which is itself part of what T-166
+// fixed: before, the two different byte sequences would have produced two
+// different-looking labels for what is now one file.
+
+test("T-166: NFC and NFD declared paths for the same filename serialize into separate waves", () => {
+  const nfc = "caf\u00E9.ts";
+  const nfd = "cafe\u0301.ts";
+  assert.notEqual(nfc, nfd, "sentinel: the two spellings must differ byte-wise");
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "writes NFC", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${nfc}`] },
+      { id: "T-B", title: "writes NFD", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${nfd}`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "the scheduler must fold Unicode and serialize these as the same declared file");
+  assert.equal(report.serializedPairs.length, 1);
+  // Both sides of the cause label normalize to the same NFC-folded string.
+  assert.deepEqual(report.serializedPairs[0].causes[0].paths, [`src/${nfc} ↔ src/${nfc}`]);
+});
+
+test("T-166 control: two genuinely different accented filenames stay in one wave", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "writes acute", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/caf\u00E9.ts"] },
+      { id: "T-B", title: "writes grave", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/caf\u00E8.ts"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]],
+    "different accents are different files, not different normal forms of one file");
+  assert.deepEqual(report.serializedPairs, []);
+});
+
+test("T-166: an accented glob collides with the other normal form of a matching concrete path", () => {
+  // `pathOverlap` is not exported, so this is exercised through
+  // `planExecution`'s waves/serializedPairs rather than called directly.
+  const nfc = "caf\u00E9";
+  const nfd = "cafe\u0301";
+  assert.notEqual(nfc, nfd, "sentinel: the two spellings must differ byte-wise");
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob over NFC dir", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${nfc}/**`] },
+      { id: "T-B", title: "writes NFD dir file", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${nfd}/a.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
+  assert.equal(report.serializedPairs.length, 1);
+  assert.deepEqual(report.serializedPairs[0].causes[0].paths, [`src/${nfc}/** ↔ src/${nfc}/a.ts`]);
+});
+
+test("T-166: an accented glob does not collide with a genuinely different accented directory", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob over acute dir", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/caf\u00E9/**"] },
+      { id: "T-B", title: "writes grave dir file", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/caf\u00E8/a.ts"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]]);
+  assert.deepEqual(report.serializedPairs, []);
+});
+
 test("T-133 point 6: the scheduler's normalizePath case-folds declared claims; protocol's pathsOverlap does not fold observed paths", () => {
   const report = planExecution({
     tasks: [

@@ -532,17 +532,99 @@ test("T-163: a claim-covered overlap stays silent -- the pair did intersect", as
   assert.equal(warnings.filter(w => w.includes("INCOMPLETE")).length, 0, JSON.stringify(warnings));
 });
 
-test("T-163: the Unicode limit is real and documented, not silently covered", () => {
-  // T-159 review F1. NFC and NFD spellings of one filename are disjoint to the
-  // audit comparison AND to the scheduler's, so neither the G4 guard nor the
-  // collision-route warning fires. Pinned as a KNOWN LIMIT so that whoever
-  // later adds `.normalize()` sees this expectation flip and has to decide
-  // deliberately -- the fix widens the scheduler's comparison for every plan.
+test("T-166: the former Unicode limit is closed -- NFC and NFD spellings are one file to the guard", () => {
+  // Was "T-163: the Unicode limit is real and documented, not silently
+  // covered" (T-159 review F1), pinning NFC/NFD as disjoint to the scheduler's
+  // comparison as a documented limit. T-166 folded `.normalize("NFC")` into
+  // `normalizeSchedulerPath`, so this guard now agrees with the scheduler: the
+  // two spellings are the same file. Written as Unicode escapes, not
+  // visually-identical accented literals, so no editor or tool can silently
+  // normalize the fixture and make this pass for the wrong reason.
+  const nfc = "caf\u00E9.ts"; // U+00E9 LATIN SMALL LETTER E WITH ACUTE
+  const nfd = "cafe\u0301.ts"; // "e" + U+0301 COMBINING ACUTE ACCENT
+  assert.notEqual(nfc, nfd, "the two spellings must differ byte-wise for this to mean anything");
+  assert.equal(schedulerTreatsAsSameFile(nfc, nfd), true);
+  assert.equal(normalizeSchedulerPath(nfc) === normalizeSchedulerPath(nfd), true);
+});
+
+// ---- T-166: the scheduler's path comparison folds Unicode to NFC, so the
+// shared guard (G4) and the collision-route warning widen along with it. Both
+// directions matter for the same reason T-159's case/`..` tests did: a guard
+// that only suppresses is indistinguishable from one that suppresses
+// everything, so a disjoint-name control sits next to every positive case.
+
+test("T-166: an NFC/NFD spelling pair in serializedPairs does not fabricate overbroad and warns instead", async () => {
+  const nfc = "caf\u00E9.ts";
+  const nfd = "cafe\u0301.ts";
+  assert.notEqual(nfc, nfd, "sentinel: the two spellings must differ byte-wise");
+  const receipts: TaskReceipt[] = [
+    { taskId: "T-001", receipt: receipt(uuid("1"), [nfc]) },
+    { taskId: "T-002", receipt: receipt(uuid("2"), [nfd]) }
+  ];
+  let result: ReturnType<typeof detectClaimViolations> = [];
+  const warnings = await captureWarnings(() => {
+    result = detectClaimViolations({
+      waves: [{ waveId: uuid("3"), taskIds: ["T-001", "T-002"] }],
+      receipts,
+      serializedPairs: [{ taskAId: "T-001", taskBId: "T-002", paths: [nfc] }],
+      detectedAt: "2026-08-17T10:02:00.000Z"
+    });
+  });
+  // The scheduler now treats these as one file, so "they never intersected"
+  // can no longer be established -- recording overbroad would be the same
+  // fabricated "did not conflict" fact G4 already refuses for case and `..`.
+  assert.deepEqual(result.filter(item => item.kind === "overbroad"), []);
+  const spelling = warnings.filter(w => w.includes("INCOMPLETE") && w.includes(`${nfc} vs ${nfd}`));
+  assert.equal(spelling.length, 2, JSON.stringify(warnings));
+  assert.equal(spelling.filter(w => w.includes("the serialized pair") && w.includes("no overbroad finding")).length, 1);
+  assert.equal(spelling.filter(w => w.includes("the wave pair") && w.includes("MISSED")).length, 1);
+});
+
+test("T-166 control: genuinely different accented names stay disjoint -- legitimate overbroad is still emitted", async () => {
+  // The guard must not have widened to always-true: two names that really
+  // differ (different accents, not different normal forms of one name) are
+  // still a real, reportable overbroad.
+  const receipts: TaskReceipt[] = [
+    { taskId: "T-001", receipt: receipt(uuid("1"), ["caf\u00E9.ts"]) }, // café.ts (acute)
+    { taskId: "T-002", receipt: receipt(uuid("2"), ["caf\u00E8.ts"]) } // cafè.ts (grave)
+  ];
+  const warnings = await captureWarnings(() => {
+    const result = detectClaimViolations({
+      waves: [{ waveId: uuid("3"), taskIds: ["T-001"] }, { waveId: uuid("4"), taskIds: ["T-002"] }],
+      receipts,
+      serializedPairs: [{ taskAId: "T-001", taskBId: "T-002", paths: ["caf\u00E9.ts"] }],
+      detectedAt: "2026-08-17T10:02:00.000Z"
+    });
+    assert.deepEqual(result.map(item => [item.kind, item.path]), [["overbroad", "caf\u00E9.ts"]],
+      "nothing here is one file spelled two ways, so the guard must stay out of the way");
+  });
+  assert.equal(warnings.filter(w => w.includes("INCOMPLETE")).length, 0, JSON.stringify(warnings));
+});
+
+test("T-166: `..` and case resolve across an accent-form disagreement at the guard level", () => {
+  // Guard-level sentinels for the scheduler-level checks that planExecution
+  // exercises in index.test.ts: a `..` resolving to the other side's accent
+  // form, and case folding combined with accent folding. Globs stay OUT of
+  // this guard on purpose -- equality only, never pattern matching.
+  const nfc = "caf\u00E9.ts";
+  const nfd = "cafe\u0301.ts";
+  assert.equal(schedulerTreatsAsSameFile(`src/x/../${nfc}`, `src/${nfd}`), true);
+  assert.equal(schedulerTreatsAsSameFile(`SRC/${nfc.toUpperCase()}`, `src/${nfd}`), true);
+  assert.equal(schedulerTreatsAsSameFile(`src/${nfc}/**`, `src/${nfd}/a.ts`), false,
+    "a glob is not equal to a path it would match -- equality only, as for any other pattern");
+});
+
+test("T-166 mutation sentinel: dies if `.normalize(\"NFC\")` is removed from normalizeSchedulerPath", () => {
+  // Named so a failure here points straight at the one line T-166 added.
+  // Verified manually: with `.normalize("NFC")` deleted from
+  // `normalizeSchedulerPath` (scheduler-paths.ts) and the package rebuilt,
+  // this assertion fails (NFC !== NFD without normalization) while every
+  // other assertion in this block (case folding, "..", lowercasing) keeps
+  // passing -- so this is the one that would actually catch that mutation.
   const nfc = "café.ts";
   const nfd = "café.ts";
-  assert.notEqual(nfc, nfd, "the two spellings must differ byte-wise for this to mean anything");
-  assert.equal(schedulerTreatsAsSameFile(nfc, nfd), false);
-  assert.equal(normalizeSchedulerPath(nfc) === normalizeSchedulerPath(nfd), false);
+  assert.notEqual(nfc, nfd, "sentinel: the two spellings must differ byte-wise");
+  assert.equal(normalizeSchedulerPath(nfc), normalizeSchedulerPath(nfd));
 });
 
 test("T-163 F1: a covered intersection must not hide a spelling collision on another file", async () => {
