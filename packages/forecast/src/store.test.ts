@@ -58,7 +58,7 @@ function receipt(dispatchId = DISPATCH_ID) {
   }
 }
 
-function runEvent(dispatchId: string, sequence: number, timestamp: string, type: "started" | "progress" | "completed") {
+function runEvent(dispatchId: string, sequence: number, timestamp: string, type: "started" | "progress" | "question" | "completed") {
   return {
     schemaVersion: 1,
     dispatchId,
@@ -77,7 +77,12 @@ test("store forecast measures active time from persisted events across idle gap"
     seedDispatch(handle)
     for (const event of [
       runEvent(DISPATCH_ID, 0, "2026-08-16T17:00:00.000Z", "started"),
-      runEvent(DISPATCH_ID, 1, "2026-08-16T17:05:00.000Z", "progress"),
+      // T-143 (D3): the interior marker cannot be `progress` or `heartbeat`
+      // any more -- those are liveness types and are excluded from active-time
+      // measurement. T-064's approved criterion is about an interior event
+      // across an idle gap, not about which type carries it, so the type is
+      // incidental here and the assertions below are unchanged.
+      runEvent(DISPATCH_ID, 1, "2026-08-16T17:05:00.000Z", "question"),
       runEvent(DISPATCH_ID, 2, "2026-08-17T01:05:00.000Z", "completed")
     ]) {
       assert.equal(recordRunEvent(handle, event, "test").ok, true)

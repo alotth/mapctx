@@ -354,6 +354,49 @@ still lands: freezing the duration on the claim would undo the deliberate
 decision that a mid-flight re-classification is honoured, and requiring
 holdership is a role-aware question that belongs with C5.
 
+### Public contract: liveness events renew a lease and never count as work
+
+`mapctx run event <dispatch-id> --type heartbeat|progress` records one liveness
+event and, as a by-product, renews that lane's claim — addressed by the
+dispatch id, with **no token**. It exists because renewal needed a credential
+printed once to whoever opened the lane, so the agent doing the work had to
+interrupt itself to stay alive, and measurably did not: 26 renewal events
+across 162 claims, 8% of claims ever renewed. Emit one where the run already
+pauses — after a suite, between slices.
+
+The event is always recorded; whether it renewed is reported separately in
+`renewal`. It does **not** renew when the event is on an attempt older than the
+dispatch's latest, when that attempt already has a receipt, when the task has
+no active claim or more than one, when the claim has expired, or past the
+ceiling below. `--attempt` defaults to the latest attempt and naming an older
+one is refused; `--sequence` defaults to the next unused one for that attempt.
+
+**The 24-hour ceiling (D4) now binds every renewal path**, this one and `task
+renew` alike, measured from the claim's original `claimedAt` rather than from
+its current expiry — a ceiling measured from the thing it constrains is no
+ceiling. Inside the window a renewal that would reach past it is clamped to it;
+past it nothing extends the claim and only a fresh `task start` opens a lane.
+`task renew` therefore has a new refusal, `ceiling-reached`. The clock is the
+local clock of whichever process renews, which is the same trust level as the
+rest of the local CLI.
+
+**Measurement change, observable:** `heartbeat` and `progress` events no longer
+count as interior events when a receipt's active time is measured. Proving you
+are alive is not evidence of work, and counting it as such inverts the
+measurement — a four-hour run emitting one every ~20 minutes has no gap under
+the 10-minute idle threshold, so it would measure ≈0 active time **and** lose
+the honest `substituted` coverage label, making the corrupted sample look more
+trustworthy than the one it replaced. The exclusion covers the whole vocabulary
+this command can write, not just `heartbeat`, because the collapse is a
+property of the cadence: `progress` at the same spacing reproduces it exactly.
+Work measurement still comes from `timeEvidence`, which takes precedence, and
+from executor boundary events, neither of which this command writes.
+
+**Nothing in the store is re-measured by this:** there are 0 run events against
+152 receipts today, because nothing has ever emitted one. The change is
+forward-looking, and a receipt whose events are all liveness measures exactly
+what it measured before — wall clock, labelled `substituted`.
+
 ### Features
 
 * **feature:** `mapctx --help` prints an "Enumerated values" table for every
