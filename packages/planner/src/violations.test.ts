@@ -621,8 +621,8 @@ test("T-166 mutation sentinel: dies if `.normalize(\"NFC\")` is removed from nor
   // this assertion fails (NFC !== NFD without normalization) while every
   // other assertion in this block (case folding, "..", lowercasing) keeps
   // passing -- so this is the one that would actually catch that mutation.
-  const nfc = "café.ts";
-  const nfd = "café.ts";
+  const nfc = "caf\u00E9.ts"; // U+00E9 LATIN SMALL LETTER E WITH ACUTE
+  const nfd = "cafe\u0301.ts"; // "e" + U+0301 COMBINING ACUTE ACCENT
   assert.notEqual(nfc, nfd, "sentinel: the two spellings must differ byte-wise");
   assert.equal(normalizeSchedulerPath(nfc), normalizeSchedulerPath(nfd));
 });
