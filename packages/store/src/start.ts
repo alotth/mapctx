@@ -1,7 +1,7 @@
 import * as crypto from "crypto"
 import { appendTaskClaim, type ClaimOptions, type ClaimResult } from "./claims"
 import { appendDispatchAttempt } from "./dispatch"
-import { getTask, listDispatchAttempts } from "./projections"
+import { getTask, latestDispatchKind, listDispatchAttempts } from "./projections"
 import type { StoreHandle } from "./store-handle"
 import type { DispatchAttemptRecord } from "./types"
 
@@ -66,7 +66,7 @@ export function startTask(store: StoreHandle, options: StartOptions): StartResul
       // The chain's lane, read from its LATEST attempt -- the same row
       // `laneRoleOf` answers renewals from, so a start and the heartbeats of
       // the run it opens cannot disagree about which lane they are in.
-      const chainKind = history.reduce((latest, item) => (item.attempt > latest.attempt ? item : latest), history[0]!).kind;
+      const chainKind = latestDispatchKind(history);
       // Thrown, not returned as a refusal, to match the two checks directly
       // above (unknown dispatch, dispatch belonging to another task) and
       // `appendDispatchAttempt`'s own contradictory-kind refusal: "you named a

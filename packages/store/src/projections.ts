@@ -603,6 +603,27 @@ export function listDispatchAttempts(db: DatabaseSync, dispatchId?: string, task
   return rows.map(rowToDispatchAttempt);
 }
 
+/**
+ * T-144 attempt 2: the lane a dispatch chain is in, read from its LATEST
+ * attempt, with an absent `kind` normalized to `implement`.
+ *
+ * One function because there were about to be three copies of it. Both writer
+ * guards ("a dispatch id names one lane": `appendDispatchAttempt` and
+ * `assertNewEventAdmission`) and both renewal lookups
+ * (`laneRoleOf` in `claims.ts`) ask the same question of the same rows, and
+ * the test agent flagged the same `?? "implement"` and the same max-by-attempt
+ * reduce being written out independently in each. Three copies of a default
+ * is how a fourth reader ends up with a different one.
+ *
+ * `attempt` ordering decides rather than array position: `listDispatchAttempts`
+ * does order by attempt, but a caller that filtered or concatenated rows
+ * should not silently get a different answer than one that did not.
+ */
+export function latestDispatchKind(attempts: readonly { attempt: number; kind?: DispatchKind }[]): DispatchKind {
+  if (attempts.length === 0) return "implement";
+  return attempts.reduce((latest, item) => (item.attempt > latest.attempt ? item : latest), attempts[0]!).kind ?? "implement";
+}
+
 function rowToDispatchAttempt(row: Record<string, unknown>): DispatchAttemptRecord {
   return {
     dispatchId: row.dispatch_id as string,

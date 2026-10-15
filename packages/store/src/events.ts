@@ -25,6 +25,7 @@ import {
   insertRunEvent,
   invalidateHistoryEvidence,
   listAcceptanceCriteria,
+  latestDispatchKind,
   listDispatchAttempts,
   patchTask,
   replaceAcceptanceCriteria,
@@ -641,9 +642,7 @@ export function assertNewEventAdmission(db: DatabaseSync, entry: EventLogEntry):
     // a mixed chain that already exists on disk still projects as the
     // historical fact it is rather than being rejected by today's rules.
     const existingAttempts = listDispatchAttempts(db, dispatch.dispatchId);
-    const recordedKind = existingAttempts.length > 0
-      ? existingAttempts.reduce((latest, item) => (item.attempt > latest.attempt ? item : latest), existingAttempts[0]!).kind
-      : undefined;
+    const recordedKind = existingAttempts.length > 0 ? latestDispatchKind(existingAttempts) : undefined;
     const attemptedKind = dispatch.kind ?? "implement";
     if (recordedKind !== undefined && attemptedKind !== recordedKind) {
       throw new Error(

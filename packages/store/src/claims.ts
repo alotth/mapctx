@@ -1,7 +1,7 @@
 import * as crypto from "crypto"
 import { claimLaneFor, parseEstimatedEffortMs, workloadSchema, type ClaimRole, type DispatchKind } from "@mapctx/protocol"
 import { ABSOLUTE_LEASE_CEILING_MS, resolveCoordinationSettings, type CoordinationSettings } from "./config"
-import { getActiveExclusiveClaimForTask, getClaim, getRunReceipt, getTask, getTaskDetail, listActiveClaimsForTask, listDispatchAttempts } from "./projections"
+import { getActiveExclusiveClaimForTask, getClaim, getRunReceipt, getTask, getTaskDetail, latestDispatchKind, listActiveClaimsForTask, listDispatchAttempts } from "./projections"
 import type { AppendEventInput, StoreHandle } from "./store-handle"
 import type { EventLogEntry } from "@mapctx/protocol"
 import type { DisclosableClaimRecord, ResourceClaimRecord } from "./types"
@@ -566,11 +566,11 @@ function ceilingNote(claim: ResourceClaimRecord, nowMs: number): string {
  * guarantee no longer rests on an invariant that one code path cannot police.
  *
  * `?? "implement"` covers every attempt written before the column existed,
- * which is what they were.
+ * which is what they were. The reduce itself lives in `latestDispatchKind`,
+ * shared with the two writer guards that ask the same question.
  */
 function laneRoleOf(attempts: readonly { attempt: number; kind?: DispatchKind }[]): ClaimRole {
-  if (attempts.length === 0) return "implement";
-  return attempts.reduce((latest, item) => (item.attempt > latest.attempt ? item : latest), attempts[0]!).kind ?? "implement";
+  return latestDispatchKind(attempts);
 }
 
 /**

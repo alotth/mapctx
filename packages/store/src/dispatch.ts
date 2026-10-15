@@ -16,7 +16,7 @@ import {
   type RunReceipt
 } from "@mapctx/protocol"
 import {
-  assertReceiptPlanningAdmission, getActiveExclusiveClaimForTask, getDispatchAttempt, getRunEvent, getTask, listActiveClaimsForTask, listDispatchAttempts, listRunReceipts } from "./projections"
+  assertReceiptPlanningAdmission, getActiveExclusiveClaimForTask, getDispatchAttempt, getRunEvent, getTask, latestDispatchKind, listActiveClaimsForTask, listDispatchAttempts, listRunReceipts } from "./projections"
 import { appendRunEventClaimRenewal, type RunEventRenewal } from "./claims"
 import type { CoordinationSettings } from "./config"
 import type { DispatchAttemptRecord } from "./types"
@@ -92,7 +92,12 @@ export function appendDispatchAttempt(
   // of each invalidating the other's. Refused by name rather than silently
   // inheriting, because a caller that passed the other kind believes something
   // false about what it is dispatching.
-  const existingKind = history[0]?.kind;
+  // The chain's lane by the SAME rule every other reader uses (attempt 2:
+  // `latestDispatchKind`, not `history[0]`). It matters only for a chain this
+  // binary did not admit -- a journal merged from another node -- but a guard
+  // that judged attempt 1 while the renewal lookup judged the latest attempt
+  // would be two answers to one question.
+  const existingKind = history.length > 0 ? latestDispatchKind(history) : undefined;
   const kind: DispatchKind = input.kind ?? existingKind ?? "implement";
   if (existingKind !== undefined && kind !== existingKind) {
     throw new Error(

@@ -7,7 +7,7 @@ import { appendRunEventClaimRenewal, claimTask, disclosableClaim, releaseClaim, 
 import { recordDispatchAttempt, recordRunEvent } from "./dispatch"
 import { startTask } from "./start"
 import { createTask, moveTask } from "./tasks"
-import { getActiveExclusiveClaimForTask, getTask, listActiveClaimsForTask } from "./projections"
+import { getActiveExclusiveClaimForTask, getClaim, getLiveActiveClaim, getTask, insertDispatchAttempt, listActiveClaimsForTask, listDispatchAttempts } from "./projections"
 import { StoreHandle } from "./store-handle"
 import { repairStore } from "./repair"
 import { importCommit } from "./cutover"
@@ -39,7 +39,12 @@ function eventsOf(handle: StoreHandle, eventType: string, taskId?: string) {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Review is never refused, and never causes the wrong refusal (N1).
+// 1. Review is never refused, and never causes the wrong refusal (N1) --
+//    this IS section 4 of the original brief (N1's own numbering put it
+//    first since the rest of this file builds on it); numbered 1 here on
+//    purpose rather than renumbered, to avoid reshuffling every other
+//    section's number for a cosmetic gap. Section 8 (D11 end-to-end wiring)
+//    lives in review-lease.test.ts, next to the rest of D11's tests.
 // ---------------------------------------------------------------------------
 
 test("N1: an implement claim request is never refused by a live review claim on the same task, in either lease order", () => {
@@ -779,6 +784,302 @@ test("the requireActiveClaim gate checks the DISPATCH'S OWN lane: a live impleme
       }, "worker", true),
       /implement/
     );
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 10. T-144 attempt 2 (review M1): `startTask({ dispatchId })` reusing an
+//     existing chain reads the chain's OWN lane for the claim it mints, not
+//     `options.kind`. Before this fix a `startTask({ dispatchId: <a review
+//     dispatch> })` with no `kind` minted an EXCLUSIVE/IMPLEMENT claim while
+//     attaching a `review` attempt -- a half-open state (claim.role !==
+//     dispatch.kind) that nothing refused.
+// ---------------------------------------------------------------------------
+
+test("startTask reusing a review dispatch's chain, with no kind, mints a review claim (role === dispatch.kind, never half-open)", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-900");
+    const first = startTask(handle, { taskId: "T-900", actor: "reviewer", kind: "review", status: "running" });
+    assert.ok(first.ok, JSON.stringify(first));
+    if (!first.ok) return;
+
+    const second = startTask(handle, { taskId: "T-900", actor: "reviewer", dispatchId: first.dispatch.dispatchId, status: "running" });
+    assert.equal(second.ok, true, JSON.stringify(second));
+    if (!second.ok) return;
+    assert.equal(second.dispatch.kind, "review");
+    assert.equal(second.claim.role, "review", "the MINTED claim must be on the review lane, not the default implement");
+    assert.equal(second.claim.exclusivity, "shared");
+    assert.equal(second.claim.role, second.dispatch.kind, "claim.role and dispatch.kind must never disagree -- the half-open state this test exists to forbid");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("startTask reusing a review dispatch's chain with an EXPLICIT contradictory kind is refused by name, naming both lanes and the dispatchId", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-901");
+    const first = startTask(handle, { taskId: "T-901", actor: "reviewer", kind: "review", status: "running" });
+    assert.ok(first.ok, JSON.stringify(first));
+    if (!first.ok) return;
+    const dispatchId = first.dispatch.dispatchId;
+
+    assert.throws(
+      () => startTask(handle, { taskId: "T-901", actor: "worker", dispatchId, kind: "implement", status: "running" }),
+      (error: Error) => {
+        assert.match(error.message, new RegExp(dispatchId));
+        assert.match(error.message, /review/);
+        assert.match(error.message, /implement/);
+        return true;
+      }
+    );
+
+    // The refused attempt must not have minted anything: no new claim and no
+    // new dispatch attempt for the task.
+    assert.equal(listActiveClaimsForTask(handle.db, "T-901", { role: "review" }).length, 1, "still only the one review claim from the first start");
+    assert.equal(listDispatchAttempts(handle.db, dispatchId).length, 1, "the refused call must not have appended a second attempt");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("startTask with no dispatchId and no kind still opens a fresh implement lane by default, unaffected by the chain-inheritance fix", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-902");
+    const started = startTask(handle, { taskId: "T-902", actor: "worker", status: "running" });
+    assert.ok(started.ok, JSON.stringify(started));
+    if (!started.ok) return;
+    assert.equal(started.dispatch.kind, "implement");
+    assert.equal(started.claim.role, "implement");
+    assert.equal(started.claim.exclusivity, "exclusive");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 11. B2 (review attempt 2): `role` is PARSED at the claim applier, not
+//     coerced -- an unknown value is refused loudly instead of silently
+//     renamed to `implement`. Plus the legacy default `claimRoleOf` still
+//     uses when a claim row genuinely cannot be found.
+// ---------------------------------------------------------------------------
+
+test("a task.claimed event with an unknown role is refused: the write throws, no claim row lands, executionState is untouched", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-903");
+    const eventsBefore = handle.listEvents().length;
+    const bogusClaimId = "77777777-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+    assert.throws(() => handle.appendEvent({
+      eventType: "task.claimed",
+      actor: "worker",
+      occurredAt: "2026-10-17T09:00:00.000Z",
+      payload: {
+        claimId: bogusClaimId,
+        taskId: "T-903",
+        leaseToken: "b".repeat(48),
+        role: "audit", // not a real lane
+        holder: {},
+        claimedAt: "2026-10-17T09:00:00.000Z",
+        expiresAt: "2026-10-17T09:30:00.000Z"
+      }
+    }));
+
+    assert.equal(handle.listEvents().length, eventsBefore, "the rejected write must not land in the journal either");
+    assert.equal(getClaim(handle.db, bogusClaimId), undefined, "no claim row for the refused payload");
+    assert.equal(getTask(handle.db, "T-903")!.executionState, "unclaimed", "the refused write must not have touched executionState");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("a task.claimed event with role ABSENT is still legal and projects implement/exclusive (the historical default stays honoured)", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-904");
+    const claimId = "88888888-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    assert.doesNotThrow(() => handle.appendEvent({
+      eventType: "task.claimed",
+      actor: "worker",
+      occurredAt: "2026-10-17T09:00:00.000Z",
+      payload: {
+        claimId, taskId: "T-904", leaseToken: "c".repeat(48), holder: {},
+        claimedAt: "2026-10-17T09:00:00.000Z", expiresAt: "2026-10-17T09:30:00.000Z"
+      }
+    }));
+    const claim = getClaim(handle.db, claimId);
+    assert.ok(claim);
+    assert.equal(claim!.exclusivity, "exclusive");
+    assert.equal(claim!.role, "implement");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("claimRoleOf's legacy default: a task.claim-released for a claimId with no row at all still clears a claimed executionState (pre-T-144 behaviour preserved)", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-905");
+    const started = startTask(handle, { taskId: "T-905", actor: "worker", kind: "implement", status: "claimed" });
+    assert.ok(started.ok, JSON.stringify(started));
+    assert.equal(getTask(handle.db, "T-905")!.executionState, "claimed");
+
+    // An orphan claimId -- no resource_claim_projection row exists for it at
+    // all (a journal whose task.claimed was dropped by a rebuild, or a
+    // hand-built replay fixture). claimRoleOf must default such a row to
+    // "implement", exactly as it behaved before lanes existed.
+    handle.appendEvent({
+      eventType: "task.claim-released",
+      actor: "worker",
+      occurredAt: "2026-10-17T09:05:00.000Z",
+      payload: { claimId: "99999999-cccc-4ccc-8ccc-cccccccccccc", taskId: "T-905" }
+    });
+
+    assert.equal(getTask(handle.db, "T-905")!.executionState, "unclaimed", "the orphan release must still default to implement and clear executionState");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 12. B5: closing a task (moveTask to a terminal state) retires ONLY the
+//     exclusive (implement) lane. A live review claim beside it survives the
+//     close untouched, and a close over a task holding ONLY a review claim
+//     journals no claim lifecycle event at all.
+// ---------------------------------------------------------------------------
+
+test("closing a task with both an implement and a review claim live releases only the implement claim; the review claim survives active", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-906");
+    moveTask(handle, { taskId: "T-906", to: "ready", actor: "test" });
+    moveTask(handle, { taskId: "T-906", to: "in-progress", actor: "test" });
+    const implement = claimTask(handle, { taskId: "T-906", actor: "worker", kind: "implement" });
+    const review = claimTask(handle, { taskId: "T-906", actor: "reviewer", kind: "review" });
+    assert.ok(implement.ok && review.ok, JSON.stringify({ implement, review }));
+    if (!implement.ok || !review.ok) return;
+
+    const before = handle.listEvents().filter(e => e.eventType === "task.claim-released").length;
+    const result = moveTask(handle, { taskId: "T-906", to: "cancelled", actor: "operator" });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    if (!result.ok) return;
+    assert.equal(result.releasedClaimId, implement.claim.claimId, "only the implement claim is reported released");
+
+    const releasedEvents = handle.listEvents().filter(e => e.eventType === "task.claim-released");
+    assert.equal(releasedEvents.length, before + 1, "exactly one new task.claim-released");
+    assert.equal((releasedEvents[releasedEvents.length - 1]!.payload as { claimId: string }).claimId, implement.claim.claimId, "naming the implement claim");
+
+    const reviewRow = getClaim(handle.db, review.claim.claimId);
+    assert.ok(reviewRow);
+    assert.equal(reviewRow!.state, "active", "the review claim survives the close, still active");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("closing a task that holds ONLY a live review claim journals no claim lifecycle event at all, and the review claim survives active", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-907");
+    const review = claimTask(handle, { taskId: "T-907", actor: "reviewer", kind: "review" });
+    assert.ok(review.ok, JSON.stringify(review));
+    if (!review.ok) return;
+
+    const releasedBefore = handle.listEvents().filter(e => e.eventType === "task.claim-released").length;
+    const expiredBefore = handle.listEvents().filter(e => e.eventType === "task.claim-expired").length;
+
+    const result = moveTask(handle, { taskId: "T-907", to: "cancelled", actor: "operator" });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    if (!result.ok) return;
+    assert.ok(!("releasedClaimId" in result), "no releasedClaimId: nothing on the exclusive lane to release");
+    assert.ok(!("expiredClaimId" in result), "no expiredClaimId either");
+
+    assert.equal(handle.listEvents().filter(e => e.eventType === "task.claim-released").length, releasedBefore, "no new task.claim-released");
+    assert.equal(handle.listEvents().filter(e => e.eventType === "task.claim-expired").length, expiredBefore, "no new task.claim-expired");
+
+    const reviewRow = getClaim(handle.db, review.claim.claimId);
+    assert.ok(reviewRow);
+    assert.equal(reviewRow!.state, "active", "the review-only claim survives the close untouched");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 13. B1: "a dispatchId names one lane" enforced on the RAW new-event
+//     admission path too (not just the guarded `appendDispatchAttempt`
+//     writer), and `laneRoleOf` resolves by the LATEST attempt so a mixed
+//     chain that reached disk despite both guards (e.g. merged from another
+//     node, or built directly against the projection) still renews correctly.
+// ---------------------------------------------------------------------------
+
+test("a raw dispatch.attempted event with a kind that contradicts the chain already recorded is refused (assertNewEventAdmission)", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-908");
+    const dispatchId = "aaaaaaaa-1111-4111-8111-111111111111";
+    const first = recordDispatchAttempt(handle, {
+      dispatchId, taskId: "T-908", executorKind: "cli", contextHash: "hash-1", attempt: 1, status: "running", kind: "review"
+    }, "reviewer");
+    assert.ok(first.ok, JSON.stringify(first));
+
+    assert.throws(() => handle.appendEvent({
+      eventType: "dispatch.attempted",
+      actor: "worker",
+      payload: {
+        dispatch: {
+          dispatchId, taskId: "T-908", executorKind: "cli", attempt: 2, contextHash: "hash-2", status: "running", kind: "implement"
+        }
+      }
+    }), (error: Error) => {
+      assert.match(error.message, new RegExp(dispatchId));
+      assert.match(error.message, /review/);
+      assert.match(error.message, /implement/);
+      return true;
+    });
+
+    assert.equal(listDispatchAttempts(handle.db, dispatchId).length, 1, "the refused raw event must not have landed");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("laneRoleOf resolves by the LATEST attempt: a mixed chain (attempt 1 review, attempt 2 implement) built by bypassing admission renews attempt 2's lane", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-909");
+    const dispatchId = "bbbbbbbb-2222-4222-8222-222222222222";
+    const now = () => new Date("2026-10-17T09:00:00.000Z");
+
+    // Built directly against the projection -- bypassing BOTH guards
+    // (`appendDispatchAttempt`'s and `assertNewEventAdmission`'s) -- to
+    // reproduce the one case neither writer guard can reach: a journal
+    // merged from another node, replayed through the applier alone (which
+    // carries no admission re-adjudication by design).
+    insertDispatchAttempt(handle.db, { dispatchId, taskId: "T-909", executorKind: "cli", attempt: 1, contextHash: "hash-1", status: "running", kind: "review" });
+    insertDispatchAttempt(handle.db, { dispatchId, taskId: "T-909", executorKind: "cli", attempt: 2, contextHash: "hash-2", status: "running", kind: "implement" });
+
+    const implement = claimTask(handle, { taskId: "T-909", actor: "worker", kind: "implement", now });
+    assert.ok(implement.ok, JSON.stringify(implement));
+    if (!implement.ok) return;
+    const review = claimTask(handle, { taskId: "T-909", actor: "reviewer", kind: "review", now });
+    assert.ok(review.ok, JSON.stringify(review));
+    if (!review.ok) return;
+
+    const laterNow = () => new Date("2026-10-17T09:30:00.000Z");
+    const result = appendRunEventClaimRenewal(
+      handle,
+      { dispatchId, attempt: 2, actor: "worker", now: laterNow },
+      input => handle.appendEvent(input)
+    );
+    assert.equal(result.renewed, true, JSON.stringify(result));
+    if (!result.renewed) return;
+    assert.equal(result.claimId, implement.claim.claimId, "attempt 2's own kind (implement) is what laneRoleOf must answer, not attempt 1's (review)");
   } finally {
     handle.close(); restoreEnv(); cleanupDir(repoDir);
   }

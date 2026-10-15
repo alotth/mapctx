@@ -3,9 +3,13 @@ import * as fs from "fs"
 import * as path from "path"
 import test from "node:test"
 import { AGENT_ACTIVE_HOUR_MS, AGENT_ACTIVE_WEEK_MS } from "@mapctx/protocol"
-import { DEFAULT_LEASE_DURATION_MS, deriveLeaseDurationMs } from "./claims"
+import { DEFAULT_LEASE_DURATION_MS, appendRunEventClaimRenewal, claimTask, deriveLeaseDurationMs, renewClaim } from "./claims"
 import { ABSOLUTE_LEASE_CEILING_MS, DEFAULT_REVIEW_LEASE_FACTOR, resolveCoordinationSettings, readMapctxToml } from "./config"
-import { cleanupDir, mkTmpDir } from "./__test-helpers__"
+import { recordDispatchAttempt } from "./dispatch"
+import { createTask } from "./tasks"
+import { StoreHandle } from "./store-handle"
+import { importCommit } from "./cutover"
+import { cleanupDir, mkTmpDir, setupGoldenRepo } from "./__test-helpers__"
 
 /**
  * T-144 (C5 / D11): a review lease is derived by the SAME formula as the
@@ -176,4 +180,110 @@ test("an explicit --lease (leaseDurationMs) wins over both the implement and rev
       return true;
     }
   );
+});
+
+// ---------------------------------------------------------------------------
+// 8. D11's wiring end to end at the store level: mint, renew (explicit and
+//    by run event) for BOTH lanes on the SAME task/plan, pinned to exact
+//    millisecond figures rather than "review > implement" alone -- the three
+//    sites this round's review found drifting back to a hardcoded
+//    `role: "implement"` (H, I, I2).
+// ---------------------------------------------------------------------------
+
+function materialize() {
+  const { repoDir, restoreEnv } = setupGoldenRepo();
+  const committed = importCommit({ cwd: repoDir, actor: "test-actor" });
+  const handle = StoreHandle.open(committed.storeDir);
+  return { repoDir, restoreEnv, handle, committed };
+}
+
+const FOUR_HOURS_MS = 4 * AGENT_ACTIVE_HOUR_MS;
+const IMPLEMENT_MS = FOUR_HOURS_MS * 0.5; // 2h
+const REVIEW_MS = IMPLEMENT_MS * DEFAULT_REVIEW_LEASE_FACTOR; // 4h
+
+test("minting: a Normal/4h task's implement claim is exactly 2h, its review claim exactly 4h -- double, not merely longer", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const created = createTask(handle, { id: "T-800", title: "D11 wiring", workload: "Normal", detail: { estimatedEffort: "4h" }, actor: "test" });
+    assert.equal(created.ok, true, JSON.stringify(created));
+    const now = () => new Date("2026-10-17T09:00:00.000Z");
+
+    const implement = claimTask(handle, { taskId: "T-800", actor: "worker", kind: "implement", now });
+    assert.ok(implement.ok, JSON.stringify(implement));
+    if (!implement.ok) return;
+    const implementMs = new Date(implement.claim.expiresAt).getTime() - new Date(implement.claim.claimedAt).getTime();
+    assert.equal(implementMs, IMPLEMENT_MS);
+    assert.equal(implementMs, deriveLeaseDurationMs({ estimatedEffort: "4h" }));
+
+    const review = claimTask(handle, { taskId: "T-800", actor: "reviewer", kind: "review", now });
+    assert.ok(review.ok, JSON.stringify(review));
+    if (!review.ok) return;
+    const reviewMs = new Date(review.claim.expiresAt).getTime() - new Date(review.claim.claimedAt).getTime();
+    assert.equal(reviewMs, REVIEW_MS);
+    assert.equal(reviewMs, deriveLeaseDurationMs({ estimatedEffort: "4h", role: "review" }));
+    assert.equal(reviewMs, implementMs * DEFAULT_REVIEW_LEASE_FACTOR);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("explicit renewClaim re-derives by the claim's OWN lane: a review claim renews to now+4h, an implement claim to now+2h, on the same plan", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const created = createTask(handle, { id: "T-801", title: "D11 wiring renew", workload: "Normal", detail: { estimatedEffort: "4h" }, actor: "test" });
+    assert.equal(created.ok, true, JSON.stringify(created));
+    const claimedAt = () => new Date("2026-10-17T09:00:00.000Z");
+
+    const implement = claimTask(handle, { taskId: "T-801", actor: "worker", kind: "implement", now: claimedAt });
+    const review = claimTask(handle, { taskId: "T-801", actor: "reviewer", kind: "review", now: claimedAt });
+    assert.ok(implement.ok && review.ok, JSON.stringify({ implement, review }));
+    if (!implement.ok || !review.ok) return;
+
+    const renewAt = () => new Date("2026-10-17T09:30:00.000Z"); // well inside both leases
+    const renewedImplement = renewClaim(handle, { taskId: "T-801", claimId: implement.claim.claimId, leaseToken: implement.claim.leaseToken, actor: "worker", now: renewAt });
+    assert.ok(renewedImplement.ok, JSON.stringify(renewedImplement));
+    if (renewedImplement.ok) {
+      const claim = renewedImplement.claim as { expiresAt: string };
+      assert.equal(new Date(claim.expiresAt).getTime(), renewAt().getTime() + IMPLEMENT_MS, "implement renews to now + 2h");
+    }
+
+    const renewedReview = renewClaim(handle, { taskId: "T-801", claimId: review.claim.claimId, leaseToken: review.claim.leaseToken, actor: "reviewer", now: renewAt });
+    assert.ok(renewedReview.ok, JSON.stringify(renewedReview));
+    if (renewedReview.ok) {
+      const claim = renewedReview.claim as { expiresAt: string };
+      assert.equal(new Date(claim.expiresAt).getTime(), renewAt().getTime() + REVIEW_MS, "review renews to now + 4h -- this is the mutation H/I site: role: 'implement' hardcoded at mint or at renewal would both collapse this to 2h");
+    }
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("renewal by run event (appendRunEventClaimRenewal) on a REVIEW dispatch also re-derives on the review lane: now+4h, not now+2h", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const created = createTask(handle, { id: "T-802", title: "D11 wiring run-event renew", workload: "Normal", detail: { estimatedEffort: "4h" }, actor: "test" });
+    assert.equal(created.ok, true, JSON.stringify(created));
+    const claimedAt = () => new Date("2026-10-17T09:00:00.000Z");
+
+    const review = claimTask(handle, { taskId: "T-802", actor: "reviewer", kind: "review", now: claimedAt });
+    assert.ok(review.ok, JSON.stringify(review));
+    if (!review.ok) return;
+    const dispatch = recordDispatchAttempt(handle, {
+      dispatchId: "11112222-3333-4444-8555-666677778888", taskId: "T-802", executorKind: "cli", contextHash: "hash", attempt: 1, status: "running", kind: "review"
+    }, "reviewer");
+    assert.ok(dispatch.ok, JSON.stringify(dispatch));
+
+    const renewAt = () => new Date("2026-10-17T09:30:00.000Z");
+    const result = appendRunEventClaimRenewal(
+      handle,
+      { dispatchId: "11112222-3333-4444-8555-666677778888", attempt: 1, actor: "reviewer", now: renewAt },
+      input => handle.appendEvent(input)
+    );
+    assert.equal(result.renewed, true, JSON.stringify(result));
+    if (!result.renewed) return;
+    assert.equal(result.claimId, review.claim.claimId);
+    assert.equal(new Date(result.expiresAt).getTime(), renewAt().getTime() + REVIEW_MS, "a review dispatch's run-event renewal must re-derive on the REVIEW lane (now + 4h), this is the I2 mutation site");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
 });
