@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 20/27
+  - subIssueProgress: 22/27
   - priority: high
   - workload: null
   - tags: []
@@ -3029,7 +3029,7 @@
 ### [T-143] C4: mapctx run event renova o claim; heartbeats fora da medição de tempo ativo
 
   - id: T-143
-  - status: review
+  - status: done
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3040,7 +3040,7 @@
   - dependsOn: [T-142]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
   - updated: 2026-10-15
   - detail: ./tasks/T-143.md
@@ -3409,7 +3409,7 @@
 ### [T-163] Rota de collision avisa quando receipts discordam da grafia (T-159 risco 4, parte A)
 
   - id: T-163
-  - status: review
+  - status: done
   - type: task
   - parent: E-017
   - subIssueProgress: null
@@ -3420,7 +3420,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
   - updated: 2026-10-15
   - detail: ./tasks/T-163.md
