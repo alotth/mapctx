@@ -5,8 +5,24 @@ import { StoreHandle } from "./store-handle"
 import { getSingleProject, getTaskDetail, listDependencies, listTasks } from "./projections"
 import { checkTaskAcceptance } from "./tasks"
 
+/**
+ * T-148 (D13): `info` is an observation, not a finding. It is reported and
+ * counted as neither an error nor a warning, so it cannot fail a run and
+ * cannot grow the warning count an operator is trying to drive to zero --
+ * which is what trains people to stop reading `validate` at all.
+ */
+export type IssueSeverity = "error" | "warning" | "info"
+
+/**
+ * The severities a gate can act on. `info` is excluded by construction: it
+ * fails nothing, so there is nothing for a baseline to accept, and the type
+ * keeps one out of a baseline file rather than relying on a filter staying
+ * in place.
+ */
+export type GatingSeverity = Exclude<IssueSeverity, "info">
+
 export type StoreSemanticIssue = {
-  severity: "error" | "warning"
+  severity: IssueSeverity
   code: string
   message: string
   taskId?: string
@@ -253,10 +269,17 @@ export function validateCanonicalStore(handle: StoreHandle): CanonicalStoreRepor
     }
   }
 
+  // T-148 (D13): `info`, not `warning`. A shared updated date is what an
+  // ordinary day of board work looks like -- one export stamps every task it
+  // rewrites -- so it proves nothing about corruption and there is no action
+  // that clears it. Reported as a warning it was permanent noise (four of
+  // them on the live board), and a validator that always prints warnings is
+  // one an operator stops reading. The message is unchanged on purpose: it is
+  // part of the T-127 baseline fingerprint.
   const counts = new Map<string, number>()
   for (const task of tasks) if (task.updatedOn) counts.set(task.updatedOn, (counts.get(task.updatedOn) ?? 0) + 1)
   for (const [date, count] of counts) {
-    if (count >= 10) issues.push({ severity: "warning", code: "bulk-updated-timestamp", message: `${count} tasks share updated date ${date}; event history carries no per-task distinction.` })
+    if (count >= 10) issues.push({ severity: "info", code: "bulk-updated-timestamp", message: `${count} tasks share updated date ${date}; event history carries no per-task distinction.` })
   }
 
   return {
@@ -352,17 +375,26 @@ export function checkStoreSnapshots(cwd: string, tasksRoot: string): SnapshotChe
 // ---------------------------------------------------------------------------
 
 export type ValidationGateIssue = {
-  severity: "error" | "warning"
+  severity: IssueSeverity
   code: string
   message: string
   taskId?: string
+}
+
+/**
+ * T-148: separates the issues a gate acts on from the advisory ones. Used as
+ * a type guard so the compiler, not a comment, is what keeps an `info` out of
+ * a baseline file.
+ */
+function isGating(issue: ValidationGateIssue): issue is ValidationGateIssue & { severity: GatingSeverity } {
+  return issue.severity !== "info"
 }
 
 export const VALIDATION_BASELINE_SCHEMA_VERSION = 1
 
 export type ValidationBaselineEntry = {
   fingerprint: string
-  severity: "error" | "warning"
+  severity: GatingSeverity
   code: string
   taskId: string | null
   message: string
@@ -389,7 +421,7 @@ export function validationIssueFingerprint(issue: ValidationGateIssue): string {
     .slice(0, 32)
 }
 
-function baselineEntry(issue: ValidationGateIssue): ValidationBaselineEntry {
+function baselineEntry(issue: ValidationGateIssue & { severity: GatingSeverity }): ValidationBaselineEntry {
   return {
     fingerprint: validationIssueFingerprint(issue),
     severity: issue.severity,
@@ -399,10 +431,15 @@ function baselineEntry(issue: ValidationGateIssue): ValidationBaselineEntry {
   }
 }
 
-/** Serializable baseline for the issues passed in, ordered deterministically. */
+/**
+ * Serializable baseline for the issues passed in, ordered deterministically.
+ * T-148: `info` issues are skipped -- recording one would put an entry in the
+ * file that can never match a failure, and an operator reviewing a baseline
+ * should see only the findings they decided to accept.
+ */
 export function buildValidationBaseline(issues: ValidationGateIssue[]): ValidationBaselineFile {
   const byFingerprint = new Map<string, ValidationBaselineEntry>()
-  for (const issue of issues) {
+  for (const issue of issues.filter(isGating)) {
     const entry = baselineEntry(issue)
     if (!byFingerprint.has(entry.fingerprint)) byFingerprint.set(entry.fingerprint, entry)
   }
@@ -524,6 +561,11 @@ export function applyValidationGate<TIssue extends ValidationGateIssue>(
   const kept: TIssue[] = []
   let baselined = 0
   for (const issue of inScope) {
+    // T-148: an `info` is never gated. It fails nothing, so a baseline has
+    // nothing to accept -- and routing it through the match would let a
+    // recorded fingerprint silence an observation the operator should still
+    // see. It is kept, uncounted, whatever the baseline says.
+    if (!isGating(issue)) { kept.push(issue); continue }
     const fingerprint = validationIssueFingerprint(issue)
     if (accepted.has(fingerprint)) {
       matched.add(fingerprint)
@@ -535,7 +577,7 @@ export function applyValidationGate<TIssue extends ValidationGateIssue>(
   // An entry that matched nothing in scope may still describe an issue the
   // task filter excluded, so the two causes are told apart against the FULL
   // issue list before any advice is given.
-  const allFingerprints = new Set(issues.map(issue => validationIssueFingerprint(issue)))
+  const allFingerprints = new Set(issues.filter(isGating).map(issue => validationIssueFingerprint(issue)))
   const staleBaseline = (options.baseline?.issues ?? [])
     .filter(entry => !matched.has(entry.fingerprint))
     .map(entry => ({
