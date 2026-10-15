@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 23/30
+  - subIssueProgress: 25/32
   - priority: high
   - workload: null
   - tags: []
@@ -3048,7 +3048,7 @@
 ### [T-144] C5: dispatch kind e claim de revisão compartilhado (migração + troca do índice único)
 
   - id: T-144
-  - status: backlog
+  - status: review
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3061,7 +3061,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-144.md
 
 ### [T-145] C6: receipt de revisão não move planning; forecast exclui kind != implement
@@ -3447,7 +3447,7 @@
 ### [T-165] Teste de escalonamento do sanitize sem relógio de parede (flake)
 
   - id: T-165
-  - status: backlog
+  - status: done
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3458,7 +3458,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
   - updated: 2026-10-15
   - detail: ./tasks/T-165.md
@@ -3466,7 +3466,7 @@
 ### [T-166] Scheduler: normalizar paths para NFC (NFC x NFD do macOS/Linux)
 
   - id: T-166
-  - status: backlog
+  - status: review
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3485,7 +3485,7 @@
 ### [T-167] Snapshot pre-migracao pulado quando a migracao roda via store repair
 
   - id: T-167
-  - status: backlog
+  - status: done
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3496,10 +3496,48 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
   - updated: 2026-10-15
   - detail: ./tasks/T-167.md
+
+### [T-168] Protocol: schemas JSON gerados podem divergir do zod sem teste que pegue (EventLogEntry sem redactions)
+
+  - id: T-168
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: low
+  - workload: Easy
+  - tags: []
+  - domains: [PROTOCOL, TEST]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/T-168.md
+
+### [T-169] Testes do store vazam MAPCTX_HOME temporario em /tmp (milhares de diretorios por rodada)
+
+  - id: T-169
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: medium
+  - workload: Easy
+  - tags: []
+  - domains: [STORE, TEST]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-15
+  - detail: ./tasks/T-169.md
 
 ## Notes
 

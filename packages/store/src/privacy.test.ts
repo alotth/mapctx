@@ -142,6 +142,9 @@ test("privacy lint on a redactable field promises the real cure with the field p
 // in outcome -- one RegExp.exec is a single uninterruptible step from JS's
 // point of view, so the matching loop (privacy.ts) runs inside a vm context
 // with a real timeout. On exhaustion the lint aborts rather than hangs.
+// T-165: elapsed < 2000 here is class B (an absolute "did not hang" ceiling
+// on the default 250ms budget, ~7.9x measured headroom), not a wall-clock
+// ratio; see sanitize.test.ts.
 test("catastrophic backtracking pattern is bounded by budget, reported by name, and never blocks the operation", () => {
   const long = `${"a".repeat(60)}b`;
   const started = Date.now();
@@ -160,6 +163,8 @@ test("catastrophic backtracking pattern is bounded by budget, reported by name, 
   assert.match(abortWarning!, /NOT blocked/);
   assert.ok(!JSON.stringify(lint).includes(long), "the pathological input itself must never be echoed");
 
+  // T-165: a separate class-B ceiling from the one above -- this scan uses
+  // an explicit 60ms budget rather than the 250ms default, measured ~61ms -> 24.6x.
   const budgeted = scanForPrivacyPatterns(long, compilePrivacyPatterns(["^(a+)+$"]), { budgetMs: 60 });
   assert.ok(budgeted.aborted);
   assert.ok(budgeted.aborted!.afterMs < 1500, `expected the explicit budget to be honoured, took ${budgeted.aborted!.afterMs}ms`);
@@ -252,6 +257,8 @@ test("replacePrivacyPatterns counts occurrences per pattern/text, leaves zero-le
   assert.deepEqual(replacePrivacyPatterns(["x"], compilePrivacyPatterns([]), { replacement: "<redacted>" }), { texts: ["x"], counts: [] });
 });
 
+// T-165: elapsed < 2000 here is class B (an absolute "did not hang" ceiling,
+// ~33x measured headroom), not a wall-clock ratio; see sanitize.test.ts.
 test("replacePrivacyPatterns on budget exhaustion: the subject it ran out on (and anything after) is undefined, never half-rewritten; an earlier subject already finished is kept", () => {
   const long = `${"a".repeat(60)}b`;
   const compiled = compilePrivacyPatterns(["^(a+)+$"]);

@@ -413,7 +413,12 @@ function printHelp(): void {
   console.log('  mapctx store backups [--json]');
   console.log('    Lists this project\'s archives, newest first.');
   console.log('    Retention prunes only AUTO snapshots (pre-migration, pre-repair); an archive you');
-  console.log('    took with `store backup` is never pruned.');
+  console.log('    took with `store backup` is never pruned. It also always spares the newest');
+  console.log('    automatic archive of the schema BELOW the newest schema archived -- the rollback');
+  console.log('    point of the last migration -- so the count can be exceeded by one directory.');
+  console.log('    After a migration applied by `store repair`, THAT archive is the pre-migration');
+  console.log('    rollback point and its reason reads `pre-repair`: look at `storeSchemaVersion`,');
+  console.log('    not at the reason, to find the state a migration left behind.');
   console.log('    PRIVACY: a backup taken before a `mapctx redact` still contains the original');
   console.log('    value, and restoring it undoes that redaction. `manifest.redactionCount` records');
   console.log('    how many redactions the store had applied when the archive was made.');

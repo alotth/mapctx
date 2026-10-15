@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite"
 import { getMapctxHome } from "@mapctx/core/workspace"
 import { checkIntegrity, openDatabaseReadOnly, readMetaValue, setPreMigrationSnapshot } from "./db"
 import { JOURNAL_DIR_NAME, listJournalNodeIds, listJournalSequences } from "./journal"
-import { acquireMaintenanceLock, assertNotUnderMaintenance, MAINTENANCE_LOCK_FILENAME } from "./maintenance"
+import { acquireMaintenanceLock, assertNotUnderMaintenance, MAINTENANCE_LOCK_FILENAME, readMaintenanceLock } from "./maintenance"
 import { MIGRATIONS } from "./schema"
 import { verifyRedactionsFromLedger } from "./redact"
 
@@ -408,22 +408,60 @@ function walkFiles(root: string, prefix = ""): string[] {
  * Retention for AUTO snapshots only. An operator backup is never pruned: the
  * one thing worse than no backup is a backup policy that deletes the archive
  * somebody made on purpose.
+ *
+ * T-167: retention also spares the rollback point of the most recent schema
+ * migration (see `rollbackPointSnapshot`), because a count cannot tell the
+ * only copy of the previous schema from a redundant copy of the current one.
  */
 export function pruneAutoBackups(projectId: string, keep: number): string[] {
   const root = backupsRootFor(projectId)
   if (!fs.existsSync(root)) return []
-  const candidates: Array<{ dir: string; createdAt: string }> = []
+  const candidates: Array<{ dir: string; createdAt: string; storeSchemaVersion: number | null }> = []
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
     const dir = path.join(root, entry.name)
     const manifest = tryReadManifest(dir)
     if (!manifest || !AUTO_REASONS.has(manifest.reason)) continue
-    candidates.push({ dir, createdAt: manifest.createdAt })
+    candidates.push({
+      dir,
+      createdAt: manifest.createdAt,
+      storeSchemaVersion: typeof manifest.storeSchemaVersion === "number" ? manifest.storeSchemaVersion : null
+    })
   }
   candidates.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  const doomed = candidates.slice(Math.max(0, keep))
+  const spared = rollbackPointSnapshot(candidates)
+  const doomed = candidates.slice(Math.max(0, keep)).filter(victim => victim.dir !== spared)
   for (const victim of doomed) fs.rmSync(victim.dir, { recursive: true, force: true })
   return doomed.map(victim => victim.dir)
+}
+
+/**
+ * T-167: the one auto-snapshot retention must never delete -- the NEWEST
+ * archive of the highest schema BELOW the newest schema these archives know
+ * about. That is the rollback point of the last migration the store went
+ * through, and the only artifact that makes it undoable.
+ *
+ * Without this, five ordinary repairs after an upgrade evict it: retention
+ * counts directories, and a count cannot tell the only copy of the previous
+ * schema from the fifth copy of the current one. The store would then hold
+ * five archives it can already reproduce and none it cannot.
+ *
+ * Exactly one directory is spared, and only while the archives actually
+ * straddle a schema boundary: once a NEWER migration is archived, yesterday's
+ * rollback point stops being one and becomes prunable again, so this cannot
+ * accumulate. A manifest written before `storeSchemaVersion` existed states
+ * no schema and so can never claim the exemption.
+ */
+function rollbackPointSnapshot(candidatesNewestFirst: Array<{ dir: string; storeSchemaVersion: number | null }>): string | null {
+  const versions = candidatesNewestFirst
+    .map(candidate => candidate.storeSchemaVersion)
+    .filter((version): version is number => version !== null)
+  if (versions.length === 0) return null
+  const newest = Math.max(...versions)
+  const older = versions.filter(version => version < newest)
+  if (older.length === 0) return null
+  const previous = Math.max(...older)
+  return candidatesNewestFirst.find(candidate => candidate.storeSchemaVersion === previous)?.dir ?? null
 }
 
 function tryReadManifest(backupDir: string): BackupManifest | null {
@@ -686,7 +724,7 @@ export function autoSnapshot(
   storeDir: string,
   reason: Exclude<BackupReason, "operator">,
   options: { projectId?: string | null; db?: DatabaseSync; retention?: number; underMaintenanceLock?: boolean } = {}
-): { ok: true; backupDir: string; pruned: string[] } | { ok: false; skipped: string } {
+): { ok: true; backupDir: string; manifest: BackupManifest; pruned: string[] } | { ok: false; skipped: string } {
   const projectId = options.projectId ?? inferProjectIdFromStoreDir(storeDir)
   if (!projectId) return { ok: false, skipped: "could not determine the projectId for the backups directory" }
   try {
@@ -694,7 +732,10 @@ export function autoSnapshot(
     const pruned = options.retention === undefined
       ? result.pruned
       : pruneAutoBackups(projectId, options.retention)
-    return { ok: true, backupDir: result.backupDir, pruned }
+    // The manifest travels with the result (T-167): a caller that holds the
+    // maintenance lock has to be able to say WHICH state it just archived --
+    // schema and event count -- and not merely that a directory exists.
+    return { ok: true, backupDir: result.backupDir, manifest: result.manifest, pruned }
   } catch (error) {
     return { ok: false, skipped: error instanceof Error ? error.message : String(error) }
   }
@@ -739,6 +780,107 @@ export function pushSnapshotNotice(notice: string): void {
 }
 
 /**
+ * T-167: the archive the MAINTENANCE LOCK HOLDER already took, published for
+ * the pre-migration hook to consult.
+ *
+ * `repair` takes the lock, snapshots inside it, and only then opens the
+ * database -- and that open is what runs a pending migration. The hook fired
+ * from inside it, called `createBackup`, and was refused by
+ * `assertNotUnderMaintenance`: from the backup code's point of view somebody
+ * was holding the lock. It was us. So the one path the operator is told to
+ * use to migrate a store (`mapctx store repair`, because every read refuses
+ * with "migration pending") printed
+ *
+ *     pre-migration snapshot SKIPPED (Store is under maintenance (repair) by
+ *     pid N ...); migration proceeded
+ *
+ * and the protection T-138 promised existed only by accident: the `pre-repair`
+ * archive happened to be taken before the migration, and nothing said so or
+ * checked it.
+ *
+ * The fix is testimony, not a weaker lock. The holder publishes WHAT it
+ * archived; the hook can then tell "another process is swapping the inode"
+ * (refuse, honestly) from "this process holds the lock and already has an
+ * archive of exactly this state" (name it). No other process gains anything,
+ * and a hook that finds no context behaves exactly as it did before.
+ */
+export type MaintenanceSnapshotContext = {
+  /** Store whose maintenance lock the publisher holds. */
+  storeDir: string
+  /**
+   * What it archived under that lock, or null when the snapshot failed. The
+   * REASON a snapshot failed is not carried here: the holder reports its own
+   * outcome on the notice queue, and a second copy of that sentence inside
+   * this hook's SKIPPED line said nothing the operator was not already told.
+   */
+  archive: { backupDir: string; manifest: BackupManifest } | null
+}
+
+let activeMaintenanceSnapshot: MaintenanceSnapshotContext | null = null
+
+/**
+ * Runs `body` with the lock holder's snapshot context installed. The previous
+ * value is restored even when `body` throws, so an aborted repair never
+ * leaves a stale claim behind for the next migration in the same process.
+ */
+export function withMaintenanceSnapshot<T>(context: MaintenanceSnapshotContext, body: () => T): T {
+  const previous = activeMaintenanceSnapshot
+  activeMaintenanceSnapshot = { ...context, storeDir: path.resolve(context.storeDir) }
+  try {
+    return body()
+  } finally {
+    activeMaintenanceSnapshot = previous
+  }
+}
+
+/**
+ * The context, but only for the store it was published about and only while
+ * this process STILL HOLDS a lock that is still exclusive. The context is a
+ * claim; the lock file is the fact, and an exemption from
+ * `assertNotUnderMaintenance` that outlived its lock would be exactly the
+ * loosening this fix must not introduce.
+ *
+ * "Still exclusive" is why `stale` is read and not just `pid` (review
+ * BAIXA-1). A lock carrying our own pid but older than
+ * `MAINTENANCE_LOCK_STALE_MS` is stale by the module's policy: any other
+ * process may steal it and open or write the store. The reuse branch below
+ * declines to snapshot precisely BECAUSE the lock excludes everyone else, so
+ * a lock that has stopped excluding anyone must stop buying that silence --
+ * the hook then takes its own snapshot, which is the safe direction.
+ */
+function maintenanceSnapshotFor(storeDir: string): MaintenanceSnapshotContext | null {
+  const context = activeMaintenanceSnapshot
+  if (!context || path.resolve(storeDir) !== context.storeDir) return null
+  const lock = readMaintenanceLock(context.storeDir)
+  if (!lock || lock.pid !== process.pid || lock.stale) return null
+  return context
+}
+
+/**
+ * Does the holder's archive hold the exact state this migration is about to
+ * rewrite? Both facts are already in its manifest:
+ *
+ * - `storeSchemaVersion` equals the live store's applied maximum -- the
+ *   archive predates the pending migration, which is the whole claim;
+ * - `eventCount` matches -- nothing was appended in between. The lock
+ *   excludes other processes, so this can only diverge if the holder itself
+ *   wrote after snapshotting, and that ordering is worth checking rather than
+ *   assuming (it is what made the old behaviour accidentally correct).
+ *
+ * A mismatch is not an error: it means the archive is NOT the rollback point
+ * for this migration, so the hook takes its own snapshot instead of claiming
+ * a coverage it cannot prove.
+ */
+function archiveCoversPreMigrationState(
+  archive: { manifest: BackupManifest },
+  db: DatabaseSync,
+  appliedVersion: number
+): boolean {
+  return archive.manifest.storeSchemaVersion === appliedVersion
+    && archive.manifest.eventCount === readCountSafely(db, "SELECT count(*) AS n FROM event_log")
+}
+
+/**
  * Installs the pre-migration snapshot into the database layer. Done at
  * module load so any process that touches `@mapctx/store` gets the
  * protection, without db.ts importing this module (it is the other way
@@ -747,15 +889,44 @@ export function pushSnapshotNotice(notice: string): void {
  */
 setPreMigrationSnapshot((dbPath, db, pendingVersions) => {
   const storeDir = path.dirname(dbPath)
-  const result = autoSnapshot(storeDir, "pre-migration", { db })
+  const maintenance = maintenanceSnapshotFor(storeDir)
+  // The schema this store is leaving behind. Read from the live database
+  // rather than inferred from `pendingVersions`: a store can be missing an
+  // older migration while carrying a newer one, and what the archive has to
+  // match is what is applied, not what is next.
+  const appliedVersion = readCountSafely(db, "SELECT max(version) AS n FROM schema_migrations")
+  const migrations = `migration(s) ${pendingVersions.join(", ")}`
+
+  // T-167: when the lock holder's own archive provably holds this exact
+  // pre-migration state, it IS the rollback point. Name it, rather than
+  // writing a byte-identical second copy of the same store and spending
+  // another slot of the auto-snapshot retention on it.
+  if (maintenance?.archive && archiveCoversPreMigrationState(maintenance.archive, db, appliedVersion)) {
+    pendingSnapshotNotices.push(
+      `pre-migration snapshot of schema ${appliedVersion} before ${migrations}:`
+      + ` already covered by the ${maintenance.archive.manifest.reason} snapshot taken under this maintenance lock`
+      + ` (storeSchemaVersion ${appliedVersion}, ${maintenance.archive.manifest.eventCount} events): ${maintenance.archive.backupDir}`
+    )
+    return
+  }
+
+  // No archive, or one that does not hold this state. Snapshot now -- and
+  // when this process is the lock holder, inside the lock it holds:
+  // `createBackup` refuses an active lock so a copy cannot straddle SOMEONE
+  // ELSE's inode swap, and this process has not swapped anything yet (repair
+  // swaps at the very end). Every other caller is refused exactly as before,
+  // so the lock stays exclusive.
+  const result = autoSnapshot(storeDir, "pre-migration", { db, underMaintenanceLock: maintenance !== null })
   if (result.ok) {
     pendingSnapshotNotices.push(
-      `pre-migration snapshot of schema before migration(s) ${pendingVersions.join(", ")}: ${result.backupDir}`
+      `pre-migration snapshot of schema ${appliedVersion} before ${migrations}: ${result.backupDir}`
       + (result.pruned.length > 0 ? ` (pruned ${result.pruned.length} older auto-snapshot(s))` : "")
     )
   } else {
     // Non-fatal by design: refusing to migrate because the snapshot failed
-    // would leave a store that no command can open.
+    // would leave a store that no command can open. What a SKIPPED may no
+    // longer be is the lock refusing its own holder: that was a diagnostic
+    // that described nothing real and hid the absence of a rollback point.
     pendingSnapshotNotices.push(`pre-migration snapshot SKIPPED (${result.skipped}); migration proceeded`)
   }
 })

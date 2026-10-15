@@ -660,3 +660,32 @@ what it measured before — wall clock, labelled `substituted`.
   migration, and the restore gate keeps reading it. In a pre-migration
   snapshot, `storeSchemaVersion` is the version before the upgrade, and
   `store backups` lists that version.
+* **fix:** `mapctx store repair` no longer reports `pre-migration snapshot
+  SKIPPED (Store is under maintenance (repair) by pid N ...)` while migrating
+  the store anyway. `repair` holds the maintenance lock and then opens the
+  database — and that open is what applies a pending migration — so the
+  pre-migration hook was refused by the lock naming its own holder. Since
+  every read refuses a store with a migration pending, `store repair` is the
+  path an operator is sent down to migrate one, and it was the path with the
+  bogus warning. The lock is unchanged: the holder now publishes the archive
+  it already took, the hook verifies that archive holds the exact state the
+  migration is about to rewrite (same `storeSchemaVersion`, same `eventCount`)
+  and names it, and anything else makes it take its own snapshot. A SKIPPED
+  can no longer be the lock refusing itself, and one taken under another
+  process's live lock is still refused.
+  **What changes for you:** after a migration applied by `store repair` there
+  is **no archive with `reason: pre-migration`** — the rollback point is the
+  `pre-repair` archive of that run, and `storeSchemaVersion` (which
+  `store backups` prints) is what identifies the schema it holds. Look for the
+  version, not the reason. An ordinary command that migrates still writes its
+  own `pre-migration` archive, as before.
+* **fix:** automatic-snapshot retention always spares the newest archive of the
+  schema below the newest schema archived — the rollback point of the last
+  migration. Retention counts directories, and a count cannot tell the only
+  copy of the previous schema from the fifth copy of the current one: five
+  ordinary repairs after an upgrade used to evict the single archive that made
+  that upgrade undoable, leaving five archives the store can reproduce and
+  none it cannot. Exactly one directory is spared, so the retention limit can
+  be exceeded by one, and it stops being spared once a newer migration is
+  archived. Archives from before `storeSchemaVersion` existed state no schema
+  and never claim the exemption.
