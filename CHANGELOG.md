@@ -465,3 +465,14 @@ holdership is a role-aware question that belongs with C5.
   lists through one update** — `mapctx task update <id> --depends-on a,b
   --blocking x,y`, spelling an empty list as `""` (omitting the flag is now a
   no-op on that kind, so it would leave the divergence in place)
+* **fix:** `mapctx validate` reports `bulk-updated-timestamp` as `info`
+  instead of `warning`, and adds `info` as a severity that counts as neither
+  an error nor a warning. A shared `updated` date is what an ordinary day of
+  board work looks like — one export stamps every task it rewrites — so it
+  proves nothing and no action clears it; as a warning it was permanent noise
+  that trained operators to stop reading the command (the live board shows
+  four). An `info` never gates: `--write-baseline` does not record one, and
+  no baseline entry can suppress one, so an observation cannot be hidden by
+  accepting it. A baseline recorded before this change reports its
+  `bulk-updated-timestamp` entry as stale `not-reported` — the warning it
+  recorded no longer exists, so drop that entry
