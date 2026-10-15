@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 15/25
+  - subIssueProgress: 16/25
   - priority: high
   - workload: null
   - tags: []
@@ -3010,7 +3010,7 @@
 ### [T-142] C3: renewToken (segunda capacidade por claimId) e task renew --dispatch
 
   - id: T-142
-  - status: backlog
+  - status: done
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3021,9 +3021,9 @@
   - dependsOn: [T-141]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-142.md
 
 ### [T-143] C4: mapctx run event renova o claim; heartbeats fora da medição de tempo ativo
