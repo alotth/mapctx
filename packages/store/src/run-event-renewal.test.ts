@@ -439,3 +439,97 @@ test("recordRunEvent without {renew} returns exactly {ok:true, event} -- no rene
     handle.close(); restoreEnv(); cleanupDir(repoDir);
   }
 });
+
+// ---------------------------------------------------------------------------
+// bc76419 (review F2): both expired branches name the 24h ceiling in their
+// message WHEN it was also reached -- and, just as importantly, do NOT when
+// it was not. Without the counterproof a message that always talks about the
+// ceiling would pass the positive half trivially.
+// ---------------------------------------------------------------------------
+
+test("F2: renewClaim's 'expired' message names the 24h ceiling when the claim also reached it, and does NOT when it expired well inside the window", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-931");
+    claimableTask(handle, "T-932");
+    const claimedAtMs = new Date("2026-10-16T09:00:00.000Z").getTime();
+
+    // Past the ceiling: the claim's own short derived lease (~2h) is long
+    // expired by hour 24, so renewClaim meets "expired" first (F2's whole
+    // point), and the message must still name the ceiling.
+    const pastCeilingClaim = claimTask(handle, { taskId: "T-931", actor: "worker", now: () => new Date(claimedAtMs) });
+    assert.ok(pastCeilingClaim.ok, JSON.stringify(pastCeilingClaim));
+    if (!pastCeilingClaim.ok) return;
+    const pastCeiling = renewClaim(handle, {
+      taskId: "T-931", claimId: pastCeilingClaim.claim.claimId, leaseToken: pastCeilingClaim.claim.leaseToken, actor: "x",
+      now: () => new Date(claimedAtMs + 24 * 60 * 60 * 1000 + 1000)
+    });
+    assert.equal(pastCeiling.ok, false);
+    if (pastCeiling.ok) return;
+    assert.equal(pastCeiling.reason, "expired");
+    assert.match(pastCeiling.message ?? "", /24 ?h/i, `must name the 24h ceiling: ${pastCeiling.message}`);
+    assert.match(pastCeiling.message ?? "", /task start/, `must point at the remedy: ${pastCeiling.message}`);
+
+    // Counterproof: expired well INSIDE the window (claimedAt + ~1h, with a
+    // 1s lease) -- the ceiling was never reached, so the message must say
+    // nothing about it.
+    const insideWindowClaim = claimTask(handle, { taskId: "T-932", actor: "worker", now: () => new Date(claimedAtMs), leaseDurationMs: 1000 });
+    assert.ok(insideWindowClaim.ok, JSON.stringify(insideWindowClaim));
+    if (!insideWindowClaim.ok) return;
+    const insideWindow = renewClaim(handle, {
+      taskId: "T-932", claimId: insideWindowClaim.claim.claimId, leaseToken: insideWindowClaim.claim.leaseToken, actor: "x",
+      now: () => new Date(claimedAtMs + 2000) // 2s later, past the 1s lease, nowhere near 24h
+    });
+    assert.equal(insideWindow.ok, false);
+    if (insideWindow.ok) return;
+    assert.equal(insideWindow.reason, "expired");
+    assert.ok(!/24 ?h/i.test(insideWindow.message ?? ""), `must NOT mention the ceiling when it was never reached: ${insideWindow.message}`);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("F2: the run-event path's 'claim-expired' message names the 24h ceiling when also reached, and does NOT when expired well inside the window", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-933");
+    claimableTask(handle, "T-934");
+    const claimedAtMs = new Date("2026-10-16T09:00:00.000Z").getTime();
+
+    const pastCeilingStarted = startTask(handle, { taskId: "T-933", actor: "worker", now: () => new Date(claimedAtMs), status: "running" });
+    assert.ok(pastCeilingStarted.ok, JSON.stringify(pastCeilingStarted));
+    if (!pastCeilingStarted.ok) return;
+    const pastCeilingResult = recordRunEvent(
+      handle,
+      runEvent(pastCeilingStarted.dispatch.dispatchId, pastCeilingStarted.dispatch.attempt, 0, new Date(claimedAtMs + 24 * 60 * 60 * 1000 + 1000).toISOString()),
+      "worker", pastCeilingStarted.dispatch.dispatchId,
+      { renew: { now: () => new Date(claimedAtMs + 24 * 60 * 60 * 1000 + 1000) } }
+    );
+    assert.equal(pastCeilingResult.ok, true, JSON.stringify(pastCeilingResult));
+    if (!pastCeilingResult.ok) return;
+    assert.ok(pastCeilingResult.renewal);
+    assert.equal(pastCeilingResult.renewal!.renewed, false);
+    if (pastCeilingResult.renewal!.renewed) return;
+    assert.equal(pastCeilingResult.renewal!.reason, "claim-expired");
+    assert.match(pastCeilingResult.renewal!.message, /24 ?h/i, `must name the 24h ceiling: ${pastCeilingResult.renewal!.message}`);
+
+    const insideWindowStarted = startTask(handle, { taskId: "T-934", actor: "worker", now: () => new Date(claimedAtMs), leaseDurationMs: 1000, status: "running" });
+    assert.ok(insideWindowStarted.ok, JSON.stringify(insideWindowStarted));
+    if (!insideWindowStarted.ok) return;
+    const insideWindowResult = recordRunEvent(
+      handle,
+      runEvent(insideWindowStarted.dispatch.dispatchId, insideWindowStarted.dispatch.attempt, 0, new Date(claimedAtMs + 2000).toISOString()),
+      "worker", insideWindowStarted.dispatch.dispatchId,
+      { renew: { now: () => new Date(claimedAtMs + 2000) } } // 2s later, past the 1s lease, nowhere near 24h
+    );
+    assert.equal(insideWindowResult.ok, true, JSON.stringify(insideWindowResult));
+    if (!insideWindowResult.ok) return;
+    assert.ok(insideWindowResult.renewal);
+    assert.equal(insideWindowResult.renewal!.renewed, false);
+    if (insideWindowResult.renewal!.renewed) return;
+    assert.equal(insideWindowResult.renewal!.reason, "claim-expired");
+    assert.ok(!/24 ?h/i.test(insideWindowResult.renewal!.message), `must NOT mention the ceiling when it was never reached: ${insideWindowResult.renewal!.message}`);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});

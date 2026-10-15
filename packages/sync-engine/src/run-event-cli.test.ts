@@ -190,3 +190,109 @@ test("mapctx redact --sequence 0 is still refused by name, even though the parse
   assert.match(String(result.stderr), /sequence is a journal event sequence and starts at 1/);
   assert.match(String(result.stderr), /0 addresses no event/);
 });
+
+// ---------------------------------------------------------------------------
+// bc76419 (review F1): [coordination] maxLease above the 24h absolute
+// ceiling refuses at config-read time, so EVERY command that opens the
+// project refuses -- including task start, which is the exact regression
+// the reviewer measured through the CLI (a 30h claim minted via the derived
+// path while --lease 30h was refused by name for the same number).
+// ---------------------------------------------------------------------------
+
+function appendCoordination(repoDir: string, tomlBody: string): void {
+  const fs = require("fs") as typeof import("fs");
+  fs.appendFileSync(path.join(repoDir, "mapctx.toml"), `\n[coordination]\n${tomlBody}\n`, "utf8");
+}
+
+test("F1: [coordination] maxLease = \"30h\" refuses EVERY command that opens the project, citing maxLease and the 24h ceiling -- task start included, which used to mint a 30h claim for exactly this config", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const taskId = createClaimableTask(f, "F1 maxLease 30h task");
+  appendCoordination(f.repoDir, 'maxLease = "30h"\n');
+
+  for (const args of [
+    ["task", "show", taskId],
+    ["task", "claim", taskId, "--actor", "test"],
+    ["task", "start", taskId, "--actor", "test"]
+  ]) {
+    const result = f.cli([...args, "--json"]);
+    assert.notEqual(result.status, 0, `${JSON.stringify(args)}: expected a refusal`);
+    const stderr = String(result.stderr);
+    assert.match(stderr, /maxLease/, `${JSON.stringify(args)}: ${stderr}`);
+    assert.match(stderr, /24h/, `${JSON.stringify(args)}: must name the 24h ceiling: ${stderr}`);
+    assert.equal(String(result.stdout).trim(), "", `${JSON.stringify(args)}: no claim/dispatch may be created on a refusal`);
+  }
+});
+
+test("F1 boundary: maxLease = \"24h\" is accepted and mints a claim clamped to exactly 24h; \"24h\" + 1 minute and \"30h\" are both refused", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+
+  // leaseFactor 2 x a 20h estimate derives to 40h, which the 24h maxLease
+  // must clamp down to exactly 24h -- proving the boundary is accepted AND
+  // actually governs minting, not just config validation in isolation.
+  appendCoordination(f.repoDir, 'leaseFactor = 2\nmaxLease = "24h"\n');
+  const taskId = createClaimableTask(f, "F1 boundary task", "20h");
+  const started = f.success(["task", "start", taskId, "--actor", "test"]);
+  const durationMs = new Date(started.expiresAt).getTime() - new Date(started.claim.claimedAt).getTime();
+  const driftMs = 24 * 60 * 60 * 1000 - durationMs;
+  assert.ok(driftMs >= 0 && driftMs <= 50, `expected ~24h, got ${durationMs}ms (drift ${driftMs}ms)`);
+
+  for (const overTheLine of ["1441m", "30h"]) {
+    const f2 = fixture(t);
+    f2.success(["import", "--commit", "--actor", "test"]);
+    appendCoordination(f2.repoDir, `maxLease = "${overTheLine}"\n`);
+    const result = f2.cli(["task", "show", "T-101", "--json"]);
+    assert.notEqual(result.status, 0, `maxLease=${overTheLine}: expected a refusal`);
+    assert.match(String(result.stderr), /maxLease/);
+    assert.match(String(result.stderr), /24h/);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// bc76419 (review F3): a run event that lands but renews nothing still exits
+// 0 (the event itself is the deliverable), but now warns on stderr naming
+// the reason. Counterproof: when it DOES renew, stderr stays empty. Both
+// --json and human mode.
+// ---------------------------------------------------------------------------
+
+test("F3: a run event over a lane with no active claim still exits 0, and warns on stderr naming the reason (no-active-claim), in both --json and human mode", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const taskId = createClaimableTask(f, "F3 no active claim task");
+  const started = f.success(["task", "start", taskId, "--actor", "test"]);
+  const released = f.success(["task", "release", taskId, "--claim", started.claim.claimId, "--token", started.claim.leaseToken, "--actor", "test"]);
+  assert.equal(released.ok, true, JSON.stringify(released));
+
+  const jsonRun = f.cli(["run", "event", started.dispatchId, "--type", "heartbeat", "--json"]);
+  assert.equal(jsonRun.status, 0, jsonRun.stderr);
+  const jsonResult = JSON.parse(jsonRun.stdout);
+  assert.equal(jsonResult.renewal.renewed, false);
+  assert.equal(jsonResult.renewal.reason, "no-active-claim");
+  const jsonStderrLines = String(jsonRun.stderr).split("\n").filter(Boolean);
+  assert.equal(jsonStderrLines.length, 1, `expected exactly one stderr warning line: ${JSON.stringify(jsonStderrLines)}`);
+  assert.match(jsonStderrLines[0], /no-active-claim/);
+
+  const humanRun = f.cli(["run", "event", started.dispatchId, "--type", "heartbeat"]);
+  assert.equal(humanRun.status, 0, humanRun.stderr);
+  const humanStderrLines = String(humanRun.stderr).split("\n").filter(Boolean);
+  assert.equal(humanStderrLines.length, 1, `expected exactly one stderr warning line in human mode too: ${JSON.stringify(humanStderrLines)}`);
+  assert.match(humanStderrLines[0], /no-active-claim/);
+});
+
+test("F3 counterproof: a run event that DOES renew leaves stderr empty, in both --json and human mode", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const taskId = createClaimableTask(f, "F3 renews task");
+  const live = f.success(["task", "start", taskId, "--actor", "test"]);
+
+  const jsonRun = f.cli(["run", "event", live.dispatchId, "--type", "heartbeat", "--json"]);
+  assert.equal(jsonRun.status, 0, jsonRun.stderr);
+  const jsonResult = JSON.parse(jsonRun.stdout);
+  assert.equal(jsonResult.renewal.renewed, true, JSON.stringify(jsonResult.renewal));
+  assert.equal(String(jsonRun.stderr).trim(), "", "a successful renewal must leave stderr empty");
+
+  const humanRun = f.cli(["run", "event", live.dispatchId, "--type", "heartbeat", "--sequence", "1"]);
+  assert.equal(humanRun.status, 0, humanRun.stderr);
+  assert.equal(String(humanRun.stderr).trim(), "", "a successful renewal must leave stderr empty in human mode too");
+});
