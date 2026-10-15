@@ -11,8 +11,8 @@
  * deliberately not merged with it. This one compares DECLARED claims before
  * work runs, so it resolves `..`, refuses to pop a `**`, folds case because the
  * scheduler must err toward serializing on filesystems that do, and folds
- * Unicode to NFC (T-166) because a mixed macOS/Linux fleet reports one filename
- * two ways. That one compares OBSERVED paths — what a receipt reported against
+ * Unicode to canonical NFD (T-166) because a mixed macOS/Linux fleet reports
+ * one filename two ways. That one compares OBSERVED paths — what a receipt reported against
  * what a violation row recorded — where case is meaningful, `..` does not
  * occur, and the recorded normal form is evidence rather than noise. Merging
  * them would make the audit record lossy or the scheduler case-blind;
@@ -27,29 +27,59 @@
  */
 
 /**
- * Segments joined, `.` dropped, `..` resolved, case folded, Unicode NFC.
+ * Segments joined, `.` dropped, `..` resolved, case folded, canonical Unicode
+ * normal form (NFD).
  *
  * Returns `""` when the path locates nothing — `/`, a bare `..`, or a `..` that
  * would pop a `**`. The scheduler reads that empty result as "unknown, collide
  * broadly" rather than as "empty".
  *
- * NFC is applied FIRST, to the whole input, so the two spellings of one
- * filename become one string before anything structural reads it: separator
- * folding, `..` resolution, the `**` check and case folding then all see
- * identical text whichever form arrived. Nothing in canonical composition
- * produces or consumes `/`, `.`, `\` or `*`, so normalizing this early cannot
- * change how the path splits or which segment a `..` pops.
+ * Normalization is applied FIRST, to the whole input, so the two spellings of
+ * one filename become one string before anything structural reads it:
+ * separator folding, `..` resolution, the `**` check and case folding then all
+ * see identical text whichever form arrived.
  *
- * T-166 added it, for the SCHEDULER and not only for the guard below — they
+ * WHY NFD AND NOT NFC — this comparator does PREFIX matching, not only
+ * equality. For equality the two canonical forms are interchangeable: they
+ * induce the same equivalence class, so either unifies `café.ts` NFC with
+ * `café.ts` NFD. But `pathOverlap` compares the truncated static prefixes
+ * `staticPrefix` cuts at the first wildcard — possibly mid-segment — with
+ * `startsWith`, and **NFC is not prefix-preserving**: `"cafe"` is a prefix of
+ * `cafe`+`◌́`+`.ts` and is NOT a prefix of `café.ts`, because composing the
+ * base letter with its mark consumes the letter the prefix ended on. So
+ * `src/cafe*` declared by one task stops matching the NFD spelling of
+ * `src/café.ts` declared by another, and a pair the scheduler used to
+ * serialize runs in parallel over one file. Measured over every ASCII letter
+ * against eight common marks, both spellings each: NFC breaks 298 of 832 such
+ * prefixes, NFD breaks 0 (T-166 review F1, which found this with a repro).
+ *
+ * NFD decomposes instead, so the base letter survives as its own code point
+ * and every prefix that held on the raw input still holds. That makes the
+ * guarantee below true rather than nearly true.
+ *
+ * CANONICAL, NOT COMPATIBILITY. NFKC/NFKD would be a bug, not a stricter
+ * version of this: they map 215 code points onto characters this function
+ * treats as structure — `U+2025` becomes `..` (path traversal), `U+FF0F`
+ * becomes `/` (a separator), `U+FF0A` becomes `*` (a wildcard) — so
+ * `src/x/‥/a.ts` would normalize to `src/a.ts`, and a doubled-wildcard path
+ * whose next segment is `U+2025` would normalize to `""`, which collides
+ * broadly. NFD produces and consumes none of
+ * `/ \ . * ? [ ( { ! | , -`, verified by brute force over all 0x110000 code
+ * points in three directions, so normalizing this early cannot change how the
+ * path splits or which segment a `..` pops. A test pins the distinction
+ * because "normalize harder" reads like an improvement (T-166 review F4).
+ *
+ * T-166 added this, for the SCHEDULER and not only for the guard below — they
  * read this one definition precisely so they cannot disagree about what one
- * filename is. The effect is only ever to widen: two paths differing just in
- * normal form become the same file, so a plan serializes more, never less.
- * macOS reports NFD and Linux NFC, so on a mixed-OS fleet the alternative was a
+ * filename is. With NFD the effect is only ever to widen: two paths differing
+ * just in normal form become the same file, and no path comparison that
+ * matched before stops matching, so a plan serializes more, never less. macOS
+ * reports NFD and Linux NFC, so on a mixed-OS fleet the alternative was a
  * scheduler that ran two writers of one file in parallel.
  */
 export function normalizeSchedulerPath(value: string): string {
   const segments: string[] = [];
-  for (const segment of value.trim().normalize("NFC").replaceAll("\\", "/").split("/")) {
+  for (const segment of value.trim().normalize("NFD").replaceAll("\\", "/").split("/")) {
     if (segment === "" || segment === ".") continue;
     if (segment === "..") {
       // A single-segment wildcard consumes exactly one segment, so popping it is exact.
@@ -83,10 +113,19 @@ export function normalizeSchedulerPath(value: string): string {
  *
  * WHICH SPELLING DISAGREEMENTS THIS SEES
  *
- * Case and `..` are resolved by `normalizeSchedulerPath`. Separators never
- * arrive here as a disagreement: the protocol's `intersectPaths` folds them, so
- * `src\a.ts` against `src/a.ts` is already a real collision and the pair does
- * not reach this guard at all (T-159 review, risk 4).
+ * Case and `..` are resolved by `normalizeSchedulerPath`.
+ *
+ * Separators are folded by the protocol's `intersectPaths`, so on the
+ * SERIALIZED-PAIR route a `src\a.ts` / `src/a.ts` pair is already a real
+ * intersection and short-circuits before this guard is reached (T-159 review,
+ * risk 4). That is a fact about one route, not about this function: T-163 Part
+ * A added a second caller, the collision route, whose gate is "nothing was
+ * RECORDED" rather than "nothing INTERSECTED". A backslash pair whose
+ * intersection is entirely claim-covered records nothing, so it does reach
+ * this guard, matches, and emits the "may have been MISSED" warning although
+ * `intersectPaths` saw the collision and the claims legitimately covered it.
+ * That false positive is the deliberate cost of the T-163 review F1 gate and
+ * predates T-166 (T-166 review F2).
  *
  * **Unicode normalization** is covered as of T-166. `café.ts` written NFC by a
  * Linux runner and NFD by a macOS one is still disjoint to the audit
@@ -96,12 +135,12 @@ export function normalizeSchedulerPath(value: string): string {
  * may have written the same bytes.
  *
  * That was a documented limit (T-159 review F1) for as long as the fix was
- * unmeasured, because `.normalize("NFC")` lives in the SCHEDULER's comparison
+ * unmeasured, because the normalization lives in the SCHEDULER's comparison
  * and widens what every plan serializes, while narrowing it to this function
  * would split a shared definition. T-166 took the decision with the plan-level
  * cost measured: on the board at the time, nil — no declared path carried a
- * character NFC could touch — against a mixed-OS fleet in which the two forms
- * otherwise ran in parallel over one file.
+ * character canonical normalization could touch — against a mixed-OS fleet in
+ * which the two forms otherwise ran in parallel over one file.
  */
 export function schedulerTreatsAsSameFile(left: string, right: string): boolean {
   const a = normalizeSchedulerPath(left);

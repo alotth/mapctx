@@ -29,6 +29,8 @@
  *   collision-route warning off      RED    warning gated on empty
  *                                           intersection instead of
  *                                           nothing-recorded            RED
+ *   normalize("NFD") removed         RED    NFD -> NFC (not
+ *   NFD -> NFKC/NFKD                 RED    prefix-preserving)          RED
  *
  * So G2 is individually load-bearing -- it is the SOLE redaction guard of the
  * serialized-pair route, where G1 cannot help because that route reads
@@ -72,11 +74,15 @@
  * Unicode normalization used to be the entry NOT in the matrix, because no
  * guard here covered it: NFC and NFD spellings of one filename were disjoint to
  * the audit comparison and to the scheduler's alike, so G4 did not fire and the
- * overbroad route emitted. T-166 folded NFC into `normalizeSchedulerPath`, so
- * G4 now covers it and it is in the matrix like the rest -- a mutation removing
- * that `.normalize("NFC")` turns the row red. The audit comparison still does
- * not normalize, deliberately, which is why this is G4's job and not its own
- * guard: see `schedulerTreatsAsSameFile`.
+ * overbroad route emitted. T-166 folded canonical NFD into
+ * `normalizeSchedulerPath`, so G4 now covers it and it has rows in the table
+ * above like the rest: removing the `.normalize("NFD")` goes red, and so does
+ * changing the FORM -- to NFC, which is not prefix-preserving and makes the
+ * scheduler serialize less (T-166 review F1), or to NFKC/NFKD, which map 215
+ * code points onto `.`, `/` and `*` and turn `src/x/‥/a.ts` into path
+ * traversal (T-166 review F4). The audit comparison still does not normalize,
+ * deliberately, which is why this is G4's job and not its own guard: see
+ * `schedulerTreatsAsSameFile`.
  *
  * WHAT THIS STILL IS NOT. The store's recordClaimViolations is the version
  * that JOURNALS violations, with idempotent re-detection and a declared
@@ -181,7 +187,28 @@ function declaredPathsOf(pair: SerializedPairForViolations): string[] {
   return [...new Set(candidates.filter(path => typeof path === "string" && !path.includes(CAUSE_LABEL_SEPARATOR)))];
 }
 
-/** Observed-path pairs the scheduler would call one file. See guard G4. */
+/**
+ * `\uXXXX` for every non-ASCII code unit, the rest verbatim.
+ *
+ * The spelling disagreement T-166 added is INVISIBLE in a terminal: `café.ts`
+ * NFC and `café.ts` NFD render identically, so a warning naming the pair reads
+ * as if it repeated one path twice and the operator cannot see what differs
+ * (T-166 review F6). The test fixtures hit the same wall and were moved to
+ * escapes for the same reason; a diagnostic that only an operator reads earns
+ * it at least as much.
+ */
+function escapeNonAscii(value: string): string {
+  return value.replace(/[^\x20-\x7E]/g, ch => `\\u${ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}`);
+}
+
+/**
+ * Observed-path pairs the scheduler would call one file. See guard G4.
+ *
+ * A pair holding a non-ASCII path carries its escaped form too, because the
+ * difference may be unrenderable. Pure-ASCII disagreements -- case, `..`, `\`
+ * -- are legible as they are and are left alone, so the T-159/T-163 warnings
+ * keep their exact wording.
+ */
 function schedulerSameFilePairs(left: readonly string[], right: readonly string[]): string[] {
   const pairs: string[] = [];
   for (const a of left) {
@@ -190,7 +217,10 @@ function schedulerSameFilePairs(left: readonly string[], right: readonly string[
       if (isRedactedPath(b)) continue;
       // Already-equal paths are handled by `actualIntersection`, which runs
       // first; only a disagreement between the two comparisons matters here.
-      if (a !== b && schedulerTreatsAsSameFile(a, b)) pairs.push(`${a} vs ${b}`);
+      if (a === b || !schedulerTreatsAsSameFile(a, b)) continue;
+      const escaped = `${escapeNonAscii(a)} vs ${escapeNonAscii(b)}`;
+      const plain = `${a} vs ${b}`;
+      pairs.push(escaped === plain ? plain : `${plain} [${escaped}]`);
     }
   }
   return [...new Set(pairs)].sort();
@@ -285,8 +315,8 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
     // case is meaningful, `..` does not occur and the normal form a runner
     // reported is evidence -- correct for an audit trail, which must not
     // rewrite evidence. The SCHEDULER compares declared claims with case
-    // folded, `..` resolved and Unicode folded to NFC, because it has to err
-    // toward serializing on macOS and Windows. So `planExecution` serializes
+    // folded, `..` resolved and Unicode folded to canonical NFD, because it
+    // has to err toward serializing on macOS and Windows. So `planExecution` serializes
     // `SRC/a.ts` against `src/a.ts`, and `café.ts` NFD against `café.ts` NFC;
     // the receipts come back spelling the same file both ways, the audit
     // comparison finds no intersection, and this route would record a permanent
@@ -358,7 +388,7 @@ function warnOnSpellingDisagreement(subject: string, samePairs: readonly string[
     `claim-violation detection over ${subject} is INCOMPLETE: ` +
     `${samePairs.length} changed-file pair(s) are different spellings of one file under the scheduler's comparison ` +
     `(${samePairs.join(", ")}), so ${consequence}. ` +
-    `The audit comparison keeps receipts verbatim by design; the scheduler folds case, resolves ".." and folds Unicode to NFC.`
+    `The audit comparison keeps receipts verbatim by design; the scheduler folds case, resolves ".." and folds Unicode to canonical NFD.`
   );
 }
 

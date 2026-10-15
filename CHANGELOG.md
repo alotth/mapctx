@@ -171,21 +171,20 @@ relied on the old output over redacted receipts was reading fabricated audit
 facts; to get the blind spot as data rather than a warning, use
 `@mapctx/store`'s `detectClaimViolationsWithCoverage`.
 
-### Behaviour change (scheduler): declared paths are compared in Unicode NFC (T-166)
+### Behaviour change (scheduler): declared paths are compared in canonical Unicode normal form (NFD) (T-166)
 
 `normalizeSchedulerPath` — the one comparison `@mapctx/planner`'s scheduler and
-its `schedulerTreatsAsSameFile` guard both read — now folds the path to Unicode
-**NFC** before resolving `..` and folding case. macOS reports filenames in NFD
-and Linux in NFC, so `café.ts` written on one host and `café.ts` written on the
-other were two different files to `mapctx plan`.
+its `schedulerTreatsAsSameFile` guard both read — now folds the path to
+canonical Unicode **NFD** before resolving `..` and folding case. macOS reports
+filenames in NFD and Linux in NFC, so `café.ts` written on one host and
+`café.ts` written on the other were two different files to `mapctx plan`.
 
 Two consequences, and the first is the reason the second was accepted:
 
 * **`mapctx plan` serializes more, never less.** Two tasks whose declared paths
   differ only in normal form now collide, so they land in different waves
   instead of running in parallel over one file. Nothing that used to be
-  serialized becomes parallel — the change can only merge two path identities,
-  not split one.
+  serialized becomes parallel.
 * **The serialized-pair route stops recording a false `overbroad`.** Two
   receipts spelling one file NFC and NFD no longer read as proof that
   serializing the pair was unnecessary; guard G4 fires and the pair is skipped
@@ -194,22 +193,44 @@ Two consequences, and the first is the reason the second was accepted:
   legitimate `overbroad` between genuinely disjoint files is unaffected, and
   genuinely different filenames (`café.ts` vs `cafè.ts`) stay disjoint.
 
-This was carried as a documented limit at `schedulerTreatsAsSameFile` (T-159
-review F1) rather than fixed, because the fix widens the scheduler for every
-plan and splitting it into a guard-only version would break the shared
-definition that keeps the two from disagreeing. Measured on the reference board
-before taking it: **no change at all** — 7 waves, 21 serialized pairs, 16
-advisories, 169 claims, `plan --json` byte-identical — because none of the 243
-distinct declared paths there contains a character NFC can touch.
+**NFD specifically, and not NFC.** For equality the two canonical forms are
+interchangeable. But `pathOverlap` also compares globs by their static prefix,
+truncated at the first wildcard and matched with `startsWith`, and NFC is not
+prefix-preserving: composing `e`+`◌́` into `é` consumes the base letter a
+prefix ended on, so under NFC `src/cafe*` stops matching the NFD spelling of
+`src/café.ts` and a pair that used to be serialized runs in parallel over one
+file. Over every ASCII letter against eight common marks, NFC breaks 298 of 832
+such prefixes and NFD breaks 0; across 15 declared-path shapes against a
+`52c73af` build, NFD narrows 0 and NFC narrows 4. The "never less" guarantee
+above is true only because the form is NFD, and tests pin each of those four
+shapes.
+
+The form is canonical on purpose: NFKC/NFKD map 215 code points onto
+characters this comparison treats as structure (`U+2025` → `..`, `U+FF0F` → `/`,
+`U+FF0A` → `*`), which would turn `src/x/‥/a.ts` into path traversal. A test
+forbids them.
 
 The audit comparison in `@mapctx/protocol` deliberately still does **not**
 normalize: what normal form a receipt reported is evidence, and this change does
 not rewrite receipts or violation rows already recorded.
 
+Measured cost on the reference board: **none.** `mapctx plan --json` is
+byte-identical between a `52c73af` build and this one, modulo the cwd-derived
+`tasksFilePath`, measured on one pristine copy of the store per run. Of the 243
+distinct declared paths on that board, 0 contain a character either canonical
+form would change — so the widening is unexposed there rather than absent, and
+the first accented declared path will exercise it. For orientation only, that
+board on 2026-10-15 planned 4 waves / 14 serialized pairs / 11 advisories / 170
+claims, identical on both builds; those four counts track board state and will
+not reproduce later, whereas the byte-equality and the 243/0 figures do.
+
 Migration: a caller that relied on two normal forms of one filename being
 schedulable in parallel will now see them serialized. The warning text for both
-INCOMPLETE routes gained "and folds Unicode to NFC"; callers matching on that
-sentence verbatim should match on `INCOMPLETE` instead.
+INCOMPLETE routes now ends "and folds Unicode to canonical NFD", and a pair
+holding a non-ASCII path additionally carries its `\uXXXX`-escaped form in
+brackets, because the two spellings are otherwise indistinguishable in a
+terminal; callers matching those sentences verbatim should match on
+`INCOMPLETE` instead.
 
 ### Public contract: `task acceptance approve --json` output shape
 
