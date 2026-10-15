@@ -298,19 +298,28 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
       // T-144: the ONE place an absent lane is decided, so a journal replay and
       // migration 13's column defaults cannot disagree.
       const { exclusivity, role } = claimLaneFor(payload.role ?? "implement");
+      // Refused BEFORE the insert, not after. The pair is derived from `role`
+      // rather than read field-by-field from the payload -- there is no such
+      // thing as a shared implement claim or an exclusive review claim, and an
+      // event asserting one describes a lane this code cannot reason about.
+      // `exclusivity` still rides on the event, because it is what the index
+      // predicate reads and a reader of the journal alone should not have to
+      // know the mapping; so it is checked for agreement rather than trusted,
+      // and a contradiction stops the applier before any row exists. Both
+      // callers wrap this in a transaction that would roll the insert back
+      // anyway, which is exactly why the order is worth getting right here
+      // instead of relying on someone else's rollback.
+      if (payload.exclusivity !== undefined && payload.exclusivity !== exclusivity) {
+        throw new Error(
+          `task.claimed ${payload.claimId} carries exclusivity "${payload.exclusivity}" for role "${role}", which pairs with "${exclusivity}".`
+        );
+      }
       insertClaim(db, {
         claimId: payload.claimId,
         taskId: payload.taskId,
         leaseToken: payload.leaseToken,
         renewToken: payload.renewToken ?? null,
         state: "active",
-        // The pair is derived from `role`, never read field-by-field from the
-        // payload: there is no such thing as a shared implement claim or an
-        // exclusive review claim, and an event asserting one would be a lane
-        // this code cannot reason about. `exclusivity` is still carried on the
-        // event (it is what the index predicate reads, and a reader of the
-        // journal alone should not have to know the mapping), and this asserts
-        // the two agree rather than trusting them to.
         exclusivity,
         role,
         claimedAt: payload.claimedAt,
@@ -319,11 +328,6 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
         eventNode: entry.nodeId,
         eventSequence: entry.sequence
       });
-      if (payload.exclusivity !== undefined && payload.exclusivity !== exclusivity) {
-        throw new Error(
-          `task.claimed ${payload.claimId} carries exclusivity "${payload.exclusivity}" for role "${role}", which pairs with "${exclusivity}".`
-        );
-      }
       // T-144: a REVIEW claim stops here. Everything below moves the task's
       // `executionState`, and that scalar describes the implement run -- a
       // review is a second, concurrent run (§3, 2A rejected). Letting a review
