@@ -22,14 +22,15 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "rm -rf node_modules/@mapctx/core && tsc -p tsconfig.json && chmod +x dist/cli.js dist/mapctx-cli.js && rm -rf dist/workspace-ui && mkdir -p dist/workspace-ui && cp src/workspace-ui/workspaceV2.* dist/workspace-ui/",
+    "build": "node ../../scripts/prepare-sync-engine-bundled-core.mjs --clean-workspace-copies && tsc -p tsconfig.json && chmod +x dist/cli.js dist/mapctx-cli.js && rm -rf dist/workspace-ui && mkdir -p dist/workspace-ui && cp src/workspace-ui/workspaceV2.* dist/workspace-ui/",
     "test": "npm run build && node --test dist/**/*.test.js test/*.test.cjs",
     "clean": "rm -rf dist",
     "bundle:core": "node ../../scripts/prepare-sync-engine-bundled-core.mjs",
+    "bundle:clean": "node ../../scripts/prepare-sync-engine-bundled-core.mjs --clean",
     "pack:check": "npm pack --dry-run",
     "pack:smoke": "node ../../scripts/verify-sync-engine-package.mjs",
     "prepack": "npm run clean && npm run build && npm run bundle:core",
-    "postpack": "rm -rf node_modules/@mapctx/core",
+    "postpack": "npm run bundle:clean",
     "dev:status": "npm run build && node dist/cli.js status --config mapcs.dev.json",
     "dev:pull": "npm run build && node dist/cli.js pull --dry-run --config mapcs.dev.json",
     "dev:push": "npm run build && node dist/cli.js push --dry-run --config mapcs.dev.json"
