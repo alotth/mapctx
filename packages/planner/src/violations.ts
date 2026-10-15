@@ -26,6 +26,7 @@
  *   G2 alone off                     RED    pair-filter + G3-final off RED
  *   G3-final alone off               RED    G4 alone off               RED
  *   serializedPairs pair-filter off  green  G4 widened to always-true  RED
+ *   collision-route warning off      RED
  *
  * So G2 is individually load-bearing -- it is the SOLE redaction guard of the
  * serialized-pair route, where G1 cannot help because that route reads
@@ -52,6 +53,18 @@
  * suppresses too much is as wrong as one that suppresses too little -- widening
  * it to always-true turns the whole overbroad route dead and takes eight tests
  * with it.
+ *
+ * The collision-route warning is T-163 Part A, and it is in the matrix for the
+ * same reason the guards are: it is the only thing standing between a missed
+ * collision and an empty result that reads like a clean wave. It records no
+ * violation and changes no existing output, so nothing but its own test can
+ * notice if it disappears.
+ *
+ * NOT IN THE MATRIX, because no guard here covers it: Unicode normalization.
+ * NFC and NFD spellings of one filename are disjoint to the audit comparison
+ * and to the scheduler's alike, so G4 does not fire and the overbroad route
+ * emits. The limit is documented at `schedulerTreatsAsSameFile`, where the
+ * reason it is not simply fixed also lives.
  *
  * WHAT THIS STILL IS NOT. The store's recordClaimViolations is the version
  * that JOURNALS violations, with idempotent re-detection and a declared
@@ -196,10 +209,28 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
       for (let j = i + 1; j < waveReceipts.length; j += 1) {
         const left = waveReceipts[i]!;
         const right = waveReceipts[j]!;
-        for (const path of actualIntersection(left, right)) {
+        const intersection = actualIntersection(left, right);
+        for (const path of intersection) {
           if (claimCovers(claims, left.taskId, path) && claimCovers(claims, right.taskId, path)) continue;
           const [taskAId, taskBId] = [left.taskId, right.taskId].sort();
           violations.push(makeViolation({ waveId: wave.waveId, kind: "collision", taskAId, taskBId, path, detectedAt, source: "derived-from-receipts" }));
+        }
+        // T-163 Part A. This route uses `actualIntersection` POSITIVELY, so a
+        // spelling disagreement makes it miss a collision rather than fabricate
+        // a non-collision -- which is why T-159 left the finding unrecorded.
+        // That argument covers not RECORDING a collision; it never covered
+        // saying nothing at all. An empty result here is indistinguishable from
+        // a clean wave, which is the exact mistake G2 and G4 exist to refuse:
+        // "no violations" and "could not look" are different answers.
+        //
+        // The warning is the whole change. No violation row is added, because
+        // which spelling an immutable `path` should carry -- the left
+        // receipt's, the right's, or the normalized form -- is a question about
+        // the audit record and belongs with the store's `recordClaimViolations`
+        // (T-163 Part B, deliberately out of scope here).
+        if (intersection.length === 0) {
+          const sameFile = schedulerSameFilePairs(left.receipt.changedFiles, right.receipt.changedFiles);
+          if (sameFile.length > 0) warnOnMissedCollisionSpelling(left.taskId, right.taskId, sameFile);
         }
       }
     }
@@ -236,14 +267,20 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
     // paths being folded: folding them here would make the recorded violation
     // path lossy, which is the merge T-133 refused.
     //
-    // DELIBERATELY ASYMMETRIC. The collision route above uses
-    // `actualIntersection` POSITIVELY, so the same spelling disagreement makes
-    // it MISS a collision rather than fabricate a non-collision. That is a
-    // real limitation and it is left alone: a missed finding is recoverable by
-    // looking again, while a recorded "they did not conflict" is an immutable
-    // false fact. Closing it means deciding what a violation row should say
-    // when two receipts disagree about a filename, which is a question about
-    // the audit record, not about this guard.
+    // DELIBERATELY ASYMMETRIC, and narrower than it first looks. The collision
+    // route above uses `actualIntersection` POSITIVELY, so a spelling
+    // disagreement makes it MISS a collision rather than fabricate a
+    // non-collision. Only CASE and `..` escape there -- a backslash spelling is
+    // already caught, because the protocol's `intersectPaths` folds separators
+    // (T-159 review, risk 4).
+    //
+    // Still no violation row on that side: a missed finding is recoverable by
+    // looking again, while a recorded "they did not conflict" is immutable, and
+    // deciding which spelling such a row's `path` would carry is a question
+    // about the audit record rather than about this guard (T-163 Part B).
+    // It is no longer SILENT though -- T-163 Part A gave that route the mirror
+    // of this warning, because "not recording a finding" never justified
+    // "saying nothing".
     const schedulerCollisions = schedulerSameFilePairs(left.receipt.changedFiles, right.receipt.changedFiles);
     if (schedulerCollisions.length > 0) {
       warnOnSchedulerDisagreement(pair.taskAId, pair.taskBId, schedulerCollisions);
@@ -279,10 +316,23 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
 }
 
 /**
- * "No violations" and "could not look" are different answers and only one of
- * them is safe to act on, so a redacted receipt is never silently treated as
- * clean evidence.
+ * The one spelling-disagreement warning, in two voices.
+ *
+ * Both routes hit the same cause -- two receipts spelling one file two ways --
+ * and reach opposite dead ends from it, so the consequence sentence differs and
+ * nothing else may. Sharing the builder is deliberate: the T-159 review found
+ * the collision route silent while the serialized-pair route warned, and two
+ * independently worded warnings are how that asymmetry would quietly come back.
  */
+function warnOnSpellingDisagreement(subject: string, samePairs: readonly string[], consequence: string): void {
+  process.emitWarning(
+    `claim-violation detection over ${subject} is INCOMPLETE: ` +
+    `${samePairs.length} changed-file pair(s) are different spellings of one file under the scheduler's comparison ` +
+    `(${samePairs.join(", ")}), so ${consequence}. ` +
+    `The audit comparison keeps receipts verbatim by design; the scheduler folds case and resolves "..".`
+  );
+}
+
 /**
  * Guard G4's blind spot, said out loud.
  *
@@ -293,14 +343,38 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
  * different answers.
  */
 function warnOnSchedulerDisagreement(taskAId: string, taskBId: string, samePairs: readonly string[]): void {
-  process.emitWarning(
-    `claim-violation detection over the serialized pair ${taskAId}/${taskBId} is INCOMPLETE: ` +
-    `${samePairs.length} changed-file pair(s) are different spellings of one file under the scheduler's comparison ` +
-    `(${samePairs.join(", ")}), so "they never intersected" cannot be established and no overbroad finding is emitted. ` +
-    `The audit comparison keeps receipts verbatim by design; the scheduler folds case and resolves "..".`
+  warnOnSpellingDisagreement(
+    `the serialized pair ${taskAId}/${taskBId}`,
+    samePairs,
+    `"they never intersected" cannot be established and no overbroad finding is emitted`
   );
 }
 
+/**
+ * The collision route's blind spot, said out loud (T-163 Part A).
+ *
+ * The mirror image of the G4 warning above, and reported for the same reason
+ * rather than a weaker one. This route misses a REAL collision instead of
+ * fabricating a false absence, which is the less dangerous failure and is why
+ * T-159 did not record a violation for it -- but an unreported miss is still
+ * returned to the caller as an empty result that looks exactly like a clean
+ * wave. Whether a violation should be recorded, and which spelling its
+ * immutable `path` would carry, is T-163 Part B and belongs with the store's
+ * `recordClaimViolations`.
+ */
+function warnOnMissedCollisionSpelling(taskAId: string, taskBId: string, samePairs: readonly string[]): void {
+  warnOnSpellingDisagreement(
+    `the wave pair ${taskAId}/${taskBId}`,
+    samePairs,
+    `a real collision may have been MISSED and no collision is recorded`
+  );
+}
+
+/**
+ * "No violations" and "could not look" are different answers and only one of
+ * them is safe to act on, so a redacted receipt is never silently treated as
+ * clean evidence.
+ */
 function warnOnIncompleteDetection(receipts: readonly TaskReceipt[]): void {
   for (const item of receipts) {
     const redacted = redactedPathCount(item.receipt.changedFiles);
