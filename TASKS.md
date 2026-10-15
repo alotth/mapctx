@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 22/27
+  - subIssueProgress: 23/28
   - priority: high
   - workload: null
   - tags: []
@@ -3428,7 +3428,7 @@
 ### [T-164] postpack remove todos os pacotes que o prepack copiou
 
   - id: T-164
-  - status: review
+  - status: done
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3439,10 +3439,29 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
   - updated: 2026-10-15
   - detail: ./tasks/T-164.md
+
+### [T-165] Teste de escalonamento do sanitize sem relógio de parede (flake)
+
+  - id: T-165
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: P2
+  - workload: Normal
+  - tags: []
+  - domains: [TEST, GITHUB]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/T-165.md
 
 ## Notes
 
