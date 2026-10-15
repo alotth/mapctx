@@ -95,8 +95,19 @@ export type BackupFileEntry = {
 
 export type BackupManifest = {
   manifestVersion: number
-  /** Store schema version at backup time; restore refuses a NEWER one. */
+  /**
+   * Schema version of the BINARY that wrote the backup (its newest known
+   * migration); restore refuses a NEWER one. This is not the archived store's
+   * schema: a pre-migration snapshot is written by a binary one migration
+   * ahead of the database it holds -- read `storeSchemaVersion` for that.
+   */
   schemaVersion: number
+  /**
+   * Schema version of the archived database itself (MAX(version) of its
+   * schema_migrations). On a pre-migration snapshot this is the version BEFORE
+   * the pending migration. Absent in manifests written before it existed.
+   */
+  storeSchemaVersion?: number
   projectId: string | null
   nodeId: string | null
   incarnationId: string | null
@@ -237,12 +248,14 @@ export function createBackup(options: CreateBackupOptions): CreateBackupResult {
     // `replayedJournalEntries` report 0 while entries really did replay.
     let eventCount = 0
     let redactionCount = 0
+    let storeSchemaVersion = 0
     let nodeId: string | null = null
     let incarnationId: string | null = null
     const snapshot = openDatabaseReadOnly(target)
     try {
       eventCount = readCountSafely(snapshot, "SELECT count(*) AS n FROM event_log")
       redactionCount = readCountSafely(snapshot, "SELECT count(*) AS n FROM redaction_projection")
+      storeSchemaVersion = readCountSafely(snapshot, "SELECT max(version) AS n FROM schema_migrations")
       nodeId = readMetaValue<string>(snapshot, "node_id") ?? null
       incarnationId = readMetaValue<string>(snapshot, "incarnation_id") ?? null
     } finally {
@@ -354,6 +367,7 @@ export function createBackup(options: CreateBackupOptions): CreateBackupResult {
     const manifest: BackupManifest = {
       manifestVersion: BACKUP_MANIFEST_SCHEMA_VERSION,
       schemaVersion: currentSchemaVersion(),
+      storeSchemaVersion,
       projectId,
       nodeId,
       incarnationId,

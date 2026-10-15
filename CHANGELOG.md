@@ -596,3 +596,8 @@ what it measured before — wall clock, labelled `substituted`.
 * **fix:** an internal CLI fault (`TypeError`/`ReferenceError`) now prints its
   stack on stderr after the `Error:` line, so the failing module is named.
   Refusals keep their exact shape (one JSON line under `--json`, then `Error:`).
+* **fix:** a backup manifest carries `storeSchemaVersion`, the archived
+  database's own schema. `schemaVersion` stays the writing binary's newest
+  migration, and the restore gate keeps reading it. In a pre-migration
+  snapshot, `storeSchemaVersion` is the version before the upgrade, and
+  `store backups` lists that version.

@@ -397,6 +397,13 @@ test("a pending migration takes a pre-migration snapshot BEFORE attempting the (
     assert.ok(notices.some(n => /pre-migration snapshot/.test(n) && n.includes(String(lastMigrationVersion))), JSON.stringify(notices))
     const backups = listBackups(fixture.projectId)
     assert.ok(backups.some(b => b.manifest?.reason === "pre-migration"), JSON.stringify(backups.map(b => b.manifest?.reason)))
+    // T-138 review attempt 2, MÉDIA-1: the pre-migration snapshot holds the
+    // store as it was BEFORE the pending migration, and its manifest must say
+    // so -- `schemaVersion` is the writing binary's (the restore gate), not the
+    // archived database's.
+    const snapshot = backups.find(b => b.manifest?.reason === "pre-migration")?.manifest
+    assert.equal(snapshot?.storeSchemaVersion, lastMigrationVersion - 1)
+    assert.equal(snapshot?.schemaVersion, lastMigrationVersion)
   } finally {
     fixture.restoreEnv()
     cleanupDir(fixture.repoDir)

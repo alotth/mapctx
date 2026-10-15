@@ -1228,7 +1228,7 @@ function storeBackupsCommand(options: MapctxOptions): void {
       continue;
     }
     const m = entry.manifest;
-    console.log(`  ${m.createdAt}  ${m.reason.padEnd(13)} schema ${m.schemaVersion}  ${m.eventCount} events  ${entry.backupDir}`);
+    console.log(`  ${m.createdAt}  ${m.reason.padEnd(13)} schema ${m.storeSchemaVersion ?? m.schemaVersion}  ${m.eventCount} events  ${entry.backupDir}`);
   }
 }
 
