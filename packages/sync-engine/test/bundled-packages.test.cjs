@@ -26,6 +26,15 @@ test('T-164: prepack and postpack read ONE list -- every path the bundler create
   assert.deepEqual([...bundledPaths()].sort(), expected);
   assert.ok(bundledNames.length >= 5, `expected the five workspace packages, got ${JSON.stringify(bundledNames)}`);
 
+  // npm only packs node_modules/<name> for what bundleDependencies declares, so
+  // that hand-kept list must equal the bundler's: a package added to one and
+  // not the other is copied and cleaned but silently never ships (T-164 review F1).
+  const { bundleDependencies } = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  assert.deepEqual(
+    [...bundleDependencies].sort(),
+    [...bundledNames.map(name => `@mapctx/${name}`), ...vendoredRuntime].sort()
+  );
+
   // The narrower build-time scope drops the third-party copies and keeps
   // every workspace copy, which are the ones that shadow a live build.
   const workspaceOnly = bundledPaths({ includeVendored: false });
@@ -40,7 +49,7 @@ test('T-164: postpack runs the shared cleaner, so no hand-maintained package lis
   // The bug: `postpack: rm -rf node_modules/@mapctx/core` removed one of the
   // eight directories prepack creates. Any script that names a single package
   // by hand is that bug returning, whatever it is spelled like.
-  for (const name of ['postpack', 'build', 'bundle:clean']) {
+  for (const name of Object.keys(scripts)) {
     assert.doesNotMatch(
       scripts[name],
       /node_modules\/@mapctx\/[a-z]/,
