@@ -635,14 +635,14 @@ test("T-166 mutation sentinel: dies if `.normalize(\"NFD\")` is removed from nor
 // Unicode spelling difference into path traversal or a broadened glob. This
 // pins the distinction so "normalize harder" cannot read as an improvement.
 
-test("T-166 review F4: a HORIZONTAL ELLIPSIS stays a literal segment, not a `..` traversal", () => {
+test("T-166 review F4: a TWO DOT LEADER stays a literal segment, not a `..` traversal", () => {
   // U+2025 TWO DOT LEADER / U+2026-adjacent look-alikes are NOT ".." under
   // NFC or NFD. NFKC/NFKD compatibility-decompose U+2025 to "..", which would
   // let this resolve a traversal that was never written.
   assert.notEqual(normalizeSchedulerPath("src/x/\u2025/a.ts"), "src/a.ts");
 });
 
-test("T-166 review F4: a HORIZONTAL ELLIPSIS after `**` does not pop the wildcard into unresolvable", () => {
+test("T-166 review F4: a TWO DOT LEADER after `**` does not pop the wildcard into unresolvable", () => {
   // Under NFKC/NFKD the same code point becomes ".." and pops the `**`,
   // returning "" -- which the scheduler reads as "unknown, collide broadly".
   // Canonical normalization must not manufacture that traversal.
