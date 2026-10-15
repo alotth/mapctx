@@ -613,11 +613,39 @@ function refuse(payload: unknown, message: string): never {
  * stdout/stderr hygiene is worth having on its own, and because a future
  * payload could carry something else that should not be sprayed.
  */
+/**
+ * T-162: an INTERNAL fault is not a refusal, and must not be reported like
+ * one.
+ *
+ * A `TypeError`/`ReferenceError` out of this CLI means the program is wrong
+ * -- a binding that was undefined when it was read, a name that does not
+ * exist. No user input produces one, and no refusal path raises one: every
+ * refusal is a `CliRefusal` or a plain `Error` with a sentence written for
+ * the operator.
+ *
+ * The distinction earns its keep because of a real investigation. A test
+ * failed once in a full suite with `Cannot read properties of undefined
+ * (reading 'open')`, and the message was all anyone had: the catch below
+ * printed `error.message` and dropped the stack, so three separate
+ * investigations could say the shape looked like `StoreHandle` arriving
+ * undefined and none could say from where. Nothing about the failure was
+ * hard except that the one line identifying the module had been discarded
+ * before anybody saw it.
+ */
+function isInternalFault(error: unknown): error is Error {
+  return (error instanceof TypeError || error instanceof ReferenceError) && !(error instanceof CliRefusal);
+}
+
 export function writeCliError(error: unknown, json: boolean): void {
   const message = error instanceof Error ? error.message : String(error);
   const payload = error instanceof CliRefusal ? error.payload : undefined;
   if (json) process.stderr.write(`${JSON.stringify(payload ?? { ok: false, error: message })}\n`);
   console.error(`Error: ${message}`);
+  // Only for internal faults, and only AFTER the two lines a refusal is
+  // allowed to print -- the stdout/stderr contract the refusal tests pin
+  // (T-127 review A10, the two-line `--json` shape, the human-mode single
+  // line) describes refusals, and this is deliberately not one.
+  if (isInternalFault(error) && error.stack) console.error(error.stack);
 }
 
 function parseArgs(argv: string[]): {
