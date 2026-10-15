@@ -1045,7 +1045,6 @@ function storeInitCommand(options: MapctxOptions): void {
 
   const handle = StoreHandle.open(storeDir);
   handle.close();
-  reportSnapshotNotices();
   print({ projectId: toml.config.projectId, storeDir, alreadyMaterialized: false, recovered: false, plansAuthority: toml.config.plansAuthority }, options.json);
 }
 
@@ -1066,6 +1065,18 @@ function reportSnapshotNotices(): void {
   for (const notice of drainSnapshotNotices()) console.error(`Note: ${notice}`);
 }
 
+/**
+ * Review MEDIA-1: the pre-migration snapshot fires inside `openDatabase`, so
+ * it is triggered by ANY writable open -- `task create`, `task move`,
+ * `acceptance approve`, `dispatch create`, `import --commit`. Draining the
+ * notices in three hand-picked store commands meant the common case threw
+ * the notice away: in practice the schema migration happens on the first
+ * write after an upgrade, and the operator was told neither that a snapshot
+ * was taken nor that it had been SKIPPED. Combined with ALTO-1 that was the
+ * amplifier -- the snapshot skipped and nothing said so.
+ *
+ * It is drained once, from main()'s finally, so every command reports it.
+ */
 function storeBackupCommand(options: MapctxOptions): void {
   const { projectId, storeDir } = resolveStoreTarget();
   const result = createBackup({
@@ -1114,7 +1125,6 @@ function storeRestoreCommand(backupDir: string | undefined, options: MapctxOptio
     storeDir,
     force: Boolean(options.force)
   });
-  reportSnapshotNotices();
   print({
     restored: true,
     storeDir: result.storeDir,
@@ -1170,9 +1180,6 @@ function storeRepairCommand(options: MapctxOptions): void {
   }
   const storeDir = resolveProjectStoreDir(toml.config.projectId);
   const result = repairStore(storeDir);
-  // T-138: the pre-repair snapshot rides the notice queue (RepairResult's
-  // shape is pinned by the P1 integrity suite), so it is drained here.
-  reportSnapshotNotices();
   // A gap report is the deliverable of this command, not a refusal of it: the
   // diagnosis (which node, which sequence, the named remedy) stays on stdout
   // and the non-zero exit is the gate. T-127 moved REFUSALS to stderr, not
@@ -3311,11 +3318,17 @@ async function main(): Promise<void> {
 }
 
 if (require.main === module) {
-  main().catch(error => {
-    // T-127: stdout carries results only. Errors -- including the structured
-    // refusal payload a CliRefusal carries -- leave on stderr, once, as JSON
-    // when the caller asked for --json.
-    writeCliError(error, process.argv.includes('--json'));
-    process.exit(1);
-  });
+  // T-138 review MEDIA-1: drained in a finally so EVERY command reports a
+  // pre-migration/pre-repair snapshot -- including the failure path, where a
+  // skipped snapshot is exactly what the operator needs to know.
+  main()
+    .then(() => { reportSnapshotNotices(); })
+    .catch(error => {
+      reportSnapshotNotices();
+      // T-127: stdout carries results only. Errors -- including the structured
+      // refusal payload a CliRefusal carries -- leave on stderr, once, as JSON
+      // when the caller asked for --json.
+      writeCliError(error, process.argv.includes('--json'));
+      process.exit(1);
+    });
 }

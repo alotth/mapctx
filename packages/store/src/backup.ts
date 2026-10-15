@@ -8,6 +8,7 @@ import { checkIntegrity, openDatabaseReadOnly, readMetaValue, setPreMigrationSna
 import { JOURNAL_DIR_NAME, listJournalNodeIds, listJournalSequences } from "./journal"
 import { acquireMaintenanceLock, assertNotUnderMaintenance, MAINTENANCE_LOCK_FILENAME } from "./maintenance"
 import { MIGRATIONS } from "./schema"
+import { verifyRedactionsFromLedger } from "./redact"
 
 /**
  * T-138: the store's own backup/restore.
@@ -250,18 +251,86 @@ export function createBackup(options: CreateBackupOptions): CreateBackupResult {
 
     // ---- STEP 2: the journal, SECOND. Entries a writer appended during
     // step 1 are copied here and replay on restore.
+    //
+    // The tree is copied RECURSIVELY rather than rebuilt from sequence
+    // numbers. The first version reconstructed `events/<node>/<seq>.json` for
+    // each sequence `listJournalSequences` reported -- but that function
+    // enumerates TWO layouts: flat `<seq>.json` files and `batch-<lo>-<hi>/`
+    // directories whose sequences it expands. A multi-event transaction
+    // (`runInWriteTransaction` with more than one append, which is what claim,
+    // violations and import all do) stages its entries in a batch directory
+    // so one rename makes them visible together. Every such entry was an
+    // ENOENT: `store backup` threw on the operator's own store, and
+    // `autoSnapshot` -- non-fatal by design -- swallowed it, so migration and
+    // repair proceeded with NO rollback point. Review ALTO-1.
+    //
+    // Copying the directory as it is preserves whatever layout the journal
+    // uses, now and later, and `walkFiles` hashes everything staged, so
+    // verify and restore need no knowledge of the layout at all.
+    const journalRoot = path.join(storeDir, JOURNAL_DIR_NAME)
+    if (fs.existsSync(journalRoot)) {
+      fs.cpSync(journalRoot, path.join(stagingDir, JOURNAL_DIR_NAME), { recursive: true })
+    }
+    // Counts still come from the journal module, which understands both
+    // layouts; they describe entries, not files.
     const journalCounts: Record<string, number> = {}
     for (const node of listJournalNodeIds(storeDir)) {
-      const sequences = listJournalSequences(storeDir, node)
-      journalCounts[node] = sequences.length
-      const destDir = path.join(stagingDir, JOURNAL_DIR_NAME, node)
-      fs.mkdirSync(destDir, { recursive: true })
-      for (const sequence of sequences) {
-        fs.copyFileSync(
-          path.join(storeDir, JOURNAL_DIR_NAME, node, `${sequence}.json`),
-          path.join(destDir, `${sequence}.json`)
-        )
+      journalCounts[node] = listJournalSequences(storeDir, node).length
+    }
+
+    // ---- STEP 2b: the redaction-skew gate (review ALTO-2).
+    //
+    // The copy-order argument covers a writer that APPENDS. It does not cover
+    // `mapctx redact`, which REWRITES an already-published entry: it commits
+    // the redaction event, UPDATEs event_log, scrubs the projections, and
+    // only then rewrites the journal entry. If that lands between STEP 1 and
+    // STEP 2, the archive ends up with a PRE-redaction database and a
+    // POST-redaction journal.
+    //
+    // The result verified, restored, reported `maintenanceNeeded: null`, and
+    // served the plaintext again -- while its restored ledger claimed the
+    // redaction had been applied. Worse, `manifest.redactionCount` read 0, so
+    // the very field the design offers for telling a pre-redaction archive
+    // from a post-redaction one pointed the wrong way.
+    //
+    // Running T-126's `verifyRedactionsFromLedger` over the archive does NOT
+    // catch this particular window on its own: the archive's ledger comes
+    // from the pre-redaction database, so there is nothing in it to check.
+    // The detection that works is comparing the live store's redaction count
+    // against the snapshot's AFTER the journal copy. The verifier runs too,
+    // for the general class of ledger/journal divergence.
+    const liveRedactionCount = (() => {
+      const live = openDatabaseReadOnly(dbPath)
+      try {
+        return readCountSafely(live, "SELECT count(*) AS n FROM redaction_projection")
+      } finally {
+        live.close()
       }
+    })()
+    if (liveRedactionCount !== redactionCount) {
+      throw new Error(
+        `Refusing to write this backup: a redaction was applied while it was being taken`
+        + ` (the store had ${redactionCount} redaction(s) when the database was snapshotted and ${liveRedactionCount} after the journal was copied).`
+        + ` The archive's database would predate the redaction while its journal follows it, which restores as a store that serves the destroyed value`
+        + ` while claiming the redaction was applied. Nothing was written; re-run the backup.`
+      )
+    }
+    const archiveDb = openDatabaseReadOnly(path.join(stagingDir, "mapctx.db"))
+    let archiveRedactionProblem: string | null = null
+    try {
+      const verified = verifyRedactionsFromLedger(stagingDir, archiveDb)
+      if (verified.problems.length > 0) {
+        const first = verified.problems[0]
+        archiveRedactionProblem = `${first.nodeId}/${first.sequence} (${first.reason})`
+      }
+    } finally {
+      archiveDb.close()
+    }
+    if (archiveRedactionProblem) {
+      throw new Error(
+        `Refusing to write this backup: its journal and redaction ledger disagree at ${archiveRedactionProblem}.`
+        + ` Nothing was written.`
+      )
     }
 
     // ---- STEP 3: the loose files beside the database.
@@ -378,7 +447,13 @@ export function parseManifest(content: string): BackupManifest {
     // Lexical confinement: a manifest is operator-supplied input, and a
     // restore writes every path it names. An absolute path or one escaping
     // the archive would write outside the target store.
-    if (path.isAbsolute(entry.path) || entry.path.split("/").includes("..")) {
+    // Split on BOTH separators (review BAIXA-1). The module documents these
+    // paths as POSIX-separated, and on POSIX a backslash is just a filename
+    // character -- but `path.join` on Windows treats it as a separator, so
+    // `..\..\evil` would have escaped the target there. The defence has to
+    // hold on both, and a backslash in a path this writer produced is itself
+    // a signal the manifest was not written by us.
+    if (path.isAbsolute(entry.path) || entry.path.includes("\\") || entry.path.split(/[\\/]/).includes("..")) {
       throw new Error(`Backup manifest files[${index}] has an unsafe path: ${entry.path}`)
     }
   }
