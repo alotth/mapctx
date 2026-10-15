@@ -48,13 +48,43 @@ Routine mutations do not regenerate mirrors. Use `task finish` or explicit `mapc
 
 ```sh
 mapctx import --dry-run
-mapctx import --commit             # explicit Markdown → store cutover
-mapctx store init                  # recover from committed checkpoint
-mapctx store repair                # replay preserved journal; gaps refuse
-mapctx push --dry-run               # store-backed GitHub projection
+mapctx import --commit                 # explicit Markdown → store cutover
+mapctx store backup                    # consistent copy + verifiable manifest
+mapctx store backups                   # list this project's archives
+mapctx store verify-backup <dir>       # re-hash every file against the manifest
+mapctx store restore <dir> [--force]   # replace the store from an archive
+mapctx store repair                    # replay preserved journal; gaps refuse
+mapctx store init [--from-git <ref>]   # last-resort rebuild from a checkpoint
+mapctx push --dry-run                  # store-backed GitHub projection
 ```
 
-Back up `~/.mapctx/projects/<id>/` (DB, journals and metadata); Git checkpoints are not complete event-history backups. Recover historical nodes only through reviewed, hash-pinned attestations. `mapcs` remains deprecated compatibility for legacy Markdown/GitHub sync; removal is outside this release.
+**Backups.** `mapctx store backup` is the real recovery path: it copies the database
+(`VACUUM INTO`, so the WAL is folded in and writers are not blocked), the event journal,
+identity and attestations, and writes a manifest with the schema version, the event count
+and a sha256 per file. The database is snapshotted *before* the journal on purpose —
+writes are journal-first, so anything appended mid-backup lands in the journal half and
+replays on restore; the reverse order would produce an archive that verifies and cannot be
+restored. Archives default to `~/.mapctx/backups/<projectId>/`.
+
+`mapctx store restore` verifies the archive, replaces the store under the maintenance lock,
+and replays journal entries newer than the snapshot. It refuses a tampered archive, a schema
+version newer than the binary, and an existing store unless you pass `--force` (which moves
+the current store aside rather than deleting it).
+
+A schema migration and `mapctx store repair` each take an automatic snapshot first, so a
+failed upgrade leaves a rollback point. Retention keeps the last few **automatic** snapshots
+only — an archive you took yourself is never pruned.
+
+**Privacy.** A backup taken before a `mapctx redact` still contains the original value, and
+restoring it undoes that redaction; `redact --commit` warns when older archives exist, and
+each manifest records `redactionCount` so you can tell an archive that predates a redaction
+from one that follows it.
+
+`mapctx store init` is the floor, not a backup: it rebuilds from a TASKS.md checkpoint and
+every event older than it is gone. Pass `--from-git <ref>` to read the *committed* checkpoint
+instead of the working copy; the result states which source it used either way. Recover
+historical nodes only through reviewed, hash-pinned attestations. `mapcs` remains deprecated
+compatibility for legacy Markdown/GitHub sync; removal is outside this release.
 
 ## Repository
 

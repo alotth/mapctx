@@ -28,6 +28,13 @@ import {
   reconcileAccept,
   reconcileDiscard,
   recoverStoreFromCheckpoint,
+  createBackup,
+  restoreBackup,
+  verifyBackup,
+  listBackups,
+  hasBackups,
+  backupsRootFor,
+  drainSnapshotNotices,
   releaseClaim,
   recordDispatchAttempt,
   recordRunReceipt,
@@ -188,6 +195,11 @@ type MapctxOptions = SyncOptions & {
   /** T-127 validate gate */
   baselinePath?: string;
   writeBaselinePath?: string;
+  /** T-138 store backup/restore */
+  outDir?: string;
+  fromGit?: string;
+  force?: boolean;
+  keep?: number;
   /** T-128 finish snapshot mode */
   snapshot?: FinishSnapshotMode;
 };
@@ -309,10 +321,12 @@ export const VALUE_FLAGS: ReadonlySet<string> = new Set([
   '--reason-file', '--receipt', '--renew-token', '--repo', '--review-threshold-ms', '--role', '--seats',
   '--sequence', '--set', '--snapshot', '--start', '--status', '--summary', '--tags', '--target', '--task',
   '--tasks-file', '--time-zone', '--title', '--token', '--type', '--wait-reason', '--workload',
+  '--out', '--from-git', '--keep',
   '--write-baseline'
 ]);
 
 export const BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
+  '--force',
   '--accept', '--all', '--commit', '--discard', '--dry-run', '--help', '--include-inferred', '--json',
   '--no-snapshot', '--project', '--read', '--remove', '--snapshots', '-h'
 ]);
@@ -355,14 +369,39 @@ function printHelp(): void {
   console.log('    Opens the workspace UI (same as: mapctx workspace). Focuses the running UI if it is already up.');
   console.log('  mapctx workspace [path] [--add path] [--org id] [--org-name name] [--org-path path] [--target target-id] [--port n] [--no-open]');
   console.log('  mapctx workspace:add <path> [--org id] [--org-name name] [--org-path path]');
-  console.log('  mapctx store init [--json]');
+  console.log('  mapctx store init [--from-git <ref>] [--json]');
   console.log('    Materializes the local store. If plansAuthority=store but ~/.mapctx/projects/<id>/');
   console.log('    is missing entirely (lost machine, fresh clone, unrepairable corruption), this');
   console.log('    recovers from the last git-committed TASKS.md/tasks/*.md checkpoint into a fresh');
   console.log('    incarnation. Event history, claims, and cost/usage data strictly older than that');
-  console.log('    checkpoint are permanently gone -- back up ~/.mapctx/projects/<id>/mapctx.db and');
-  console.log('    commit checkpoints on your own cadence if you need more than that.');
+  console.log('    checkpoint are permanently gone. Prefer `mapctx store restore` from a real');
+  console.log('    backup; this path is the floor, not a backup.');
+  console.log('    --from-git <ref> reads the COMMITTED TASKS.md/tasks/*.md at that ref. Without');
+  console.log('    it the working copy is read, which may not be committed; the result states');
+  console.log('    which source was used either way.');
   console.log('  mapctx store repair [--json]');
+  console.log('    Snapshots the store first (see `store backup`); the snapshot path is reported on stderr.');
+  console.log('  mapctx store backup [--out <dir>] [--json]');
+  console.log('    Consistent copy of the store -- database (VACUUM INTO, WAL folded in), journal,');
+  console.log('    identity and attestations -- plus a manifest carrying the schema version, event');
+  console.log('    count and a sha256 per file. Writers are NOT blocked: the database is snapshotted');
+  console.log('    first and the journal second, so anything appended in between replays on restore.');
+  console.log('    Defaults to ~/.mapctx/backups/<projectId>/operator-<timestamp>.');
+  console.log('  mapctx store verify-backup <backup-dir> [--json]');
+  console.log('    Re-hashes every file against the manifest. Also reports files the manifest does');
+  console.log('    not list, which a restore would ignore.');
+  console.log('  mapctx store restore <backup-dir> [--force] [--json]');
+  console.log('    Verifies the archive, then replaces the store under the maintenance lock and');
+  console.log('    replays any journal entries newer than the snapshot. Refuses a tampered archive,');
+  console.log('    a schema version NEWER than this binary, and an existing store without --force');
+  console.log('    (which moves the current store aside rather than deleting it).');
+  console.log('  mapctx store backups [--json]');
+  console.log('    Lists this project\'s archives, newest first.');
+  console.log('    Retention prunes only AUTO snapshots (pre-migration, pre-repair); an archive you');
+  console.log('    took with `store backup` is never pruned.');
+  console.log('    PRIVACY: a backup taken before a `mapctx redact` still contains the original');
+  console.log('    value, and restoring it undoes that redaction. `manifest.redactionCount` records');
+  console.log('    how many redactions the store had applied when the archive was made.');
   console.log('  mapctx store attest-orphan <node-id> --reason "text" [--evidence key=value ...] [--json]');
   console.log('    Drafts a T-119 attestation pinning a DB-only node\'s complete event_log rows');
   console.log('    (journal-less, verifiable payload hashes only) and prints its content sha256.');
@@ -786,6 +825,14 @@ function parseArgs(argv: string[]): {
       if (!Number.isInteger(value) || value < 1) throw new Error('--sequence must be a positive integer');
       options.sequence = value;
     }
+    else if (a === '--out') options.outDir = valueFor(a);
+    else if (a === '--from-git') options.fromGit = valueFor(a);
+    else if (a === '--force') options.force = true;
+    else if (a === '--keep') {
+      const value = Number(valueFor(a));
+      if (!Number.isInteger(value) || value < 0) throw new Error('--keep must be a non-negative integer');
+      options.keep = value;
+    }
     else if (a === '--baseline') options.baselinePath = valueFor(a);
     else if (a === '--write-baseline') options.writeBaselinePath = valueFor(a);
     else if (a === '--because') options.correctionReason = valueFor(a);
@@ -958,7 +1005,11 @@ function storeInitCommand(options: MapctxOptions): void {
       tasksRoot: cwd,
       projectId: toml.config.projectId,
       storeDir,
-      actor: defaultActor(options.actor)
+      actor: defaultActor(options.actor),
+      // T-138: `--from-git <ref>` reads the COMMITTED checkpoint. Without it
+      // the working copy is used, which is the historical behaviour and is
+      // why the result now states the source out loud.
+      ...(options.fromGit ? { source: { kind: 'git' as const, ref: options.fromGit } } : {})
     });
     print(
       {
@@ -968,16 +1019,135 @@ function storeInitCommand(options: MapctxOptions): void {
         recovered: true,
         taskCount: recovered.taskCount,
         incarnationId: recovered.incarnationId,
-        warning: 'Recovered from the last git-committed checkpoint. Event history, claims, and cost/usage data strictly older than this checkpoint are permanently gone.'
+        checkpointSource: recovered.source,
+        warning: `Recovered from ${recovered.source.describedAs}. Event history, claims, and cost/usage data strictly older than this checkpoint are permanently gone.`
       },
       options.json
     );
+    if (!options.json && recovered.source.kind === 'disk') {
+      console.log('');
+      console.log('This read the WORKING COPY, which may not be committed. Use --from-git <ref> to recover from a committed checkpoint instead.');
+    }
     return;
   }
 
   const handle = StoreHandle.open(storeDir);
   handle.close();
+  reportSnapshotNotices();
   print({ projectId: toml.config.projectId, storeDir, alreadyMaterialized: false, recovered: false, plansAuthority: toml.config.plansAuthority }, options.json);
+}
+
+/**
+ * T-138: resolves the store for a backup/restore command. Separate from
+ * `openStoreOrFail` because these commands act on the store DIRECTORY, not
+ * on an open handle -- `restore` in particular must work when the store
+ * cannot be opened at all, which is the case it exists for.
+ */
+function resolveStoreTarget(): { projectId: string; storeDir: string } {
+  const toml = resolveMapctxToml(process.cwd());
+  if (!toml) throw new Error('No mapctx.toml found in this repository or its parents.');
+  return { projectId: toml.config.projectId, storeDir: resolveProjectStoreDir(toml.config.projectId) };
+}
+
+/** Prints any pre-migration/pre-repair snapshot notices to stderr. */
+function reportSnapshotNotices(): void {
+  for (const notice of drainSnapshotNotices()) console.error(`Note: ${notice}`);
+}
+
+function storeBackupCommand(options: MapctxOptions): void {
+  const { projectId, storeDir } = resolveStoreTarget();
+  const result = createBackup({
+    storeDir,
+    projectId,
+    reason: 'operator',
+    ...(options.outDir ? { outDir: path.resolve(process.cwd(), options.outDir) } : {})
+  });
+  print({
+    backupDir: result.backupDir,
+    storeDir,
+    projectId,
+    schemaVersion: result.manifest.schemaVersion,
+    eventCount: result.manifest.eventCount,
+    journalEntries: Object.values(result.manifest.journalCounts).reduce((sum, n) => sum + n, 0),
+    redactionCount: result.manifest.redactionCount,
+    files: result.manifest.files.length,
+    pruned: result.pruned
+  }, options.json);
+  if (!options.json) {
+    console.log('');
+    console.log(`Verify it any time with: mapctx store verify-backup ${result.backupDir}`);
+    if (result.manifest.redactionCount > 0) {
+      console.log('This archive contains data as of now; a LATER redaction will not reach it.');
+    }
+  }
+}
+
+function storeVerifyBackupCommand(backupDir: string | undefined, options: MapctxOptions): void {
+  if (!backupDir) throw new Error('Usage: mapctx store verify-backup <backup-dir> [--json]');
+  const result = verifyBackup(path.resolve(process.cwd(), backupDir));
+  if (!result.ok) {
+    refuse(result, `Backup does not match its manifest: ${result.problems.length} problem(s).`);
+  }
+  print(result, options.json);
+  if (!options.json && result.unlisted.length > 0) {
+    console.log(`Warning: ${result.unlisted.length} file(s) in the directory are not listed in the manifest and would be ignored by a restore.`);
+  }
+}
+
+function storeRestoreCommand(backupDir: string | undefined, options: MapctxOptions): void {
+  if (!backupDir) throw new Error('Usage: mapctx store restore <backup-dir> [--force] [--json]');
+  const { projectId, storeDir } = resolveStoreTarget();
+  const result = restoreBackup({
+    backupDir: path.resolve(process.cwd(), backupDir),
+    storeDir,
+    force: Boolean(options.force)
+  });
+  reportSnapshotNotices();
+  print({
+    restored: true,
+    storeDir: result.storeDir,
+    backupDir: result.backupDir,
+    projectId,
+    backupProjectId: result.manifest.projectId,
+    schemaVersion: result.manifest.schemaVersion,
+    eventCount: result.eventCount,
+    replayedJournalEntries: result.replayedJournalEntries,
+    replacedStoreMovedTo: result.replacedStoreMovedTo
+  }, options.json);
+  if (!options.json) {
+    console.log('');
+    if (result.replayedJournalEntries > 0) {
+      console.log(`${result.replayedJournalEntries} journal entr(ies) newer than the database snapshot were replayed.`);
+    }
+    if (result.replacedStoreMovedTo) {
+      console.log(`The store that was there was moved to ${result.replacedStoreMovedTo} (not deleted).`);
+    }
+    if (result.manifest.projectId && result.manifest.projectId !== projectId) {
+      console.log(`Warning: the archive was taken from project ${result.manifest.projectId}, but this repository is ${projectId}.`);
+    }
+  }
+}
+
+function storeBackupsCommand(options: MapctxOptions): void {
+  const { projectId } = resolveStoreTarget();
+  const entries = listBackups(projectId);
+  if (options.json) {
+    print({ projectId, backupsRoot: backupsRootFor(projectId), backups: entries }, true);
+    return;
+  }
+  console.log(`Backups for ${projectId} in ${backupsRootFor(projectId)}:`);
+  if (entries.length === 0) {
+    console.log('  (none) -- take one with `mapctx store backup`');
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.manifest) {
+      console.log(`  ${entry.backupDir}  UNREADABLE: ${entry.unreadable}`);
+      continue;
+    }
+    const m = entry.manifest;
+    console.log(`  ${m.createdAt}  ${m.reason.padEnd(13)} schema ${m.schemaVersion}  ${m.eventCount} events  ${entry.backupDir}`);
+  }
 }
 
 function storeRepairCommand(options: MapctxOptions): void {
@@ -988,6 +1158,9 @@ function storeRepairCommand(options: MapctxOptions): void {
   }
   const storeDir = resolveProjectStoreDir(toml.config.projectId);
   const result = repairStore(storeDir);
+  // T-138: the pre-repair snapshot rides the notice queue (RepairResult's
+  // shape is pinned by the P1 integrity suite), so it is drained here.
+  reportSnapshotNotices();
   // A gap report is the deliverable of this command, not a refusal of it: the
   // diagnosis (which node, which sequence, the named remedy) stays on stdout
   // and the non-zero exit is the gate. T-127 moved REFUSALS to stderr, not
@@ -1135,7 +1308,7 @@ function redactCommand(options: MapctxOptions): void {
     throw new Error('mapctx redact requires --reason "<why>": redaction destroys evidence permanently and must say why.');
   }
   const cwd = process.cwd();
-  const { handle, storeDir } = openStoreOrFail(cwd, { mode: options.commit ? 'write' : 'read' });
+  const { handle, storeDir, toml } = openStoreOrFail(cwd, { mode: options.commit ? 'write' : 'read' });
   try {
     const target = { nodeId: options.nodeId ?? handle.nodeId, sequence: options.sequence };
     const result = redactEvidence(handle, {
@@ -1167,6 +1340,18 @@ function redactCommand(options: MapctxOptions): void {
     }
     if (result.mode === 'commit' && result.reclaimWarning) {
       console.error(result.reclaimWarning);
+    }
+    // T-138: redaction destroys the value in the LIVE store only. Any archive
+    // taken before this moment still holds the plaintext, and restoring it
+    // would resurrect what was just destroyed -- which an operator running a
+    // privacy command needs to be told, not left to infer.
+    if (result.mode === 'commit' && hasBackups(toml.config.projectId)) {
+      const archives = listBackups(toml.config.projectId);
+      console.error(
+        `Warning: ${archives.length} backup(s) under ${backupsRootFor(toml.config.projectId)} were taken BEFORE this redaction`
+        + ` and still contain the original value. Restoring one would undo this redaction.`
+        + ` Re-take a backup (\`mapctx store backup\`) and delete the older archives if the value must not survive anywhere.`
+      );
     }
   } finally {
     handle.close();
@@ -2847,7 +3032,11 @@ async function main(): Promise<void> {
     if (subcommand === 'init') { storeInitCommand(options); return; }
     if (subcommand === 'repair') { storeRepairCommand(options); return; }
     if (subcommand === 'attest-orphan') { storeAttestOrphanCommand(positional[1], options); return; }
-    throw new Error('Usage: mapctx store <init|repair|attest-orphan> [--json]');
+    if (subcommand === 'backup') { storeBackupCommand(options); return; }
+    if (subcommand === 'restore') { storeRestoreCommand(positional[1], options); return; }
+    if (subcommand === 'verify-backup') { storeVerifyBackupCommand(positional[1], options); return; }
+    if (subcommand === 'backups') { storeBackupsCommand(options); return; }
+    throw new Error('Usage: mapctx store <init|repair|attest-orphan|backup|restore|verify-backup|backups> [--json]');
   }
 
   if (command === 'redact') {
