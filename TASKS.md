@@ -2842,7 +2842,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 3/13
+  - subIssueProgress: 4/13
   - priority: null
   - workload: null
   - tags: []
@@ -3181,7 +3181,7 @@
 ### [T-151] Sanitização para publicar tasks num repo público
 
   - id: T-151
-  - status: review
+  - status: done
   - type: feature
   - parent: E-018
   - subIssueProgress: null
@@ -3192,9 +3192,9 @@
   - dependsOn: [T-139]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-151.md
 
 ### [T-152] Espelho store → GitHub: issues, Project, dependências e campos derivados
