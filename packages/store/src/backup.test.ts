@@ -568,6 +568,74 @@ test("pruneAutoBackups spares the only auto-snapshot of the previous schema, how
   }
 })
 
+test("MUTATION GUARD: the lock-holder exemption is granted only to the real holder -- a published context never snapshots under ANOTHER process's maintenance lock", async () => {
+  const fixture = materialize()
+  const schema = require("./schema") as typeof import("./schema")
+  const lockPath = path.join(fixture.storeDir, MAINTENANCE_LOCK_FILENAME)
+  let child: import("child_process").ChildProcess | null = null
+  let probe: { version: number; sql: string } | null = null
+  try {
+    // This process's own archive of the CURRENT state, taken before anyone
+    // claims the lock. With the pid check removed from
+    // `maintenanceSnapshotFor`, this is exactly the archive the hook would
+    // wrongly cite as "already covered" while ANOTHER process holds the
+    // lock below.
+    const archive = createBackup({ storeDir: fixture.storeDir, projectId: fixture.projectId, reason: "pre-repair" })
+    const previousVersion = currentSchemaVersion()
+    probe = { version: previousVersion + 1, sql: "CREATE TABLE IF NOT EXISTS t167_probe (id TEXT PRIMARY KEY)" }
+    ;(schema.MIGRATIONS as Array<{ version: number; sql: string }>).push(probe)
+
+    // A live lock held by ANOTHER process -- a fresh takenAt, so it is not
+    // stale by MAINTENANCE_LOCK_STALE_MS policy and genuinely blocks.
+    const { spawn } = await import("child_process")
+    child = spawn("sleep", ["30"])
+    const otherPid = child.pid as number
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: otherPid, takenAt: new Date().toISOString() }), "utf8")
+
+    // Sanity: the real open path refuses under this lock exactly as R12
+    // promises -- this is the guarantee the exemption must not loosen.
+    assert.throws(() => StoreHandle.open(fixture.storeDir), /under maintenance/)
+
+    drainSnapshotNotices()
+    const { withMaintenanceSnapshot } = require("./backup") as typeof import("./backup")
+    // Reaches the pre-migration hook directly through `openDatabase`, the
+    // layer one below `StoreHandle.open`'s refusal just proved above. That
+    // refusal is what this test relies on to know nothing else could have
+    // opened the store meanwhile; `openDatabase` under someone else's lock
+    // is otherwise unreachable from a real caller, and it is only the
+    // HOOK's behaviour -- does it grant the exemption to a context that is
+    // not really the lock holder? -- that is under test here.
+    const db = withMaintenanceSnapshot(
+      { storeDir: fixture.storeDir, archive: { backupDir: archive.backupDir, manifest: archive.manifest }, skipped: null },
+      () => openDatabase(path.join(fixture.storeDir, "mapctx.db"))
+    )
+    db.close()
+
+    const notices = drainSnapshotNotices()
+    const skipped = notices.find(n => /pre-migration snapshot SKIPPED/.test(n) && /under maintenance/.test(n))
+    assert.ok(skipped, JSON.stringify(notices))
+    assert.ok(skipped!.includes(`pid ${otherPid}`), skipped)
+    // MUTATION GUARD: dropping the `=== process.pid` check in
+    // `maintenanceSnapshotFor` would make this SKIPPED describe THIS
+    // process instead of the real holder -- the exact tell of the T-167
+    // defect reappearing one level removed, under a lock that is not ours.
+    assert.ok(!skipped!.includes(`pid ${process.pid}`), skipped)
+    assert.ok(!notices.some(n => /already covered by/.test(n)), JSON.stringify(notices))
+
+    const backups = listBackups(fixture.projectId)
+    assert.equal(backups.length, 1, "no pre-migration snapshot must be written while another process holds the lock")
+  } finally {
+    if (child) {
+      child.kill("SIGKILL")
+      await new Promise(resolve => child!.once("exit", resolve))
+    }
+    fs.rmSync(lockPath, { force: true })
+    if (probe) (schema.MIGRATIONS as Array<{ version: number; sql: string }>).splice(schema.MIGRATIONS.indexOf(probe), 1)
+    fixture.restoreEnv()
+    cleanupDir(fixture.repoDir)
+  }
+})
+
 test("restoreBackup's post-restore open failure names the open/replay failure explicitly, not a corrupt archive, and still reports where the old store went", () => {
   const fixture = materialize()
   const restoreDir = mkTmpDir("mapctx-backup-restore-target-")
