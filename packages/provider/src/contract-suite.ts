@@ -441,6 +441,23 @@ async function checkPreconditions(ctx: ContractContext, checks: ContractCheck[])
       )
     )
     if (readOnlyError) auditError(checks, "precondition.read-only", group, readOnlyError)
+    // The refusal above is ambiguous by construction -- it may be for the
+    // precondition or for the unwritable field -- so on its own it lets a
+    // read-only provider DECLARE compare-and-swap support and pass. The
+    // declaration is checkable without a writable field though: a provider that
+    // cannot apply any write cannot be honouring a precondition on one, so
+    // `revision: true` is false whatever the refusal said. This is the phase
+    // where the declaration is easiest to get wrong and hardest to notice,
+    // because the real `precondition.stale-conflicts` check cannot fire until
+    // something is writable.
+    checks.push(
+      check(
+        "precondition.declaration-coherent",
+        group,
+        provider.capabilities.preconditions.revision === false,
+        "no field is writable, so preconditions.revision must be declared false: a provider that applies no write cannot be honouring a precondition on one"
+      )
+    )
     return
   }
 
