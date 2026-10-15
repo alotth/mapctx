@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 24/31
+  - subIssueProgress: 25/32
   - priority: high
   - workload: null
   - tags: []
@@ -3485,7 +3485,7 @@
 ### [T-167] Snapshot pre-migracao pulado quando a migracao roda via store repair
 
   - id: T-167
-  - status: review
+  - status: done
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3496,7 +3496,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
   - updated: 2026-10-15
   - detail: ./tasks/T-167.md
@@ -3519,6 +3519,25 @@
   - externalId: null
   - updated: null
   - detail: ./tasks/T-168.md
+
+### [T-169] Testes do store vazam MAPCTX_HOME temporario em /tmp (milhares de diretorios por rodada)
+
+  - id: T-169
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: medium
+  - workload: Easy
+  - tags: []
+  - domains: [STORE, TEST]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-15
+  - detail: ./tasks/T-169.md
 
 ## Notes
 
