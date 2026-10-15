@@ -10,7 +10,7 @@ import { resolveProjectStoreDir } from "./config"
 import {
   validateCanonicalStore, validateStoreRegime,
   applyValidationGate, buildValidationBaseline, parseValidationBaseline, validationIssueFingerprint,
-  VALIDATION_BASELINE_SCHEMA_VERSION, type ValidationGateIssue
+  VALIDATION_BASELINE_SCHEMA_VERSION, type ValidationGateIssue, type ValidationBaselineFile
 } from "./validate"
 import { createTask, updateTask } from "./tasks"
 import { StoreHandle } from "./store-handle"
@@ -412,6 +412,131 @@ test("applyValidationGate intersects --task before --baseline, so staleBaseline 
   assert.equal(gated.issues.length, 0)
   assert.equal(gated.staleBaseline.length, 1)
   assert.equal(gated.staleBaseline[0].taskId, "T-2")
+})
+
+// ---------------------------------------------------------------------------
+// T-148 (D13): `bulk-updated-timestamp` is `info`, routed around the T-127
+// gate entirely.
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates 9 additional tasks alongside the fixture's own task (10 total),
+ * then stamps all 10 with the SAME updatedOn date via a real patch --
+ * `createTask` leaves `updatedOn: null`, which the rule does not count, so
+ * only the subsequent `updateTask` trips the `count >= 10` threshold. A
+ * fixed `now` keeps the recorded date (and the fingerprint/message built
+ * from it) deterministic across test runs.
+ */
+const BULK_UPDATE_DATE = "2026-05-01"
+function tripBulkTimestamp(fixture: ReturnType<typeof openCanonicalFixture>): string[] {
+  const ids = [fixture.taskId]
+  for (let i = 0; i < 9; i++) {
+    const created = createTask(fixture.handle, { title: `Bulk task ${i}`, actor: "test" })
+    assert.equal(created.ok, true)
+    if (created.ok) ids.push(created.taskId)
+  }
+  for (const id of ids) {
+    assert.equal(
+      updateTask(fixture.handle, { taskId: id, patch: { priority: "high" }, actor: "test", now: () => new Date(`${BULK_UPDATE_DATE}T00:00:00.000Z`) }).ok,
+      true
+    )
+  }
+  return ids
+}
+
+test("T-148.1: bulk-updated-timestamp is severity info with its exact T-127-fingerprinted message", () => {
+  const fixture = openCanonicalFixture()
+  try {
+    tripBulkTimestamp(fixture)
+    const report = validateCanonicalStore(fixture.handle)
+    const bulk = report.issues.find(issue => issue.code === "bulk-updated-timestamp")
+    assert.ok(bulk, JSON.stringify(report.issues))
+    assert.equal(bulk?.severity, "info")
+    // Exact literal on purpose: this message is part of the T-127 baseline
+    // fingerprint (validationIssueFingerprint hashes severity+code+taskId+
+    // message), so rewording it here would mask a breaking change to every
+    // baseline file that recorded this issue.
+    assert.equal(bulk?.message, `10 tasks share updated date ${BULK_UPDATE_DATE}; event history carries no per-task distinction.`)
+  } finally {
+    fixture.close()
+  }
+})
+
+test("T-148.2: bulk-updated-timestamp counts in neither errors nor warnings, and a real error in the same run is still counted", () => {
+  const fixture = openCanonicalFixture()
+  try {
+    tripBulkTimestamp(fixture)
+    // A real error alongside it, so the change cannot be blinding the gate.
+    fixture.handle.appendEvent({ eventType: "task.patched", actor: "raw-fixture", payload: { taskId: fixture.taskId, patch: { title: "" } } })
+    const report = validateCanonicalStore(fixture.handle)
+    assert.ok(report.issues.some(issue => issue.code === "bulk-updated-timestamp"), JSON.stringify(report.issues))
+    assert.ok(codesOf(report).includes("missing-title"), JSON.stringify(report.issues))
+    assert.equal(report.errors, 1, "only the real error counts")
+    assert.equal(report.warnings, 0, "the info issue never becomes a warning")
+  } finally {
+    fixture.close()
+  }
+})
+
+test("T-148.3: buildValidationBaseline records no entry for bulk-updated-timestamp while still recording a real error", () => {
+  const fixture = openCanonicalFixture()
+  try {
+    tripBulkTimestamp(fixture)
+    fixture.handle.appendEvent({ eventType: "task.patched", actor: "raw-fixture", payload: { taskId: fixture.taskId, patch: { title: "" } } })
+    const report = validateCanonicalStore(fixture.handle)
+    assert.ok(report.issues.some(issue => issue.code === "bulk-updated-timestamp"))
+    const baseline = buildValidationBaseline(report.issues)
+    assert.ok(!baseline.issues.some(entry => entry.code === "bulk-updated-timestamp"), JSON.stringify(baseline.issues))
+    assert.ok(baseline.issues.some(entry => entry.code === "missing-title"), JSON.stringify(baseline.issues))
+  } finally {
+    fixture.close()
+  }
+})
+
+test("T-148.4: applyValidationGate keeps an info issue even when a forged baseline carries its exact fingerprint", () => {
+  const fixture = openCanonicalFixture()
+  try {
+    tripBulkTimestamp(fixture)
+    const report = validateCanonicalStore(fixture.handle)
+    const bulk = report.issues.find(issue => issue.code === "bulk-updated-timestamp")
+    assert.ok(bulk)
+    if (!bulk) return
+    // A baseline cannot legitimately be built with an info entry (T-148.3),
+    // so this forges one directly -- as if a hand-edited or pre-T-148
+    // baseline file carried the info's own fingerprint -- to prove
+    // applyValidationGate ignores the match rather than relying on nothing
+    // ever producing such a file.
+    const forged = {
+      schemaVersion: VALIDATION_BASELINE_SCHEMA_VERSION,
+      issues: [{
+        fingerprint: validationIssueFingerprint(bulk),
+        severity: bulk.severity,
+        code: bulk.code,
+        taskId: bulk.taskId ?? null,
+        message: bulk.message
+      }]
+    } as unknown as ValidationBaselineFile
+    const gated = applyValidationGate(report.issues, { baseline: forged })
+    assert.ok(gated.issues.some(issue => issue.code === "bulk-updated-timestamp"), "a baseline cannot silence an info issue")
+    assert.equal(gated.baselined, 0, "an info issue is never counted as baselined")
+  } finally {
+    fixture.close()
+  }
+})
+
+test("T-148.5: applyValidationGate --task excludes bulk-updated-timestamp as board-scoped without counting it as an error", () => {
+  const fixture = openCanonicalFixture()
+  try {
+    const ids = tripBulkTimestamp(fixture)
+    const report = validateCanonicalStore(fixture.handle)
+    assert.ok(report.issues.some(issue => issue.code === "bulk-updated-timestamp" && issue.taskId === undefined))
+    const gated = applyValidationGate(report.issues, { tasks: [ids[0]] })
+    assert.ok(!gated.issues.some(issue => issue.code === "bulk-updated-timestamp"), "excluded by the --task filter")
+    assert.ok(gated.boardScopedExcluded >= 1, JSON.stringify(gated))
+    assert.ok(!gated.boardScopedErrors.some(issue => issue.code === "bulk-updated-timestamp"), "info is never a boardScopedError")
+  } finally {
+    fixture.close()
+  }
 })
 
 test("parseValidationBaseline round-trips buildValidationBaseline's JSON and rejects malformed input", () => {

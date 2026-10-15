@@ -16,6 +16,7 @@
  * the specific check which should catch it is the one that fails.
  */
 
+import { effectiveCapabilities, resolveOptionId, widenedSpeciesClaims } from "./capabilities"
 import { isRetryableKind } from "./results"
 import type {
   FieldWrite,
@@ -79,6 +80,12 @@ export type ContractContext = {
   illegalPlanningStateMove?: string
   /** Total items the provider should report for `project`, when known. */
   expectedItemCount?: number
+  /**
+   * An item of a NARROWER species than `capabilities.primarySpecies`, when the
+   * provider has one. GitHub's draft issue is the case this exists for: the
+   * suite checks that the declared narrowing is real rather than decorative.
+   */
+  narrowedSpeciesItem?: ProviderItemRef
 }
 
 function check(id: string, group: string, ok: boolean, detail: string): ContractCheck {
@@ -409,7 +416,48 @@ async function checkPreconditions(ctx: ContractContext, checks: ContractCheck[])
     (candidate) => candidate !== "planningState" && provider.capabilities.fields[candidate]?.write === true && ctx.sampleValues[candidate] !== undefined
   )
   if (field === undefined) {
-    checks.push(skip("precondition.handling", group, "no writable field with a sample value to test a precondition against"))
+    // A read-only provider still has to get this right, and skipping here left
+    // the rule unexercised for exactly the providers most likely to break it.
+    // The refusal may be for the precondition or for the unwritable field --
+    // both are `unsupported`, and what must never happen is success, which
+    // would tell the caller its write was guarded when nothing was.
+    const unwritable = (Object.keys(provider.capabilities.fields) as ProviderOwnedField[])[0]
+    if (unwritable === undefined) {
+      checks.push(skip("precondition.handling", group, "the provider declares no fields at all"))
+      return
+    }
+    const refused = await provider.setField({
+      ...fieldWriteFor(ctx, unwritable, ctx.sampleValues[unwritable] ?? "contract-suite"),
+      clientOperationId: "contract-precondition-read-only",
+      precondition: { expectedRevision: "contract-suite-stale-revision" }
+    })
+    const readOnlyError = errorOf(refused)
+    checks.push(
+      check(
+        "precondition.handling",
+        group,
+        readOnlyError?.kind === "unsupported",
+        `no field is writable, so a write carrying a precondition must be refused as unsupported, got ${describe(refused)}`
+      )
+    )
+    if (readOnlyError) auditError(checks, "precondition.read-only", group, readOnlyError)
+    // The refusal above is ambiguous by construction -- it may be for the
+    // precondition or for the unwritable field -- so on its own it lets a
+    // read-only provider DECLARE compare-and-swap support and pass. The
+    // declaration is checkable without a writable field though: a provider that
+    // cannot apply any write cannot be honouring a precondition on one, so
+    // `revision: true` is false whatever the refusal said. This is the phase
+    // where the declaration is easiest to get wrong and hardest to notice,
+    // because the real `precondition.stale-conflicts` check cannot fire until
+    // something is writable.
+    checks.push(
+      check(
+        "precondition.declaration-coherent",
+        group,
+        provider.capabilities.preconditions.revision === false,
+        "no field is writable, so preconditions.revision must be declared false: a provider that applies no write cannot be honouring a precondition on one"
+      )
+    )
     return
   }
 
@@ -991,6 +1039,371 @@ async function checkLifecycle(ctx: ContractContext, checks: ContractCheck[]): Pr
   )
 }
 
+/**
+ * Species honesty (T-150).
+ *
+ * A provider with more than one kind of item cannot describe itself with one
+ * static record, and the failure mode is specific: GitHub's draft issues have no
+ * dependency edges, no comments, no timeline and no open/closed state, while
+ * issues on the same board have all of them. A caller that plans a dependency
+ * read against `capabilities` and runs it against a draft gets an `unsupported`
+ * it had no way to anticipate.
+ *
+ * So two things are checked. The declaration may only narrow — a species that
+ * claims more than the primary record turns that record into an undocumented
+ * floor. And the narrowing must be real: an operation a species says it cannot
+ * do must actually refuse for an item of that species.
+ */
+async function checkSpecies(ctx: ContractContext, checks: ContractCheck[]): Promise<void> {
+  const group = "species"
+  const { provider } = ctx
+  const declared = provider.capabilities.species ?? {}
+  const names = Object.keys(declared).filter((name) => name !== provider.capabilities.primarySpecies)
+
+  checks.push(
+    check(
+      "species.primary-declared",
+      group,
+      typeof provider.capabilities.primarySpecies === "string" && provider.capabilities.primarySpecies.length > 0,
+      "capabilities must name the species they describe"
+    )
+  )
+
+  const widened = widenedSpeciesClaims(provider.capabilities)
+  checks.push(
+    check(
+      "species.narrowing-only",
+      group,
+      widened.length === 0,
+      `a species may only narrow the primary record; widened: ${widened.join(", ")}`
+    )
+  )
+
+  if (names.length > 0) {
+    checks.push(
+      check(
+        "species.resolver-present",
+        group,
+        typeof provider.capabilitiesForItem === "function",
+        "a provider declaring more than one species must expose capabilitiesForItem"
+      )
+    )
+  }
+
+  // The primary record must describe the item the rest of the suite ran against,
+  // or every other group tested a provider that does not apply to it.
+  const primaryItem = await provider.getItem({ ref: ctx.writableItem })
+  if (primaryItem.ok) {
+    checks.push(
+      check(
+        "species.primary-matches-item",
+        group,
+        primaryItem.value.species === provider.capabilities.primarySpecies,
+        `the suite's writableItem is species ${primaryItem.value.species}, but capabilities describe ${provider.capabilities.primarySpecies}`
+      )
+    )
+  }
+
+  // A provider with one kind of item has nothing to narrow, and that is a
+  // result rather than a gap: emitting a skip here would make every
+  // single-species provider look partially unchecked.
+  if (names.length === 0) {
+    checks.push(
+      check(
+        "species.single",
+        group,
+        provider.capabilitiesForItem === undefined,
+        "a single-species provider declares no narrower species, so it must not offer capabilitiesForItem either"
+      )
+    )
+    return
+  }
+
+  if (ctx.narrowedSpeciesItem === undefined) {
+    checks.push(skip("species.narrowed-refuses", group, `species ${names.join(", ")} are declared but no item of one was supplied`))
+    return
+  }
+
+  const ref = ctx.narrowedSpeciesItem
+  const narrowed = effectiveCapabilities(provider, ref)
+  const got = await provider.getItem({ ref })
+  if (got.ok) {
+    checks.push(
+      check(
+        "species.narrowed-item-reports-species",
+        group,
+        got.value.species !== provider.capabilities.primarySpecies,
+        `the narrowed item reports species ${got.value.species}, which is the primary one`
+      )
+    )
+  }
+
+  const anyRelationReadable = (["blocks", "blocked-by", "relates-to"] as const).some(
+    (kind) => narrowed.relations[kind]?.read === true
+  )
+  if (!anyRelationReadable) {
+    const deps = await provider.getDependencies({ items: [ref] })
+    const error = errorOf(deps)
+    checks.push(
+      check(
+        "species.narrowed-refuses",
+        group,
+        error?.kind === "unsupported",
+        `this species declares no readable relation, so getDependencies on it must be unsupported, got ${describe(deps)}`
+      )
+    )
+    if (error) auditError(checks, "species.narrowed-relations", group, error)
+  } else {
+    checks.push(skip("species.narrowed-refuses", group, "the narrower species still reads relations"))
+  }
+
+  if (!narrowed.comments.read) {
+    const comments = await provider.listComments({ item: ref })
+    const error = errorOf(comments)
+    checks.push(
+      check(
+        "species.narrowed-comments-refused",
+        group,
+        error?.kind === "unsupported",
+        `this species declares comments unreadable, so listComments on it must be unsupported, got ${describe(comments)}`
+      )
+    )
+    if (error) auditError(checks, "species.narrowed-comments", group, error)
+  }
+
+  if (!narrowed.timeline.read) {
+    const timeline = await provider.timeline({ item: ref })
+    const error = errorOf(timeline)
+    checks.push(
+      check(
+        "species.narrowed-timeline-refused",
+        group,
+        error?.kind === "unsupported",
+        `this species declares timeline unreadable, so timeline on it must be unsupported, got ${describe(timeline)}`
+      )
+    )
+    if (error) auditError(checks, "species.narrowed-timeline", group, error)
+  }
+}
+
+/**
+ * Key resolution (T-150).
+ *
+ * The mirror reconciles against a board whose ids it does not own. Walking
+ * `listItems` every pass is both a full read and a convention nobody declared,
+ * so `findByKey` is contract surface — and its one subtle rule is that an
+ * unmatched key is ABSENT rather than an error, because during a migration most
+ * keys are.
+ */
+async function checkKeyResolution(ctx: ContractContext, checks: ContractCheck[]): Promise<void> {
+  const group = "keys"
+  const { provider } = ctx
+
+  const known = ctx.writableItem.workItem.key
+  const resolved = await provider.findByKey({ project: ctx.project, keys: [known] })
+  checks.push(check("findByKey.ok", group, resolved.ok, `findByKey([${known}]) -> ${describe(resolved)}`))
+  if (resolved.ok) {
+    checks.push(
+      check(
+        "findByKey.resolves-known",
+        group,
+        resolved.value.items.some((item) => item.ref.workItem.id === ctx.writableItem.workItem.id),
+        `findByKey must return the item whose key is ${known}`
+      )
+    )
+    checks.push(
+      check(
+        "findByKey.freshness",
+        group,
+        resolved.value.freshness.partial === (resolved.value.nextCursor !== undefined),
+        "partial must mirror the presence of a cursor"
+      )
+    )
+  }
+
+  const missing = await provider.findByKey({ project: ctx.project, keys: ["contract-suite-absent-key"] })
+  checks.push(
+    check(
+      "findByKey.unknown-is-absent",
+      group,
+      missing.ok && missing.value.items.length === 0,
+      `an unmatched key must come back as an empty page, not an error, got ${describe(missing)}`
+    )
+  )
+
+  const mixed = await provider.findByKey({ project: ctx.project, keys: [known, "contract-suite-absent-key"] })
+  checks.push(
+    check(
+      "findByKey.mixed",
+      group,
+      mixed.ok && mixed.value.items.length === 1,
+      `a mix of one known and one unknown key must return exactly the known one, got ${mixed.ok ? mixed.value.items.length : describe(mixed)}`
+    )
+  )
+}
+
+/**
+ * Field description and option ids (T-150).
+ *
+ * `FieldRef.optionId` is required for a single-select write and cannot be
+ * derived from the value. Until the contract could hand back option ids, every
+ * caller needed provider-specific code to find one — so this group checks that
+ * a declared enumerated field actually carries its options, and that an option
+ * id resolves from a value the provider itself reports.
+ */
+async function checkFieldDescriptors(ctx: ContractContext, checks: ContractCheck[]): Promise<void> {
+  const group = "field-descriptors"
+  const { provider } = ctx
+
+  const described = await provider.describeFields({ project: ctx.project })
+  checks.push(check("describeFields.ok", group, described.ok, `describeFields -> ${describe(described)}`))
+  if (!described.ok) return
+  const descriptors = described.value
+
+  checks.push(
+    check(
+      "describeFields.ids-unique",
+      group,
+      new Set(descriptors.map((entry) => `${entry.surface}:${entry.providerFieldId}`)).size === descriptors.length,
+      "every descriptor must have a distinct surface+id"
+    )
+  )
+
+  // A field the provider says it can read must be describable, or a caller
+  // cannot address it for a write.
+  for (const field of Object.keys(provider.capabilities.fields) as ProviderOwnedField[]) {
+    if (provider.capabilities.fields[field]?.write !== true) continue
+    checks.push(
+      check(
+        `describeFields.covers.${field}`,
+        group,
+        descriptors.some((entry) => entry.semantic === field),
+        `${field} is declared writable, so describeFields must describe how to address it`
+      )
+    )
+  }
+
+  for (const descriptor of descriptors) {
+    if (descriptor.dataType !== "single-select" && descriptor.dataType !== "multi-select") continue
+    checks.push(
+      check(
+        `describeFields.options.${descriptor.providerFieldId}`,
+        group,
+        Array.isArray(descriptor.options) && descriptor.options.length > 0,
+        `${descriptor.name} is enumerated, so its options must be listed: an option id cannot be derived from a value`
+      )
+    )
+    if (descriptor.surface === "project-item") {
+      checks.push(
+        check(
+          `describeFields.project-id.${descriptor.providerFieldId}`,
+          group,
+          typeof descriptor.projectId === "string" && descriptor.projectId.length > 0,
+          "a project-item field must carry the project id a write needs"
+        )
+      )
+    }
+  }
+
+  // Round trip: take the value the provider reports for an enumerated field and
+  // resolve it back to an option id.
+  const planning = descriptors.find((entry) => entry.semantic === "planningState" && entry.options !== undefined)
+  if (planning === undefined) {
+    checks.push(skip("describeFields.option-roundtrip", group, "planningState is not an enumerated field here"))
+  } else {
+    const item = await provider.getItem({ ref: ctx.writableItem })
+    const current = item.ok ? item.value.fields.planningState : undefined
+    if (typeof current !== "string") {
+      checks.push(skip("describeFields.option-roundtrip", group, "the item reports no planningState value to resolve"))
+    } else {
+      checks.push(
+        check(
+          "describeFields.option-roundtrip",
+          group,
+          resolveOptionId(descriptors, "planningState", current) !== undefined,
+          `the item's own planningState ${current} must resolve to an option id, got undefined`
+        )
+      )
+    }
+  }
+
+  const budget = provider.capabilities.fieldBudget
+  if (budget !== undefined) {
+    checks.push(
+      check(
+        "describeFields.within-budget",
+        group,
+        descriptors.filter((entry) => entry.surface === "project-item").length <= budget.maxFieldsPerProject,
+        `describeFields reported more project fields than the declared ceiling of ${budget.maxFieldsPerProject}`
+      )
+    )
+  }
+}
+
+/**
+ * Rate-limit reporting (T-150).
+ *
+ * A mirror sizing a batch needs to know what is left. The rule is the same one
+ * that governs preconditions: a provider that cannot report a balance must
+ * refuse, because a fabricated balance is worse than none.
+ */
+async function checkRateLimit(ctx: ContractContext, checks: ContractCheck[]): Promise<void> {
+  const group = "rate-limit"
+  const { provider } = ctx
+  const reportable = provider.capabilities.rateLimit.reportable
+
+  if (provider.rateLimit === undefined) {
+    checks.push(
+      check(
+        "rateLimit.absent-is-declared",
+        group,
+        !reportable,
+        "capabilities declare rateLimit reportable, so the method must exist"
+      )
+    )
+    return
+  }
+
+  const result = await provider.rateLimit()
+  if (!reportable) {
+    const error = errorOf(result)
+    checks.push(
+      check(
+        "rateLimit.refused-when-unsupported",
+        group,
+        error?.kind === "unsupported",
+        `rateLimit is declared unreportable, so the method must refuse rather than invent a balance, got ${describe(result)}`
+      )
+    )
+    if (error) auditError(checks, "rateLimit.refused", group, error)
+    return
+  }
+
+  checks.push(check("rateLimit.ok", group, result.ok, `rateLimit -> ${describe(result)}`))
+  if (!result.ok) return
+  const reading = result.value
+  checks.push(
+    check(
+      "rateLimit.sane",
+      group,
+      Number.isFinite(reading.limit) &&
+        Number.isFinite(reading.remaining) &&
+        reading.limit > 0 &&
+        reading.remaining >= 0 &&
+        reading.remaining <= reading.limit,
+      `remaining must be between 0 and limit, got ${reading.remaining}/${reading.limit}`
+    )
+  )
+  checks.push(
+    check(
+      "rateLimit.resets",
+      group,
+      !Number.isNaN(Date.parse(reading.resetAt)),
+      `resetAt must be a timestamp, got ${reading.resetAt}`
+    )
+  )
+}
+
 // ---- entry point ----------------------------------------------------------
 
 /**
@@ -1013,6 +1426,10 @@ export async function checkProviderContract(ctx: ContractContext): Promise<Contr
   await checkBatch(ctx, checks)
   await checkPlanningState(ctx, checks)
   await checkLifecycle(ctx, checks)
+  await checkSpecies(ctx, checks)
+  await checkKeyResolution(ctx, checks)
+  await checkFieldDescriptors(ctx, checks)
+  await checkRateLimit(ctx, checks)
 
   const failures = checks.filter((entry) => !entry.ok)
   return {

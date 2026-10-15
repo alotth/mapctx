@@ -86,6 +86,23 @@ export const PROVIDER_OWNED_FIELDS: readonly ProviderOwnedField[] = [
 ]
 
 /**
+ * What kind of thing an item is, inside one provider.
+ *
+ * Provider-defined, because the distinction is provider-specific: GitHub has
+ * `issue` and `draft-issue` on the same board, and a draft has no dependency
+ * edges, no sub-issues, no comments, no timeline and no open/closed state,
+ * while an issue has all of them. One static capability record cannot describe
+ * both, and a caller that plans a dependency write against "GitHub" rather than
+ * against "this item" plans against a provider that does not exist.
+ *
+ * `capabilities` describes the PRIMARY species (`capabilities.primarySpecies`).
+ * `capabilitiesForItem` is authoritative for one item, and a non-primary
+ * species may only NARROW the primary record — never widen it, or the primary
+ * record would be a floor nobody declared.
+ */
+export type ProviderItemSpecies = string
+
+/**
  * Item identity.
  *
  * `workItem` is the thing that owns title and body — a store task, a GitHub
@@ -93,11 +110,16 @@ export const PROVIDER_OWNED_FIELDS: readonly ProviderOwnedField[] = [
  * when the item also sits on a board: on GitHub a Project V2 item id is not the
  * issue id, and the spike confirmed a field write needs the project id and the
  * item id as well as the field id.
+ *
+ * `species` is optional on a ref because a caller holding only an id should not
+ * have to know. A provider that distinguishes species must be able to infer it
+ * from the ref it issued, and uses this field only when it cannot.
  */
 export type ProviderItemRef = {
   provider: ProviderKind
   workItem: { id: string; key: string; url?: string }
   projectItem?: { projectId: string; itemId: string }
+  species?: ProviderItemSpecies
 }
 
 /**
@@ -128,6 +150,75 @@ export type ProviderItem = {
   ref: ProviderItemRef
   revision: Revision
   fields: Partial<Record<ProviderOwnedField, unknown>>
+  /** Which species this item is. A single-species provider reports its own. */
+  species: ProviderItemSpecies
+}
+
+/**
+ * One option of an enumerated provider field.
+ *
+ * The spike's load-bearing finding for addressing: a GitHub single-select write
+ * needs the OPTION id, and an option id cannot be derived from the value — only
+ * looked up. `Status` is the field the adapter owns and the one the mirror has
+ * to write, so if the contract cannot hand back option ids, every caller has to
+ * reach around it with provider-specific code.
+ */
+export type ProviderFieldOption = { id: string; name: string; description?: string }
+
+export type ProviderFieldDataType =
+  | "text"
+  | "number"
+  | "date"
+  /** Enumerated: one of a fixed option set, and a write needs the option id. */
+  | "single-select"
+  /** Enumerated: several of a fixed option set. GitHub's `Labels` is one. */
+  | "multi-select"
+  /**
+   * An open-ended list of strings with no option set at all. Distinct from
+   * `multi-select` on purpose: the store's `tags` accept any text, so demanding
+   * an option id for them would be demanding one that cannot exist.
+   */
+  | "text-list"
+  | "iteration"
+  /** A provider built-in with no contract-visible value shape (GitHub's `Repository`, `Linked pull requests`). */
+  | "native"
+
+/**
+ * A provider field as the provider itself describes it.
+ *
+ * `semantic` is absent when the field carries no contract meaning. That is not
+ * noise: the count of descriptors against `capabilities.fieldBudget` is how a
+ * caller knows how much room is left on a board, and GitHub's 13 built-ins
+ * spend that budget whether MapCtx uses them or not.
+ */
+export type ProviderFieldDescriptor = {
+  semantic?: ProviderOwnedField
+  /** The provider's own name for the field, as a person sees it. */
+  name: string
+  providerFieldId: string
+  surface: "work-item" | "project-item"
+  dataType: ProviderFieldDataType
+  options?: readonly ProviderFieldOption[]
+  /** Present for `project-item`, where the field belongs to a board. */
+  projectId?: string
+}
+
+/**
+ * Remaining provider budget before a large batch, read rather than guessed.
+ *
+ * GitHub bills GraphQL in points (5,000/hour) and a batch of 50 aliased writes
+ * cost one, so a mirror pushing 136 tasks is cheap — but only if it can check.
+ * A provider that cannot report this declares `reportable: false` and callers
+ * must not infer a balance from a failed write.
+ */
+export type ProviderRateLimit = {
+  limit: number
+  remaining: number
+  /** ISO timestamp when `remaining` returns to `limit`. */
+  resetAt: string
+  unit: "points" | "requests"
+  /** Cost of the operation that produced this reading, when the provider says. */
+  costOfLastOperation?: number
 }
 
 export type ProviderDependency = {
@@ -249,6 +340,41 @@ export type FieldCapability = {
 
 export type RelationCapability = { read: boolean; write: boolean }
 
+/**
+ * How one non-primary species differs from the primary record.
+ *
+ * Narrowing only. Every `true` here must be `true` in the primary record too,
+ * and the contract suite checks that — otherwise `capabilities` would silently
+ * become a floor, and a caller reading it would under-use the provider while
+ * believing it was reading the truth.
+ */
+export type SpeciesCapabilities = {
+  fields?: Partial<Record<ProviderOwnedField, FieldCapability>>
+  relations?: Partial<Record<ProviderRelationKind, RelationCapability>>
+  comments?: { read: boolean; write: boolean }
+  criteria?: { read: boolean; write: boolean }
+  timeline?: { read: boolean }
+  lifecycle?: { create?: boolean; closeOrReopen?: boolean }
+  /** Why this species is narrower, for the error message a caller will see. */
+  note?: string
+}
+
+/**
+ * How many fields a board can hold at all.
+ *
+ * Measured, not quoted: the spike reached 49 observable fields on a GitHub
+ * Project and the 50th was refused, while GitHub's own message says 50 — so the
+ * number a caller must budget against is the one that was observable. Count
+ * `describeFields` against `maxFieldsPerProject` to know what is left; the
+ * descriptor list is the live truth and this is only the ceiling.
+ */
+export type FieldBudget = {
+  maxFieldsPerProject: number
+  /** True when this ceiling was observed against the provider, not read off documentation. */
+  measured: boolean
+  note?: string
+}
+
 export type ProviderCapabilities = {
   fields: Partial<Record<ProviderOwnedField, FieldCapability>>
   relations: Partial<Record<ProviderRelationKind, RelationCapability>>
@@ -256,6 +382,19 @@ export type ProviderCapabilities = {
   criteria: { read: boolean; write: boolean }
   timeline: { read: boolean }
   lifecycle: { create: boolean; closeOrReopen: boolean }
+  /**
+   * The species this whole record describes. A single-species provider names
+   * its only one; `species` then carries the narrower ones.
+   */
+  primarySpecies: ProviderItemSpecies
+  species?: Record<ProviderItemSpecies, SpeciesCapabilities>
+  /** Absent when the provider imposes no board-wide field ceiling. */
+  fieldBudget?: FieldBudget
+  /**
+   * Whether `rateLimit()` returns a real reading. False means the method must
+   * refuse with `unsupported` rather than invent a balance.
+   */
+  rateLimit: { reportable: boolean; unit?: ProviderRateLimit["unit"]; costPerOperation?: number }
   /**
    * Compare-and-swap support. `revision: false` means a caller may not pass a
    * precondition at all; passing one is refused rather than dropped.
@@ -419,8 +558,45 @@ export type TaskProvider = {
   readonly kind: ProviderKind
   readonly capabilities: ProviderCapabilities
 
+  /**
+   * Capabilities for one specific item, resolving its species.
+   *
+   * Absent on a single-species provider. Present means `capabilities` describes
+   * `primarySpecies` and this is the per-item truth; a caller about to write
+   * must ask this, not the static record.
+   */
+  capabilitiesForItem?(ref: ProviderItemRef): ProviderCapabilities
+
   listItems(input: ListItemsInput): Promise<ProviderResult<Page<ProviderItem>>>
   getItem(input: { ref: ProviderItemRef }): Promise<ProviderResult<ProviderItem>>
+
+  /**
+   * Resolve caller-side keys to provider items in one call.
+   *
+   * The mirror (T-152) reconciles 136 tasks against a board it does not own the
+   * ids of. Without this it has to walk `listItems` on every pass and match on
+   * a convention, which is both a full-board read per reconciliation and a
+   * silent breakage the day the convention changes. A key with no match is
+   * simply ABSENT from the page — not an error, because "this task is not on
+   * the board yet" is the normal state during a migration.
+   */
+  findByKey(input: { project: string; keys: readonly string[] }): Promise<ProviderResult<Page<ProviderItem>>>
+
+  /**
+   * The provider's own fields, with the option ids an enumerated write needs.
+   *
+   * This is what makes `FieldRef.optionId` resolvable inside the contract
+   * instead of through provider-specific code in every caller.
+   */
+  describeFields(input: { project: string }): Promise<ProviderResult<ProviderFieldDescriptor[]>>
+
+  /**
+   * Remaining budget, for deciding whether a large batch fits.
+   *
+   * Must refuse with `unsupported` when `capabilities.rateLimit.reportable` is
+   * false. Omitting the method entirely is also legal.
+   */
+  rateLimit?(): Promise<ProviderResult<ProviderRateLimit>>
 
   getProject(input: { project: string }): Promise<ProviderResult<ProviderProject>>
   setProjectField(input: SetProjectFieldInput): Promise<ProviderResult<ProviderProject>>

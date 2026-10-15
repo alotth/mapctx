@@ -479,3 +479,17 @@ holdership is a role-aware question that belongs with C5.
   are not a disagreement) and derives the stored lists from the edges; the
   CLI's `task create` never exposed those two, so no `task create` invocation
   changes
+* **fix:** `mapctx validate` reports `bulk-updated-timestamp` as `info`
+  instead of `warning`, and adds `info` as a severity that counts as neither
+  an error nor a warning. A shared `updated` date is what an ordinary day of
+  board work looks like — one export stamps every task it rewrites — so it
+  proves nothing and no action clears it; as a warning it was permanent noise
+  that trained operators to stop reading the command (the live board shows
+  four). An `info` never gates: `--write-baseline` does not record one, and
+  no baseline entry can suppress one, so an observation cannot be hidden by
+  accepting it. A baseline recorded before this change reports its
+  `bulk-updated-timestamp` entry as stale `not-reported` — the warning it
+  recorded no longer exists, so drop that entry. The legacy Markdown
+  validator behind `validate --snapshots` still reports the same code as a
+  `warning` in `snapshots.structural`, so a `--json` consumer sees the
+  observation twice with two severities; it never affects the exit code
