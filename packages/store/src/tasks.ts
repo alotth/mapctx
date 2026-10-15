@@ -1,7 +1,7 @@
 import * as crypto from "crypto"
 import { parseEstimatedEffortMs, predictedStartSchema, STATUS_TO_PLANNING, transitionPlanning, workloadSchema } from "@mapctx/protocol"
 import { buildFirstAcceptanceRevision } from "./acceptance"
-import { getAcceptance, getActiveClaimForTask, getTask, getTaskDetail } from "./projections"
+import { getAcceptance, getActiveClaimForTask, getLiveActiveClaim, getTask, getTaskDetail } from "./projections"
 import type { StoreHandle } from "./store-handle"
 import type { AcceptanceCondition, DependencyRecord, TaskDetailRecord, TaskRecord } from "./types"
 
@@ -22,7 +22,7 @@ export type MoveTaskOptions = {
 };
 
 export type MoveTaskResult =
-  | { ok: true; from: string; to: string; releasedClaimId?: string }
+  | { ok: true; from: string; to: string; releasedClaimId?: string; expiredClaimId?: string }
   | {
       ok: false;
       reason: "unknown-task" | "illegal-transition" | "unknown-state" | "state-not-exportable" | "acceptance-incomplete";
@@ -73,16 +73,60 @@ export function moveTask(store: StoreHandle, options: MoveTaskOptions): MoveTask
     }
 
     let releasedClaimId: string | undefined;
+    let expiredClaimId: string | undefined;
     if (options.to === "done" || options.to === "cancelled" || options.to === "archived") {
-      const active = getActiveClaimForTask(store.db, options.taskId);
-      if (active) {
+      // T-140 (C1 / D14): which event this journals depends on the lease, not
+      // on the row's `state` alone. A row left `active` by a lease that
+      // expired days ago is a ghost, and releasing a ghost wrote a
+      // `task.claim-released` for a lease nobody held -- a fiction in an
+      // append-only log, attributed to whoever ran the close.
+      //
+      // A LIVE claim is released, exactly as before. An expired one is
+      // retired with the event that is actually true of it:
+      // `task.claim-expired`, the same event claim admission journals when it
+      // reclaims over a dead lease (`claims.ts:115-124`), by the same `system`
+      // actor, in this same transaction.
+      //
+      // Journaling *nothing* was the first version of this fix and it left
+      // the state wrong rather than merely incomplete: `task.claim-expired`
+      // is also what clears `executionState` and moves the row out of
+      // `active` (`events.ts:286-292`). Without it a closed task kept reading
+      // `executionState: "claimed"` over a lease nobody held, and kept a
+      // ghost row that no admission path could ever retire -- claim admission
+      // refuses a terminal task (`claims.ts:79-81`) before it reaches its own
+      // expiry branch, so for an already-closed task reclaim is not a
+      // cleanup path at all.
+      //
+      // One clock reading for the whole decision, like admission
+      // (`claims.ts:113`): the instant that judges the lease is the instant
+      // the event is stamped with. Calling `now()` again for `occurredAt`
+      // let a release be dated after the very `expiresAt` it had just read as
+      // live -- a sub-millisecond window in practice, but this is the code
+      // whose whole purpose is to not journal fiction.
+      const closedAt = now();
+      const atClosedAt = () => closedAt;
+      const live = getLiveActiveClaim(store.db, options.taskId, atClosedAt);
+      if (live) {
         append({
           eventType: "task.claim-released",
           actor: options.actor,
-          occurredAt: now().toISOString(),
-          payload: { claimId: active.claimId, taskId: options.taskId }
+          occurredAt: closedAt.toISOString(),
+          payload: { claimId: live.claimId, taskId: options.taskId }
         });
-        releasedClaimId = active.claimId;
+        releasedClaimId = live.claimId;
+      } else {
+        // The unfiltered getter on purpose, used the way admission uses it:
+        // the stale row has to be seen in order to be expired.
+        const stale = getActiveClaimForTask(store.db, options.taskId);
+        if (stale) {
+          append({
+            eventType: "task.claim-expired",
+            actor: "system",
+            occurredAt: closedAt.toISOString(),
+            payload: { claimId: stale.claimId, taskId: options.taskId }
+          });
+          expiredClaimId = stale.claimId;
+        }
       }
     }
 
@@ -102,7 +146,18 @@ export function moveTask(store: StoreHandle, options: MoveTaskOptions): MoveTask
       }
     });
 
-    return { ok: true, from: task.planningState, to: options.to, releasedClaimId };
+    // Both claim fields are present only when they happened, so `"…" in
+    // result` is an honest test for either one. `releasedClaimId` used to be
+    // an always-present `undefined`, which answered `true` for a close that
+    // released nothing; `JSON.stringify` hid that from `--json` consumers but
+    // not from an in-process one.
+    return {
+      ok: true,
+      from: task.planningState,
+      to: options.to,
+      ...(releasedClaimId ? { releasedClaimId } : {}),
+      ...(expiredClaimId ? { expiredClaimId } : {})
+    };
   });
 }
 
@@ -512,7 +567,15 @@ export function updateTask(store: StoreHandle, options: UpdateTaskOptions): Upda
 
     let edges: DependencyRecord[] | undefined;
     if (options.dependsOn !== undefined || options.blocking !== undefined) {
-      edges = listOutgoingEdges(store, to).filter(edge => edge.kind !== "depends-on" && edge.kind !== "blocks");
+      // T-157: drop only the kind this patch actually replaces. Dropping both
+      // while re-adding only the supplied one wiped the other kind's EDGES and
+      // left its DETAIL list behind -- the two surfaces diverged, which is the
+      // one thing `--depends-on`/`--blocking` promise cannot happen. Under
+      // plansAuthority=store, `plan`/`gantt` read the edges, so the lost
+      // relation stopped serializing while tasks/<ID>.md still advertised it.
+      edges = listOutgoingEdges(store, to).filter(edge =>
+        (options.dependsOn === undefined || edge.kind !== "depends-on") &&
+        (options.blocking === undefined || edge.kind !== "blocks"));
       if (options.dependsOn !== undefined) {
         for (const target of options.dependsOn) {
           if (!getTask(store.db, target)) {

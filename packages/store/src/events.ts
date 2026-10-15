@@ -102,6 +102,13 @@ export type TaskClaimedPayload = {
   claimId: string;
   taskId: string;
   leaseToken: string;
+  /**
+   * T-142 (C3 / D2): optional, which is how the 162 historical `task.claimed`
+   * events stay valid and replayable -- they were written before the second
+   * capability existed and must project to a claim with no renewToken, not to
+   * a claim with a fabricated one.
+   */
+  renewToken?: string;
   holder: Record<string, unknown>;
   claimedAt: string;
   expiresAt: string;
@@ -248,6 +255,7 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
         claimId: payload.claimId,
         taskId: payload.taskId,
         leaseToken: payload.leaseToken,
+        renewToken: payload.renewToken ?? null,
         state: "active",
         claimedAt: payload.claimedAt,
         expiresAt: payload.expiresAt,

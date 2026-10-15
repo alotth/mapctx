@@ -14,6 +14,7 @@ import {
 } from '@mapctx/core/workspace';
 import { generateTaskDetailFile, parseBareAcceptanceChecklist, parseTaskDetailFile, parseTasksFile, readTaskDetailFile } from '@mapctx/core';
 import {
+  ABSOLUTE_LEASE_CEILING_MS,
   buildExport,
   claimTask,
   startTask,
@@ -38,6 +39,7 @@ import {
   listReceiptsForTask,
   renewClaim,
   reopenTask,
+  resolveCoordinationSettings,
   resolveMapctxToml,
   resolveProjectStoreDir,
   repairStore,
@@ -78,7 +80,9 @@ import {
   approveAcceptanceCriteria,
   unapproveAcceptanceCriterion,
   getAcceptance,
+  getLiveActiveClaim,
   checkTaskAcceptance,
+  type CoordinationSettings,
   type MapctxTomlConfig
 } from '@mapctx/store';
 import { CHECKPOINT_REASONS, finishTask, publishCheckpoint, type CheckpointReason, type FinishSnapshotMode } from './checkpoint';
@@ -88,7 +92,7 @@ import { loadConfigOptionalForBoard } from './config';
 import { accountAddCommand, accountBindCommand, accountListCommand, budgetHistoryCommand, budgetSetCommand, budgetStatusCommand, planPeriodRecordCommand } from './budget-cli';
 import { buildGanttDataset, type GanttHistoryDate } from './gantt';
 import { extractClaudeIntervals, type OtherSessionActivity, type Workload } from '@mapctx/forecast';
-import { planningStateSchema, prioritySchema, specModeSchema, taskTypeSchema, workloadSchema } from '@mapctx/protocol';
+import { parseEstimatedEffortMs, planningStateSchema, prioritySchema, specModeSchema, taskTypeSchema, workloadSchema } from '@mapctx/protocol';
 import { pushStoreCommand } from './push-store';
 import { SyncOptions } from './types';
 import { detectWorkspaceModel, deriveSubIssueProgress, toWorkspaceTaskView, toWorkspaceTaskViewFromStoreRecord } from './board-view';
@@ -99,6 +103,11 @@ type MapctxOptions = SyncOptions & {
   actor?: string;
   claimId?: string;
   leaseToken?: string;
+  /** T-142: the renew-only capability (`--renew-token`). */
+  renewToken?: string;
+  /** T-142: `task renew --dispatch <id>`, a lookup for the task's active claim. */
+  dispatch?: string;
+  lease?: string;
   holder?: string;
   reason?: CheckpointReason;
   reconcileMode?: 'accept' | 'discard';
@@ -291,13 +300,13 @@ export const VALUE_FLAGS: ReadonlySet<string> = new Set([
   '--account', '--actor', '--amount', '--approve', '--approve-hash', '--baseline', '--because',
   '--blocking', '--budget', '--claim', '--claude-dir', '--claude-transcript', '--codex-sessions',
   '--config', '--context-hash', '--criterion-id', '--currency', '--depends-on', '--description',
-  '--description-file', '--dispatch-id', '--domains', '--due', '--effort',
+  '--description-file', '--dispatch', '--dispatch-id', '--domains', '--due', '--effort',
   '--emit-approval-template', '--end', '--evidence', '--executor', '--expect-revision', '--field',
   '--acceptance-file', '--expect-title',
   '--file', '--from-file', '--holder', '--id', '--idle-threshold-ms', '--impact', '--index',
-  '--limit', '--minutes', '--node', '--note', '--opencode-db', '--other-session-activity',
+  '--lease', '--limit', '--minutes', '--node', '--note', '--opencode-db', '--other-session-activity',
   '--parent', '--parked-threshold-ms', '--plan-name', '--priority', '--query', '--reason',
-  '--reason-file', '--receipt', '--repo', '--review-threshold-ms', '--role', '--seats',
+  '--reason-file', '--receipt', '--renew-token', '--repo', '--review-threshold-ms', '--role', '--seats',
   '--sequence', '--set', '--snapshot', '--start', '--status', '--summary', '--tags', '--target', '--task',
   '--tasks-file', '--time-zone', '--title', '--token', '--type', '--wait-reason', '--workload',
   '--write-baseline'
@@ -439,11 +448,28 @@ function printHelp(): void {
   console.log('    local mirrors are not consulted (there is no snapshot-drift gate). Reconciles');
   console.log('    issues/status/dates in the GitHub repo+project bound in mapctx.toml [github].');
   console.log('    Requires the gh CLI authenticated.');
-  console.log('  mapctx task claim <task-id> [--json] [--actor name] [--holder json]');
-  console.log('  mapctx task start <task-id> [--dispatch-id id] [--executor kind] [--context-hash hash] [--status claimed|running] [--holder json] [--actor name] [--json]');
-  console.log('    Atomically claims the task and creates a dispatch. Returns claimId, leaseToken, dispatchId and attempt; preferred execution entry point.');
-  console.log('  mapctx task renew <task-id> --claim id --token token [--json] [--actor name]');
+  console.log('  mapctx task claim <task-id> [--lease duration] [--json] [--actor name] [--holder json]');
+  console.log('  mapctx task start <task-id> [--dispatch-id id] [--executor kind] [--context-hash hash] [--status claimed|running] [--lease duration] [--holder json] [--actor name] [--json]');
+  console.log('    Atomically claims the task and creates a dispatch. Returns claimId, leaseToken, renewToken, dispatchId and attempt; preferred execution entry point.');
+  console.log('    Lease duration is derived from the plan, not fixed: clamp(estimatedEffort x leaseFactor, defaultLease, maxLease),');
+  console.log('    so an Easy/30m task and a Hard/2d task no longer get the same window. Defaults: leaseFactor 0.5, defaultLease 30m, maxLease 8h.');
+  console.log('    `--lease <duration>` (30m, 4h, 1d, 1w) overrides both config and the derived value, and is NOT clamped -- it is an explicit choice.');
+  console.log('    It is still bounded: above the 24h absolute ceiling it is refused, not shrunk. A lane held longer than a day is a stuck lane.');
+  console.log('    A task with no parseable estimate (an epic) gets defaultLease whole. Tune with [coordination] in mapctx.toml:');
+  console.log('      [coordination]  leaseFactor = 0.5  defaultLease = "30m"  maxLease = "8h"   (an invalid value or defaultLease > maxLease is refused on read)');
+  console.log('  mapctx task renew <task-id> (--claim id | --dispatch id) (--token leaseToken | --renew-token renewToken) [--json] [--actor name]');
+  console.log('    Exactly one address and one credential. `--claim` names the claim; `--dispatch` LOOKS IT UP (dispatch -> task -> that task\'s active claim),');
+  console.log('    so an orchestrator that holds only the dispatch id can keep the lane alive. With --dispatch the task id is checked, not used to find the claim.');
+  console.log('    Two capabilities per claim, both minted at claim time and scoped to the claimId: `leaseToken` renews AND releases, `renewToken` only renews.');
+  console.log('    Hand `renewToken` to your orchestrator to keep your lease alive without granting it the power to take the lane away. Renewing with --token returns the full claim (the holder already has both tokens); renewing with --renew-token returns the claim with no token at all.');
+  console.log('    A claim made before this existed has no renewToken (it is refused by name, not compared): renew those with --token.');
+  console.log('    `--dispatch` is refused once the dispatch\'s latest attempt has a receipt -- that lane is finished; admit a new attempt first.');
+  console.log('    Extends by the same derived duration as the claim (re-read from the plan, so a mid-flight re-classification applies), never a fixed 30m.');
+  console.log('    `--lease` is refused here, not ignored: the renewal size comes from the plan. Known coupling: editing detail.estimatedEffort changes');
+  console.log('    the next renewal of a live claim, and nothing requires the editor to be the holder -- lowering it pins renewals to defaultLease.');
+  console.log('    That edit now warns on stderr when the task has a live claim, naming the claim id (never a token).');
   console.log('  mapctx task release <task-id> --claim id --token token [--json] [--actor name]');
+  console.log('    Release takes the lease token only: a renewToken has no release path at all, which is what makes the split real.');
   console.log('  mapctx task create --title "<title>" [--id T-###] [--type epic|feature|task|bug|chore] [--parent id] [--status planning-state]');
   console.log('    [--priority high|medium|low] [--workload Easy|Normal|Hard|Extreme] [--tags a,b] [--domains d,e]');
   console.log('    [--depends-on a,b] [--blocking x,y]');
@@ -692,6 +718,9 @@ function parseArgs(argv: string[]): {
     else if (a === '--actor') options.actor = valueFor(a);
     else if (a === '--claim') options.claimId = valueFor(a);
     else if (a === '--token') options.leaseToken = valueFor(a);
+    else if (a === '--renew-token') options.renewToken = valueFor(a);
+    else if (a === '--dispatch') options.dispatch = valueFor(a);
+    else if (a === '--lease') options.lease = valueFor(a);
     else if (a === '--holder') options.holder = valueFor(a);
     else if (a === '--receipt' || a === '--file') options.receiptPath = valueFor(a);
     else if (a === '--claude-transcript') options.claudeTranscriptPath = valueFor(a);
@@ -1454,12 +1483,61 @@ function activeClaimSuffix(activeClaim: DisclosableClaimRecord | undefined): str
   return ` -- claim ${activeClaim.claimId} held by ${renderHolder(activeClaim.holder)}, expires ${activeClaim.expiresAt}`;
 }
 
+/**
+ * T-141 (C2 / D3): lease resolution for `task claim` and `task start`, in one
+ * place so the two entry points cannot drift on precedence.
+ *
+ *     --lease  >  [coordination] in mapctx.toml  >  derived from the plan
+ *
+ * `--lease` is honoured as written and is deliberately NOT clamped by
+ * `maxLease`: D3 makes the flag the operator's explicit choice, and quietly
+ * shrinking `--lease 12h` to 8 h is the kind of silent adjustment this CLI
+ * refuses everywhere else. The bound on an over-long lease is C4's 24 h
+ * absolute renewal ceiling (D4), which lands with the heartbeat path.
+ */
+function resolveCoordination(cwd: string): CoordinationSettings {
+  return resolveCoordinationSettings(resolveMapctxToml(cwd)?.config.coordination);
+}
+
+/** The `--lease` override in milliseconds, or undefined when the flag is absent. */
+function leaseOverrideMs(options: MapctxOptions): number | undefined {
+  if (options.lease === undefined) return undefined;
+  const parsed = parseEstimatedEffortMs(options.lease);
+  if (parsed === null) {
+    refuse(
+      { ok: false, reason: 'invalid-lease', lease: options.lease },
+      `--lease must be a positive duration like 30m, 4h or 1d (got "${options.lease}").`
+      + ' Omit it to use the lease derived from estimatedEffort and [coordination] in mapctx.toml.'
+    );
+  }
+  // B3: the flag is not clamped by `maxLease` on purpose (it is the operator's
+  // override), but "not clamped" is not "unbounded": `--lease 9999w` used to
+  // write an expiry in 2072 and hold the lane until somebody released it by
+  // hand. Refused, not silently shrunk, so the override keeps meaning exactly
+  // what it says -- against D4's 24 h ceiling, the same number C4 will enforce
+  // on the renewal paths.
+  if (parsed > ABSOLUTE_LEASE_CEILING_MS) {
+    refuse(
+      { ok: false, reason: 'lease-above-ceiling', lease: options.lease, ceilingMs: ABSOLUTE_LEASE_CEILING_MS },
+      `--lease ${options.lease} exceeds the absolute lease ceiling of 24h (D4).`
+      + ' A lane held longer than a day is a stuck lane, not a long task: split the task, or release and re-claim.'
+    );
+  }
+  return parsed;
+}
+
 export function taskClaimCommand(taskId: string, options: MapctxOptions): void {
   const cwd = process.cwd();
   const { handle } = openStoreOrFail(cwd);
   try {
     const holder = options.holder ? (JSON.parse(options.holder) as Record<string, unknown>) : { pid: process.pid, host: os.hostname() };
-    const result = claimTask(handle, { taskId, actor: defaultActor(options.actor), holder });
+    const result = claimTask(handle, {
+      taskId,
+      actor: defaultActor(options.actor),
+      holder,
+      leaseDurationMs: leaseOverrideMs(options),
+      coordination: resolveCoordination(cwd)
+    });
     if (!result.ok) refuse(result, `Claim failed: ${result.reason}${activeClaimSuffix(result.activeClaim)}`);
     print(result, options.json);
   } finally {
@@ -1723,12 +1801,56 @@ export function mapctxBoardCommand(options: MapctxOptions): void {
 }
 
 function taskRenewCommand(taskId: string, options: MapctxOptions): void {
-  if (!options.claimId || !options.leaseToken) throw new Error('task renew requires --claim <id> --token <token>');
+  // B1: `--lease` lives in the global VALUE_FLAGS table (claim/start need it),
+  // so the parser accepts it here too -- and this command used to drop it in
+  // silence while the help and the CHANGELOG said it "is not offered", which
+  // a reader takes for a refusal. Refused before anything else, so passing it
+  // is answered by name even when the token is missing as well. Same shape as
+  // `acceptance unapprove --evidence`: refuse caller input, never discard it.
+  if (options.lease !== undefined) {
+    refuse(
+      { ok: false, reason: 'lease-not-accepted-on-renew', lease: options.lease },
+      '--lease is not accepted by task renew; a renewal re-derives the lease from the task plan.'
+      + ' Set the size when the lane opens (task claim/start --lease), or tune [coordination] in mapctx.toml.'
+    );
+  }
+  // T-142: `--dispatch-id` is the spelling `task start` uses for the same
+  // identifier, so it is the spelling a hand reaches for here -- and it is a
+  // known global flag, which means the parser would accept it and this command
+  // would then renew nothing while exiting 0. Refused by name, same reason as
+  // `--lease` above (B1): never discard caller input.
+  if (options.dispatchId !== undefined) {
+    refuse(
+      { ok: false, reason: 'dispatch-id-not-accepted-on-renew', dispatchId: options.dispatchId },
+      'task renew addresses a dispatch with --dispatch <id>, not --dispatch-id (which belongs to task start/dispatch create).'
+    );
+  }
+  const addresses = [options.claimId !== undefined, options.dispatch !== undefined].filter(Boolean).length;
+  const credentials = [options.leaseToken !== undefined, options.renewToken !== undefined].filter(Boolean).length;
+  if (addresses !== 1 || credentials !== 1) {
+    throw new Error(
+      'task renew takes exactly one address and exactly one credential:'
+      + ' --claim <id> (with the task id) or --dispatch <id> to look the claim up,'
+      + ' plus --token <leaseToken> or --renew-token <renewToken>.'
+      + ' The renew token renews only; releasing still requires --token.'
+    );
+  }
   const cwd = process.cwd();
   const { handle } = openStoreOrFail(cwd);
   try {
-    const result = renewClaim(handle, { taskId, claimId: options.claimId, leaseToken: options.leaseToken, actor: defaultActor(options.actor) });
-    if (!result.ok) refuse(result, `Renew failed: ${result.reason}`);
+    const result = renewClaim(handle, {
+      // With `--dispatch` the task id is an assertion, not the address: the
+      // dispatch names its own task, and a mismatch is refused rather than
+      // silently renewing the lane the caller did not mean.
+      taskId,
+      claimId: options.claimId,
+      dispatchId: options.dispatch,
+      leaseToken: options.leaseToken,
+      renewToken: options.renewToken,
+      actor: defaultActor(options.actor),
+      coordination: resolveCoordination(cwd)
+    });
+    if (!result.ok) refuse(result, `Renew failed: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
     print(result, options.json);
   } finally {
     handle.close();
@@ -2180,9 +2302,48 @@ export function taskUpdateCommand(taskId: string, options: MapctxOptions): void 
       actor: defaultActor(options.actor)
     });
     if (!result.ok) refuse(result, `Update refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
+    const effortNote = effortChangedUnderLiveClaimWarning(handle, taskId, detailPatch);
+    if (effortNote) console.error(effortNote);
     print({ taskId, ...result }, options.json);
   } finally {
     handle.close();
+  }
+}
+
+/**
+ * T-142, answering the T-141 review's B2: a renewal re-derives the lease from
+ * `detail.estimatedEffort`, and nothing requires the editor of that field to
+ * be the holder of the claim. Lowering it pins the holder's next renewal to
+ * `defaultLease`; raising it extends somebody else's lane.
+ *
+ * What this is NOT: a refusal, and not a frozen lease either. T-141 decided
+ * deliberately that renewal re-derives from the plan, because a task
+ * re-classified mid-flight should renew on the new plan and not on the
+ * estimate that turned out wrong -- freezing the duration on the claim would
+ * undo that decision, and a capability change (C3) is not the place to
+ * reverse it. The gap B2 names is not that re-derivation happens, it is that
+ * it happened INVISIBLY to the editor.
+ *
+ * So the edit lands and says what it just did to a live lane, naming the claim
+ * by id only -- never a token (T-134 / D1). Advisory on stderr, so `--json`
+ * stdout stays one document. Best-effort by construction: the write already
+ * succeeded, and no read for a warning may turn a successful update into an
+ * error.
+ */
+function effortChangedUnderLiveClaimWarning(
+  handle: { db: Parameters<typeof getLiveActiveClaim>[0] },
+  taskId: string,
+  detailPatch: Record<string, unknown>
+): string | undefined {
+  if (!Object.prototype.hasOwnProperty.call(detailPatch, 'estimatedEffort')) return undefined;
+  try {
+    const claim = getLiveActiveClaim(handle.db, taskId, () => new Date());
+    if (!claim) return undefined;
+    return `Note: ${taskId} has a live claim (${claim.claimId}, expires ${claim.expiresAt}).`
+      + ` Its next renewal re-derives the lease from detail.estimatedEffort, so this edit changes the lane's window`
+      + ` even though you are not necessarily its holder.`;
+  } catch {
+    return undefined;
   }
 }
 
@@ -2427,7 +2588,9 @@ export function taskStartCommand(taskId: string, options: MapctxOptions): void {
       dispatchId: options.dispatchId,
       executorKind: options.executor,
       contextHash: options.contextHash,
-      status
+      status,
+      leaseDurationMs: leaseOverrideMs(options),
+      coordination: resolveCoordination(cwd)
     });
     if (!result.ok) refuse(result, `Start refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}${activeClaimSuffix(result.activeClaim)}`);
     print({
@@ -2435,6 +2598,11 @@ export function taskStartCommand(taskId: string, options: MapctxOptions): void {
       taskId,
       claimId: result.claim.claimId,
       leaseToken: result.claim.leaseToken,
+      // T-142: the holder of a successful claim receives BOTH capabilities --
+      // it already holds the stronger one. Flattened beside `leaseToken` so an
+      // executing agent can hand `renewToken` to its orchestrator without
+      // handing over release authority, which is the whole point of D2.
+      renewToken: result.claim.renewToken,
       expiresAt: result.claim.expiresAt,
       dispatchId: result.dispatch.dispatchId,
       attempt: result.dispatch.attempt,

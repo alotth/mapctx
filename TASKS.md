@@ -26,7 +26,7 @@
 ### [T-001] Harden session-start sync hooks and OpenCode plugin integration
 
   - id: T-001
-  - status: paused
+  - status: archived
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -39,13 +39,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-001.md
 
 ### [T-002] Add task log timeline sync using GitHub issue comments
 
   - id: T-002
-  - status: paused
+  - status: cancelled
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -58,13 +58,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-002.md
 
 ### [T-003] Add iteration and assignees with backward compatibility
 
   - id: T-003
-  - status: paused
+  - status: cancelled
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -77,13 +77,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-003.md
 
 ### [T-004] Map sub-issue progress from GitHub Projects GraphQL
 
   - id: T-004
-  - status: paused
+  - status: cancelled
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -96,13 +96,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-004.md
 
 ### [T-005] Add migration docs and regression coverage for new fields
 
   - id: T-005
-  - status: paused
+  - status: cancelled
   - type: chore
   - parent: null
   - subIssueProgress: null
@@ -115,13 +115,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-005.md
 
 ### [E-007] Epic: Obsidian vault sync (future)
 
   - id: E-007
-  - status: paused
+  - status: archived
   - type: epic
   - parent: null
   - subIssueProgress: null
@@ -134,7 +134,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/E-007.md
 
 ### [E-008] Epic: Clean and organize new repository
@@ -464,7 +464,7 @@
 ### [E-003] Isolated generator/evaluator execution model
 
   - id: E-003
-  - status: paused
+  - status: archived
   - type: epic
   - parent: null
   - subIssueProgress: 0/5
@@ -477,13 +477,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/E-003.md
 
 ### [T-022] Define evaluator handoff contract and evidence bundle
 
   - id: T-022
-  - status: paused
+  - status: archived
   - type: task
   - parent: E-003
   - subIssueProgress: null
@@ -496,13 +496,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-022.md
 
 ### [T-023] Implement isolated evaluator flow in task execution skill
 
   - id: T-023
-  - status: paused
+  - status: archived
   - type: feature
   - parent: E-003
   - subIssueProgress: null
@@ -515,13 +515,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-023.md
 
 ### [T-024] Add optional parallel evaluator mode with `auto` fallback
 
   - id: T-024
-  - status: paused
+  - status: archived
   - type: feature
   - parent: E-003
   - subIssueProgress: null
@@ -534,13 +534,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-024.md
 
 ### [T-025] Standardize evaluation verdict model and status transitions
 
   - id: T-025
-  - status: paused
+  - status: archived
   - type: task
   - parent: E-003
   - subIssueProgress: null
@@ -553,13 +553,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-025.md
 
 ### [T-026] Add regression coverage for isolated evaluation behavior
 
   - id: T-026
-  - status: paused
+  - status: archived
   - type: task
   - parent: E-003
   - subIssueProgress: null
@@ -572,7 +572,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-026.md
 
 ### [E-004] Validation and execution-order tooling
@@ -787,7 +787,7 @@
 ### [E-006] Workflow layer inspired by GSD/BMAD
 
   - id: E-006
-  - status: paused
+  - status: archived
   - type: epic
   - parent: null
   - subIssueProgress: 2/5
@@ -800,7 +800,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/E-006.md
 
 ### [T-036] Create `mapctx-enrich-task` skill for context enrichment
@@ -825,7 +825,7 @@
 ### [T-037] Create `mapctx-sprint-status` workflow and recommendations
 
   - id: T-037
-  - status: paused
+  - status: archived
   - type: feature
   - parent: E-006
   - subIssueProgress: null
@@ -838,13 +838,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-037.md
 
 ### [T-038] Implement `mapctx-next` next-best-action flow
 
   - id: T-038
-  - status: paused
+  - status: archived
   - type: feature
   - parent: E-006
   - subIssueProgress: null
@@ -857,7 +857,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-038.md
 
 ### [T-039] Implement `mapctx-correct-course` workflow
@@ -882,7 +882,7 @@
 ### [T-040] Add wave-based task execution support to operational loop
 
   - id: T-040
-  - status: paused
+  - status: archived
   - type: feature
   - parent: E-006
   - subIssueProgress: null
@@ -895,7 +895,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-040.md
 
 ### [T-041] Sync Project date fields from TASKS.md on push
@@ -939,7 +939,7 @@
 ### [T-043] Configure real Project date field IDs and run first sync validation
 
   - id: T-043
-  - status: paused
+  - status: cancelled
   - type: task
   - parent: null
   - subIssueProgress: null
@@ -952,7 +952,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-043.md
 
 ### [T-044] Pull Project date fields back into local task model
@@ -977,7 +977,7 @@
 ### [T-045] Add optional Project field sync for priority and workload
 
   - id: T-045
-  - status: paused
+  - status: cancelled
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -990,13 +990,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-045.md
 
 ### [T-046] Add automated tests for Project field date operations
 
   - id: T-046
-  - status: paused
+  - status: cancelled
   - type: task
   - parent: null
   - subIssueProgress: null
@@ -1009,7 +1009,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-05-29
+  - updated: 2026-10-14
   - detail: ./tasks/T-046.md
 
 ### [T-047] Add full support for custom status workflows and configurable completion states
@@ -1227,7 +1227,7 @@
   - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 4/9
+  - subIssueProgress: 8/9
   - priority: high
   - workload: Hard
   - tags: [vnext, traycer, dispatch, execution]
@@ -1284,7 +1284,7 @@
   - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 4/7
+  - subIssueProgress: 5/7
   - priority: high
   - workload: Hard
   - tags: [vnext, forecast, cost, gantt]
@@ -1360,7 +1360,7 @@
   - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 1/5
+  - subIssueProgress: 5/5
   - priority: medium
   - workload: Hard
   - tags: [vnext, migration, cli, skills, github]
@@ -1376,7 +1376,7 @@
 ### [T-057] Unify CLI, consolidate skills, and define GitHub source modes
 
   - id: T-057
-  - status: review
+  - status: done
   - type: feature
   - parent: E-012
   - subIssueProgress: null
@@ -1387,15 +1387,15 @@
   - dependsOn: [T-050, T-052, T-056, T-065]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-09-23
+  - updated: 2026-10-14
   - detail: ./tasks/T-057.md
 
 ### [T-058] Prove walking-skeleton dispatch through Traycer before waves and forecast
 
   - id: T-058
-  - status: review
+  - status: done
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1406,9 +1406,9 @@
   - dependsOn: [T-048, T-049, T-052]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-09-23
+  - updated: 2026-10-14
   - detail: ./tasks/T-058.md
 
 ### [T-060] Persist dispatch and receipt state in the external store
@@ -1471,7 +1471,7 @@
 ### [T-067] Update README and docs for store authority and the CLI write path
 
   - id: T-067
-  - status: review
+  - status: done
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1482,15 +1482,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-067.md
 
 ### [T-068] Update mapctx-tasks and mapctx-traycer skills for the CLI write path
 
   - id: T-068
-  - status: review
+  - status: done
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1501,15 +1501,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-068.md
 
 ### [T-069] Align docs site and thread-substrate.md with post-cutover framing
 
   - id: T-069
-  - status: review
+  - status: done
   - type: task
   - parent: E-012
   - subIssueProgress: null
@@ -1520,9 +1520,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-069.md
 
 ### [T-070] Budget and value ledger: planned budget consumed by actuals, with learning forecast and value estimates
@@ -1547,7 +1547,7 @@
 ### [T-071] Workload re-attribution: record planned vs discovered difficulty, pool by discovered, measure estimation error
 
   - id: T-071
-  - status: review
+  - status: done
   - type: feature
   - parent: E-011
   - subIssueProgress: null
@@ -1558,9 +1558,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-071.md
 
 ### [T-072] Fix PR1 P1 findings: journal atomicity, recovery locks, create races, export cycles, cutover prose, currency
@@ -1585,7 +1585,7 @@
 ### [T-073] Fix PR1 P2 findings: money safety, drift bypass, blocked receipts, read-only opens, repair locking, legacy sync authority
 
   - id: T-073
-  - status: review
+  - status: done
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1596,15 +1596,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-073.md
 
 ### [T-074] Publish @mapctx packages to npm with the vNext (sync-engine bump, bundled deps, mapcs deprecation ships)
 
   - id: T-074
-  - status: review
+  - status: done
   - type: chore
   - parent: E-010
   - subIssueProgress: null
@@ -1615,15 +1615,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-074.md
 
 ### [T-075] Post-T-073 review hardening: maintenance-lock staleness, guard scope, crash-dirty read-only opens
 
   - id: T-075
-  - status: review
+  - status: done
   - type: task
   - parent: E-010
   - subIssueProgress: null
@@ -1634,18 +1634,18 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-075.md
 
 ### [E-013] GitHub push store-backed
 
   - id: E-013
-  - status: backlog
+  - status: done
   - type: epic
   - parent: null
-  - subIssueProgress: 0/2
+  - subIssueProgress: 1/1
   - priority: null
   - workload: null
   - tags: []
@@ -1653,15 +1653,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-09-08
+  - updated: 2026-10-14
   - detail: ./tasks/E-013.md
 
 ### [T-076] mapctx push reads store projections (fail-closed)
 
   - id: T-076
-  - status: review
+  - status: done
   - type: feature
   - parent: E-013
   - subIssueProgress: null
@@ -1672,9 +1672,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-076.md
 
 ### [T-077] executorModel wiring in CLI/adapter
@@ -1682,7 +1682,7 @@
   - id: T-077
   - status: review
   - type: feature
-  - parent: E-013
+  - parent: E-015
   - subIssueProgress: null
   - priority: null
   - workload: Normal
@@ -1693,13 +1693,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-077.md
 
 ### [T-078] Long-range roadmap timeline with day/week/month scales
 
   - id: T-078
-  - status: review
+  - status: done
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -1710,9 +1710,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-078.md
 
 ### [T-079] Calibrated forecast range and honest baselines in Roadmap
@@ -1794,7 +1794,7 @@
 ### [T-083] CLI: task search para checagem anti-duplicata
 
   - id: T-083
-  - status: review
+  - status: done
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -1805,9 +1805,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-083.md
 
 ### [T-084] Add financial cost and budget view to Workspace V2
@@ -1927,7 +1927,7 @@
 ### Add archived as terminal planning status
 
   - id: T-090
-  - status: review
+  - status: done
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -1938,9 +1938,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-090.md
 
 ### [T-091] Add cancelled planning status end-to-end
@@ -2003,7 +2003,7 @@
 ### [T-094] Migrate workspaceV2 kanban to store-backed data via CLI
 
   - id: T-094
-  - status: review
+  - status: done
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -2014,15 +2014,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-094.md
 
 ### [T-095] Bare mapctx launches workspace UI and heals stale active target
 
   - id: T-095
-  - status: review
+  - status: done
   - type: task
   - parent: null
   - subIssueProgress: null
@@ -2033,9 +2033,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-095.md
 
 ### Ingest harness usage by dispatch
@@ -2177,7 +2177,7 @@
   - status: doing
   - type: epic
   - parent: null
-  - subIssueProgress: 7/13
+  - subIssueProgress: 11/13
   - priority: null
   - workload: null
   - tags: [time, history, roadmap]
@@ -2196,7 +2196,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 0/4
+  - subIssueProgress: 0/5
   - priority: null
   - workload: null
   - tags: [cost, budget, telemetry]
@@ -2212,7 +2212,7 @@
 ### [T-103] Test Task
 
   - id: T-103
-  - status: backlog
+  - status: archived
   - type: task
   - parent: null
   - subIssueProgress: null
@@ -2225,13 +2225,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-01
+  - updated: 2026-10-14
   - detail: ./tasks/T-103.md
 
 ### [T-104] Test Task 2
 
   - id: T-104
-  - status: backlog
+  - status: archived
   - type: task
   - parent: null
   - subIssueProgress: null
@@ -2244,13 +2244,13 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-10-14
   - detail: ./tasks/T-104.md
 
 ### [T-105] Test Task 3
 
   - id: T-105
-  - status: backlog
+  - status: archived
   - type: task
   - parent: null
   - subIssueProgress: null
@@ -2263,7 +2263,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-10-14
   - detail: ./tasks/T-105.md
 
 ### [T-106] [T-A] Comando task start atomico: claim + dispatch em uma transacao
@@ -2285,7 +2285,7 @@
   - updated: 2026-10-04
   - detail: ./tasks/T-106.md
 
-### [T-107] [T-B] Plan mostra executionState e lease; validate rebaixa bulk-timestamp para info
+### [T-107] C8: plan --show-execution com faixa de claims (implement e revisão)
 
   - id: T-107
   - status: backlog
@@ -2296,15 +2296,15 @@
   - workload: Normal
   - tags: []
   - domains: [CLI]
-  - dependsOn: []
+  - dependsOn: [T-144]
   - start: null
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-04
+  - updated: 2026-10-14
   - detail: ./tasks/T-107.md
 
-### [T-108] [T-C] Comando stale scan: fantasmas planning-vs-execution com commit auditavel
+### [T-108] C9: stale scan --dry-run/--commit, sweeper de claims fantasmas
 
   - id: T-108
   - status: backlog
@@ -2315,12 +2315,12 @@
   - workload: Hard
   - tags: []
   - domains: [CLI, FORECAST]
-  - dependsOn: [T-101]
+  - dependsOn: [T-140, T-143]
   - start: null
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-04
+  - updated: 2026-10-14
   - detail: ./tasks/T-108.md
 
 ### [T-109] Planner: distinguish started work from unscheduled
@@ -2364,7 +2364,7 @@
 ### [T-111] Wave header periodo e progresso
 
   - id: T-111
-  - status: review
+  - status: done
   - type: feature
   - parent: E-014
   - subIssueProgress: null
@@ -2375,15 +2375,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-02
+  - updated: 2026-10-14
   - detail: ./tasks/T-111.md
 
 ### [T-112] Backfill sintetico de periodo para done sem historico + limpeza de targets
 
   - id: T-112
-  - status: review
+  - status: done
   - type: feature
   - parent: E-014
   - subIssueProgress: null
@@ -2394,15 +2394,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-02
+  - updated: 2026-10-14
   - detail: ./tasks/T-112.md
 
 ### [T-113] Sidebar counts do banco por target + faixa do epico por tasks relacionadas
 
   - id: T-113
-  - status: review
+  - status: done
   - type: feature
   - parent: E-014
   - subIssueProgress: null
@@ -2413,15 +2413,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-02
+  - updated: 2026-10-14
   - detail: ./tasks/T-113.md
 
 ### [T-114] Auditar reviews stale: cancelar pausadas mortas e fechar epicos E-001/E-002/E-004/E-005
 
   - id: T-114
-  - status: review
+  - status: done
   - type: chore
   - parent: E-014
   - subIssueProgress: null
@@ -2432,9 +2432,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-02
+  - updated: 2026-10-14
   - detail: ./tasks/T-114.md
 
 ### Carryover dos epicos v3 (trabalho restante)
@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 11/12
+  - subIssueProgress: 16/25
   - priority: high
   - workload: null
   - tags: []
@@ -2808,32 +2808,32 @@
   - priority: null
   - workload: Easy
   - tags: []
-  - domains: [CODE]
+  - domains: [PLANNER]
   - dependsOn: []
   - start: null
   - due: null
   - completed: 2026-10-10
   - externalId: null
-  - updated: 2026-10-10
+  - updated: 2026-10-14
   - detail: ./tasks/T-132.md
 
 ### [T-133] Planner: deduplicar a detecção de violações de claim e guardar o sentinela
 
   - id: T-133
-  - status: backlog
+  - status: done
   - type: chore
   - parent: E-017
   - subIssueProgress: null
   - priority: null
   - workload: Normal
   - tags: []
-  - domains: [CODE]
+  - domains: [PLANNER, STORE]
   - dependsOn: [T-131]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-14
   - externalId: null
-  - updated: 2026-10-10
+  - updated: 2026-10-14
   - detail: ./tasks/T-133.md
 
 ### [E-018] Provider authority (ADR 0005, opção B com provider local)
@@ -2842,7 +2842,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 1/3
+  - subIssueProgress: 4/13
   - priority: null
   - workload: null
   - tags: []
@@ -2865,13 +2865,13 @@
   - priority: null
   - workload: Easy
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE, CLI]
   - dependsOn: []
   - start: null
   - due: null
   - completed: 2026-10-10
   - externalId: null
-  - updated: 2026-10-10
+  - updated: 2026-10-14
   - detail: ./tasks/T-134.md
 
 ### [T-135] Spike: ler GitHub Projects e escrever campos derivados num Project de teste
@@ -2884,7 +2884,7 @@
   - priority: null
   - workload: Normal
   - tags: []
-  - domains: [CODE, DOCS]
+  - domains: [GITHUB, PROJECT, DOCS]
   - dependsOn: []
   - start: null
   - due: null
@@ -2909,7 +2909,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-13
+  - updated: 2026-10-14
   - detail: ./tasks/T-136.md
 
 ### [T-137] Editar título, descrição e metadados de task pela workspace UI
@@ -2934,14 +2934,14 @@
 ### [T-138] Store: backup e restore próprios, snapshot automático antes de migração
 
   - id: T-138
-  - status: backlog
+  - status: doing
   - type: feature
   - parent: E-018
   - subIssueProgress: null
   - priority: null
   - workload: Normal
   - tags: []
-  - domains: [CODE]
+  - domains: [STORE, CLI]
   - dependsOn: []
   - start: null
   - due: null
@@ -2953,6 +2953,253 @@
 ### [T-139] TaskProvider em código + LocalStoreProvider (store como provider local)
 
   - id: T-139
+  - status: done
+  - type: feature
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Hard
+  - tags: []
+  - domains: [ADAPTER, STORE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-10-14
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-139.md
+
+### [T-140] C1: verdade de lease na leitura (getLiveActiveClaim) e sem release fictício em move done
+
+  - id: T-140
+  - status: done
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [STORE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-10-14
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-140.md
+
+### [T-141] C2: duração do lease derivada de workload/esforço, --lease e [coordination]
+
+  - id: T-141
+  - status: done
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [STORE, CLI]
+  - dependsOn: [T-140]
+  - start: null
+  - due: null
+  - completed: 2026-10-15
+  - externalId: null
+  - updated: 2026-10-15
+  - detail: ./tasks/T-141.md
+
+### [T-142] C3: renewToken (segunda capacidade por claimId) e task renew --dispatch
+
+  - id: T-142
+  - status: done
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [STORE, CLI]
+  - dependsOn: [T-141]
+  - start: null
+  - due: null
+  - completed: 2026-10-15
+  - externalId: null
+  - updated: 2026-10-15
+  - detail: ./tasks/T-142.md
+
+### [T-143] C4: mapctx run event renova o claim; heartbeats fora da medição de tempo ativo
+
+  - id: T-143
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [STORE, CLI, TELEMETRY, FORECAST]
+  - dependsOn: [T-142]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-143.md
+
+### [T-144] C5: dispatch kind e claim de revisão compartilhado (migração + troca do índice único)
+
+  - id: T-144
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Hard
+  - tags: []
+  - domains: [STORE, PROTOCOL, CLI]
+  - dependsOn: [T-143]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-144.md
+
+### [T-145] C6: receipt de revisão não move planning; forecast exclui kind != implement
+
+  - id: T-145
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [STORE, FORECAST]
+  - dependsOn: [T-144]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-145.md
+
+### [T-146] C7: mapctx task split e aviso de cadeia de attempts
+
+  - id: T-146
+  - status: backlog
+  - type: feature
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [STORE, CLI]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-146.md
+
+### [T-147] C11: docs, skills e rules da coordenação v2
+
+  - id: T-147
+  - status: backlog
+  - type: chore
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: [T-107, T-108, T-145, T-146]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-147.md
+
+### [T-148] validate: bulk-updated-timestamp passa de erro para info
+
+  - id: T-148
+  - status: backlog
+  - type: chore
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [STORE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-148.md
+
+### [T-149] Triagem do board antes do espelho no GitHub (proposta, sem aplicar)
+
+  - id: T-149
+  - status: done
+  - type: chore
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: 2026-10-14
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-149.md
+
+### [T-150] Adapter GitHub de leitura atrás da TaskProvider
+
+  - id: T-150
+  - status: review
+  - type: feature
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Hard
+  - tags: []
+  - domains: [GITHUB, PROJECT, ADAPTER]
+  - dependsOn: [T-139]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-150.md
+
+### [T-151] Sanitização para publicar tasks num repo público
+
+  - id: T-151
+  - status: done
+  - type: feature
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [GITHUB, STORE]
+  - dependsOn: [T-139]
+  - start: null
+  - due: null
+  - completed: 2026-10-15
+  - externalId: null
+  - updated: 2026-10-15
+  - detail: ./tasks/T-151.md
+
+### [T-152] Espelho store → GitHub: issues, Project, dependências e campos derivados
+
+  - id: T-152
   - status: backlog
   - type: feature
   - parent: E-018
@@ -2960,14 +3207,204 @@
   - priority: null
   - workload: Hard
   - tags: []
-  - domains: [CODE]
+  - domains: [GITHUB, PROJECT, CLI]
+  - dependsOn: [T-138, T-150, T-151]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-152.md
+
+### [T-153] Publicar o board do MapCtx no GitHub Projects (execução do espelho)
+
+  - id: T-153
+  - status: backlog
+  - type: chore
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: [T-149, T-152]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-153.md
+
+### [T-154] A0: store local sem snapshots TASKS.md/tasks/*.md no Git
+
+  - id: T-154
+  - status: backlog
+  - type: feature
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [STORE, CLI]
+  - dependsOn: [T-138]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-154.md
+
+### [T-155] Virada de autoridade: GitHub dono das tasks, store como cache
+
+  - id: T-155
+  - status: backlog
+  - type: feature
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Hard
+  - tags: []
+  - domains: [GITHUB, STORE]
+  - dependsOn: [T-153]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-155.md
+
+### [T-156] ADR 0005 de Proposed para Accepted
+
+  - id: T-156
+  - status: backlog
+  - type: chore
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: [T-155]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-156.md
+
+### [T-157] Store: task update com uma lista de dependência não apaga a outra espécie nem diverge do detail
+
+  - id: T-157
+  - status: done
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [STORE]
+  - dependsOn: [T-140]
+  - start: null
+  - due: null
+  - completed: 2026-10-14
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-157.md
+
+### [T-158] Aplicar a triagem do board antes do espelho (decisões do operador de 2026-10-14)
+
+  - id: T-158
+  - status: review
+  - type: chore
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: [T-149]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-158.md
+
+### [T-159] Planner: overbroad falso por caixa/.. e rótulo de exibição usado como path (T-133 MÉDIA-1/2)
+
+  - id: T-159
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [PLANNER]
   - dependsOn: []
   - start: null
   - due: null
   - completed: null
   - externalId: null
   - updated: 2026-10-14
-  - detail: ./tasks/T-139.md
+  - detail: ./tasks/T-159.md
+
+### [T-160] Acceptance retroativo das 13 entregues sem critérios (autor + revisor independente)
+
+  - id: T-160
+  - status: review
+  - type: chore
+  - parent: E-018
+  - subIssueProgress: null
+  - priority: null
+  - workload: Normal
+  - tags: []
+  - domains: [DOCS]
+  - dependsOn: [T-158]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-160.md
+
+### [T-161] Store: fechar as outras portas de divergência entre arestas e lista de detail
+
+  - id: T-161
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [STORE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-161.md
+
+### [T-162] Teste intermitente: claim-redaction 'reading open' de undefined
+
+  - id: T-162
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: null
+  - workload: Easy
+  - tags: []
+  - domains: [STORE]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-14
+  - detail: ./tasks/T-162.md
 
 ## Notes
 

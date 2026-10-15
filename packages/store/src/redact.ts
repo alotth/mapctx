@@ -212,8 +212,13 @@ export const REDACTION_EVENT_TYPE = "evidence.redacted"
  * an empty string: a reader must be able to tell "deliberately destroyed"
  * from "was always blank", and the entry-level declaration (not a scan for
  * this string) is what detection actually relies on.
+ *
+ * T-133 moved the literal itself to @mapctx/protocol, because the planner has
+ * to recognise it too and a second copy of the string is a second thing to
+ * drift. Re-exported here so this module's published name is unchanged.
  */
-export const REDACTED_SENTINEL = "mapctx:redacted"
+export { REDACTED_SENTINEL } from "@mapctx/protocol"
+import { REDACTED_SENTINEL } from "@mapctx/protocol"
 
 /**
  * Per-event-type redactable roots. A requested path must be one of these or

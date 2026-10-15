@@ -103,6 +103,25 @@ export type PrivacyScanOptions = {
   budgetMs?: number;
 };
 
+/**
+ * Why a pattern did not compile, WITHOUT quoting the pattern back.
+ *
+ * V8 formats the error as `Invalid regular expression: /<source>/: <reason>`,
+ * so the raw message carries the source. That was harmless while patterns
+ * only came from the committed mapctx.toml. Since T-151 they may also come
+ * from an unversioned `privacy.toml`, where the pattern IS the secret -- it
+ * exists precisely to name a third party or a hostname. Echoing it into a
+ * warning on a board write, or into a publication refusal, would leak the
+ * thing the pattern was written to hide. The operator gets the index and the
+ * compiler's reason; the index is enough to find the line.
+ */
+function compilerReason(error: Error, source: string): string {
+  const marker = "/: "
+  const at = error.message.lastIndexOf(marker)
+  const reason = at >= 0 ? error.message.slice(at + marker.length) : error.message
+  return reason.length > 0 && !reason.includes(source) ? reason : "it does not compile"
+}
+
 export function compilePrivacyPatterns(patterns: readonly string[]): CompiledPrivacyPatterns {
   const regexes: CompiledPrivacyPatterns["regexes"] = []
   const invalid: CompiledPrivacyPatterns["invalid"] = []
@@ -110,7 +129,7 @@ export function compilePrivacyPatterns(patterns: readonly string[]): CompiledPri
     try {
       regexes.push({ index, source, regex: new RegExp(source) })
     } catch (error) {
-      invalid.push({ index, source, message: (error as Error).message })
+      invalid.push({ index, source, message: compilerReason(error as Error, source) })
     }
   })
   return { regexes, invalid }
@@ -216,6 +235,110 @@ function matchWithinBudget(
     // lint degrades to "what it managed to find", never to an exception on a
     // board write.
     return { matches, abortedAtPattern: progress.pattern, afterMs: Date.now() - startedAt }
+  }
+}
+
+/**
+ * T-151: the same discipline, for REPLACING instead of reporting.
+ *
+ * Public-repo sanitization has to rewrite what a configured `[privacy]`
+ * pattern matches, not merely warn about it, and a rewrite runs the same
+ * untrusted regexes from `mapctx.toml` that ALTA-2 showed can backtrack
+ * catastrophically. Doing the replace with `String.replace` in this realm
+ * would reintroduce exactly the hang the scanner was bounded to prevent, so
+ * the replace loop lives in the same `vm` sandbox under the same budget, and
+ * untrusted regex execution stays in this one module.
+ *
+ * Each text is emitted only once it is FULLY rewritten. A text the budget cut
+ * short is therefore absent from `texts`, never half-sanitized-and-returned:
+ * the caller can tell "clean" from "unfinished" and must refuse to publish
+ * the latter. `aborted` says the same thing at the call level.
+ *
+ * A zero-length match is left alone. `a*` matches the empty string at every
+ * position, and replacing those would pepper the document with the
+ * replacement token for a pattern that found nothing.
+ */
+const REPLACE_SCRIPT = new vm.Script(`
+(() => {
+  const patterns = __sources.map(source => new RegExp(source, "g"));
+  for (let subject = 0; subject < __texts.length; subject++) {
+    let text = __texts[subject];
+    for (let pattern = 0; pattern < patterns.length; pattern++) {
+      __progress.pattern = pattern;
+      patterns[pattern].lastIndex = 0;
+      let occurrences = 0;
+      text = text.replace(patterns[pattern], match => {
+        if (match.length === 0) return match;
+        occurrences++;
+        return __replacement;
+      });
+      if (occurrences > 0) __count(subject, pattern, occurrences);
+    }
+    __emit(subject, text);
+  }
+  __progress.completed = true;
+})()
+`, { filename: "mapctx-privacy-replacer.js" })
+
+export type PrivacyReplacementCount = {
+  /** Index into the input texts. */
+  subject: number;
+  /** Index into the configured pattern list, as the operator wrote it. */
+  patternIndex: number;
+  occurrences: number;
+};
+
+export type PrivacyReplacementResult = {
+  /** Fully rewritten text per input. `undefined` where the budget ran out first. */
+  texts: Array<string | undefined>;
+  /** How many occurrences each pattern replaced where. Never the values. */
+  counts: PrivacyReplacementCount[];
+  aborted?: PrivacyScanAbort;
+};
+
+/**
+ * Replaces every match of every configured pattern with `replacement`, within
+ * one wall-clock budget for the whole call. Pure: the inputs are not mutated.
+ */
+export function replacePrivacyPatterns(
+  texts: readonly string[],
+  compiled: CompiledPrivacyPatterns,
+  options: { replacement: string; budgetMs?: number }
+): PrivacyReplacementResult {
+  const budgetMs = options.budgetMs ?? PRIVACY_LINT_BUDGET_MS
+  if (compiled.regexes.length === 0) return { texts: [...texts], counts: [] }
+  if (!Number.isFinite(budgetMs) || budgetMs <= 0) {
+    return { texts: texts.map(() => undefined), counts: [], aborted: { afterMs: 0, budgetMs, patternIndex: -1, pattern: "" } }
+  }
+  const rewritten: Array<string | undefined> = texts.map(() => undefined)
+  const counts: PrivacyReplacementCount[] = []
+  const progress = { pattern: -1, completed: false }
+  const context = vm.createContext({
+    __sources: compiled.regexes.map(entry => entry.source),
+    __texts: [...texts],
+    __replacement: options.replacement,
+    __progress: progress,
+    __emit: (subject: number, text: string): void => { rewritten[subject] = text },
+    __count: (subject: number, pattern: number, occurrences: number): void => {
+      counts.push({ subject, patternIndex: compiled.regexes[pattern].index, occurrences })
+    }
+  })
+  const startedAt = Date.now()
+  try {
+    REPLACE_SCRIPT.runInContext(context, { timeout: budgetMs })
+    return { texts: rewritten, counts }
+  } catch {
+    const culprit = progress.pattern >= 0 ? compiled.regexes[progress.pattern] : undefined
+    return {
+      texts: rewritten,
+      counts,
+      aborted: {
+        afterMs: Date.now() - startedAt,
+        budgetMs,
+        patternIndex: culprit?.index ?? -1,
+        pattern: culprit?.source ?? ""
+      }
+    }
   }
 }
 

@@ -193,6 +193,15 @@ export function deriveResourceClaims(tasks: readonly PlannerTask[]): ResourceCla
  * Unicode normalization, so NFC and NFD spellings of the same name stay disjoint; and
  * folding `\` to `/` means `src/\*.ts` becomes the glob `src/*.ts` — escapes are not
  * supported, they over-serialize.
+ *
+ * NOT the `normalizePath` in @mapctx/protocol/claim-paths, and T-133 deliberately
+ * did not merge them. This one compares DECLARED claims before work runs, so it
+ * resolves `..`, refuses to pop a `**`, and folds case because the scheduler must
+ * err toward serializing on filesystems that do. That one compares OBSERVED paths
+ * — what a receipt reported against what a violation row recorded — where case is
+ * meaningful and `..` does not occur. Merging them would make the audit record
+ * lossy or the scheduler case-blind; equivalence was never proven, so the two
+ * comparisons stay two functions with two names' worth of documentation.
  */
 function normalizePath(value: string): string {
   const segments: string[] = [];

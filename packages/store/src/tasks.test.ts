@@ -337,6 +337,80 @@ test("updateTask --depends-on/--blocking replace edges and detail lists together
   }
 });
 
+/**
+ * T-157: proves edges and the detail prerequisites/blocking lists never
+ * diverge across all four dependsOn/blocking supplied-or-not combinations,
+ * plus clearing. Reads both surfaces after every step so a regression that
+ * only re-breaks the unsupplied kind (the exact bug in 5886fd5) still fails
+ * the assertion, instead of only checking the list just written.
+ */
+function assertEdgesMatchDetail(handle: StoreHandle, taskId: string): { dependsOn: string[]; blocking: string[] } {
+  const edges = listDependencies(handle.db).filter(e => e.fromTaskId === taskId);
+  const dependsOn = edges.filter(e => e.kind === "depends-on").map(e => e.toTaskId).sort();
+  const blocking = edges.filter(e => e.kind === "blocks").map(e => e.toTaskId).sort();
+  const detail = getTaskDetail(handle.db, taskId);
+  assert.deepEqual([...detail!.prerequisites].sort(), dependsOn, "detail.prerequisites must match depends-on edges");
+  assert.deepEqual([...detail!.blocking].sort(), blocking, "detail.blocking must match blocks edges");
+  return { dependsOn, blocking };
+}
+
+test("updateTask never lets depends-on/blocks edges diverge from detail.prerequisites/blocking, across all flag combinations", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const extra1 = createTask(handle, { title: "extra target 1", actor: "test" });
+    const extra2 = createTask(handle, { title: "extra target 2", actor: "test" });
+    const extra3 = createTask(handle, { title: "extra target 3", actor: "test" });
+    assert.ok(extra1.ok && extra2.ok && extra3.ok);
+    if (!extra1.ok || !extra2.ok || !extra3.ok) return;
+
+    const subject = createTask(handle, {
+      title: "subject with both edge kinds",
+      dependsOn: ["T-101"],
+      blocking: ["T-102"],
+      actor: "test"
+    });
+    assert.ok(subject.ok);
+    if (!subject.ok) return;
+    const taskId = subject.taskId;
+
+    let state = assertEdgesMatchDetail(handle, taskId);
+    assert.deepEqual(state, { dependsOn: ["T-101"], blocking: ["T-102"] }, "subject seeded with both edge kinds");
+
+    // (1) both flags supplied: both kinds replaced.
+    assert.equal(updateTask(handle, { taskId, dependsOn: ["E-100"], blocking: [extra1.taskId], actor: "test" }).ok, true);
+    state = assertEdgesMatchDetail(handle, taskId);
+    assert.deepEqual(state, { dependsOn: ["E-100"], blocking: [extra1.taskId] });
+
+    // (2) only dependsOn supplied: blocks edges AND detail.blocking must be
+    // untouched -- this is the exact regression that reverts if the T-157
+    // fix is undone.
+    assert.equal(updateTask(handle, { taskId, dependsOn: [extra2.taskId], actor: "test" }).ok, true);
+    state = assertEdgesMatchDetail(handle, taskId);
+    assert.deepEqual(state, { dependsOn: [extra2.taskId], blocking: [extra1.taskId] }, "blocks surface survives a dependsOn-only patch");
+
+    // (3) only blocking supplied: mirror of (2).
+    assert.equal(updateTask(handle, { taskId, blocking: [extra3.taskId], actor: "test" }).ok, true);
+    state = assertEdgesMatchDetail(handle, taskId);
+    assert.deepEqual(state, { dependsOn: [extra2.taskId], blocking: [extra3.taskId] }, "depends-on surface survives a blocking-only patch");
+
+    // (4) neither flag supplied: both surfaces untouched, applied.edges is false.
+    const neither = updateTask(handle, { taskId, patch: { priority: "high" }, actor: "test" });
+    assert.equal(neither.ok, true);
+    assert.ok(neither.ok && neither.applied.edges === false, JSON.stringify(neither));
+    state = assertEdgesMatchDetail(handle, taskId);
+    assert.deepEqual(state, { dependsOn: [extra2.taskId], blocking: [extra3.taskId] });
+
+    // Clearing: dependsOn: [] removes only the depends-on edges/list.
+    assert.equal(updateTask(handle, { taskId, dependsOn: [], actor: "test" }).ok, true);
+    state = assertEdgesMatchDetail(handle, taskId);
+    assert.deepEqual(state, { dependsOn: [], blocking: [extra3.taskId] });
+  } finally {
+    handle.close();
+    restoreEnv();
+    cleanupDir(repoDir);
+  }
+});
+
 test("createTask auto-assigns the next free id and lands at the end of the board", () => {
   const { repoDir, restoreEnv, handle } = materialize();
   try {
