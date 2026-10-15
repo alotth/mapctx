@@ -394,7 +394,7 @@ flowchart LR
 | Store | **C0, independent:** claim refusals stop carrying token fields at the source (`claims.ts:93`), so no print site can leak them | **PENDING OPERATOR APPROVAL** (removes `activeClaim.leaseToken` from observable CLI output — a fix, but a visible one) |
 | Store | `claims.ts` derives lease duration, mints `renewToken`, resolves renewal through dispatch → task → live claim, enforces the 24 h absolute ceiling; `projections.ts` adds `getLiveActiveClaim` alongside the unchanged `getActiveClaimForTask`; `forecast/src/duration.ts` excludes heartbeats from interior events | **PENDING OPERATOR APPROVAL** (observable semantics of an existing event) |
 | CLI | `--lease <duration>` on `task claim`/`task start`; `task renew --dispatch/--renew-token` (with `--claim/--token` unchanged); new `mapctx run event` with `--attempt`/`--sequence`; redacted refusal/renew output | **PENDING OPERATOR APPROVAL** |
-| Config | `[coordination] defaultLease`, `maxLease`, `leaseFactor` in `mapctx.toml` | **PENDING OPERATOR APPROVAL** (new public config surface) |
+| Config | `[coordination] defaultLease`, `maxLease`, `leaseFactor` and — added by C5 under D11 — `reviewLeaseFactor` in `mapctx.toml` | **PENDING OPERATOR APPROVAL** (new public config surface) |
 
 **Data migration.** `resource_claim_projection` gains a `renew_token` column
 (backfilled `NULL` for the 162 historical rows — none of them is still
@@ -1080,6 +1080,7 @@ existing event. Approving the design does not approve these individually.
 | D4 | 24 h absolute renewal ceiling, measured on the local clock | §2 | (a) 24 h; (b) another figure; (c) no ceiling, rely on the sweeper | **(a)**, with the clock caveat stated in §2 — evidence-based liveness with no ceiling renews a wedged agent forever |
 | D5 | `dispatchSchema` gains `kind`; claim payloads gain `exclusivity` and `role` — **and, the operationally risky part, a migration over the live store: two `NOT NULL` columns with `CHECK` enums, plus dropping and recreating `idx_resource_claim_active_task`, the index that today guarantees one holder per task, under a new predicate.** C5 also moves claim admission onto a role-aware lookup and retires the single-row getter (§3), without which a review claim can refuse an implement claim | §3 | (a) all of it; (b) dispatch `kind` only; (c) neither — review stays outside MapCtx | **(a).** (b) makes the review lane invisible to lease accounting; (c) is today's status quo, in which the board cannot say a task was reviewed. Note that (a) is not a payload-only change: approving it approves the index swap, which is why the migration order and the same-name requirement are spelled out in §3 |
 | D6 | CLI: `task start --kind review`, `dispatch create --kind review`, review columns in `plan` | §3 | (a) ship with C5+C6 together; (b) ship earlier alongside C5 | **(a).** Exposing the lane before the receipt-admission guard lets a review receipt move the task's planning state |
+| D6b | **Config: `[coordination] reviewLeaseFactor`** — the new public key C5 adds to implement D11, defaulting to 2 and validated like `leaseFactor` (a non-positive or non-numeric value is refused by name, never silently defaulted) | §3, §10.2 | (a) configurable key, default 2; (b) hard-coded constant, no key; (c) no separate factor — review uses the implement lease (this is D11 (a), already rejected by the operator) | **(a).** Listed here rather than only under D11 because it is public config surface in the same sense its three siblings are: an operator reading §10.1 for "what new knobs does this add" must find it there. (b) would leave one of the four lease figures untunable for no reason beyond its being newer, and the re-derivation §7 already schedules would then need a code change |
 | D7 | CLI: `mapctx task split --slice <title> --effort <x>` | §4 | (a) paired flags; (b) `"title:effort"` in one argument; (c) no command, documentation only | **(a).** (b) has no unambiguous parse against titles containing colons. (c) was tried — the normative rule alone is what produced the slices-as-attempts pattern |
 | D8 | Attempt-chain warning at `attempt >= 4`, **without** forecast exclusion | §4 | (a) warning only; (b) warning plus permanent calibration exclusion; (c) neither | **(a).** (b) was this document's previous position and the measurement refutes it: the predicate catches 38 of 112 receipts, all `completed` review loops, including this document's own dispatch |
 
@@ -1107,7 +1108,9 @@ not equivalent:
 
 `reviewLeaseFactor` defaults to 2 and is tunable under `[coordination]`
 alongside `leaseFactor`, validated the same way (a non-positive or
-non-numeric value is refused by name, never silently defaulted). An explicit
+non-numeric value is refused by name, never silently defaulted). As public
+config surface it also carries its own approval line in §10.1 (**D6b**), with
+its three siblings, rather than living only inside this note. An explicit
 `--lease` still wins over both and is still refused above 24 h
 (`lease-above-ceiling`), unchanged. The figure is a first guess in the same
 sense D10's are, and the one place to change when §7's re-derivation happens.
