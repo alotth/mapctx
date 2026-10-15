@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 14/25
+  - subIssueProgress: 15/25
   - priority: high
   - workload: null
   - tags: []
@@ -2991,7 +2991,7 @@
 ### [T-141] C2: duração do lease derivada de workload/esforço, --lease e [coordination]
 
   - id: T-141
-  - status: review
+  - status: done
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3002,9 +3002,9 @@
   - dependsOn: [T-140]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-141.md
 
 ### [T-142] C3: renewToken (segunda capacidade por claimId) e task renew --dispatch
