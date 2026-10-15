@@ -1,5 +1,5 @@
 import type { DurationCoverage, DurationInput, MeasuredDurations, Session, SessionInterval, Timestamp } from "./types"
-import { timeEvidenceSchema, type RunEvent, type TimeEvidence } from "@mapctx/protocol"
+import { isLivenessRunEventType, timeEvidenceSchema, type RunEvent, type TimeEvidence } from "@mapctx/protocol"
 
 export const DEFAULT_IDLE_THRESHOLD_MS = 10 * 60 * 1000
 
@@ -146,7 +146,20 @@ export function measureDurations(input: DurationInput): MeasuredDurations {
 export function durationMeasuresFromReceipt(
   startedAt: Timestamp,
   endedAt: Timestamp,
-  options: { readyAt?: Timestamp; idleThresholdMs?: number; events?: readonly Pick<RunEvent, "timestamp">[]; timeEvidence?: TimeEvidence } = {}
+  options: {
+    readyAt?: Timestamp
+    idleThresholdMs?: number
+    /**
+     * T-143: widened from `Pick<RunEvent, "timestamp">` because the exclusion
+     * of liveness events has to be decided HERE, and a shape without `type`
+     * cannot decide it. `type` stays optional so a caller that only has
+     * timestamps (a synthetic session, an older fixture) keeps compiling and
+     * keeps its current meaning: an event with no type is not a liveness
+     * event.
+     */
+    events?: readonly (Pick<RunEvent, "timestamp"> & Partial<Pick<RunEvent, "type">>)[]
+    timeEvidence?: TimeEvidence
+  } = {}
 ): MeasuredDurations {
   const startedMs = timestampMs(startedAt)
   const endedMs = timestampMs(endedAt)
@@ -197,7 +210,19 @@ export function durationMeasuresFromReceipt(
   }
   // Receipt boundaries define run scope. Boundary and late/out-of-range
   // events cannot prove intra-run activity and must not alter wall clock.
+  //
+  // T-143 (C4): liveness events are excluded here, at the source, rather than
+  // at the caller (`forecast/store.ts`) -- a filter at one call site is a
+  // filter the next call site will not have, which is the same reasoning C0
+  // used for redacting refusals. `mapctx run event` exists so an agent can
+  // prove it is alive without interrupting itself; proving liveness is not
+  // evidence of work, and counting it as work would read ~0 active time for a
+  // run that heartbeats every 20 minutes while LOSING the honest
+  // `substituted` label. Work measurement keeps coming from `timeEvidence`
+  // (which takes precedence above) and from executor boundary events, neither
+  // of which that command can write.
   const interiorEvents = (options.events ?? []).filter(event => {
+    if (event.type !== undefined && isLivenessRunEventType(event.type)) return false
     const eventMs = timestampMs(event.timestamp)
     return eventMs > startedMs && eventMs < endedMs
   })

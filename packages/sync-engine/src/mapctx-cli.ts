@@ -33,6 +33,8 @@ import {
   recordRunReceipt,
   listClaimViolations,
   listDispatchAttempts,
+  listRunEvents,
+  recordRunEvent,
   listEstimateSnapshots,
   listInvalidatedReceiptKeys,
   listReceiptsForDispatch,
@@ -92,7 +94,7 @@ import { loadConfigOptionalForBoard } from './config';
 import { accountAddCommand, accountBindCommand, accountListCommand, budgetHistoryCommand, budgetSetCommand, budgetStatusCommand, planPeriodRecordCommand } from './budget-cli';
 import { buildGanttDataset, type GanttHistoryDate } from './gantt';
 import { extractClaudeIntervals, type OtherSessionActivity, type Workload } from '@mapctx/forecast';
-import { parseEstimatedEffortMs, planningStateSchema, prioritySchema, specModeSchema, taskTypeSchema, workloadSchema } from '@mapctx/protocol';
+import { LIVENESS_RUN_EVENT_TYPES, isLivenessRunEventType, parseEstimatedEffortMs, planningStateSchema, prioritySchema, specModeSchema, taskTypeSchema, workloadSchema } from '@mapctx/protocol';
 import { pushStoreCommand } from './push-store';
 import { SyncOptions } from './types';
 import { detectWorkspaceModel, deriveSubIssueProgress, toWorkspaceTaskView, toWorkspaceTaskViewFromStoreRecord } from './board-view';
@@ -183,8 +185,17 @@ type MapctxOptions = SyncOptions & {
   all?: boolean;
   /** T-126 redact */
   nodeId?: string;
+  /**
+   * Shared by `redact` (a journal event's sequence, 1-based) and `run event`
+   * (a run event's sequence within one attempt, 0-based per `runEventSchema`).
+   * The parser therefore accepts any non-negative integer and each command
+   * enforces its own floor -- `redact` by name, below.
+   */
   sequence?: number;
   field?: string;
+  /** T-143 run event */
+  attempt?: number;
+  payload?: string;
   /** T-127 validate gate */
   baselinePath?: string;
   writeBaselinePath?: string;
@@ -212,6 +223,7 @@ const ENUM_HELP: Array<{ flag: string; values: string; schema?: true }> = [
   { flag: '--set waitReason / --wait-reason', values: 'review|decision|parked|blocked-external (or null to clear)' },
   { flag: '--effort, --set detail.estimatedEffort', values: 'positive m|h|d|w duration (90m, 6h, 1d, 2w); agent ACTIVE time, 1d=8h, 1w=40h' },
   { flag: '--set predictedStart', values: 'null, or JSON {"start":"YYYY-MM-DD","method":"manual|heuristic|model","confidence":"low|medium|high"}' },
+  { flag: 'run event --type', values: LIVENESS_RUN_EVENT_TYPES.join('|'), schema: true },
   { flag: '--executor', values: 'free text naming the runner (traycer, claude, codex, ...)' },
   { flag: '--reason (export)', values: CHECKPOINT_REASONS.join('|'), schema: true },
   {
@@ -297,7 +309,7 @@ function printEnumHelp(): void {
  * suite instead of silently weakening the check.
  */
 export const VALUE_FLAGS: ReadonlySet<string> = new Set([
-  '--account', '--actor', '--amount', '--approve', '--approve-hash', '--baseline', '--because',
+  '--account', '--actor', '--amount', '--approve', '--approve-hash', '--attempt', '--baseline', '--because',
   '--blocking', '--budget', '--claim', '--claude-dir', '--claude-transcript', '--codex-sessions',
   '--config', '--context-hash', '--criterion-id', '--currency', '--depends-on', '--description',
   '--description-file', '--dispatch', '--dispatch-id', '--domains', '--due', '--effort',
@@ -305,7 +317,7 @@ export const VALUE_FLAGS: ReadonlySet<string> = new Set([
   '--acceptance-file', '--expect-title',
   '--file', '--from-file', '--holder', '--id', '--idle-threshold-ms', '--impact', '--index',
   '--lease', '--limit', '--minutes', '--node', '--note', '--opencode-db', '--other-session-activity',
-  '--parent', '--parked-threshold-ms', '--plan-name', '--priority', '--query', '--reason',
+  '--parent', '--parked-threshold-ms', '--payload', '--plan-name', '--priority', '--query', '--reason',
   '--reason-file', '--receipt', '--renew-token', '--repo', '--review-threshold-ms', '--role', '--seats',
   '--sequence', '--set', '--snapshot', '--start', '--status', '--summary', '--tags', '--target', '--task',
   '--tasks-file', '--time-zone', '--title', '--token', '--type', '--wait-reason', '--workload',
@@ -369,6 +381,17 @@ function printHelp(): void {
   console.log('    Writes nothing. Re-run with --approve-hash <sha256-from-the-draft> to write');
   console.log('    node-attestations.json, which lets `mapctx store repair` replay those rows and');
   console.log('    treat the node\'s absent prefix as a declared fact instead of a gap.');
+  console.log('  mapctx run event <dispatch-id> --type ' + LIVENESS_RUN_EVENT_TYPES.join('|') + ' [--attempt n] [--sequence n]');
+  console.log('    [--payload \'{"key":"value"}\'] [--actor name] [--json]');
+  console.log('    Records one liveness event for a dispatch and, as a by-product, renews that');
+  console.log('    lane\'s claim -- addressed by dispatch id, with no token. Emit one where you');
+  console.log('    already pause (after a suite, between slices) instead of interrupting yourself');
+  console.log('    to run task renew. --attempt defaults to the dispatch\'s latest attempt and is');
+  console.log('    refused if you name an older one; --sequence defaults to the next unused one.');
+  console.log('    The event is always recorded; whether it renewed is reported separately, and it');
+  console.log('    does not renew on a stale attempt, after a receipt landed, past the 24h ceiling');
+  console.log('    measured from the original claim, or when the claim is gone or expired.');
+  console.log('    Liveness is not work: these events are excluded from active-time measurement.');
   console.log('  mapctx redact list [--task T-123] [--json]');
   console.log('    Lists events holding redactable evidence, without printing any value.');
   console.log('  mapctx redact --sequence <n> --field <payload.path> --reason "<why>" [--node <nodeId>] [--actor name] [--commit] [--json]');
@@ -783,9 +806,18 @@ function parseArgs(argv: string[]): {
     else if (a === '--field') options.field = valueFor(a);
     else if (a === '--sequence') {
       const value = Number(valueFor(a));
-      if (!Number.isInteger(value) || value < 1) throw new Error('--sequence must be a positive integer');
+      // Non-negative, not positive: a run event's first sequence is 0
+      // (`runEventSchema` says non-negative). `redact`, whose journal
+      // sequences start at 1, refuses 0 by name in its own command.
+      if (!Number.isInteger(value) || value < 0) throw new Error('--sequence must be a non-negative integer');
       options.sequence = value;
     }
+    else if (a === '--attempt') {
+      const value = Number(valueFor(a));
+      if (!Number.isInteger(value) || value < 1) throw new Error('--attempt must be a positive integer');
+      options.attempt = value;
+    }
+    else if (a === '--payload') options.payload = valueFor(a);
     else if (a === '--baseline') options.baselinePath = valueFor(a);
     else if (a === '--write-baseline') options.writeBaselinePath = valueFor(a);
     else if (a === '--because') options.correctionReason = valueFor(a);
@@ -1130,6 +1162,13 @@ function redactCommand(options: MapctxOptions): void {
   const reason = options.attestationReason ?? (typeof options.reason === 'string' ? options.reason : undefined);
   if (options.sequence === undefined || !options.field) {
     throw new Error('Usage: mapctx redact --sequence <n> --field <payload.path> --reason "<why>" [--node <nodeId>] [--actor <name>] [--commit] [--json]  |  mapctx redact list [--task T-123] [--json]');
+  }
+  // T-143 shares `--sequence` with `run event`, whose sequences are 0-based,
+  // so the parser's floor moved to 0. A journal sequence of 0 never exists,
+  // and it must keep being refused by name rather than becoming a lookup that
+  // finds nothing.
+  if (options.sequence < 1) {
+    throw new Error('mapctx redact --sequence is a journal event sequence and starts at 1; 0 addresses no event.');
   }
   if (!reason || !reason.trim()) {
     throw new Error('mapctx redact requires --reason "<why>": redaction destroys evidence permanently and must say why.');
@@ -1795,6 +1834,109 @@ export function mapctxBoardCommand(options: MapctxOptions): void {
         deriveSubIssueProgress(task.taskId, tasks)
       ))
     }, options.json);
+  } finally {
+    handle.close();
+  }
+}
+
+/**
+ * T-143 (C4 / D3): `mapctx run event <dispatch-id>` -- the renewal path that
+ * needs no secret, because it is addressed by the dispatch an orchestrator
+ * already holds.
+ *
+ * The problem it answers, measured in this store: renewal required
+ * `--claim/--token`, a credential printed once to whoever ran `task start`,
+ * so the executing agent had to interrupt itself every lease to stay alive.
+ * It did not happen -- 26 renewal events across 162 claims, 8% of claims ever
+ * renewed. Here liveness is a by-product of working: emit one event where the
+ * run already pauses.
+ *
+ * The event is ALWAYS the deliverable; the renewal is reported beside it. A
+ * stale attempt, a landed receipt, a missing or expired claim and the 24 h
+ * ceiling each leave the event recorded and say, in `renewal.reason`, that
+ * nothing was extended -- because "we wrote your event but silently did not
+ * keep your lane alive" is exactly the failure an agent must be able to see.
+ *
+ * `--attempt` and `--sequence` exist because `runEventSchema` requires both,
+ * so the CLI cannot omit them. Deriving the attempt makes "the caller's
+ * attempt is the latest" a tautology, which is why the guarantee that matters
+ * is the refusal of an explicitly OLDER one: naming a dead attempt is a
+ * mistake about which lane you are in, and answering it with a recorded event
+ * that renews nothing would hide that mistake behind exit 0.
+ */
+function runEventCommand(dispatchId: string, options: MapctxOptions): void {
+  const type = options.type;
+  if (!type || !isLivenessRunEventType(type)) {
+    throw new Error(
+      `run event requires --type ${LIVENESS_RUN_EVENT_TYPES.join('|')}`
+      + `${type ? `; "${type}" is not one of them` : ''}.`
+      + ' These are the liveness types this command can write, and the ones excluded from active-time measurement.'
+    );
+  }
+
+  let payload: Record<string, unknown> = {};
+  if (options.payload !== undefined) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(options.payload);
+    } catch (error) {
+      throw new Error(`--payload must be JSON: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('--payload must be a JSON object, e.g. --payload \'{"slice":"2/5"}\'.');
+    }
+    payload = parsed as Record<string, unknown>;
+  }
+
+  const cwd = process.cwd();
+  const { handle } = openStoreOrFail(cwd);
+  try {
+    const attempts = listDispatchAttempts(handle.db, dispatchId);
+    if (attempts.length === 0) {
+      refuse({ ok: false, reason: 'unknown-dispatch', dispatchId }, `Unknown dispatch: ${dispatchId}.`);
+    }
+    const latestAttempt = Math.max(...attempts.map(attempt => attempt.attempt));
+    if (options.attempt !== undefined && options.attempt < latestAttempt) {
+      refuse(
+        { ok: false, reason: 'stale-attempt', attempt: options.attempt, latestAttempt },
+        `Attempt ${options.attempt} is older than this dispatch's latest attempt (${latestAttempt}).`
+        + ' Record liveness against the attempt that is running, or omit --attempt to use the latest.'
+      );
+    }
+    if (options.attempt !== undefined && !attempts.some(attempt => attempt.attempt === options.attempt)) {
+      refuse(
+        { ok: false, reason: 'unknown-attempt', attempt: options.attempt, latestAttempt },
+        `Dispatch ${dispatchId} has no attempt ${options.attempt} (latest is ${latestAttempt}).`
+      );
+    }
+    const attempt = options.attempt ?? latestAttempt;
+
+    // Next unused sequence for THIS attempt. An explicit --sequence is kept
+    // as given: colliding with a recorded one is answered by the writer's
+    // existing duplicate/conflicting refusal, which is also why a replayed
+    // event cannot renew -- it never reaches the append.
+    const recorded = listRunEvents(handle.db, dispatchId, attempt);
+    const sequence = options.sequence
+      ?? (recorded.length === 0 ? 0 : Math.max(...recorded.map(event => event.sequence)) + 1);
+
+    const actor = defaultActor(options.actor);
+    const result = recordRunEvent(
+      handle,
+      { schemaVersion: 1, dispatchId, attempt, sequence, type, timestamp: new Date().toISOString(), payload },
+      actor,
+      dispatchId,
+      { renew: { coordination: resolveCoordination(cwd), actor } }
+    );
+    if (!result.ok) {
+      refuse(
+        result,
+        `run event refused: ${result.reason}`
+        + (result.reason === 'duplicate-run-event' || result.reason === 'conflicting-run-event'
+          ? ` -- attempt ${attempt} already holds sequence ${sequence}. Omit --sequence to take the next unused one.`
+          : '')
+      );
+    }
+    print(result, options.json);
   } finally {
     handle.close();
   }
@@ -2936,6 +3078,12 @@ async function main(): Promise<void> {
     const dispatchId = positional[1];
     if (subcommand === 'receipt' && dispatchId) { dispatchReceiptCommand(dispatchId, options); return; }
     throw new Error('Usage: mapctx dispatch create <task-id> [...] | mapctx dispatch receipt <dispatch-id> [...]');
+  }
+
+  if (command === 'run') {
+    const dispatchId = positional[1];
+    if (subcommand === 'event' && dispatchId) { runEventCommand(dispatchId, options); return; }
+    throw new Error(`Usage: mapctx run event <dispatch-id> --type ${LIVENESS_RUN_EVENT_TYPES.join('|')} [--attempt n] [--sequence n] [--payload json] [--actor name] [--json]`);
   }
 
   if (command === 'reconcile') {
