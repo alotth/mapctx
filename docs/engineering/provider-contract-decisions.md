@@ -113,9 +113,10 @@ Worth knowing before trusting a green run.
 
 ## T-150: the GitHub read adapter, and four gaps closed
 
-The T-139 review left seven gaps. Four were contract gaps and are closed here;
-three were not, and are registered in T-152's description rather than invented
-into the interface.
+The T-139 review left seven gaps. **Five** were contract gaps and are closed
+here; **two** were not, and are registered in T-152's description rather than
+invented into the interface. The counts are stated because the T-150 description
+enumerates seven and a reader should be able to make them close.
 
 ### Closed
 
@@ -149,10 +150,23 @@ have gone the other way:
 
 ### Registered for T-152
 
-Dependency writes over REST (unvalidated, so the capability stays `false`),
-`bundleDependencies` (the CLI does not import the provider yet, so nothing was
-touched), and the read-modify-write window the store and GitHub share. The
-detail is in `tasks/T-152.md`.
+Two of the seven:
+
+- **`bundleDependencies`** — the CLI does not import the provider yet, so
+  nothing was touched. The day it does, the provider joins the sync-engine's
+  bundle and `pack:smoke` has to pass with it, fixtures included.
+- **The read-modify-write window** — a write-path concern, and one both
+  providers share: neither has a precondition, and the store replaces its whole
+  edge set rather than appending.
+
+A third item is registered alongside them but is **not** one of the seven: the
+REST **dependency write** path. That came from T-135, which measured that no
+GraphQL mutation for issue dependencies exists and that the REST endpoints read
+`200 []` but were never exercised for writing. It is listed in `tasks/T-152.md`
+with the other two because it gates the same work, not because the T-139 review
+raised it.
+
+The detail for all three is in `tasks/T-152.md`.
 
 ### What the suite gained, and what it caught
 
