@@ -1302,6 +1302,16 @@ body.detail-open .workspace-main {
   top: 8px;
 }
 
+.timeline-grid-label-hour {
+  color: rgba(149, 162, 200, 0.5);
+  font-size: 8px;
+  top: 10px;
+}
+
+.timeline-grid-line-hour {
+  background: rgba(149, 162, 200, 0.07);
+}
+
 .gantt-banner {
   border-bottom: 1px solid rgba(255, 184, 77, 0.32);
   color: #ffe2ad;

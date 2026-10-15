@@ -395,6 +395,7 @@ function setView(view) {
   document.getElementById('history-view').classList.toggle('active', activeView === 'history');
   document.getElementById('execution-view').classList.toggle('active', activeView === 'execution');
   if (activeView === 'history') renderHistory();
+  if (activeView === 'roadmap' && roadmapScrollToNow) centerRoadmapOnNow();
 }
 
 function projectInitials(target) {
@@ -671,7 +672,39 @@ async function loadGanttDataset() {
   }
 }
 
+// Re-rendering replaces the scroll surface: keep the reader's position, except
+// on first paint and roadmap control changes, which center the now line.
+let roadmapScrollToNow = true;
+
 function renderRoadmap() {
+  const previous = document.getElementById('roadmap-view').querySelector?.('.roadmap-surface');
+  const kept = previous ? { left: previous.scrollLeft, top: previous.scrollTop } : null;
+  renderRoadmapView();
+  const surface = document.getElementById('roadmap-view').querySelector?.('.roadmap-surface');
+  if (!surface) return;
+  // A fresh surface (after loading/empty states) is a first paint too.
+  if (!kept) roadmapScrollToNow = true;
+  if (roadmapScrollToNow) {
+    centerRoadmapOnNow();
+  } else if (kept) {
+    surface.scrollLeft = kept.left;
+    surface.scrollTop = kept.top;
+  }
+}
+
+function centerRoadmapOnNow() {
+  const surface = document.getElementById('roadmap-view').querySelector?.('.roadmap-surface');
+  const line = surface?.querySelector('.timeline-header .today-line');
+  // Hidden view has no layout yet; retry when the roadmap tab is shown.
+  if (!line || !surface.clientWidth) return;
+  roadmapScrollToNow = false;
+  const label = surface.querySelector('.timeline-header .timeline-label');
+  const labelWidth = label && getComputedStyle(label).position === 'sticky' ? label.offsetWidth : 0;
+  const lineX = line.getBoundingClientRect().left - surface.getBoundingClientRect().left + surface.scrollLeft;
+  surface.scrollLeft = Math.max(0, lineX - labelWidth - (surface.clientWidth - labelWidth) / 2);
+}
+
+function renderRoadmapView() {
   const root = document.getElementById('roadmap-view');
   const rawTasks = filteredWorkspaceTasks();
   if (!rawTasks.length) {
@@ -714,7 +747,7 @@ function renderRoadmap() {
           <span><i class="legend-dot planned"></i> planned calendar position (dated tasks)</span>
           <span><i class="legend-chip"></i> forecast P50 / P90 (duration chip in task label)</span>
           <span><i class="legend-dot actual"></i> actual (coverage shown per row)</span>
-          <span><i class="legend-line"></i> today</span>
+          <span><i class="legend-line"></i> now</span>
           <span><i class="legend-tier tier-measured"></i> measured history</span>
         </div>
       </section>
@@ -1277,6 +1310,17 @@ function todayDate() {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
+/**
+ * Actual/history spans sit on their exact instants, the same time axis as the
+ * now line. A span without an end is still running and reaches now; no span
+ * may cross now (receipt clock skew must not draw executed work as future).
+ */
+function executedSpan(start, end) {
+  const now = new Date();
+  const stop = end && end < now ? end : now;
+  return { start: start < stop ? start : stop, end: stop, ongoing: !end };
+}
+
 function dateDiffDays(start, end) {
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / ONE_DAY_MS));
 }
@@ -1390,15 +1434,16 @@ function roadmapTaskSpans(task) {
   }
   const actualStart = parseExecutionTimestamp(task.actual?.startedAt);
   const actualEnd = parseExecutionTimestamp(task.actual?.endedAt);
-  if (actualStart && actualEnd && actualEnd >= actualStart) {
-    spans.push({ kind: 'actual', start: actualStart, end: actualEnd });
+  const running = actualStart && !actualEnd && !['done', 'cancelled', 'archived'].includes(normalizeStatus(task.status));
+  if (actualStart && ((actualEnd && actualEnd >= actualStart) || running)) {
+    spans.push({ kind: 'actual', ...executedSpan(actualStart, actualEnd) });
   } else {
     const historyStart = parseExecutionTimestamp(task.historySpan?.startedAt);
     const historyEnd = parseExecutionTimestamp(task.historySpan?.endedAt);
     // T-116 review attempt 3: the tier rides the span so the bar and its
     // tooltip can state the evidence tier honestly -- inferred history is a
     // window, never measured active time.
-    if (historyStart && historyEnd && historyEnd >= historyStart) spans.push({ kind: 'actual', start: historyStart, end: historyEnd, historySource: task.historySpan?.source, historyConfidence: task.historySpan?.confidence, historyTier: task.historySpan?.tier || 'measured' });
+    if (historyStart && historyEnd && historyEnd >= historyStart) spans.push({ kind: 'actual', ...executedSpan(historyStart, historyEnd), historySource: task.historySpan?.source, historyConfidence: task.historySpan?.confidence, historyTier: task.historySpan?.tier || 'measured' });
   }
   const approximateDate = parseDate(task.approximateDate?.date);
   if (approximateDate) {
@@ -1426,7 +1471,8 @@ function renderRoadmapTimeline(groups, timeline, timelineLabel) {
 
 function timelineWidthPx(timeline) {
   const days = Math.max(1, dateDiffDays(timeline.start, timeline.end));
-  const perDay = timeline.scale === 'day' ? 48 : timeline.scale === 'week' ? 20 : 8;
+  // Day scale shows roughly a week per viewport so hours stay readable.
+  const perDay = timeline.scale === 'day' ? 150 : timeline.scale === 'week' ? 20 : 8;
   return Math.max(760, days * perDay);
 }
 
@@ -1587,6 +1633,7 @@ function renderScaleTicks(timeline) {
   return `
     ${renderScaleGridLines(timeline)}
     ${ticks.map((tick) => `<div class="timeline-grid-label timeline-grid-label-${timeline.scale}" style="left:${tick.left}%">${escapeHtml(tick.label)}</div>`).join('')}
+    ${timeline.scale === 'day' ? buildHourTicks(timeline).map((tick) => `<div class="timeline-grid-line timeline-grid-line-hour" style="left:${tick.left}%"></div><div class="timeline-grid-label timeline-grid-label-hour" style="left:${tick.left}%">${tick.label}</div>`).join('') : ''}
     ${renderTodayLine(timeline, true)}
   `;
 }
@@ -1640,8 +1687,22 @@ function buildDayTicks(range) {
   while (cursor <= range.end) {
     ticks.push({
       left: getPosition(cursor, range),
-      label: days > 35 ? String(cursor.getDate()) : formatShortDate(cursor)
+      label: days > 35 && range.scale !== 'day' ? String(cursor.getDate()) : formatShortDate(cursor)
     });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return ticks;
+}
+
+// Day scale: 06/12/18h marks between day lines, so receipt hours read off the axis.
+function buildHourTicks(range) {
+  const ticks = [];
+  const cursor = new Date(range.start.getFullYear(), range.start.getMonth(), range.start.getDate());
+  while (cursor <= range.end) {
+    for (const hour of [6, 12, 18]) {
+      const stamp = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate(), hour);
+      if (stamp > range.start && stamp < range.end) ticks.push({ left: getPosition(stamp, range), label: `${hour}h` });
+    }
     cursor.setDate(cursor.getDate() + 1);
   }
   return ticks;
@@ -1661,12 +1722,14 @@ function renderGridLines(range) {
 }
 
 function renderTodayLine(range, withBadge = false) {
-  const today = todayDate();
-  if (today < range.start || today > range.end) return '';
-  const left = getPosition(today, range);
+  // The line marks the current instant, not local midnight, so executed spans
+  // end on or before it and the hour of day is readable on the day scale.
+  const now = new Date();
+  if (now < range.start || now > range.end) return '';
+  const left = getPosition(now, range);
   return `
-    <div class="today-line" style="left:${left}%">
-      ${withBadge ? '<span class="today-badge">Today</span>' : ''}
+    <div class="today-line" style="left:${left}%" title="Now ${escapeHtml(formatDateTime(now.toISOString()))}">
+      ${withBadge ? '<span class="today-badge">Now</span>' : ''}
     </div>
   `;
 }
@@ -2035,10 +2098,17 @@ function renderPredictedMarker(task, timeline) {
 }
 
 function renderCalendarSpanBar(span, timeline, kind, label, inclusive = false, tooltip = '') {
-  const left = Math.max(0, getPosition(span.start, timeline));
-  const width = Math.max((inclusive ? getWidth : getExactWidth)(span.start, span.end, timeline), 0.8);
+  let left = Math.max(0, getPosition(span.start, timeline));
+  let width = (inclusive ? getWidth : getExactWidth)(span.start, span.end, timeline);
+  // Sub-pixel exact spans still need a visible bar (CSS min-width 7px); grow
+  // it leftward from the end so a just-finished span never pokes past now.
+  const minWidth = (7 / timelineWidthPx(timeline)) * 100;
+  if (!inclusive && width < minWidth) {
+    left = Math.max(0, getPosition(span.end, timeline) - minWidth);
+    width = minWidth;
+  }
   const text = kind === 'actual'
-    ? `${label} ${span.start.toISOString()} -> ${span.end.toISOString()}`
+    ? `${label} ${span.start.toISOString()} -> ${span.ongoing ? `now (running, ${span.end.toISOString()})` : span.end.toISOString()}`
     : kind === 'approximate'
       ? `Approximate ${formatShortDate(span.start)}`
     : `${label} ${formatShortDate(span.start)} – ${formatShortDate(span.end)}`;
@@ -2223,6 +2293,7 @@ function setRoadmapGroupMode(mode) {
   window.localStorage?.setItem('mapctx:roadmapGroupMode', roadmapGroupMode);
   roadmapCollapsedGroups.clear();
   saveRoadmapCollapsedGroups();
+  roadmapScrollToNow = true;
   renderRoadmap();
 }
 
@@ -2231,6 +2302,7 @@ function setRoadmapScale(scale) {
   if (roadmapScale === normalized) return;
   roadmapScale = normalized;
   window.localStorage?.setItem('mapctx:roadmapScale', roadmapScale);
+  roadmapScrollToNow = true;
   renderRoadmap();
 }
 
@@ -2241,6 +2313,7 @@ function setRoadmapSort(sort) {
   }
   roadmapSort = normalized;
   window.localStorage?.setItem('mapctx:roadmapSort', roadmapSort);
+  roadmapScrollToNow = true;
   renderRoadmap();
 }
 
@@ -2267,6 +2340,7 @@ function setAllRoadmapGroupsCollapsed(collapsed) {
     roadmapCollapsedGroups.clear();
   }
   saveRoadmapCollapsedGroups();
+  roadmapScrollToNow = true;
   renderRoadmap();
 }
 

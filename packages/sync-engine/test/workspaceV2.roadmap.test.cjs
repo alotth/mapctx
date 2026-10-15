@@ -348,7 +348,9 @@ test('epic group period spans related work, extends to today while open, skips h
   ];
   const groups = epicGroups(board, dataset);
   const epic = groups.find(group => group.id === 'epic:E-100');
-  const today = new Date().toISOString().slice(0, 10);
+  // todayDate() in the view is local-midnight anchored; UTC slicing diverges
+  // from it whenever the local evening is already the next UTC day.
+  const today = new Date().toLocaleDateString('sv-SE');
   // Paused Mar 1 must not pull the start; open backlog extends the end to today.
   assert.equal(epic.rangeStart, '2026-03-03');
   assert.equal(epic.rangeEnd, today);
