@@ -465,3 +465,17 @@ holdership is a role-aware question that belongs with C5.
   lists through one update** — `mapctx task update <id> --depends-on a,b
   --blocking x,y`, spelling an empty list as `""` (omitting the flag is now a
   no-op on that kind, so it would leave the divergence in place)
+* **fix:** `--set detail.prerequisites=...` and `--set detail.blocking=...`
+  are refused. Those two lists are not fields, they are a rendering of the
+  task's dependency edges — `export` builds them from the edges, `reconcile`
+  diffs them against the edges, and `plan`/`gantt` read only the edges — so
+  writing one on its own moved the rendering while the thing it renders
+  stayed put. The refusal names the flag that writes both surfaces in one
+  event: `--depends-on` for `prerequisites`, `--blocking` for `blocking`.
+  Both keys are gone from the patchable-detail list in `--help` and in the
+  unknown-field refusal. The library's `createTask` likewise refuses a
+  `detail.prerequisites`/`detail.blocking` that disagrees with its
+  `dependsOn`/`blocking` argument (compared as sets, so order and duplicates
+  are not a disagreement) and derives the stored lists from the edges; the
+  CLI's `task create` never exposed those two, so no `task create` invocation
+  changes
