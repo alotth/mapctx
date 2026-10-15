@@ -398,17 +398,28 @@ function collectFields(task: PublishableTask): FieldText[] {
  * clock of two input sizes, which flaked (a GC pause in the second
  * measurement blew a ratio whose base was a few milliseconds). These counters
  * are the same property expressed structurally, so the assertion is
- * deterministic and machine-independent: every loop the sweep itself drives
- * increments one of them, and on a linear sweep every one of them is bounded
- * by a constant times the input length.
+ * deterministic and machine-independent: the three loops below are counted
+ * unconditionally, and on a linear sweep each count is bounded by a constant
+ * times the input length.
+ *
+ * Read the scope of that narrowly, because the first draft of this comment
+ * overclaimed it (T-165 review MÉDIA-1). The invariant covers the loops that
+ * are INSTRUMENTED, not every loop the sweep might ever drive: add a fourth
+ * loop here and forget to count it, and a genuinely quadratic sweep leaves
+ * all three counts unchanged. Measured: an O(n)-per-match probe loop added to
+ * `applyRule` kept `1012/2012` steps exactly while the sweep slowed ~40x.
+ * The same blindness covers work inside the regex engine, where a rule that
+ * backtracks quadratically finds the same matches with the same counts.
+ *
+ * Neither blind spot is silent, because the counters are not the only guard.
+ * Both classes are caught as an OUTCOME by the structural budget
+ * (`STRUCTURAL_BUDGET_MS`): the sweep blows it and the task is refused as
+ * `scan-incomplete`. `sanitize.test.ts` asserts exactly that, on a body large
+ * enough that a clean sweep finishes with ~200x of headroom -- so a new
+ * uncounted loop fails the suite on the refusal, not on a duration.
  *
  * They are instrumentation, not a result: `sanitizeTaskForPublication`
- * ignores them, and they cost three integer increments per match. What they
- * CANNOT see is work done inside the regex engine -- a rule that backtracks
- * quadratically finds the same matches with the same counts. That class is
- * caught by the structural budget instead (`STRUCTURAL_BUDGET_MS`): it blows
- * the budget by more than an order of magnitude and the task is refused as
- * `scan-incomplete`, which is an outcome, not a duration.
+ * ignores them, and they cost three integer increments per match.
  */
 export type StructuralSweepWork = {
   /** `regex.exec` calls, including the final failing one that ends each rule's loop. */
@@ -463,15 +474,29 @@ function applyRule(text: string, rule: StructuralRule, work: StructuralSweepWork
   return { text: out + tail, occurrences }
 }
 
+/**
+ * The clock the sweep reads, injectable so a test can assert the exact value
+ * of `exhausted.afterMs` instead of a range (T-165 review BAIXA-1).
+ *
+ * The default is the real clock and no production path passes anything else.
+ * A test that scripts it is the only way to pin `afterMs` down: with the real
+ * clock, a budget small enough to exhaust on the first check also makes the
+ * elapsed time ~0ms, where "time spent", "time past the deadline" and the
+ * constant 0 are indistinguishable -- which is how two wrong versions of this
+ * field survived the first attempt's test.
+ */
+export type SweepClock = () => number
+
 function applyStructuralRules(
   text: string,
   deadline: { endsAt: number; budgetMs: number },
-  work: StructuralSweepWork = noSweepWork()
+  work: StructuralSweepWork = noSweepWork(),
+  now: SweepClock = Date.now
 ): StructuralOutcome {
   const perCategory = new Map<StructuralCategory, number>()
   let current = text
   for (const rule of STRUCTURAL_RULES) {
-    if (Date.now() > deadline.endsAt) {
+    if (now() > deadline.endsAt) {
       return {
         text: current,
         hits: [...perCategory.entries()].map(([category, occurrences]) => ({ category, occurrences })),
@@ -482,7 +507,7 @@ function applyStructuralRules(
         // when it took 3400ms misleads exactly the person investigating why.
         // T-165 carries that value through to `SanitizeResult` and the
         // refusal message, which is what makes the distinction observable.
-        exhausted: { rule: rule.category, afterMs: Date.now() - (deadline.endsAt - deadline.budgetMs), budgetMs: deadline.budgetMs }
+        exhausted: { rule: rule.category, afterMs: now() - (deadline.endsAt - deadline.budgetMs), budgetMs: deadline.budgetMs }
       }
     }
     const applied = applyRule(current, rule, work)
@@ -503,10 +528,17 @@ function applyStructuralRules(
  * It runs the production sweep, with the production rule set and the
  * production budget: the counters a test reads are the ones
  * `sanitizeTaskForPublication` produced on the same input, not a reimplemented
- * model of it. Exported for that reason, like `structuralResiduesIn` below.
+ * model of it. Exported for that reason, like `findStructuralResidues` below.
+ *
+ * `now` exists for the `afterMs` test only; omitting it reads the real clock,
+ * which is what every production caller does.
  */
-export function measureStructuralSweep(text: string, budgetMs: number = STRUCTURAL_BUDGET_MS): StructuralOutcome {
-  return applyStructuralRules(text, { endsAt: Date.now() + budgetMs, budgetMs }, noSweepWork())
+export function measureStructuralSweep(
+  text: string,
+  budgetMs: number = STRUCTURAL_BUDGET_MS,
+  now: SweepClock = Date.now
+): StructuralOutcome {
+  return applyStructuralRules(text, { endsAt: now() + budgetMs, budgetMs }, noSweepWork(), now)
 }
 
 function emptyTotals(): Record<SanitizeCategory, number> {
