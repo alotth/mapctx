@@ -420,7 +420,21 @@ function applyStructuralRules(text: string, deadline: { endsAt: number; budgetMs
       return {
         text: current,
         hits: [...perCategory.entries()].map(([category, occurrences]) => ({ category, occurrences })),
-        exhausted: { rule: rule.category, afterMs: deadline.budgetMs, budgetMs: deadline.budgetMs }
+        // T-138 review BAIXA-2: report the time actually spent, not the
+        // budget. The deadline is checked BETWEEN rules, so a single slow
+        // rule overshoots -- and a report that says "exhausted after 1000ms"
+        // when it took 3400ms misleads exactly the person investigating why.
+        //
+        // NOTE, because the correction is currently unobservable: the caller
+        // below narrows this to `{rule, budgetMs}` when building
+        // `SanitizeResult.structuralExhausted`, so `afterMs` is computed and
+        // then dropped -- it reaches no public surface, no refusal message
+        // and no test. The value is right rather than wrong now, which costs
+        // nothing, but making the review's point actually true means either
+        // surfacing this field on `SanitizeResult` or deleting it. That is a
+        // change to this module's public result type and belongs to whoever
+        // owns it, not to T-138.
+        exhausted: { rule: rule.category, afterMs: Date.now() - (deadline.endsAt - deadline.budgetMs), budgetMs: deadline.budgetMs }
       }
     }
     const applied = applyRule(current, rule)

@@ -5,6 +5,7 @@ import { checkIntegrity, openDatabase, writeMetaValue } from "./db"
 import { applyEventToProjections } from "./events"
 import { readStoreMetaFile } from "./identity"
 import { acquireMaintenanceLock, assertNotUnderMaintenance } from "./maintenance"
+import { autoSnapshot, pushSnapshotNotice } from "./backup"
 import { listJournalNodeIds, listJournalSequences, readJournalEntry } from "./journal"
 import { attestedEntries, loadNodeAttestations, verifyAttestationAgainstDb, type NodeAttestation } from "./attestation"
 import { reconcilePendingRedactions } from "./redact"
@@ -58,6 +59,28 @@ export function repairStore(storeDir: string): RepairResult {
   assertNotUnderMaintenance(storeDir);
   const maintenanceLock = acquireMaintenanceLock(storeDir);
   try {
+    // T-138: repair rebuilds the database and swaps the inode. Snapshot
+    // first, INSIDE the lock so no writer can move the store between the
+    // snapshot and the rebuild, and before anything is read or written.
+    //
+    // `createBackup` normally refuses to run under maintenance for exactly
+    // that reason, so this path passes the lock-holder flag: we ARE the
+    // maintenance holder, and this is the one caller allowed to snapshot
+    // while the lock is held.
+    //
+    // Best-effort on purpose. A store that cannot be snapshotted (no space,
+    // unreadable database) is precisely a store that needs repairing, so a
+    // failed snapshot must not block the repair -- it is reported instead.
+    // Reported through the snapshot-notice queue rather than on RepairResult:
+    // `RepairResult` is pinned by exact-shape assertions in the P1 store
+    // integrity suite, and a diagnostic of mine does not get to change a
+    // contract those tests exist to hold. The CLI drains the notices either
+    // way, so the operator still learns whether a rollback point exists.
+    const snapshot = autoSnapshot(storeDir, "pre-repair", { underMaintenanceLock: true });
+    pushSnapshotNotice(snapshot.ok
+      ? `pre-repair snapshot: ${snapshot.backupDir}`
+        + (snapshot.pruned.length > 0 ? ` (pruned ${snapshot.pruned.length} older auto-snapshot(s))` : "")
+      : `pre-repair snapshot SKIPPED (${snapshot.skipped}); repair proceeded`);
     return repairStoreUnderLock(storeDir);
   } finally {
     maintenanceLock.release();

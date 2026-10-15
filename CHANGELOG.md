@@ -67,6 +67,40 @@
 
 ## mapctx CLI — [0.4.0] (Unreleased)
 
+### Features: the store backs itself up (T-138)
+
+* **feature:** `mapctx store backup [--out <dir>]` takes a consistent copy of the
+  store -- database via `VACUUM INTO` (WAL folded in, writers not blocked), event
+  journal, identity and attestations -- with a manifest carrying the manifest and
+  schema versions, event count, per-node journal counts, `redactionCount`, and a
+  sha256 + size per file. Archives default to `~/.mapctx/backups/<projectId>/`.
+  The database is snapshotted before the journal deliberately: writes are
+  journal-first, so entries appended mid-backup replay on restore, while the
+  reverse order would yield an archive that verifies and cannot be restored.
+* **feature:** `mapctx store verify-backup <dir>` re-hashes every listed file and
+  reports files the manifest does not list (a restore would ignore them).
+* **feature:** `mapctx store restore <dir> [--force]` verifies the archive, replaces
+  the store under the maintenance lock, and replays journal entries newer than the
+  snapshot. Refuses a tampered archive, a schema version newer than the binary, a
+  manifest path escaping the archive, and an existing store without `--force` --
+  which moves the current store aside rather than deleting it.
+* **feature:** `mapctx store backups` lists this project's archives, newest first.
+* **feature:** a schema migration and `mapctx store repair` each take an automatic
+  snapshot first, reported on stderr, so a failed upgrade leaves a rollback point.
+  Retention prunes only automatic snapshots; an operator backup is never pruned.
+  Both are best-effort: a store that cannot be snapshotted must still be repairable.
+* **feature:** `mapctx store init --from-git <ref>` recovers from the **committed**
+  TASKS.md/tasks/*.md at that ref. Without it the working copy is read, as before --
+  which the command used to describe as "the last git-committed checkpoint" while
+  reading uncommitted files. Both paths now state the source they used.
+
+### Privacy note
+
+A backup predates any later redaction and still contains the original value, so
+restoring an old archive undoes a `mapctx redact`. `redact --commit` now warns when
+archives exist, and every manifest records how many redactions the store had applied
+when it was taken.
+
 ### Breaking (public contract): an unknown flag is an error
 
 `parseArgs` used to drop any unrecognized `--flag` in silence. That made four

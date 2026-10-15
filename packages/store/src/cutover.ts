@@ -181,6 +181,20 @@ export function importDryRun(options: ImportDryRunOptions): ImportDryRunResult {
   return { plan, wouldCommit: plan.errors === 0 && cutover.blockers.length === 0, cutover };
 }
 
+/**
+ * T-138: where the checkpoint is read FROM.
+ *
+ * `disk` is the historical behaviour and stays the default. It is also the
+ * reason this option exists: the doc comment below has always said "the last
+ * git-committed checkpoint", but the code read the WORKING COPY -- so an
+ * uncommitted or half-edited TASKS.md was silently accepted as the recovery
+ * floor (found while reviewing T-128). `git` reads the committed blobs at a
+ * ref instead, which is what the sentence always claimed.
+ */
+export type CheckpointSource =
+  | { kind: "disk" }
+  | { kind: "git"; ref: string };
+
 export type RecoverStoreOptions = {
   tasksFilePath: string;
   tasksRoot: string;
@@ -188,6 +202,18 @@ export type RecoverStoreOptions = {
   storeDir: string;
   actor: string;
   now?: () => Date;
+  /** Defaults to `disk`, preserving pre-T-138 behaviour. */
+  source?: CheckpointSource;
+};
+
+export type ResolvedCheckpointSource = {
+  kind: "disk" | "git";
+  /** The git ref, when the checkpoint came from git. */
+  ref: string | null;
+  /** The commit the ref resolved to, so the recovery is reproducible. */
+  commit: string | null;
+  /** Operator-facing one-liner naming exactly what was read. */
+  describedAs: string;
 };
 
 export type RecoverStoreResult = {
@@ -196,7 +222,86 @@ export type RecoverStoreResult = {
   nodeId: string;
   incarnationId: string;
   taskCount: number;
+  /** T-138: callers must be able to say which checkpoint they recovered from. */
+  source: ResolvedCheckpointSource;
 };
+
+/**
+ * Materializes TASKS.md and tasks/*.md as COMMITTED at `ref` into a fresh
+ * temp directory, and returns the path to the TASKS.md inside it.
+ *
+ * planImport derives everything else from `dirname(tasksFilePath)`, so
+ * reproducing the two paths under one temp root is all that is needed to
+ * point the existing importer at git content instead of the working copy.
+ */
+function materializeCheckpointFromGit(
+  tasksFilePath: string,
+  ref: string
+): { tasksFilePath: string; tempDir: string; commit: string; fileCount: number } {
+  const startDir = path.dirname(tasksFilePath);
+  let topLevel: string;
+  try {
+    topLevel = git(startDir, ["rev-parse", "--show-toplevel"]).trim();
+  } catch {
+    throw new Error(`Cannot read a git checkpoint: ${startDir} is not inside a git repository.`);
+  }
+  if (!topLevel) throw new Error(`Cannot read a git checkpoint: ${startDir} is not inside a git repository.`);
+  let commit: string;
+  try {
+    commit = git(topLevel, ["rev-parse", "--verify", `${ref}^{commit}`]).trim();
+  } catch {
+    throw new Error(`Cannot read a git checkpoint: "${ref}" is not a commit in ${topLevel}.`);
+  }
+  // Both sides are resolved through realpath before being compared. `git
+  // rev-parse --show-toplevel` always reports the real path, while the caller
+  // may legitimately hold a symlinked one -- on macOS every /tmp and
+  // /var/folders path is exactly that, so a naive compare declared a valid
+  // checkpoint "outside the repository". Resolving both is also what makes
+  // this a real confinement check rather than a string test a symlink could
+  // walk out of.
+  const realTopLevel = fs.realpathSync(topLevel);
+  const realTasksFile = fs.realpathSync(path.resolve(tasksFilePath));
+  const tasksRel = path.relative(realTopLevel, realTasksFile).split(path.sep).join("/");
+  if (tasksRel === "" || tasksRel.startsWith("..") || path.isAbsolute(tasksRel)) {
+    throw new Error(`Cannot read a git checkpoint: ${tasksFilePath} is outside the repository at ${topLevel}.`);
+  }
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mapctx-git-checkpoint-"));
+  try {
+    // TASKS.md itself. A ref that does not carry it is a hard error: the
+    // alternative is importing an empty board over a lost store.
+    let tasksContent: string;
+    try {
+      tasksContent = git(realTopLevel, ["show", `${commit}:${tasksRel}`]);
+    } catch {
+      throw new Error(`Cannot read a git checkpoint: ${tasksRel} does not exist at ${ref} (${commit.slice(0, 12)}).`);
+    }
+    const destTasks = path.join(tempDir, path.basename(tasksRel));
+    fs.writeFileSync(destTasks, tasksContent, "utf8");
+
+    // Every detail file committed beside it, at the same ref. Listed from the
+    // tree rather than parsed out of TASKS.md, so a detail file the board
+    // forgot to reference is still recovered rather than silently dropped.
+    const tasksDirRel = `${path.posix.join(path.posix.dirname(tasksRel) === "." ? "" : path.posix.dirname(tasksRel), "tasks")}`;
+    let detailPaths: string[] = [];
+    try {
+      detailPaths = git(realTopLevel, ["ls-tree", "-r", "--name-only", commit, "--", tasksDirRel])
+        .split("\n").map(line => line.trim()).filter(line => line.endsWith(".md"));
+    } catch {
+      detailPaths = [];
+    }
+    for (const detailRel of detailPaths) {
+      const relativeToTasks = path.posix.relative(path.posix.dirname(tasksRel) === "." ? "" : path.posix.dirname(tasksRel), detailRel);
+      const destination = path.join(tempDir, relativeToTasks);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.writeFileSync(destination, git(realTopLevel, ["show", `${commit}:${detailRel}`]), "utf8");
+    }
+    return { tasksFilePath: destTasks, tempDir, commit, fileCount: detailPaths.length + 1 };
+  } catch (error) {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    throw error;
+  }
+}
 
 /**
  * ADR 0003 "Durability and rollback" corruption tier 3: losing the entire
@@ -210,11 +315,46 @@ export type RecoverStoreResult = {
  */
 export function recoverStoreFromCheckpoint(options: RecoverStoreOptions): RecoverStoreResult {
   const now = options.now ?? (() => new Date());
-  const plan = planImport(options.tasksFilePath);
+  const requested = options.source ?? { kind: "disk" };
+  let readFrom = options.tasksFilePath;
+  let tempDir: string | null = null;
+  let source: ResolvedCheckpointSource;
+  if (requested.kind === "git") {
+    const materialized = materializeCheckpointFromGit(options.tasksFilePath, requested.ref);
+    readFrom = materialized.tasksFilePath;
+    tempDir = materialized.tempDir;
+    source = {
+      kind: "git",
+      ref: requested.ref,
+      commit: materialized.commit,
+      describedAs: `git ${requested.ref} (${materialized.commit.slice(0, 12)}), ${materialized.fileCount} committed file(s)`
+    };
+  } else {
+    source = {
+      kind: "disk",
+      ref: null,
+      commit: null,
+      describedAs: `working copy at ${options.tasksFilePath} (NOT necessarily committed)`
+    };
+  }
+  try {
+    return recoverFromResolvedCheckpoint(options, readFrom, source, now);
+  } finally {
+    if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function recoverFromResolvedCheckpoint(
+  options: RecoverStoreOptions,
+  tasksFilePath: string,
+  source: ResolvedCheckpointSource,
+  now: () => Date
+): RecoverStoreResult {
+  const plan = planImport(tasksFilePath);
   if (plan.errors > 0) {
     const messages = plan.issues.filter(i => i.severity === "error").map(i => `[${i.code}]${i.taskId ? ` ${i.taskId}` : ""}: ${i.message}`);
     throw new Error(
-      `Cannot recover store: the last git-committed checkpoint (${options.tasksFilePath}) fails validation with ${plan.errors} error(s):\n${messages.join("\n")}\nFix the checkout or restore an earlier commit before retrying.`
+      `Cannot recover store: the checkpoint read from ${source.describedAs} fails validation with ${plan.errors} error(s):\n${messages.join("\n")}\nFix the checkout or recover from an earlier commit (--from-git <ref>) before retrying.`
     );
   }
 
@@ -250,7 +390,8 @@ export function recoverStoreFromCheckpoint(options: RecoverStoreOptions): Recove
       storeDir: options.storeDir,
       nodeId: handle.nodeId,
       incarnationId: handle.incarnationId,
-      taskCount: plan.taskCount
+      taskCount: plan.taskCount,
+      source
     };
   } finally {
     handle.close();
@@ -277,7 +418,10 @@ export type ImportCommitResult = {
 };
 
 function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" }).toString();
+  // T-138: `git show <ref>:TASKS.md` streams a whole board through stdout,
+  // and execFileSync's default 1 MB cap would truncate a large one into a
+  // parse error that looks like board corruption.
+  return execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).toString();
 }
 
 function assertPathClean(cwd: string, relativePath: string): void {
