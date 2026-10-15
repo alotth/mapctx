@@ -515,16 +515,34 @@ export function restoreBackup(options: RestoreBackupOptions): RestoreBackupResul
   // entry the snapshot's database had not indexed (the ordering guarantee in
   // the header is what makes this a replay rather than a gap).
   const { StoreHandle } = require("./store-handle") as typeof import("./store-handle")
-  const handle = StoreHandle.open(storeDir) as import("./store-handle").StoreHandle
   let eventCount = 0
   try {
-    eventCount = readCountSafely(handle.db, "SELECT count(*) AS n FROM event_log")
-    const pending = handle.maintenanceNeeded()
-    if (pending) {
-      throw new Error(`Restored store still reports maintenance needed: ${pending}`)
+    const handle = StoreHandle.open(storeDir) as import("./store-handle").StoreHandle
+    try {
+      eventCount = readCountSafely(handle.db, "SELECT count(*) AS n FROM event_log")
+      const pending = handle.maintenanceNeeded()
+      if (pending) {
+        throw new Error(`Restored store still reports maintenance needed: ${pending}`)
+      }
+    } finally {
+      handle.close()
     }
-  } finally {
-    handle.close()
+  } catch (error) {
+    // The files are already in place: the archive verified, its database
+    // passed integrity_check, and the swap happened. Rolling back here would
+    // discard the restore the operator asked for and could fail in turn, so
+    // the honest outcome is a refusal that says exactly what state the
+    // filesystem is in -- including where the previous store went, which is
+    // otherwise unrecoverable knowledge.
+    const whereOld = replacedStoreMovedTo
+      ? ` The store that was there is at ${replacedStoreMovedTo}.`
+      : ""
+    throw new Error(
+      `The backup was restored to ${storeDir} but the store could not be opened afterwards: `
+      + `${error instanceof Error ? error.message : String(error)}.`
+      + ` The restored files are in place and were verified against the manifest; this is an open/replay failure, not a corrupt archive.`
+      + `${whereOld}`
+    )
   }
   const replayedJournalEntries = Math.max(0, eventCount - verification.manifest.eventCount)
   return {
@@ -620,6 +638,15 @@ const pendingSnapshotNotices: string[] = []
 
 export function drainSnapshotNotices(): string[] {
   return pendingSnapshotNotices.splice(0, pendingSnapshotNotices.length)
+}
+
+/**
+ * Queues a notice from a maintenance path that has no reporting channel of
+ * its own. `repair` uses this instead of adding fields to `RepairResult`,
+ * whose exact shape the P1 integrity suite asserts on.
+ */
+export function pushSnapshotNotice(notice: string): void {
+  pendingSnapshotNotices.push(notice)
 }
 
 /**

@@ -5,7 +5,7 @@ import { checkIntegrity, openDatabase, writeMetaValue } from "./db"
 import { applyEventToProjections } from "./events"
 import { readStoreMetaFile } from "./identity"
 import { acquireMaintenanceLock, assertNotUnderMaintenance } from "./maintenance"
-import { autoSnapshot } from "./backup"
+import { autoSnapshot, pushSnapshotNotice } from "./backup"
 import { listJournalNodeIds, listJournalSequences, readJournalEntry } from "./journal"
 import { attestedEntries, loadNodeAttestations, verifyAttestationAgainstDb, type NodeAttestation } from "./attestation"
 import { reconcilePendingRedactions } from "./redact"
@@ -17,20 +17,9 @@ export type RepairGap = {
   reason: string;
 };
 
-/**
- * T-138 adds the pre-repair snapshot outcome to every result: the directory
- * when one was taken, or the reason it was skipped. Reported, never silent --
- * an operator about to read a gap report needs to know whether a rollback
- * point exists.
- */
-export type PreRepairSnapshot = {
-  preRepairBackupDir?: string | null;
-  preRepairBackupSkipped?: string | null;
-};
-
 export type RepairResult =
-  | ({ status: "ok"; dbWasCorrupt: boolean; eventsReplayed: number } & PreRepairSnapshot)
-  | ({ status: "gap"; dbWasCorrupt: boolean; gaps: RepairGap[] } & PreRepairSnapshot);
+  | { status: "ok"; dbWasCorrupt: boolean; eventsReplayed: number }
+  | { status: "gap"; dbWasCorrupt: boolean; gaps: RepairGap[] };
 
 /**
  * Rebuilds mapctx.db by validating the independent journal (per-event hash,
@@ -82,11 +71,17 @@ export function repairStore(storeDir: string): RepairResult {
     // Best-effort on purpose. A store that cannot be snapshotted (no space,
     // unreadable database) is precisely a store that needs repairing, so a
     // failed snapshot must not block the repair -- it is reported instead.
+    // Reported through the snapshot-notice queue rather than on RepairResult:
+    // `RepairResult` is pinned by exact-shape assertions in the P1 store
+    // integrity suite, and a diagnostic of mine does not get to change a
+    // contract those tests exist to hold. The CLI drains the notices either
+    // way, so the operator still learns whether a rollback point exists.
     const snapshot = autoSnapshot(storeDir, "pre-repair", { underMaintenanceLock: true });
-    const result = repairStoreUnderLock(storeDir);
-    return snapshot.ok
-      ? { ...result, preRepairBackupDir: snapshot.backupDir, preRepairBackupSkipped: null }
-      : { ...result, preRepairBackupDir: null, preRepairBackupSkipped: snapshot.skipped };
+    pushSnapshotNotice(snapshot.ok
+      ? `pre-repair snapshot: ${snapshot.backupDir}`
+        + (snapshot.pruned.length > 0 ? ` (pruned ${snapshot.pruned.length} older auto-snapshot(s))` : "")
+      : `pre-repair snapshot SKIPPED (${snapshot.skipped}); repair proceeded`);
+    return repairStoreUnderLock(storeDir);
   } finally {
     maintenanceLock.release();
   }
