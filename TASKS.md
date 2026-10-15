@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 17/25
+  - subIssueProgress: 18/27
   - priority: high
   - workload: null
   - tags: []
@@ -2934,7 +2934,7 @@
 ### [T-138] Store: backup e restore próprios, snapshot automático antes de migração
 
   - id: T-138
-  - status: doing
+  - status: review
   - type: feature
   - parent: E-018
   - subIssueProgress: null
@@ -2947,7 +2947,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-138.md
 
 ### [T-139] TaskProvider em código + LocalStoreProvider (store como provider local)
@@ -3029,7 +3029,7 @@
 ### [T-143] C4: mapctx run event renova o claim; heartbeats fora da medição de tempo ativo
 
   - id: T-143
-  - status: doing
+  - status: review
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3333,7 +3333,7 @@
 ### [T-159] Planner: overbroad falso por caixa/.. e rótulo de exibição usado como path (T-133 MÉDIA-1/2)
 
   - id: T-159
-  - status: backlog
+  - status: done
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3344,9 +3344,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-159.md
 
 ### [T-160] Acceptance retroativo das 13 entregues sem critérios (autor + revisor independente)
@@ -3371,7 +3371,7 @@
 ### [T-161] Store: fechar as outras portas de divergência entre arestas e lista de detail
 
   - id: T-161
-  - status: doing
+  - status: review
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3390,7 +3390,7 @@
 ### [T-162] Teste intermitente: claim-redaction 'reading open' de undefined
 
   - id: T-162
-  - status: backlog
+  - status: review
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3403,8 +3403,46 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-162.md
+
+### [T-163] Rota de collision avisa quando receipts discordam da grafia (T-159 risco 4, parte A)
+
+  - id: T-163
+  - status: backlog
+  - type: task
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: P2
+  - workload: Normal
+  - tags: []
+  - domains: [PLANNER]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: null
+  - detail: ./tasks/T-163.md
+
+### [T-164] postpack remove todos os pacotes que o prepack copiou
+
+  - id: T-164
+  - status: doing
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: P2
+  - workload: Normal
+  - tags: []
+  - domains: [CONFIG, TEST]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-15
+  - detail: ./tasks/T-164.md
 
 ## Notes
 
