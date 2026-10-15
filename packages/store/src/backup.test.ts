@@ -9,7 +9,7 @@ import { resolveProjectStoreDir } from "./config"
 import { openDatabase, openDatabaseReadOnly, checkIntegrity } from "./db"
 import { StoreHandle } from "./store-handle"
 import { getTask, listTasks } from "./projections"
-import { MAINTENANCE_LOCK_FILENAME } from "./maintenance"
+import { MAINTENANCE_LOCK_FILENAME, MAINTENANCE_LOCK_STALE_MS } from "./maintenance"
 import { listJournalSequences } from "./journal"
 import { reviseAcceptance, approveAcceptanceCriterion } from "./acceptance"
 import { listRedactionCandidates } from "./redact"
@@ -460,7 +460,10 @@ test("MUTATION GUARD: store repair with a pending migration leaves a snapshot of
       db.close()
     }
   } finally {
-    ;(schema.MIGRATIONS as Array<{ version: number; sql: string }>).splice(schema.MIGRATIONS.indexOf(probe), 1)
+    // splice(-1, 1) would remove the newest REAL migration if indexOf ever
+    // returned -1, poisoning every later test in this process -- guard it.
+    const probeIndex = schema.MIGRATIONS.indexOf(probe)
+    if (probeIndex >= 0) (schema.MIGRATIONS as Array<{ version: number; sql: string }>).splice(probeIndex, 1)
     fixture.restoreEnv()
     cleanupDir(fixture.repoDir)
   }
@@ -500,7 +503,10 @@ test("an ordinary writable open with a pending migration still writes its own pr
       db.close()
     }
   } finally {
-    ;(schema.MIGRATIONS as Array<{ version: number; sql: string }>).splice(schema.MIGRATIONS.indexOf(probe), 1)
+    // splice(-1, 1) would remove the newest REAL migration if indexOf ever
+    // returned -1, poisoning every later test in this process -- guard it.
+    const probeIndex = schema.MIGRATIONS.indexOf(probe)
+    if (probeIndex >= 0) (schema.MIGRATIONS as Array<{ version: number; sql: string }>).splice(probeIndex, 1)
     fixture.restoreEnv()
     cleanupDir(fixture.repoDir)
   }
@@ -562,7 +568,10 @@ test("pruneAutoBackups spares the only auto-snapshot of the previous schema, how
     assert.equal(remainingByVersion.get(previousVersion), 1, JSON.stringify(remaining.map(b => b.manifest?.storeSchemaVersion)))
     assert.equal(remainingByVersion.get(previousVersion + 1), 3, JSON.stringify(remaining.map(b => b.manifest?.storeSchemaVersion)))
   } finally {
-    ;(schema.MIGRATIONS as Array<{ version: number; sql: string }>).splice(schema.MIGRATIONS.indexOf(probe), 1)
+    // splice(-1, 1) would remove the newest REAL migration if indexOf ever
+    // returned -1, poisoning every later test in this process -- guard it.
+    const probeIndex = schema.MIGRATIONS.indexOf(probe)
+    if (probeIndex >= 0) (schema.MIGRATIONS as Array<{ version: number; sql: string }>).splice(probeIndex, 1)
     fixture.restoreEnv()
     cleanupDir(fixture.repoDir)
   }
@@ -630,7 +639,165 @@ test("MUTATION GUARD: the lock-holder exemption is granted only to the real hold
       await new Promise(resolve => child!.once("exit", resolve))
     }
     fs.rmSync(lockPath, { force: true })
-    if (probe) (schema.MIGRATIONS as Array<{ version: number; sql: string }>).splice(schema.MIGRATIONS.indexOf(probe), 1)
+    if (probe) {
+      const probeIndex = schema.MIGRATIONS.indexOf(probe)
+      if (probeIndex >= 0) (schema.MIGRATIONS as Array<{ version: number; sql: string }>).splice(probeIndex, 1)
+    }
+    fixture.restoreEnv()
+    cleanupDir(fixture.repoDir)
+  }
+})
+
+// T-167 review attempt 1, MÉDIA-1: `archiveCoversPreMigrationState` is the
+// coverage proof at the heart of the whole fix -- the archive only counts as
+// the rollback point when BOTH halves hold. The two tests below publish a
+// context with a manifest that diverges on exactly one half, under a FRESH
+// lock of this process's own pid (so the exemption itself is granted; it is
+// the coverage check inside it that each test puts under test).
+
+test("MUTATION GUARD: a published archive whose eventCount diverges from the live store does not count as the pre-migration snapshot", () => {
+  const fixture = materialize()
+  const schema = require("./schema") as typeof import("./schema")
+  const lockPath = path.join(fixture.storeDir, MAINTENANCE_LOCK_FILENAME)
+  let probe: { version: number; sql: string } | null = null
+  try {
+    // This process's own archive, taken before any lock exists -- it
+    // genuinely covers the live state right now.
+    const archive = createBackup({ storeDir: fixture.storeDir, projectId: fixture.projectId, reason: "pre-repair" })
+    const previousVersion = currentSchemaVersion()
+    probe = { version: previousVersion + 1, sql: "CREATE TABLE IF NOT EXISTS t167_probe (id TEXT PRIMARY KEY)" }
+    ;(schema.MIGRATIONS as Array<{ version: number; sql: string }>).push(probe)
+
+    // A fresh lock of OUR OWN pid: still exclusive, so the exemption itself
+    // is granted and the only thing left standing between "already covered"
+    // and a real snapshot is the eventCount half of the coverage proof.
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: process.pid, takenAt: new Date().toISOString() }), "utf8")
+    const taintedManifest = { ...archive.manifest, eventCount: archive.manifest.eventCount + 1 }
+
+    drainSnapshotNotices()
+    const { withMaintenanceSnapshot } = require("./backup") as typeof import("./backup")
+    const db = withMaintenanceSnapshot(
+      { storeDir: fixture.storeDir, archive: { backupDir: archive.backupDir, manifest: taintedManifest } },
+      () => openDatabase(path.join(fixture.storeDir, "mapctx.db"))
+    )
+    db.close()
+
+    const notices = drainSnapshotNotices()
+    // MUTATION GUARD: `(archive.manifest.eventCount === readCountSafely(...) || true)`
+    // in archiveCoversPreMigrationState would let this pass as "already
+    // covered" despite the mismatch -- the archive would then be cited as
+    // the rollback point for a state it does not actually hold.
+    assert.ok(!notices.some(n => /already covered by/.test(n)), JSON.stringify(notices))
+    assert.ok(!notices.some(n => /SKIPPED/.test(n)), JSON.stringify(notices))
+    assert.ok(notices.some(n => /pre-migration snapshot of schema/.test(n)), JSON.stringify(notices))
+
+    const backups = listBackups(fixture.projectId)
+    const preMigration = backups.find(b => b.manifest?.reason === "pre-migration")
+    assert.ok(preMigration, JSON.stringify(backups.map(b => b.manifest?.reason)))
+    assert.equal(preMigration!.manifest?.storeSchemaVersion, previousVersion)
+  } finally {
+    fs.rmSync(lockPath, { force: true })
+    if (probe) {
+      const probeIndex = schema.MIGRATIONS.indexOf(probe)
+      if (probeIndex >= 0) (schema.MIGRATIONS as Array<{ version: number; sql: string }>).splice(probeIndex, 1)
+    }
+    fixture.restoreEnv()
+    cleanupDir(fixture.repoDir)
+  }
+})
+
+test("MUTATION GUARD: a published archive whose storeSchemaVersion diverges from the applied schema does not count as the pre-migration snapshot", () => {
+  const fixture = materialize()
+  const schema = require("./schema") as typeof import("./schema")
+  const lockPath = path.join(fixture.storeDir, MAINTENANCE_LOCK_FILENAME)
+  let probe: { version: number; sql: string } | null = null
+  try {
+    const archive = createBackup({ storeDir: fixture.storeDir, projectId: fixture.projectId, reason: "pre-repair" })
+    const previousVersion = currentSchemaVersion()
+    probe = { version: previousVersion + 1, sql: "CREATE TABLE IF NOT EXISTS t167_probe (id TEXT PRIMARY KEY)" }
+    ;(schema.MIGRATIONS as Array<{ version: number; sql: string }>).push(probe)
+
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: process.pid, takenAt: new Date().toISOString() }), "utf8")
+    const taintedManifest = { ...archive.manifest, storeSchemaVersion: previousVersion - 1 }
+
+    drainSnapshotNotices()
+    const { withMaintenanceSnapshot } = require("./backup") as typeof import("./backup")
+    const db = withMaintenanceSnapshot(
+      { storeDir: fixture.storeDir, archive: { backupDir: archive.backupDir, manifest: taintedManifest } },
+      () => openDatabase(path.join(fixture.storeDir, "mapctx.db"))
+    )
+    db.close()
+
+    const notices = drainSnapshotNotices()
+    // MUTATION GUARD: `(archive.manifest.storeSchemaVersion === appliedVersion || true)`
+    // in archiveCoversPreMigrationState would let this pass as "already
+    // covered" despite archiving a DIFFERENT schema than the one being
+    // migrated away from.
+    assert.ok(!notices.some(n => /already covered by/.test(n)), JSON.stringify(notices))
+    assert.ok(!notices.some(n => /SKIPPED/.test(n)), JSON.stringify(notices))
+    assert.ok(notices.some(n => /pre-migration snapshot of schema/.test(n)), JSON.stringify(notices))
+
+    const backups = listBackups(fixture.projectId)
+    const preMigration = backups.find(b => b.manifest?.reason === "pre-migration")
+    assert.ok(preMigration, JSON.stringify(backups.map(b => b.manifest?.reason)))
+    assert.equal(preMigration!.manifest?.storeSchemaVersion, previousVersion)
+  } finally {
+    fs.rmSync(lockPath, { force: true })
+    if (probe) {
+      const probeIndex = schema.MIGRATIONS.indexOf(probe)
+      if (probeIndex >= 0) (schema.MIGRATIONS as Array<{ version: number; sql: string }>).splice(probeIndex, 1)
+    }
+    fixture.restoreEnv()
+    cleanupDir(fixture.repoDir)
+  }
+})
+
+// T-167 review attempt 1, BAIXA-1: the reuse branch declines to snapshot
+// BECAUSE the lock excludes everyone else. A lock carrying our own pid but
+// older than MAINTENANCE_LOCK_STALE_MS is stale by the module's own policy --
+// any other process may steal it -- so it has stopped excluding anyone, and
+// must stop buying the reuse branch's silence.
+test("MUTATION GUARD: a lock of ours that went stale by age stops buying the reuse branch's silence -- the hook takes its own snapshot", () => {
+  const fixture = materialize()
+  const schema = require("./schema") as typeof import("./schema")
+  const lockPath = path.join(fixture.storeDir, MAINTENANCE_LOCK_FILENAME)
+  let probe: { version: number; sql: string } | null = null
+  try {
+    const archive = createBackup({ storeDir: fixture.storeDir, projectId: fixture.projectId, reason: "pre-repair" })
+    const previousVersion = currentSchemaVersion()
+    probe = { version: previousVersion + 1, sql: "CREATE TABLE IF NOT EXISTS t167_probe (id TEXT PRIMARY KEY)" }
+    ;(schema.MIGRATIONS as Array<{ version: number; sql: string }>).push(probe)
+
+    // A lock of OUR OWN pid, but old enough to be stale by policy.
+    const staleTakenAt = new Date(Date.now() - MAINTENANCE_LOCK_STALE_MS - 60_000).toISOString()
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: process.pid, takenAt: staleTakenAt }), "utf8")
+
+    drainSnapshotNotices()
+    const { withMaintenanceSnapshot } = require("./backup") as typeof import("./backup")
+    const db = withMaintenanceSnapshot(
+      { storeDir: fixture.storeDir, archive: { backupDir: archive.backupDir, manifest: archive.manifest } },
+      () => openDatabase(path.join(fixture.storeDir, "mapctx.db"))
+    )
+    db.close()
+
+    const notices = drainSnapshotNotices()
+    // MUTATION GUARD: removing `|| lock.stale` from `maintenanceSnapshotFor`'s
+    // refusal condition would grant the exemption to this stale lock and cite
+    // the archive as "already covered" -- exactly what its own doc comment
+    // promises never to happen ("released, or stolen as stale").
+    assert.ok(!notices.some(n => /already covered by/.test(n)), JSON.stringify(notices))
+    assert.ok(!notices.some(n => /SKIPPED/.test(n)), JSON.stringify(notices))
+
+    const backups = listBackups(fixture.projectId)
+    const preMigration = backups.find(b => b.manifest?.reason === "pre-migration")
+    assert.ok(preMigration, JSON.stringify(backups.map(b => b.manifest?.reason)))
+    assert.equal(preMigration!.manifest?.storeSchemaVersion, previousVersion)
+  } finally {
+    fs.rmSync(lockPath, { force: true })
+    if (probe) {
+      const probeIndex = schema.MIGRATIONS.indexOf(probe)
+      if (probeIndex >= 0) (schema.MIGRATIONS as Array<{ version: number; sql: string }>).splice(probeIndex, 1)
+    }
     fixture.restoreEnv()
     cleanupDir(fixture.repoDir)
   }
