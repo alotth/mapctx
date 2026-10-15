@@ -1953,7 +1953,11 @@ function requireStoreAuthority(cwd: string): { toml: { config: MapctxTomlConfig;
   return { toml, handle, tasksRoot: toml.dir };
 }
 
-const LIST_SET_FIELDS = new Set(['tags', 'domains', 'assignees', 'externalLinks', 'filesAffected', 'testsRequired', 'prerequisites', 'blocking']);
+// `prerequisites`/`blocking` are not settable lists: the store refuses them by name
+// (`edge-list-not-patchable`, T-161), so they must reach it unparsed -- a list
+// parse here would answer a malformed value with syntax advice for a key that
+// can never be written.
+const LIST_SET_FIELDS = new Set(['tags', 'domains', 'assignees', 'externalLinks', 'filesAffected', 'testsRequired']);
 
 const LIST_SYNTAX_HELP = 'use `a,b,c` (bare, comma-separated) or a JSON array like `["a","b"]`';
 
