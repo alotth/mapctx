@@ -69,11 +69,14 @@
  * hides an uncovered collision behind a spelling. The two conditions differ
  * only there, which is exactly why that row exists.
  *
- * NOT IN THE MATRIX, because no guard here covers it: Unicode normalization.
- * NFC and NFD spellings of one filename are disjoint to the audit comparison
- * and to the scheduler's alike, so G4 does not fire and the overbroad route
- * emits. The limit is documented at `schedulerTreatsAsSameFile`, where the
- * reason it is not simply fixed also lives.
+ * Unicode normalization used to be the entry NOT in the matrix, because no
+ * guard here covered it: NFC and NFD spellings of one filename were disjoint to
+ * the audit comparison and to the scheduler's alike, so G4 did not fire and the
+ * overbroad route emitted. T-166 folded NFC into `normalizeSchedulerPath`, so
+ * G4 now covers it and it is in the matrix like the rest -- a mutation removing
+ * that `.normalize("NFC")` turns the row red. The audit comparison still does
+ * not normalize, deliberately, which is why this is G4's job and not its own
+ * guard: see `schedulerTreatsAsSameFile`.
  *
  * WHAT THIS STILL IS NOT. The store's recordClaimViolations is the version
  * that JOURNALS violations, with idempotent re-detection and a declared
@@ -279,14 +282,15 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
     // same reason: do not assert an absence that cannot be established.
     //
     // `actualIntersection` compares what the receipts literally recorded, where
-    // case is meaningful and `..` does not occur -- correct for an audit trail,
-    // which must not rewrite evidence. The SCHEDULER compares declared claims
-    // with case folded and `..` resolved, because it has to err toward
-    // serializing on macOS and Windows. So `planExecution` serializes
-    // `SRC/a.ts` against `src/a.ts`, the receipts come back spelling the same
-    // file both ways, the audit comparison finds no intersection, and this
-    // route would record a permanent "these tasks did not conflict" about two
-    // tasks that wrote the same bytes.
+    // case is meaningful, `..` does not occur and the normal form a runner
+    // reported is evidence -- correct for an audit trail, which must not
+    // rewrite evidence. The SCHEDULER compares declared claims with case
+    // folded, `..` resolved and Unicode folded to NFC, because it has to err
+    // toward serializing on macOS and Windows. So `planExecution` serializes
+    // `SRC/a.ts` against `src/a.ts`, and `café.ts` NFD against `café.ts` NFC;
+    // the receipts come back spelling the same file both ways, the audit
+    // comparison finds no intersection, and this route would record a permanent
+    // "these tasks did not conflict" about two tasks that wrote the same bytes.
     //
     // The pair is skipped and the incompleteness reported, rather than the
     // paths being folded: folding them here would make the recorded violation
@@ -295,9 +299,9 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
     // DELIBERATELY ASYMMETRIC, and narrower than it first looks. The collision
     // route above uses `actualIntersection` POSITIVELY, so a spelling
     // disagreement makes it MISS a collision rather than fabricate a
-    // non-collision. Only CASE and `..` escape there -- a backslash spelling is
-    // already caught, because the protocol's `intersectPaths` folds separators
-    // (T-159 review, risk 4).
+    // non-collision. CASE, `..` and NORMAL FORM escape there -- a backslash
+    // spelling is already caught, because the protocol's `intersectPaths` folds
+    // separators (T-159 review, risk 4).
     //
     // Still no violation row on that side: a missed finding is recoverable by
     // looking again, while a recorded "they did not conflict" is immutable, and
@@ -354,7 +358,7 @@ function warnOnSpellingDisagreement(subject: string, samePairs: readonly string[
     `claim-violation detection over ${subject} is INCOMPLETE: ` +
     `${samePairs.length} changed-file pair(s) are different spellings of one file under the scheduler's comparison ` +
     `(${samePairs.join(", ")}), so ${consequence}. ` +
-    `The audit comparison keeps receipts verbatim by design; the scheduler folds case and resolves "..".`
+    `The audit comparison keeps receipts verbatim by design; the scheduler folds case, resolves ".." and folds Unicode to NFC.`
   );
 }
 

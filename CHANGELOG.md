@@ -171,6 +171,46 @@ relied on the old output over redacted receipts was reading fabricated audit
 facts; to get the blind spot as data rather than a warning, use
 `@mapctx/store`'s `detectClaimViolationsWithCoverage`.
 
+### Behaviour change (scheduler): declared paths are compared in Unicode NFC (T-166)
+
+`normalizeSchedulerPath` — the one comparison `@mapctx/planner`'s scheduler and
+its `schedulerTreatsAsSameFile` guard both read — now folds the path to Unicode
+**NFC** before resolving `..` and folding case. macOS reports filenames in NFD
+and Linux in NFC, so `café.ts` written on one host and `café.ts` written on the
+other were two different files to `mapctx plan`.
+
+Two consequences, and the first is the reason the second was accepted:
+
+* **`mapctx plan` serializes more, never less.** Two tasks whose declared paths
+  differ only in normal form now collide, so they land in different waves
+  instead of running in parallel over one file. Nothing that used to be
+  serialized becomes parallel — the change can only merge two path identities,
+  not split one.
+* **The serialized-pair route stops recording a false `overbroad`.** Two
+  receipts spelling one file NFC and NFD no longer read as proof that
+  serializing the pair was unnecessary; guard G4 fires and the pair is skipped
+  with the usual INCOMPLETE warning. Symmetrically, the collision route now
+  warns that it may have MISSED a collision where it was previously silent. A
+  legitimate `overbroad` between genuinely disjoint files is unaffected, and
+  genuinely different filenames (`café.ts` vs `cafè.ts`) stay disjoint.
+
+This was carried as a documented limit at `schedulerTreatsAsSameFile` (T-159
+review F1) rather than fixed, because the fix widens the scheduler for every
+plan and splitting it into a guard-only version would break the shared
+definition that keeps the two from disagreeing. Measured on the reference board
+before taking it: **no change at all** — 7 waves, 21 serialized pairs, 16
+advisories, 169 claims, `plan --json` byte-identical — because none of the 243
+distinct declared paths there contains a character NFC can touch.
+
+The audit comparison in `@mapctx/protocol` deliberately still does **not**
+normalize: what normal form a receipt reported is evidence, and this change does
+not rewrite receipts or violation rows already recorded.
+
+Migration: a caller that relied on two normal forms of one filename being
+schedulable in parallel will now see them serialized. The warning text for both
+INCOMPLETE routes gained "and folds Unicode to NFC"; callers matching on that
+sentence verbatim should match on `INCOMPLETE` instead.
+
 ### Public contract: `task acceptance approve --json` output shape
 
 `approve` now routes every selection through the batch path, so its result

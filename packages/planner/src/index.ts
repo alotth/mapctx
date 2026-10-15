@@ -190,7 +190,10 @@ export function deriveResourceClaims(tasks: readonly PlannerTask[]): ResourceCla
  * the same question the scheduler asks — "would these two be the same file?" —
  * and a second copy of this transformation is exactly the twin T-133 removed.
  * The rationale for why it differs from @mapctx/protocol's `normalizePath`
- * lives at the moved function; nothing about the comparison changed here.
+ * lives at the moved function; the move itself changed nothing. T-166 then
+ * added Unicode NFC folding there, which does widen this comparison — two
+ * declared paths differing only in normal form now collide — in one place, so
+ * the scheduler and the guard in `violations.ts` cannot disagree about it.
  */
 const normalizePath = normalizeSchedulerPath;
 
