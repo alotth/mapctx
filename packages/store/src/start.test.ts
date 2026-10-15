@@ -3,7 +3,7 @@ import test from "node:test"
 import { startTask } from "./start"
 import { claimTask, releaseClaim } from "./claims"
 import { recordRunReceipt } from "./dispatch"
-import { getActiveClaimForTask, getTask, listDispatchAttempts } from "./projections"
+import { getActiveExclusiveClaimForTask, getTask, listDispatchAttempts } from "./projections"
 import { StoreHandle } from "./store-handle"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
 
@@ -28,7 +28,7 @@ test("start persists claim, planning hops and dispatch together; competing start
     assert.equal(getTask(handle.db, "T-001")?.executionState, "running");
     assert.equal(result.dispatch.workloadAtDispatch, "Normal");
     assert.equal(result.dispatch.attempt, 1);
-    assert.equal(getActiveClaimForTask(handle.db, "T-001")?.claimId, result.claim.claimId);
+    assert.equal(getActiveExclusiveClaimForTask(handle.db, "T-001")?.claimId, result.claim.claimId);
     const before = handle.listEvents().length;
     const other = StoreHandle.open(dir);
     assert.equal(startTask(other, { taskId: "T-001", actor: "other" }).ok, false);
@@ -55,7 +55,7 @@ test("dispatch failure rolls back claim, expiry and planning events, including d
     assert.equal(listDispatchAttempts(handle.db).length, 0);
     handle.close(); handle = StoreHandle.open(dir);
     assert.deepEqual(handle.listEvents(), before);
-    assert.equal(getActiveClaimForTask(handle.db, "T-001")?.claimId, expired.ok ? expired.claim.claimId : undefined);
+    assert.equal(getActiveExclusiveClaimForTask(handle.db, "T-001")?.claimId, expired.ok ? expired.claim.claimId : undefined);
     handle.close();
   } finally { cleanupDir(dir); }
 });

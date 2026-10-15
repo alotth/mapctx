@@ -67,6 +67,65 @@
 
 ## mapctx CLI — [0.4.0] (Unreleased)
 
+### Features: review becomes a lane the store can see (T-144)
+
+* **feature:** a dispatch declares which lane it runs in — `kind` is
+  `implement` or `review`, and absent means `implement`, which is what all 235
+  recorded attempts were. A review of a task under implementation is a second,
+  concurrent run with its own `dispatchId`, its own attempt counter and its own
+  receipt, so implement and review attempts can never invalidate each other
+  (`evaluateRunReceipt` is scoped per dispatch). A dispatch id names one lane
+  for its whole life: an attempt whose `kind` contradicts the attempts already
+  recorded under that id is refused by name.
+* **feature:** a claim declares whether it excludes others (`exclusivity`:
+  `exclusive` or `shared`) and which lane it holds (`role`: `implement` or
+  `review`). An implement claim is the exclusive claim every claim has always
+  been; a review claim is shared, is never refused because the task is being
+  implemented, and never blocks the implementation it reviews. Two reviewers on
+  one task is legitimate and admitted.
+* **feature:** a review lease is longer than the implement lease the same plan
+  derives (operator decision D11, 2026-10-15), by `[coordination]
+  reviewLeaseFactor` — default 2, validated like `leaseFactor` and refused by
+  name if non-positive. The factor scales the clamp's ceiling as well as the
+  multiplier, so the proportion an operator configures is preserved
+  (`maxLease = "2h"` → review ≤ 4 h) and a review lease still cannot outlive
+  the 24 h absolute ceiling. `--lease` is unaffected: it still wins over config
+  and is still refused above 24 h.
+* **feature:** every path that reasoned from "this task's active claim" now
+  names a lane. Claim admission, `dispatch create`'s claim gate, `task renew
+  --dispatch` and the run-event renewal all resolve within the lane they are
+  asking about, and the single-row getter that could answer with the wrong lane
+  is gone. A heartbeat on a review dispatch renews the review claim or nothing
+  — never the implement lease beside it. Where two live claims match one lane,
+  the lookup refuses (`ambiguous-claim`) and asks for `task renew --claim <id>`
+  rather than guessing; an expired claim never competes with a live one.
+* **feature:** releasing or expiring a review claim leaves the task's
+  `executionState` alone, as does opening a review dispatch or claim. That
+  scalar describes the implement run, and a review is a different run: before
+  this, a reviewer's claim expiring would have reset a still-running
+  implementation to `unclaimed`.
+* **fix:** a claim refusal now names the lane that refused it
+  (`exclusivity`/`role` on `activeClaim`, 8 allowlisted fields becoming 10).
+  Neither is a credential, and "an exclusive implement claim holds this task"
+  is what a turned-away caller needs; `leaseToken` and `renewToken` remain
+  absent from every refusal.
+* **migration 13** (additive, and the first migration that changes an existing
+  constraint): two `NOT NULL` columns with `CHECK` enums on
+  `resource_claim_projection`, one on `dispatch_projection`, and
+  `idx_resource_claim_active_task` dropped and recreated **under the same name**
+  with the `exclusivity = 'exclusive'` predicate. `NOT NULL DEFAULT` fills every
+  existing row in the same statement, so no row is ever NULL — a nullable
+  column would have fallen outside the new predicate and let a second
+  exclusive claim insert beside a legacy one. Downgrade-safe: a binary that
+  knows only schema ≤ 12 reads and writes the migrated store, and its claims
+  land on the column defaults, which is the only lane it can mean.
+* **no new CLI surface.** `task start --kind review` and `dispatch create
+  --kind review` deliberately ship with T-145 (C6) instead, per operator
+  decision D6: exposing the lane before review-receipt admission lands would
+  let a completed review receipt carry the task's planning state to `review`.
+  Until then the lane exists in the store API and in the schema, and nothing a
+  user can type reaches it.
+
 ### Features: the store backs itself up (T-138)
 
 * **feature:** `mapctx store backup [--out <dir>]` takes a consistent copy of the

@@ -21,6 +21,14 @@
           "minLength": 1,
           "type": "string"
         },
+        "kind": {
+          "default": "implement",
+          "enum": [
+            "implement",
+            "review"
+          ],
+          "type": "string"
+        },
         "status": {
           "enum": [
             "claimed",

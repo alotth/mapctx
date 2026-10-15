@@ -3,8 +3,11 @@ import {
   assertTransition,
   type Account,
   type Budget,
+  type ClaimExclusivity,
+  type ClaimRole,
   type ClaimViolation,
   type CostEvent,
+  type DispatchKind,
   type EstimateSnapshot,
   type PlanPeriod,
   type RunEvent,
@@ -363,8 +366,8 @@ export function listExternalRefsForOwner(db: DatabaseSync, ownerKind: string, ow
 
 export function insertClaim(db: DatabaseSync, claim: ResourceClaimRecord): void {
   db.prepare(`
-    INSERT INTO resource_claim_projection (claim_id, task_id, lease_token, renew_token, state, claimed_at, expires_at, holder_json, event_node, event_sequence)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO resource_claim_projection (claim_id, task_id, lease_token, renew_token, state, exclusivity, role, claimed_at, expires_at, holder_json, event_node, event_sequence)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     claim.claimId,
     claim.taskId,
@@ -373,6 +376,13 @@ export function insertClaim(db: DatabaseSync, claim: ResourceClaimRecord): void 
     // before the capability existed, replayed as it happened.
     claim.renewToken,
     claim.state,
+    // T-144: written explicitly rather than left to the column default, so a
+    // replayed legacy event and a migrated row reach the same value through
+    // the same decision (the applier normalizes an absent payload field to
+    // `exclusive`/`implement`) instead of one going through DDL and the other
+    // through code.
+    claim.exclusivity,
+    claim.role,
     claim.claimedAt,
     claim.expiresAt,
     JSON.stringify(claim.holder ?? {}),
@@ -390,21 +400,46 @@ export function updateClaimState(db: DatabaseSync, claimId: string, state: Resou
 }
 
 /**
- * The claim row a task holds, whatever its lease says. This is the ADMISSION
- * getter: `appendTaskClaim` and `dispatch create` must see an expired row to
- * journal `task.claim-expired` for it before inserting the replacement, which
- * is what makes reclaim work in one call with no sweeper
- * (`claims.ts:111-124`). Filtering it by expiry would make the insert collide
- * with the still-`active` row's partial unique index instead.
+ * The EXCLUSIVE claim row a task holds, whatever its lease says.
+ *
+ * This is the ADMISSION getter: `appendTaskClaim` and `dispatch create` must
+ * see an expired row to journal `task.claim-expired` for it before inserting
+ * the replacement, which is what makes reclaim work in one call with no
+ * sweeper. Filtering it by expiry would make the insert collide with the
+ * still-`active` row's partial unique index instead.
  *
  * `moveTask`'s closing branch uses it the same way, and for the same reason:
  * after `getLiveActiveClaim` reports no live claim, the stale row still has to
  * be *seen* to be expired. Readers that only want to know whether a lease is
- * held want the opposite -- see `getLiveActiveClaim`. (C5 retires this one
- * when shared review claims make a single-row getter return the wrong lane.)
+ * held want the opposite -- see `getLiveActiveClaim`.
+ *
+ * T-144 (C5): this REPLACES `getActiveClaimForTask`, which selected
+ * `task_id = ? AND state = 'active'` with `.get()` and no `ORDER BY`. That was
+ * correct only while a task could hold at most one active claim, and shared
+ * review claims end that premise -- at which point the getter became actively
+ * dangerous rather than merely imprecise. Measured against the migrated
+ * schema: the new partial index no longer serves the unqualified query (it now
+ * requires `exclusivity = 'exclusive'`), so the plan falls to
+ * `idx_resource_claim_state_expiry(state, expires_at)` and `.get()` returns
+ * the soonest-expiring active row. Which lane that is depends on the leases
+ * involved, and "depends on" is the whole defect: the caller asked about one
+ * specific lane and got whichever row the query planner reached first.
+ * Three guarantees broke at once: an implement claim request would be refused
+ * `active-claim-held` by a reviewer's claim (which §3 forbids outright);
+ * an implement reclaim would journal `task.claim-expired` against the
+ * REVIEWER's claim, silently killing the review lane; and `dispatch create`
+ * would validate against the wrong lane.
+ *
+ * `.get()` is safe here, and by construction rather than by luck: this
+ * function's WHERE clause is character-for-character the predicate of
+ * `idx_resource_claim_active_task`, the UNIQUE index that is the definition of
+ * "one holder per task". At most one row can match, so there is nothing for an
+ * `ORDER BY` to disambiguate.
  */
-export function getActiveClaimForTask(db: DatabaseSync, taskId: string): ResourceClaimRecord | undefined {
-  const row = db.prepare("SELECT * FROM resource_claim_projection WHERE task_id = ? AND state = 'active'").get(taskId) as Record<string, unknown> | undefined;
+export function getActiveExclusiveClaimForTask(db: DatabaseSync, taskId: string): ResourceClaimRecord | undefined {
+  const row = db.prepare(
+    "SELECT * FROM resource_claim_projection WHERE task_id = ? AND state = 'active' AND exclusivity = 'exclusive'"
+  ).get(taskId) as Record<string, unknown> | undefined;
   if (!row) return undefined;
   return rowToClaim(row);
 }
@@ -437,33 +472,56 @@ export function getActiveClaimForTask(db: DatabaseSync, taskId: string): Resourc
  * code has already moved past expiry. `moveTask` passes the single instant it
  * reads for the whole close; the display readers (C8) and the sweeper (C9)
  * have to do the same.
+ *
+ * T-144 (C5): reads the EXCLUSIVE lane, following its getter. That keeps both
+ * of its callers honest about what they are asking: `moveTask`'s close reasons
+ * about the lane whose `executionState` the task row carries, and a display
+ * reader asking "is this task held?" means held against implementation. A
+ * shared review claim neither holds the task nor blocks it (§3), so it is not
+ * what either caller is looking for; readers that want every lane want
+ * `listActiveClaimsForTask`.
  */
 export function getLiveActiveClaim(
   db: DatabaseSync,
   taskId: string,
   now: () => Date = () => new Date()
 ): ResourceClaimRecord | undefined {
-  const claim = getActiveClaimForTask(db, taskId);
+  const claim = getActiveExclusiveClaimForTask(db, taskId);
   if (!claim) return undefined;
   return new Date(claim.expiresAt).getTime() <= now().getTime() ? undefined : claim;
 }
 
 /**
  * Every `active` row a task holds, not just the first one SQLite happens to
- * return. `getActiveClaimForTask` uses `.get()`, which is correct only while
- * the partial unique index guarantees one active row per task -- true today,
- * and precisely what C5 ends when shared review claims arrive.
+ * return, optionally narrowed to one lane.
  *
- * T-142 needs the plural form so the dispatch-addressed renewal can *refuse*
- * an ambiguous lookup instead of silently renewing whichever row came first
- * (§2). Today that refusal is unreachable by construction; writing the lookup
- * against the real cardinality is what keeps it unreachable by the index
- * rather than by luck.
+ * T-142 needed the plural form so the dispatch-addressed renewal could
+ * *refuse* an ambiguous lookup instead of silently renewing whichever row came
+ * first (§2). That refusal was unreachable then, because the partial unique
+ * index allowed one active row per task; T-144 is what makes it reachable, and
+ * the refusal is now the behaviour rather than a guard against a case that
+ * could not happen.
+ *
+ * `role` is the narrowing a renewal needs: a heartbeat on a review dispatch
+ * must address a review claim or nothing, never the implement lease running
+ * beside it. Within a lane the cardinality is different on each side --
+ * `exclusive` is capped at one by the index, while `shared` is deliberately
+ * uncapped (two reviewers on one task is legitimate), so a role-narrowed
+ * lookup can still return several rows and its caller still has to refuse
+ * rather than choose.
  */
-export function listActiveClaimsForTask(db: DatabaseSync, taskId: string): ResourceClaimRecord[] {
-  const rows = db.prepare(
-    "SELECT * FROM resource_claim_projection WHERE task_id = ? AND state = 'active' ORDER BY claimed_at ASC, claim_id ASC"
-  ).all(taskId) as Record<string, unknown>[];
+export function listActiveClaimsForTask(
+  db: DatabaseSync,
+  taskId: string,
+  options: { role?: ClaimRole } = {}
+): ResourceClaimRecord[] {
+  const rows = (options.role === undefined
+    ? db.prepare(
+        "SELECT * FROM resource_claim_projection WHERE task_id = ? AND state = 'active' ORDER BY claimed_at ASC, claim_id ASC"
+      ).all(taskId)
+    : db.prepare(
+        "SELECT * FROM resource_claim_projection WHERE task_id = ? AND state = 'active' AND role = ? ORDER BY claimed_at ASC, claim_id ASC"
+      ).all(taskId, options.role)) as Record<string, unknown>[];
   return rows.map(rowToClaim);
 }
 
@@ -483,6 +541,12 @@ function rowToClaim(row: Record<string, unknown>): ResourceClaimRecord {
     // row object produced before the column existed.
     renewToken: (row.renew_token as string | null | undefined) ?? null,
     state: row.state as ResourceClaimState,
+    // T-144: `??` rather than a bare cast, for the one absence the column
+    // definition cannot produce -- a row object assembled by a caller that
+    // predates the column (repair fixtures, a hand-built record in a test).
+    // Migration 13 leaves no NULL in the database itself.
+    exclusivity: (row.exclusivity as ClaimExclusivity | null | undefined) ?? "exclusive",
+    role: (row.role as ClaimRole | null | undefined) ?? "implement",
     claimedAt: row.claimed_at as string,
     expiresAt: row.expires_at as string,
     holder: JSON.parse(row.holder_json as string),
@@ -495,13 +559,14 @@ function rowToClaim(row: Record<string, unknown>): ResourceClaimRecord {
 
 export function insertDispatchAttempt(db: DatabaseSync, dispatch: DispatchAttemptRecord): void {
   db.prepare(`
-    INSERT INTO dispatch_projection (dispatch_id, task_id, executor_kind, attempt, context_hash, status, workload_at_dispatch, executor_model)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO dispatch_projection (dispatch_id, task_id, executor_kind, attempt, context_hash, status, kind, workload_at_dispatch, executor_model)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(dispatch_id, attempt) DO UPDATE SET
       task_id = excluded.task_id,
       executor_kind = excluded.executor_kind,
       context_hash = excluded.context_hash,
       status = excluded.status,
+      kind = excluded.kind,
       workload_at_dispatch = excluded.workload_at_dispatch,
       executor_model = excluded.executor_model
   `).run(
@@ -511,6 +576,7 @@ export function insertDispatchAttempt(db: DatabaseSync, dispatch: DispatchAttemp
     dispatch.attempt,
     dispatch.contextHash,
     dispatch.status,
+    dispatch.kind,
     dispatch.workloadAtDispatch ?? null,
     dispatch.executorModel ?? null
   );
@@ -545,6 +611,10 @@ function rowToDispatchAttempt(row: Record<string, unknown>): DispatchAttemptReco
     attempt: row.attempt as number,
     contextHash: row.context_hash as string,
     status: row.status as DispatchAttemptRecord["status"],
+    // T-144: same normalization as the claim's lane fields, for the same
+    // reason -- migration 13 fills every row, so this `??` covers only a row
+    // object that never came from the database.
+    kind: (row.kind as DispatchKind | null | undefined) ?? "implement",
     workloadAtDispatch: (row.workload_at_dispatch as string | null) ?? null,
     executorModel: (row.executor_model as string | null) ?? null
   };

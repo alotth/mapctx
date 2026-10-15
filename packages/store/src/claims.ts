@@ -1,7 +1,7 @@
 import * as crypto from "crypto"
-import { parseEstimatedEffortMs, workloadSchema } from "@mapctx/protocol"
+import { claimLaneFor, parseEstimatedEffortMs, workloadSchema, type ClaimRole, type DispatchKind } from "@mapctx/protocol"
 import { ABSOLUTE_LEASE_CEILING_MS, resolveCoordinationSettings, type CoordinationSettings } from "./config"
-import { getActiveClaimForTask, getClaim, getRunReceipt, getTask, getTaskDetail, listActiveClaimsForTask, listDispatchAttempts } from "./projections"
+import { getActiveExclusiveClaimForTask, getClaim, getRunReceipt, getTask, getTaskDetail, listActiveClaimsForTask, listDispatchAttempts } from "./projections"
 import type { AppendEventInput, StoreHandle } from "./store-handle"
 import type { EventLogEntry } from "@mapctx/protocol"
 import type { DisclosableClaimRecord, ResourceClaimRecord } from "./types"
@@ -46,15 +46,47 @@ export { ABSOLUTE_LEASE_CEILING_MS };
  * nothing to clamp, and refusing the claim here is not this function's job
  * (admission already refuses executable tasks that lack the plan).
  */
+/**
+ * T-144 (C5 / D11): `role` selects the lane's factor. Review claims use the
+ * SAME derivation with a larger factor, which is literally what the operator
+ * decided -- not a second formula.
+ *
+ * The factor scales the clamp's ceiling as well as the multiplier. Both halves
+ * are load-bearing and the reasoning lives on
+ * `DEFAULT_REVIEW_LEASE_FACTOR`; the short version is that scaling the
+ * multiplier alone leaves a big task's review lease pinned at `maxLease`, equal
+ * to its implement lease, and D11 decided they must differ.
+ *
+ * The absolute 24 h ceiling bounds the review ceiling and nothing else needs
+ * to: `maxLease` is already refused above 24 h at config-read time, so the
+ * implement lease cannot reach it, and the review lease is the only figure in
+ * this file that can be derived past it.
+ *
+ * A task with no parseable estimate gets `defaultLease` whole in BOTH lanes.
+ * The clamp has nothing to clamp, and a container/epic claim is not the place
+ * to start inventing a review-specific floor.
+ */
 export function deriveLeaseDurationMs(options: {
   estimatedEffort?: string | null;
   coordination?: CoordinationSettings;
+  role?: ClaimRole;
 }): number {
   const settings = options.coordination ?? resolveCoordinationSettings(undefined);
   const effortMs = options.estimatedEffort ? parseEstimatedEffortMs(options.estimatedEffort) : null;
   if (effortMs === null) return settings.defaultLeaseMs;
-  const derived = Math.round(effortMs * settings.leaseFactor);
-  return Math.min(Math.max(derived, settings.defaultLeaseMs), settings.maxLeaseMs);
+  const review = options.role === "review";
+  const factor = review ? settings.leaseFactor * settings.reviewLeaseFactor : settings.leaseFactor;
+  const ceilingMs = review
+    ? Math.min(settings.maxLeaseMs * settings.reviewLeaseFactor, ABSOLUTE_LEASE_CEILING_MS)
+    : settings.maxLeaseMs;
+  const derived = Math.round(effortMs * factor);
+  // Floor first, ceiling last -- unchanged, and the order now carries one more
+  // case. Config refuses `defaultLease > maxLease`, so on the implement side
+  // the two can never cross; on the review side a factor below 1 can push the
+  // review ceiling under the floor, and there the CEILING must win, or a
+  // configuration asking for shorter review leases would quietly hand out
+  // longer ones.
+  return Math.min(Math.max(derived, settings.defaultLeaseMs), ceilingMs);
 }
 
 /**
@@ -113,6 +145,11 @@ export function disclosableClaim(claim: ResourceClaimRecord): DisclosableClaimRe
     claimId: claim.claimId,
     taskId: claim.taskId,
     state: claim.state,
+    // T-144: a refusal names the LANE that refused it. Neither field is a
+    // secret, and "an exclusive implement claim holds this task" is the whole
+    // answer a turned-away caller needs in order to know what to do next.
+    exclusivity: claim.exclusivity,
+    role: claim.role,
     claimedAt: claim.claimedAt,
     expiresAt: claim.expiresAt,
     holder: claim.holder,
@@ -125,6 +162,14 @@ export type ClaimOptions = {
   taskId: string;
   actor: string;
   holder?: Record<string, unknown>;
+  /**
+   * T-144 (C5 / D5): which lane to claim. `implement` (the default, and what
+   * every claim before this was) takes the EXCLUSIVE claim and is refused by a
+   * live implement claim; `review` takes a SHARED claim and is never refused
+   * because the task is being implemented -- review must not be able to stall
+   * the work it reviews.
+   */
+  kind?: DispatchKind;
   /**
    * An explicit lease, which wins over config and over the derived default --
    * the `--lease` flag's precedence (T-141). Left unset, the lease comes from
@@ -201,7 +246,31 @@ export function appendTaskClaim(
     }
   }
 
-  let active = getActiveClaimForTask(store.db, options.taskId);
+  // T-144 (C5, review N1): the lane being claimed, and the ONE lookup
+  // admission is allowed to make.
+  //
+  // `getActiveExclusiveClaimForTask` replaces the old single-row
+  // `getActiveClaimForTask`, which selected every `active` row for the task
+  // with `.get()` and no `ORDER BY`. That was safe only while a task could
+  // hold one claim; with a shared review claim beside an implement one it
+  // returned whichever row the query planner reached first, and all three of
+  // its consequences were defects this design forbids elsewhere: an implement
+  // request refused by a reviewer's claim, a reclaim journaling
+  // `task.claim-expired` against the REVIEWER's claim (killing the review lane
+  // in silence), and `dispatch create` validating the wrong lane.
+  //
+  // A REVIEW claim consults no other claim at all. There is nothing for it to
+  // collide with: the unique index constrains `exclusive` rows only, so shared
+  // claims are admitted beside a live implement claim -- which is the decision
+  // ("a shared review claim never blocks implementation", and implementation
+  // never blocks review) -- and beside each other, since two reviewers on one
+  // task is legitimate. The ambiguity that creates is refused where it
+  // actually matters, at renewal lookup, rather than prevented by rejecting a
+  // second reviewer here.
+  const lane = claimLaneFor(options.kind ?? "implement");
+  let active = lane.exclusivity === "exclusive"
+    ? getActiveExclusiveClaimForTask(store.db, options.taskId)
+    : undefined;
   let expiredPrevious: string | undefined;
   const nowMs = now().getTime();
 
@@ -223,11 +292,22 @@ export function appendTaskClaim(
     return { ok: false, reason: "active-claim-held", activeClaim: disclosableClaim(active) };
   }
 
+  // T-144: a stale SHARED claim is deliberately left alone, and the asymmetry
+  // has a structural reason rather than being an oversight. The implement path
+  // must journal the expiry above because the unique index would otherwise
+  // refuse the replacement insert -- retiring the ghost is what makes reclaim
+  // work in one call with no sweeper. No index stands in a shared claim's way,
+  // so nothing forces this call to retire a row that belongs to somebody
+  // else's lane, and a ghost review claim is bounded by its own (D11) lease
+  // and swept by C9. Lookups ignore it in the meantime: they disambiguate by
+  // liveness, so an expired review claim never competes with a live one.
+
   // Precedence (T-141): an explicit `leaseDurationMs` (the `--lease` flag)
   // wins; otherwise the lease is derived from this task's own plan under the
-  // project's `[coordination]` figures.
+  // project's `[coordination]` figures -- and, since T-144, under the lane's
+  // own factor (D11).
   const leaseDurationMs = options.leaseDurationMs
-    ?? deriveLeaseDurationMs({ estimatedEffort: detail?.estimatedEffort, coordination: options.coordination });
+    ?? deriveLeaseDurationMs({ estimatedEffort: detail?.estimatedEffort, coordination: options.coordination, role: lane.role });
 
   const claimId = crypto.randomUUID();
   const leaseToken = crypto.randomBytes(LEASE_TOKEN_BYTES).toString("hex");
@@ -259,7 +339,23 @@ export function appendTaskClaim(
     eventType: "task.claimed",
     actor: options.actor,
     occurredAt: claimedAt,
-    payload: { claimId, taskId: options.taskId, leaseToken, renewToken, holder: options.holder ?? {}, claimedAt, expiresAt }
+    payload: {
+      claimId,
+      taskId: options.taskId,
+      leaseToken,
+      renewToken,
+      // T-144: the lane rides on the event, so a database rebuilt from the
+      // journal alone reproduces it. Both fields are written even though the
+      // applier derives the pair from `role`: `exclusivity` is what the index
+      // predicate reads, and a reader of the journal should not have to know
+      // the mapping to understand what a row constrains. The applier refuses
+      // a pair that contradicts itself rather than silently preferring one.
+      exclusivity: lane.exclusivity,
+      role: lane.role,
+      holder: options.holder ?? {},
+      claimedAt,
+      expiresAt
+    }
   });
 
   // Claiming is starting work: carry the planning state to in-progress
@@ -268,11 +364,18 @@ export function appendTaskClaim(
   // blocked, review, and in-progress tasks are left where they are --
   // unpausing or reopening is an explicit human decision, never a side
   // effect of a lease.
+  //
+  // T-144: a REVIEW claim moves no planning state. Reviewing is not starting
+  // the work -- claiming a review lane on a `backlog` task must not announce
+  // that the task is `in-progress`, and the symmetric rule on the way out
+  // (a completed review receipt does not carry planning to `review`) is C6's
+  // half of the same principle: a review records a review, and promoting the
+  // task stays an explicit orchestrator or operator decision.
   const CLAIM_PATH: Record<string, string[]> = {
     backlog: ["ready", "in-progress"],
     ready: ["in-progress"]
   };
-  const path = CLAIM_PATH[task.planningState] ?? [];
+  const path = lane.role === "implement" ? CLAIM_PATH[task.planningState] ?? [] : [];
   for (const next of path) {
     append({
       eventType: "task.patched",
@@ -439,6 +542,68 @@ function ceilingNote(claim: ResourceClaimRecord, nowMs: number): string {
     + " task start is the only way to open the lane again.";
 }
 
+/**
+ * T-144: the lane a dispatch runs in, read from its own attempts.
+ *
+ * Every attempt of one `dispatchId` carries the same `kind`
+ * (`appendDispatchAttempt` refuses one that contradicts the attempts already
+ * recorded), so the first row answers for all of them. `?? "implement"` covers
+ * every attempt written before the column existed, which is what they were.
+ */
+function laneRoleOf(attempts: readonly { kind?: DispatchKind }[]): ClaimRole {
+  return attempts[0]?.kind ?? "implement";
+}
+
+/**
+ * T-144 (C5, review N1/N2): resolve "this lane's claim on this task", or
+ * refuse.
+ *
+ * One function for both renewal paths -- `task renew --dispatch` and the
+ * run-event renewal -- because a renewal that picks the wrong lane is the same
+ * defect whichever door it came through, and two copies of this rule would
+ * drift.
+ *
+ * Two cardinalities, both real:
+ * - `implement` is capped at one active row by the unique index, so the common
+ *   case resolves immediately;
+ * - `review` is deliberately uncapped (two reviewers on one task is
+ *   legitimate, and §8.2 counts on shared claims being multi-writer), so this
+ *   can genuinely see several rows.
+ *
+ * When it does, LIVENESS breaks the tie before ambiguity is declared. That is
+ * not a convenience: claim admission deliberately leaves expired shared rows
+ * alone (nothing forces it to retire another lane's ghost), so without this a
+ * single abandoned review claim would make the lane permanently unrenewable
+ * for the reviewer who actually holds it. A ghost does not compete with a live
+ * claim. Two LIVE claims, on the other hand, are a question only the caller
+ * can answer, and the answer is `--claim <id>` -- guessing is how a renewal
+ * ends up extending the wrong reviewer's lease.
+ *
+ * Expiry is NOT filtered out of the single-claim case, which is why this
+ * returns the row rather than only live rows: the caller still has to see an
+ * expired claim in order to journal `task.claim-expired` for it (the explicit
+ * path) or to report `claim-expired` (the event path). Both behaviours are
+ * tested contracts of T-142 and T-143 and neither changes here.
+ */
+function resolveLaneClaim(
+  store: StoreHandle,
+  taskId: string,
+  role: ClaimRole,
+  nowMs: number
+):
+  | { ok: true; claim: ResourceClaimRecord }
+  | { ok: false; reason: "not-active" }
+  | { ok: false; reason: "ambiguous-claim"; role: ClaimRole; count: number; live: number } {
+  const active = listActiveClaimsForTask(store.db, taskId, { role });
+  if (active.length === 0) return { ok: false, reason: "not-active" };
+  if (active.length === 1) return { ok: true, claim: active[0]! };
+  const live = active.filter(claim => new Date(claim.expiresAt).getTime() > nowMs);
+  if (live.length !== 1) {
+    return { ok: false, reason: "ambiguous-claim", role, count: active.length, live: live.length };
+  }
+  return { ok: true, claim: live[0]! };
+}
+
 function ceilingBoundedExpiry(
   claim: ResourceClaimRecord,
   nowMs: number,
@@ -513,21 +678,24 @@ export function renewClaim(store: StoreHandle, options: RenewOptions): RenewResu
           message: `Dispatch ${options.dispatchId} attempt ${latestAttempt} already has a receipt; admit a new attempt before renewing again.`
         };
       }
-      // Role narrows this lookup once C5 exists; today the partial unique
-      // index means at most one active row per task. Refusing an ambiguous
-      // resolution rather than picking one keeps that an index guarantee
-      // instead of a coincidence -- and `--claim` is the way out when it
-      // ever fires.
-      const active = listActiveClaimsForTask(store.db, dispatchTaskId);
-      if (active.length === 0) return { ok: false, reason: "not-active" };
-      if (active.length > 1) {
-        return {
-          ok: false,
-          reason: "ambiguous-claim",
-          message: `Dispatch ${options.dispatchId} resolves ${active.length} active claims on ${dispatchTaskId}; name the one to renew with its claim id.`
-        };
+      // T-144 (C5): the dispatch's own `kind` narrows this to its own lane.
+      // Without it, a renewal addressed by a review dispatch could extend the
+      // implement lease running beside it -- the lane confusion §3 names.
+      // T-142 wrote the refusal against the real cardinality while the index
+      // still made it unreachable; this is where it becomes reachable, and
+      // refusing rather than guessing is the behaviour.
+      const resolved = resolveLaneClaim(store, dispatchTaskId, laneRoleOf(attempts), nowMs);
+      if (resolved.ok === false) {
+        return resolved.reason === "not-active"
+          ? { ok: false, reason: "not-active" }
+          : {
+              ok: false,
+              reason: "ambiguous-claim",
+              message: `Dispatch ${options.dispatchId} resolves ${resolved.count} active ${resolved.role} claims on ${dispatchTaskId}`
+                + `${resolved.live === resolved.count ? "" : ` (${resolved.live} live)`}; name the one to renew with its claim id.`
+            };
       }
-      claim = active[0]!;
+      claim = resolved.claim;
     }
 
     if (presentsRenew) {
@@ -578,7 +746,15 @@ export function renewClaim(store: StoreHandle, options: RenewOptions): RenewResu
     const leaseDurationMs = options.leaseDurationMs
       ?? deriveLeaseDurationMs({
         estimatedEffort: getTaskDetail(store.db, taskId)?.estimatedEffort,
-        coordination: options.coordination
+        coordination: options.coordination,
+        // T-144: the renewal extends by the lane's OWN figure, read from the
+        // claim being renewed rather than from how it was addressed. T-141
+        // settled that a renewal re-derives from the plan instead of reusing
+        // the minted length so a re-classified task is honoured; the lane is
+        // the same kind of fact, and reading it from the row keeps a review
+        // claim renewing on review terms even when `--claim <id>` was used and
+        // no dispatch named the lane.
+        role: claim.role
       });
 
     const bounded = ceilingBoundedExpiry(claim, nowMs, leaseDurationMs);
@@ -640,9 +816,10 @@ export type RunEventRenewal =
  * - the latest attempt has no landed receipt. A lane that reported itself
  *   finished is over; keeping its lease alive would hold the task against a
  *   run that already ended;
- * - the task has exactly one active claim. Pre-C5 the partial unique index
- *   makes that an invariant; refusing to guess keeps it an index guarantee
- *   instead of a coincidence, and C5 is where `role` narrows the lookup;
+ * - the task has exactly one claim resolvable in the DISPATCH'S OWN LANE
+ *   (T-144). For `implement` the unique index makes that an invariant; for
+ *   `review` it is a question, answered by liveness where it can be and
+ *   refused where it cannot -- see `resolveLaneClaim`;
  * - the claim is unexpired, and inside the ceiling.
  *
  * On the expired branch this writes NOTHING -- not even the
@@ -653,15 +830,16 @@ export type RunEventRenewal =
  * not address is how audit trails fill with events nobody asked for. The next
  * admission, renewal or close journals that expiry honestly.
  *
- * **Implement-only until C5, and this is safe by construction rather than by
- * assertion.** Resolution is by `taskId` alone, which would be wrong once
- * shared review claims exist -- a heartbeat on a review dispatch must not
- * extend the implement lease. It cannot be wrong yet: `dispatchSchema` is a
- * plain `z.object` with no `.passthrough()`, so Zod DROPS a `kind` field, no
- * review dispatch can exist, and every dispatch that can exist resolves
- * unambiguously. C5 owns the role-aware resolver, and the test that a review
- * heartbeat renews nothing is not writable before it -- there is no way to
- * construct a review dispatch to write it against.
+ * **Lane-aware since T-144 (C5).** T-143 resolved by `taskId` alone, which was
+ * safe only because no review dispatch could exist to resolve wrongly; now one
+ * can, and a heartbeat on a review dispatch must never extend the implement
+ * lease. Resolution therefore goes through the dispatch's own `kind`. The two
+ * cases the lane split creates, both tested:
+ * - a review dispatch on a task that holds only an implement claim renews
+ *   NOTHING, and the implement `expiresAt` is left byte-identical -- liveness
+ *   in one lane is not evidence about another;
+ * - a review dispatch on a task that holds both renews only the review claim,
+ *   by the review lease (D11), and the implement claim is untouched.
  */
 export function appendRunEventClaimRenewal(
   store: StoreHandle,
@@ -703,18 +881,25 @@ export function appendRunEventClaimRenewal(
   }
 
   const taskId = attempts[0]!.taskId;
-  const active = listActiveClaimsForTask(store.db, taskId);
-  if (active.length === 0) {
-    return { renewed: false, reason: "no-active-claim", message: `${taskId} holds no active claim to renew.` };
-  }
-  if (active.length > 1) {
+  // T-144 (C5): the event renews ITS OWN lane and no other. A heartbeat on a
+  // review dispatch addresses the task's review claim; if the task holds only
+  // an implement claim, this resolves nothing and the implement lease is left
+  // exactly as it was -- which is the guarantee, not a side effect.
+  const role = laneRoleOf(attempts);
+  const resolved = resolveLaneClaim(store, taskId, role, nowMs);
+  if (resolved.ok === false) {
+    if (resolved.reason === "not-active") {
+      return { renewed: false, reason: "no-active-claim", message: `${taskId} holds no active ${role} claim to renew.` };
+    }
     return {
       renewed: false,
       reason: "ambiguous-claim",
-      message: `${taskId} holds ${active.length} active claims; an event cannot choose between them. Renew the one you mean with task renew --claim <id>.`
+      message: `${taskId} holds ${resolved.count} active ${role} claims`
+        + `${resolved.live === resolved.count ? "" : ` (${resolved.live} live)`}`
+        + "; an event cannot choose between them. Renew the one you mean with task renew --claim <id>."
     };
   }
-  const claim = active[0]!;
+  const claim = resolved.claim;
 
   if (new Date(claim.expiresAt).getTime() <= nowMs) {
     return {
@@ -728,7 +913,9 @@ export function appendRunEventClaimRenewal(
   const leaseDurationMs = options.leaseDurationMs
     ?? deriveLeaseDurationMs({
       estimatedEffort: getTaskDetail(store.db, taskId)?.estimatedEffort,
-      coordination: options.coordination
+      coordination: options.coordination,
+      // T-144: the resolved claim's lane, same as the explicit path.
+      role: claim.role
     });
   const bounded = ceilingBoundedExpiry(claim, nowMs, leaseDurationMs);
   if ("ceilingReached" in bounded) {

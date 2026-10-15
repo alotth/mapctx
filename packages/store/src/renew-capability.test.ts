@@ -11,7 +11,7 @@ import {
 import { recordDispatchAttempt, recordRunReceipt } from "./dispatch"
 import { startTask } from "./start"
 import { createTask } from "./tasks"
-import { getClaim, getActiveClaimForTask } from "./projections"
+import { getClaim, getActiveExclusiveClaimForTask } from "./projections"
 import { StoreHandle } from "./store-handle"
 import { repairStore } from "./repair"
 import { importCommit } from "./cutover"
@@ -92,7 +92,7 @@ test("renewToken renews; leaseToken still renews; releasing with the renewToken 
     const released = releaseClaim(handle, { taskId: "T-900", claimId, leaseToken: renewToken!, actor: "orchestrator" });
     assert.equal(released.ok, false);
     if (!released.ok) assert.equal(released.reason, "token-mismatch");
-    assert.ok(getActiveClaimForTask(handle.db, "T-900"), "the claim stays active -- the renewToken has no release path at all");
+    assert.ok(getActiveExclusiveClaimForTask(handle.db, "T-900"), "the claim stays active -- the renewToken has no release path at all");
   } finally {
     handle.close(); restoreEnv(); cleanupDir(repoDir);
   }
@@ -166,7 +166,7 @@ test("matching the prefix is not enough: a wrong credential sharing the first 8 
     assert.equal(released.ok, false);
     if (!released.ok) assert.equal(released.reason, "token-mismatch");
 
-    assert.ok(getActiveClaimForTask(handle.db, "T-913"), "the claim must still be active after all three prefix-collision attempts");
+    assert.ok(getActiveExclusiveClaimForTask(handle.db, "T-913"), "the claim must still be active after all three prefix-collision attempts");
 
     const renewedForReal = renewClaim(handle, { taskId: "T-913", claimId, leaseToken, actor: "x", now: () => new Date("2026-10-16T09:05:00.000Z") });
     assert.ok(renewedForReal.ok, "the real credential must still work after the collisions were refused");
@@ -205,7 +205,7 @@ test("a credential of the wrong length (shorter or longer than the real one, sam
       if (!released!.ok) assert.equal(released!.reason, "token-mismatch");
     }
 
-    assert.ok(getActiveClaimForTask(handle.db, "T-914"), "the claim must still be active after every wrong-length attempt");
+    assert.ok(getActiveExclusiveClaimForTask(handle.db, "T-914"), "the claim must still be active after every wrong-length attempt");
   } finally {
     handle.close(); restoreEnv(); cleanupDir(repoDir);
   }

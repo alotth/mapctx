@@ -4,7 +4,7 @@ import { claimTask, renewClaim } from "./claims"
 import { recordDispatchAttempt, recordRunEvent, recordRunReceipt } from "./dispatch"
 import { startTask } from "./start"
 import { createTask } from "./tasks"
-import { getActiveClaimForTask } from "./projections"
+import { getActiveExclusiveClaimForTask } from "./projections"
 import { StoreHandle } from "./store-handle"
 import { importCommit } from "./cutover"
 import { cleanupDir, setupGoldenRepo } from "./__test-helpers__"
@@ -373,7 +373,7 @@ test("an expired claim: reason claim-expired, and NO task.claim-expired is journ
     if (!result.renewal!.renewed) assert.equal(result.renewal!.reason, "claim-expired");
 
     assert.equal(eventCount(handle, "task.claim-expired"), expiredEventsBefore, "this by-product path writes no claim lifecycle event on expiry");
-    assert.ok(getActiveClaimForTask(handle.db, "T-928"), "the row is untouched -- still 'active' (a ghost), this path writes nothing to retire it");
+    assert.ok(getActiveExclusiveClaimForTask(handle.db, "T-928"), "the row is untouched -- still 'active' (a ghost), this path writes nothing to retire it");
   } finally {
     handle.close(); restoreEnv(); cleanupDir(repoDir);
   }

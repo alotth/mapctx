@@ -5,6 +5,14 @@ import { getTask, listDispatchAttempts } from "./projections"
 import type { StoreHandle } from "./store-handle"
 import type { DispatchAttemptRecord } from "./types"
 
+/**
+ * T-144 (C5): `kind` is inherited from `ClaimOptions` and used TWICE -- once
+ * for the claim's lane and once for the dispatch's. That is the point of one
+ * vocabulary for both halves: `startTask({ kind: "review" })` opens a review
+ * lane whole (shared claim + review dispatch), and there is no way to express
+ * the half-open states (a review claim running an implement dispatch, or the
+ * reverse) that would have to be checked for everywhere else.
+ */
 export type StartOptions = ClaimOptions & {
   dispatchId?: string;
   executorKind?: string;
@@ -40,6 +48,11 @@ export function startTask(store: StoreHandle, options: StartOptions): StartResul
       contextHash: options.contextHash ?? crypto.createHash("sha256").update(JSON.stringify(task)).digest("hex"),
       attempt,
       status: options.status ?? "claimed",
+      // T-144: the same lane the claim just took. When `--dispatch-id` reuses
+      // an existing dispatch, `appendDispatchAttempt` refuses a kind that
+      // contradicts the attempts already recorded under it -- so a review
+      // start cannot graft a review attempt onto an implement chain.
+      kind: options.kind,
       actor: options.actor
     }, append);
     if (!result.ok) throw new Error(`Dispatch refused: ${result.reason}`);

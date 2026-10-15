@@ -93,7 +93,9 @@ test("custom leaseFactor/defaultLease/maxLease change the derived result; an abs
   assert.equal(deriveLeaseDurationMs({ estimatedEffort: "1d", coordination: tightMax }), AGENT_ACTIVE_HOUR_MS);
 
   // Absent table entirely.
-  assert.deepEqual(resolveCoordinationSettings(undefined), { leaseFactor: 0.5, defaultLeaseMs: 30 * 60 * 1000, maxLeaseMs: AGENT_ACTIVE_HOUR_MS * 8 });
+  // T-144 adds the fourth resolved figure (D11's review factor); the three
+  // D10 ones are unchanged, which is what this assertion is here to pin.
+  assert.deepEqual(resolveCoordinationSettings(undefined), { leaseFactor: 0.5, defaultLeaseMs: 30 * 60 * 1000, maxLeaseMs: AGENT_ACTIVE_HOUR_MS * 8, reviewLeaseFactor: 2 });
   // Table present, but every key absent -- same defaults.
   assert.deepEqual(resolveCoordinationSettings({}), resolveCoordinationSettings(undefined));
 });

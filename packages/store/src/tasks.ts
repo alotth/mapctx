@@ -1,7 +1,7 @@
 import * as crypto from "crypto"
 import { parseEstimatedEffortMs, predictedStartSchema, STATUS_TO_PLANNING, transitionPlanning, workloadSchema } from "@mapctx/protocol"
 import { buildFirstAcceptanceRevision } from "./acceptance"
-import { getAcceptance, getActiveClaimForTask, getLiveActiveClaim, getTask, getTaskDetail } from "./projections"
+import { getAcceptance, getActiveExclusiveClaimForTask, getLiveActiveClaim, getTask, getTaskDetail } from "./projections"
 import type { StoreHandle } from "./store-handle"
 import type { AcceptanceCondition, DependencyRecord, TaskDetailRecord, TaskRecord } from "./types"
 
@@ -117,7 +117,18 @@ export function moveTask(store: StoreHandle, options: MoveTaskOptions): MoveTask
       } else {
         // The unfiltered getter on purpose, used the way admission uses it:
         // the stale row has to be seen in order to be expired.
-        const stale = getActiveClaimForTask(store.db, options.taskId);
+        //
+        // T-144: the EXCLUSIVE lane, which is the lane this whole branch is
+        // about -- closing a task retires the claim that held it against
+        // implementation, and `executionState` (the thing the close reasons
+        // about) describes that lane alone. A shared review claim is
+        // deliberately left where it is: it neither held the task nor blocked
+        // the close, retiring somebody else's lane is not this command's
+        // authority, and journaling a `task.claim-released` for it would add
+        // an observable event to `move done` that nobody approved. Such a
+        // claim expires on its own (D11) and is swept by C9; until then no
+        // read path treats it as holding the task.
+        const stale = getActiveExclusiveClaimForTask(store.db, options.taskId);
         if (stale) {
           append({
             eventType: "task.claim-expired",

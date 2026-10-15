@@ -6,7 +6,7 @@ import * as path from "path"
 import { importCommit } from "./cutover"
 import { createTask, moveTask, reopenTask, updateTask } from "./tasks"
 import { approveAcceptanceCriterion, reviseAcceptance } from "./acceptance"
-import { getAcceptance, getTask, getTaskDetail, listDependencies, getActiveClaimForTask } from "./projections"
+import { getAcceptance, getTask, getTaskDetail, listDependencies, getActiveExclusiveClaimForTask } from "./projections"
 import { claimTask, releaseClaim } from "./claims"
 import { StoreHandle } from "./store-handle"
 import { buildExport } from "./export"
@@ -217,7 +217,7 @@ test("moveTask to done or cancelled releases an active claim", () => {
     const result = moveTask(handle, { taskId: "T-101", to: "done", actor: "test" });
     assert.equal(result.ok, true);
     if (result.ok) assert.equal(result.releasedClaimId, claim.claim.claimId);
-    assert.equal(getActiveClaimForTask(handle.db, "T-101"), undefined);
+    assert.equal(getActiveExclusiveClaimForTask(handle.db, "T-101"), undefined);
     assert.equal(getTask(handle.db, "T-101")!.executionState, "unclaimed");
   } finally {
     handle.close();
@@ -239,7 +239,7 @@ test("moveTask to cancelled releases the claim, stamps no completedOn, exports, 
     assert.deepEqual(result, { ok: true, from: "in-progress", to: "cancelled", releasedClaimId: claim.claim!.claimId });
     assert.equal(getTask(handle.db, "T-101")!.planningState, "cancelled");
     assert.equal(getTask(handle.db, "T-101")!.completedOn, null, "cancelled does not stamp completedOn");
-    assert.equal(getActiveClaimForTask(handle.db, "T-101"), undefined);
+    assert.equal(getActiveExclusiveClaimForTask(handle.db, "T-101"), undefined);
 
     const { buildExport } = require("./export") as typeof import("./export");
     const exported = buildExport(handle.db, { tasksRoot: repoDir });

@@ -958,9 +958,13 @@ Still open, for the operator:
   once C4 ships the heartbeat exclusion (§2), because without it the arrival
   of heartbeats would rewrite `activeTimeMs` for every run and the
   re-derivation would be reading its own artifact rather than the work.
-- Should a shared review claim expire on the same schedule as an implement
-  claim? A reviewer idle for hours is less harmful than a stalled implementer,
-  which argues for a longer or non-expiring review lease.
+- ~~Should a shared review claim expire on the same schedule as an implement
+  claim?~~ **Answered (D11, operator, 2026-10-15): longer, not non-expiring.**
+  A reviewer idle for hours is less harmful than a stalled implementer, but a
+  non-expiring review lease accumulates ghosts in a lane the C9 sweeper would
+  have to special-case. C5 (T-144) sets the factor at 2× with the clamp scaled
+  to match; the arithmetic and the two readings it rules out are in §10.2 under
+  D11.
 
 ---
 
@@ -1085,10 +1089,28 @@ existing event. Approving the design does not approve these individually.
 | --- | --- | --- | --- | --- |
 | D9 | Write two `history.correction-recorded` events against T-107/T-108 | §5 | (a) record corrections; (b) delete the false receipts; (c) leave the mis-attribution | **(a).** The backfill is contradicted in the audit trail rather than erased. (b) destroys history; (c) leaves both tasks reading `completed` for work never done |
 | D10 | Lease factor and cap (`estimatedEffort × 0.5`, clamp 30 min…8 h) | §2, §7 | (a) adopt as the starting point and re-derive after C4; (b) pick different numbers now; (c) keep the fixed 30 min | **(a).** The figures are an honest first guess; re-deriving them before C4's heartbeat exclusion would read the measurement artifact rather than the work |
-| D11 | Does a shared review claim expire on the implement schedule? | §7 | (a) same schedule; (b) longer; (c) no expiry for review claims | **Decided by the operator (2026-10-15): (b) longer.** A review lease uses the same derivation with a larger factor, still clamped by the 24 h absolute ceiling, so it expires and does not accumulate ghosts. The factor is set in C5 (T-144). An idle reviewer is less harmful than a stalled implementer, which argues against (a), but (c) accumulates ghosts in a lane the sweeper would then have to special-case |
+| D11 | Does a shared review claim expire on the implement schedule? | §7 | (a) same schedule; (b) longer; (c) no expiry for review claims | **Decided by the operator (2026-10-15): (b) longer.** A review lease uses the same derivation with a larger factor, still clamped by the 24 h absolute ceiling, so it expires and does not accumulate ghosts. **Factor set in C5 (T-144): `reviewLeaseFactor = 2`, configurable under `[coordination]`** — see the note below for the shape of the clamp, which is the part D11 left open. An idle reviewer is less harmful than a stalled implementer, which argues against (a), but (c) accumulates ghosts in a lane the sweeper would then have to special-case |
 | D12 | **A0 or B** in ADR 0005, and whether Git-ref CAS is accepted at all | §8 | per ADR 0005; the first ADR accepted fixes the other | Not T-124's call, and this document no longer writes as if B had won. §8 holds under either; C10 stays out of wave until this lands |
 | D13 | **Execute §5's re-scope of T-107 and T-108**: move the `bulk-updated-timestamp` severity change from T-107 to T-127, and **revise T-108's acceptance** to drop criterion `a7e927fd` ("Heartbeat registrado como follow-up: os dados do scan decidem se varredor basta ou se precisa de heartbeat"), which exists and is `pending` — §2 of this document decides that question, so the criterion is now answered rather than outstanding | §5 | (a) execute both via `task update` and `task acceptance revise`; (b) leave T-108's criterion pending and let whoever implements T-108 discover it is already decided; (c) keep `bulk-updated-timestamp` in T-107 | **(a).** §5 says "this document decides it", but T-124 **cannot** execute it: these are planning changes to two other tasks, and acceptance revision in particular is an operator act. Flagged here precisely because the earlier drafts decided it in prose and left no one holding the action |
 | D14 | **Does C1's one-fewer-journal-event count as an observable change requiring approval?** After C1, `move done` over a ghost claim stops journaling a fictitious `task.claim-released` | §2, §6 | (a) yes — C1 carries the marker (current position); (b) no — the banner is amended to say that *removing* a provably false event is outside the definition | **(a)**, chosen as the conservative reading: the banner's test is "observable semantics of an existing event", and one fewer event meets it whether or not the event was a fiction. (b) is defensible and cheaper, but it means writing an exemption into the banner, and an exemption is the kind of thing that gets reused later for changes that deserve the marker |
+
+**D11's factor, as implemented by C5 (T-144), and why the clamp has the shape
+it does.** D11 fixed the direction ("longer") and left the arithmetic to C5.
+"The same derivation with a larger factor" admits three readings, and they are
+not equivalent:
+
+| Reading | Review lease | Why not |
+| --- | --- | --- |
+| scale the multiplier only — `clamp(effort × leaseFactor × 2, defaultLease, maxLease)` | pinned at `maxLease` | On a `Hard`/`2w` task (80 h agent-active) the implement lease already saturates at 8 h, so the review lease comes out at 8 h too — **identical**, and D11 has no effect on the big tasks where a slow review is most likely |
+| scale the multiplier and ignore `maxLease` — `min(clamp(…) × 2, 24 h)` | genuinely longer | Overruns the one lease figure the operator configures: `maxLease = "2h"` would hand out a 4 h review claim |
+| **scale the derivation *and* the clamp's ceiling** — `clamp(effort × leaseFactor × reviewLeaseFactor, defaultLease, min(maxLease × reviewLeaseFactor, 24 h))` | **chosen** | Keeps the operator's proportion (`maxLease = "2h"` → review ≤ 4 h), keeps review ≥ implement even at saturation (defaults: implement ≤ 8 h, review ≤ 16 h), and leaves the 24 h ceiling as the bound that actually bites (`maxLease = "24h"` derives 48 h and is cut to 24 h) |
+
+`reviewLeaseFactor` defaults to 2 and is tunable under `[coordination]`
+alongside `leaseFactor`, validated the same way (a non-positive or
+non-numeric value is refused by name, never silently defaulted). An explicit
+`--lease` still wins over both and is still refused above 24 h
+(`lease-above-ceiling`), unchanged. The figure is a first guess in the same
+sense D10's are, and the one place to change when §7's re-derivation happens.
 
 ### 10.3 What this document does *not* ask for
 

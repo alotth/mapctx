@@ -471,7 +471,19 @@ test("claimTask refuses a second claim with activeClaim lacking leaseToken but c
     assert.ok(second.activeClaim, JSON.stringify(second));
     const disclosed = second.activeClaim!;
     assert.equal((disclosed as unknown as { leaseToken?: unknown }).leaseToken, undefined, "leaseToken must never appear on a refusal's activeClaim");
-    assert.deepEqual(Object.keys(disclosed).sort(), ["claimId", "claimedAt", "eventNode", "eventSequence", "expiresAt", "holder", "state", "taskId"].sort());
+    // T-144 grew this list from 8 keys to 10: `exclusivity` and `role` name
+    // the LANE that refused, which is the one thing a turned-away caller most
+    // needs and which neither reveals a credential nor can be derived from the
+    // rest. The assertion is exact on purpose and is meant to fail when the
+    // shape changes -- what must never change is the two lines around it:
+    // no token field, ever, whatever else the allowlist grows.
+    assert.deepEqual(
+      Object.keys(disclosed).sort(),
+      ["claimId", "claimedAt", "eventNode", "eventSequence", "exclusivity", "expiresAt", "holder", "role", "state", "taskId"].sort()
+    );
+    assert.equal((disclosed as unknown as { renewToken?: unknown }).renewToken, undefined, "nor the renew capability");
+    assert.equal(disclosed.exclusivity, "exclusive", "the lane that refused: an exclusive implement claim");
+    assert.equal(disclosed.role, "implement");
     assert.equal(disclosed.claimId, first.claim.claimId);
     assert.deepEqual(disclosed.holder, { pid: 1, host: "a" });
     assert.equal(disclosed.expiresAt, first.claim.expiresAt);
@@ -500,7 +512,7 @@ test("startTask's refusal activeClaim is redacted too, by construction (start.ts
   }
 });
 
-test("disclosableClaim() returns exactly the 8 allowlisted keys and never leaseToken, called directly", () => {
+test("disclosableClaim() returns exactly the 10 allowlisted keys and never leaseToken, called directly", () => {
   const dir = mkTmpDir("mapctx-store-claims-redaction-direct-");
   try {
     const handle = StoreHandle.open(dir);
@@ -509,8 +521,12 @@ test("disclosableClaim() returns exactly the 8 allowlisted keys and never leaseT
     assert.equal(claimed.ok, true);
     if (!claimed.ok) return;
     const disclosed = disclosableClaim(claimed.claim);
-    assert.deepEqual(Object.keys(disclosed).sort(), ["claimId", "claimedAt", "eventNode", "eventSequence", "expiresAt", "holder", "state", "taskId"].sort());
+    assert.deepEqual(
+      Object.keys(disclosed).sort(),
+      ["claimId", "claimedAt", "eventNode", "eventSequence", "exclusivity", "expiresAt", "holder", "role", "state", "taskId"].sort()
+    );
     assert.equal((disclosed as unknown as { leaseToken?: unknown }).leaseToken, undefined);
+    assert.equal((disclosed as unknown as { renewToken?: unknown }).renewToken, undefined);
   } finally {
     cleanupDir(dir);
   }

@@ -177,7 +177,8 @@ export const dispatchFixture: Dispatch = {
   executorKind: "traycer",
   attempt: 1,
   contextHash: "b".repeat(64),
-  status: "running"
+  status: "running",
+  kind: "implement"
 };
 
 export const usageEventFixture: UsageEvent = {
