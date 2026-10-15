@@ -169,3 +169,117 @@ export function resolveProjectStoreDir(projectId: string): string {
 export function isStoreMaterialized(storeDir: string): boolean {
   return fs.existsSync(path.join(storeDir, "mapctx.db"));
 }
+
+/**
+ * T-151: a SECOND, unversioned source for `[privacy] patterns`.
+ *
+ * `mapctx.toml` is committed, and for this project it is about to be
+ * committed to a PUBLIC repository. That makes it the wrong place for the
+ * patterns that matter most: the name of a third party, the operator's
+ * machine hostname, a customer identifier. Writing those into the public
+ * config in order to keep them out of public issues publishes them on the
+ * way in -- the control would leak exactly what it exists to hide.
+ *
+ * So patterns may also live in `<storeDir>/privacy.toml`, beside the store
+ * and outside every repository, or in a file named by
+ * MAPCTX_PRIVACY_PATTERNS_FILE. Both carry the same `[privacy] patterns`
+ * shape as mapctx.toml. The three sources are UNIONED, not overridden: a
+ * pattern list is a set of things to look for, and dropping the public ones
+ * because a private file exists would be a silent downgrade of coverage.
+ * Unversioned sources come first so their indices stay stable in reports as
+ * the public list grows.
+ */
+export const LOCAL_PRIVACY_FILENAME = "privacy.toml"
+export const PRIVACY_PATTERNS_FILE_ENV = "MAPCTX_PRIVACY_PATTERNS_FILE"
+
+export type PrivacyPatternOrigin = "local-file" | "env-file" | "mapctx.toml"
+
+export type ResolvedPrivacyPatterns = {
+  /** Deduplicated union, unversioned sources first. */
+  patterns: string[]
+  origins: Array<{ origin: PrivacyPatternOrigin; path?: string; count: number }>
+  /** True when at least one pattern came from a source that is not committed. */
+  hasUnversionedSource: boolean
+}
+
+/**
+ * Same structural rule as `[privacy]` in mapctx.toml: `patterns` must be an
+ * array of strings or the file is refused. A privacy file that silently reads
+ * as "no patterns" is the failure this whole mechanism exists to prevent.
+ */
+function readPrivacyPatternsFile(filePath: string): string[] {
+  const parsed = TOML.parse(fs.readFileSync(filePath, "utf8")) as Record<string, unknown>;
+  const table = parsed.privacy;
+  if (table === undefined) return [];
+  if (typeof table !== "object" || table === null || Array.isArray(table)) {
+    throw new Error(`Invalid privacy patterns file at ${filePath}: [privacy] must be a table.`);
+  }
+  // A typo is the failure mode this file cannot afford. `pattern = [...]`
+  // parses fine and yields nothing, and "nothing" is indistinguishable from
+  // "no secrets here" at every later layer (review MEDIA-2). Refuse the key
+  // we do not know instead.
+  for (const key of Object.keys(table as Record<string, unknown>)) {
+    if (key !== "patterns") {
+      throw new Error(`Invalid privacy patterns file at ${filePath}: unknown key "${key}" under [privacy]; the only supported key is "patterns". A typo here reads as "no patterns configured", which is exactly what this file exists to prevent.`);
+    }
+  }
+  const patterns = (table as Record<string, unknown>).patterns;
+  if (patterns === undefined) return [];
+  if (!Array.isArray(patterns) || !patterns.every(item => typeof item === "string")) {
+    throw new Error(`Invalid privacy patterns file at ${filePath}: [privacy] patterns must be an array of regex strings.`);
+  }
+  return patterns as string[];
+}
+
+export function resolvePrivacyPatterns(
+  projectId: string,
+  configPatterns: readonly string[] = [],
+  options: { storeDir?: string; env?: NodeJS.ProcessEnv } = {}
+): ResolvedPrivacyPatterns {
+  const env = options.env ?? process.env;
+  const storeDir = options.storeDir ?? resolveProjectStoreDir(projectId);
+  const origins: ResolvedPrivacyPatterns["origins"] = [];
+  const patterns: string[] = [];
+  const seen = new Set<string>();
+  // `report` is separate from `source.length > 0` on purpose (review
+  // MEDIA-2): a file that EXISTS and yields nothing must still appear in
+  // `origins`, with count 0. Otherwise an empty or mis-keyed privacy file is
+  // indistinguishable from no file at all, and the operator reads silence as
+  // "configured and clean".
+  const take = (source: readonly string[], origin: PrivacyPatternOrigin, options: { report: boolean; path?: string }): void => {
+    let added = 0;
+    for (const pattern of source) {
+      if (seen.has(pattern)) continue;
+      seen.add(pattern);
+      patterns.push(pattern);
+      added++;
+    }
+    if (options.report) origins.push({ origin, ...(options.path ? { path: options.path } : {}), count: added });
+  };
+
+  const localPath = path.join(storeDir, LOCAL_PRIVACY_FILENAME);
+  if (fs.existsSync(localPath)) take(readPrivacyPatternsFile(localPath), "local-file", { report: true, path: localPath });
+
+  // An env var that is SET is an intention. Pointing it at nothing is a
+  // broken intention -- a typo in a path, or a file that moved -- and
+  // ignoring it silently would disarm the control the operator thought they
+  // had turned on. An unset variable is simply not using this source.
+  const envPath = env[PRIVACY_PATTERNS_FILE_ENV];
+  if (envPath !== undefined) {
+    if (envPath.trim() === "") {
+      throw new Error(`${PRIVACY_PATTERNS_FILE_ENV} is set but empty. Unset it, or point it at a privacy patterns file.`);
+    }
+    if (!fs.existsSync(envPath)) {
+      throw new Error(`${PRIVACY_PATTERNS_FILE_ENV} points at ${envPath}, which does not exist. Refusing to continue with a privacy source the operator asked for and the filesystem does not have.`);
+    }
+    take(readPrivacyPatternsFile(envPath), "env-file", { report: true, path: envPath });
+  }
+
+  take(configPatterns, "mapctx.toml", { report: configPatterns.length > 0 });
+
+  return {
+    patterns,
+    origins,
+    hasUnversionedSource: origins.some(entry => entry.origin !== "mapctx.toml")
+  };
+}
