@@ -278,3 +278,84 @@ test("renewClaim extends by the derived duration (not a fixed 30m); a later re-c
     handle.close(); restoreEnv(); cleanupDir(repoDir);
   }
 });
+
+// ---------------------------------------------------------------------------
+// 8. T-162: claimedAt and expiresAt must come from the SAME clock read.
+//
+// `expiresAt` has always been derived from `nowMs`, read once at the top of
+// `appendTaskClaim`. `claimedAt` used to be a SECOND, separate read taken
+// later -- after the admission checks, the lease derivation and two token
+// generations. Whatever happened in between (a GC pause, a descheduled
+// process under a parallel test run) silently shortened the duration the row
+// declares, because `expiresAt - claimedAt` is how every consumer reads it
+// back. These inject a clock that is NOT constant -- it returns `base` on
+// its first call and `base + pauseMs` on every call after -- to reproduce
+// that pause deterministically instead of relying on real wall-clock luck.
+// ---------------------------------------------------------------------------
+
+/**
+ * First call returns `base`; every call after returns `base + pauseMs`
+ * (not cumulative further). Models "time passed once, between two reads",
+ * which is exactly the gap the old `appendTaskClaim` had between its
+ * `nowMs` read and its separate `claimedAt` read.
+ */
+function pausedClock(baseIso: string, pauseMs: number): () => Date {
+  const base = new Date(baseIso).getTime();
+  let calls = 0;
+  return () => new Date(base + (calls++ === 0 ? 0 : pauseMs));
+}
+
+test("T-162: a 62ms pause between clock reads no longer drifts an EXPLICIT leaseDurationMs claim", t => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const created = createTask(handle, { id: "T-910", title: "Explicit lease, paused clock", workload: "Normal", detail: { estimatedEffort: "4h" }, actor: "test" });
+    assert.equal(created.ok, true, JSON.stringify(created));
+
+    const paused = pausedClock("2026-10-14T10:00:00.000Z", 62);
+    const claim = claimTask(handle, { taskId: "T-910", actor: "worker", now: paused, leaseDurationMs: 28_800_000 /* 8h, the T-141 CLI case */ });
+    assert.ok(claim.ok, JSON.stringify(claim));
+    if (!claim.ok) return;
+    assert.equal(claim.claim.claimedAt, "2026-10-14T10:00:00.000Z", "claimedAt must be the FIRST read (nowMs), not a later one");
+    const durationMs = new Date(claim.claim.expiresAt).getTime() - new Date(claim.claim.claimedAt).getTime();
+    assert.equal(durationMs, 28_800_000, "exact 8h, not 8h minus the 62ms pause");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-162: a 62ms pause between clock reads no longer drifts a lease DERIVED from estimatedEffort", t => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const created = createTask(handle, { id: "T-911", title: "Derived lease, paused clock", workload: "Normal", detail: { estimatedEffort: "4h" }, actor: "test" });
+    assert.equal(created.ok, true, JSON.stringify(created));
+
+    const paused = pausedClock("2026-10-14T11:00:00.000Z", 62);
+    // No leaseDurationMs: derives from estimatedEffort (4h x 0.5 = 2h), same
+    // path as the T-141 CLI test that originally saw the drift.
+    const claim = claimTask(handle, { taskId: "T-911", actor: "worker", now: paused });
+    assert.ok(claim.ok, JSON.stringify(claim));
+    if (!claim.ok) return;
+    assert.equal(claim.claim.claimedAt, "2026-10-14T11:00:00.000Z");
+    const durationMs = new Date(claim.claim.expiresAt).getTime() - new Date(claim.claim.claimedAt).getTime();
+    assert.equal(durationMs, AGENT_ACTIVE_HOUR_MS * 4 * 0.5, "exact 2h derived duration, not 2h minus the pause");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-162: with no pause at all (clock constant across both reads), the duration was already exact -- sanity companion to the paused cases", t => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const created = createTask(handle, { id: "T-912", title: "No pause, constant clock", workload: "Normal", detail: { estimatedEffort: "4h" }, actor: "test" });
+    assert.equal(created.ok, true, JSON.stringify(created));
+
+    const constant = pausedClock("2026-10-14T12:00:00.000Z", 0);
+    const claim = claimTask(handle, { taskId: "T-912", actor: "worker", now: constant, leaseDurationMs: 28_800_000 });
+    assert.ok(claim.ok, JSON.stringify(claim));
+    if (!claim.ok) return;
+    const durationMs = new Date(claim.claim.expiresAt).getTime() - new Date(claim.claim.claimedAt).getTime();
+    assert.equal(durationMs, 28_800_000);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});

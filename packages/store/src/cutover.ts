@@ -72,6 +72,11 @@ export type ImportDryRunResult = {
  * the store becomes authoritative and immediately rewrites the Markdown from
  * it, so an unreconciled disagreement is not a warning about the board -- it is
  * silent deletion of the losing side. Reconcile in Markdown first.
+ *
+ * `prerequisites-dependson-mismatch` is also what keeps `import --commit` from
+ * writing a board whose detail lists and dependency edges diverge (T-161): it is
+ * the import-side door of that invariant, not only a cutover-era check, so do
+ * not prune it as cleanup.
  */
 const CUTOVER_BLOCKING_WARNING_CODES = new Set(["prerequisites-dependson-mismatch"]);
 

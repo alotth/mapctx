@@ -59,16 +59,14 @@ function leaseMsOfClaim(claimLike: { claim: { claimedAt: string; expiresAt: stri
 }
 
 /**
- * The CLI uses the real wall clock (no injected `now`), and `appendTaskClaim`
- * reads it twice -- once for the `nowMs` the lease is computed against, once
- * again for `claimedAt` -- so `expiresAt - claimedAt` can be a couple of
- * milliseconds short of the exact derived/override duration. A tolerance
- * check here is about that clock-read gap, not about the derivation itself,
- * which the store-level tests already pin exactly with an injected clock.
+ * The CLI uses the real wall clock (no injected `now`). Since T-162,
+ * `appendTaskClaim` derives `claimedAt` and `expiresAt` from ONE clock read, so
+ * `expiresAt - claimedAt` is the derived/override duration exactly -- no
+ * tolerance. A drift here means the two timestamps came from different reads
+ * again.
  */
 function assertLeaseCloseTo(actualMs: number, expectedMs: number, label: string): void {
-  const driftMs = expectedMs - actualMs;
-  assert.ok(driftMs >= 0 && driftMs <= 50, `${label}: expected ~${expectedMs}ms, got ${actualMs}ms (drift ${driftMs}ms)`);
+  assert.equal(actualMs, expectedMs, `${label}: expected exactly ${expectedMs}ms, got ${actualMs}ms (drift ${expectedMs - actualMs}ms)`);
 }
 
 function appendCoordination(repoDir: string, tomlBody: string): void {

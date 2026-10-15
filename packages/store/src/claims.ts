@@ -246,7 +246,19 @@ export function appendTaskClaim(
   // with no dispatch at all, and one claim legitimately spans the attempts of
   // a retry.
   const renewToken = crypto.randomBytes(RENEW_TOKEN_BYTES).toString("hex");
-  const claimedAt = now().toISOString();
+  // T-162: ONE clock read for both ends of the lease. `expiresAt` has always
+  // been derived from `nowMs`, read at the top of this function; `claimedAt`
+  // used to be a SECOND read taken here, after the admission checks, the
+  // lease derivation and two token generations. Whatever time passed in
+  // between -- a GC pause, a descheduled process under a parallel test run --
+  // silently shortened the lease the row describes: a claim asking for 8h
+  // would store a pair 62ms apart from 8h, and `expiresAt - claimedAt` is how
+  // every consumer reads the duration back. That is a row that misstates its
+  // own lease, and it is also what made the T-141 CLI test need a wall-clock
+  // tolerance at all. Deriving both from the same instant makes the stored
+  // duration exact by construction rather than approximately right when the
+  // machine is idle.
+  const claimedAt = new Date(nowMs).toISOString();
   const expiresAt = new Date(nowMs + leaseDurationMs).toISOString();
 
   append({

@@ -506,13 +506,16 @@ function printHelp(): void {
   console.log('    [--description text | --description-file path] [--json] [--actor name]');
   console.log('    Whitelisted fields only (title,type,parentTaskId,priority,workload,tags,domains,startDate,dueDate,');
   console.log('    predictedStart,externalId,externalLinks,specMode,assignees,iteration,milestone; detail.* for');
-  console.log('    role,impact,estimatedEffort,filesAffected,testsRequired,summary,prerequisites,blocking;');
+  console.log('    role,impact,estimatedEffort,filesAffected,testsRequired,summary;');
   console.log('    waitReason=review|decision|parked|blocked-external as a shorthand for detail.waitReason).');
   console.log('    List fields take `--set detail.filesAffected=a,b` or `--set detail.filesAffected=["a","b"]`;');
   console.log('    `[a,b]` is refused with the correct syntax instead of storing the brackets. `=null` clears.');
   console.log('    --set externalLinks=https://…,github:issue:42 validates every entry as a URI.');
   console.log('    --depends-on/--blocking replace both');
   console.log('    the dependency edges and the detail prerequisites/blocking so the two surfaces never diverge.');
+  console.log('    They are the ONLY way to write those two lists: `--set detail.prerequisites`/`detail.blocking`');
+  console.log('    is refused, because it would move the list while the edges every planning read follows stayed put.');
+  console.log('    An omitted flag leaves its own edge kind untouched.');
   console.log('    The Git-authored `description:` prose of tasks/<ID>.md is NOT patchable here via --set.');
   console.log('    --description / --description-file rewrite only that block of the file (structured fields,');
   console.log('    an epic budget section and the store-owned ## Acceptance checklist are kept), in any');
@@ -592,6 +595,29 @@ function refuse(payload: unknown, message: string): never {
 }
 
 /**
+ * T-162: an INTERNAL fault is not a refusal, and must not be reported like
+ * one.
+ *
+ * A `TypeError`/`ReferenceError` out of this CLI means the program is wrong
+ * -- a binding that was undefined when it was read, a name that does not
+ * exist. No user input produces one, and no refusal path raises one: every
+ * refusal is a `CliRefusal` or a plain `Error` with a sentence written for
+ * the operator.
+ *
+ * The distinction earns its keep because of a real investigation. A test
+ * failed once in a full suite with `Cannot read properties of undefined
+ * (reading 'open')`, and the message was all anyone had: the catch below
+ * printed `error.message` and dropped the stack, so three separate
+ * investigations could say the shape looked like `StoreHandle` arriving
+ * undefined and none could say from where. Nothing about the failure was
+ * hard except that the one line identifying the module had been discarded
+ * before anybody saw it.
+ */
+function isInternalFault(error: unknown): error is Error {
+  return (error instanceof TypeError || error instanceof ReferenceError) && !(error instanceof CliRefusal);
+}
+
+/**
  * Writes the one error document for a failed run, entirely on stderr.
  *
  * Under `--json`: exactly one line of compact JSON -- the structured refusal
@@ -618,6 +644,11 @@ export function writeCliError(error: unknown, json: boolean): void {
   const payload = error instanceof CliRefusal ? error.payload : undefined;
   if (json) process.stderr.write(`${JSON.stringify(payload ?? { ok: false, error: message })}\n`);
   console.error(`Error: ${message}`);
+  // Only for internal faults, and only AFTER the two lines a refusal is
+  // allowed to print -- the stdout/stderr contract the refusal tests pin
+  // (T-127 review A10, the two-line `--json` shape, the human-mode single
+  // line) describes refusals, and this is deliberately not one.
+  if (isInternalFault(error) && error.stack) console.error(error.stack);
 }
 
 function parseArgs(argv: string[]): {
@@ -1950,7 +1981,11 @@ function requireStoreAuthority(cwd: string): { toml: { config: MapctxTomlConfig;
   return { toml, handle, tasksRoot: toml.dir };
 }
 
-const LIST_SET_FIELDS = new Set(['tags', 'domains', 'assignees', 'externalLinks', 'filesAffected', 'testsRequired', 'prerequisites', 'blocking']);
+// `prerequisites`/`blocking` are not settable lists: the store refuses them by name
+// (`edge-list-not-patchable`, T-161), so they must reach it unparsed -- a list
+// parse here would answer a malformed value with syntax advice for a key that
+// can never be written.
+const LIST_SET_FIELDS = new Set(['tags', 'domains', 'assignees', 'externalLinks', 'filesAffected', 'testsRequired']);
 
 const LIST_SYNTAX_HELP = 'use `a,b,c` (bare, comma-separated) or a JSON array like `["a","b"]`';
 

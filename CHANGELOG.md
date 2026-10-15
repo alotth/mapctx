@@ -465,6 +465,20 @@ holdership is a role-aware question that belongs with C5.
   lists through one update** — `mapctx task update <id> --depends-on a,b
   --blocking x,y`, spelling an empty list as `""` (omitting the flag is now a
   no-op on that kind, so it would leave the divergence in place)
+* **fix:** `--set detail.prerequisites=...` and `--set detail.blocking=...`
+  are refused. Those two lists are not fields, they are a rendering of the
+  task's dependency edges — `export` builds them from the edges, `reconcile`
+  diffs them against the edges, and `plan`/`gantt` read only the edges — so
+  writing one on its own moved the rendering while the thing it renders
+  stayed put. The refusal names the flag that writes both surfaces in one
+  event: `--depends-on` for `prerequisites`, `--blocking` for `blocking`.
+  Both keys are gone from the patchable-detail list in `--help` and in the
+  unknown-field refusal. The library's `createTask` likewise refuses a
+  `detail.prerequisites`/`detail.blocking` that disagrees with its
+  `dependsOn`/`blocking` argument (compared as sets, so order and duplicates
+  are not a disagreement) and derives the stored lists from the edges; the
+  CLI's `task create` never exposed those two, so no `task create` invocation
+  changes
 * **fix:** `mapctx validate` reports `bulk-updated-timestamp` as `info`
   instead of `warning`, and adds `info` as a severity that counts as neither
   an error nor a warning. A shared `updated` date is what an ordinary day of
@@ -479,3 +493,11 @@ holdership is a role-aware question that belongs with C5.
   validator behind `validate --snapshots` still reports the same code as a
   `warning` in `snapshots.structural`, so a `--json` consumer sees the
   observation twice with two severities; it never affects the exit code
+* **fix:** a claim's `claimedAt` and `expiresAt` now come from one clock
+  read, so `expiresAt - claimedAt` is exactly the lease that was applied.
+  Before this, both values came from two reads, so the recorded lease was a
+  few milliseconds short of the real one, and the 24 h ceiling, measured
+  from `claimedAt`, ended that much earlier.
+* **fix:** an internal CLI fault (`TypeError`/`ReferenceError`) now prints its
+  stack on stderr after the `Error:` line, so the failing module is named.
+  Refusals keep their exact shape (one JSON line under `--json`, then `Error:`).
