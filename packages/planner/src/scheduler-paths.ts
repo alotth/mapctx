@@ -64,6 +64,28 @@ export function normalizeSchedulerPath(value: string): string {
  * would suppress the legitimate `overbroad` findings this route exists to
  * produce. An unresolvable path (normalizing to `""`) is not matched against
  * anything either — "locates nothing" is not "is the same file as".
+ *
+ * WHAT THIS DOES NOT SEE (the guard's documented limits)
+ *
+ * Case and `..` are covered, and separators are folded before this is ever
+ * reached. The one disagreement that escapes is **Unicode normalization**:
+ * `café.ts` written NFC by one runner and NFD by another is disjoint to the
+ * audit comparison AND to this function, so a guard built on it does not fire
+ * and the serialized-pair route records `overbroad` — a permanent "these two
+ * did not conflict" about receipts that may have written the same bytes
+ * (T-159 review F1). Reachability is narrow but real: the pair must have been
+ * serialized, and the two receipts must come from runners that disagree about
+ * normal form — macOS reports NFD, Linux NFC. A mixed-OS fleet is what this
+ * epic is building toward.
+ *
+ * It is documented rather than fixed on purpose. The one-line fix is
+ * `.normalize("NFC")` inside `normalizeSchedulerPath`, but that function is the
+ * SCHEDULER's comparison: adding it there widens what gets serialized for every
+ * plan, which is a decision about scheduling behaviour and not a patch to a
+ * guard. Narrowing the fix to this function instead would split the two apart,
+ * and they share a definition precisely so they cannot disagree. Either way it
+ * is a choice someone should make deliberately, with the plan-level cost in
+ * front of them.
  */
 export function schedulerTreatsAsSameFile(left: string, right: string): boolean {
   const a = normalizeSchedulerPath(left);

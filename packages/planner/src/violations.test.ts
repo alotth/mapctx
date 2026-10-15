@@ -191,8 +191,16 @@ test("T-159: a case-only spelling difference between receipts does not fabricate
   // serialized the pair. Recording "they did not conflict" would be a
   // permanent false audit fact about tasks that wrote the same bytes.
   assert.deepEqual(result.filter(item => item.kind === "overbroad"), []);
-  // Skipping silently would look identical to a clean pair.
-  assert.equal(warnings.filter(w => w.includes("INCOMPLETE") && w.includes("SRC/a.ts vs src/a.ts")).length, 1);
+  // Skipping silently would look identical to a clean pair. This fixture puts
+  // the two tasks in one wave AND in serializedPairs, so after T-163 both
+  // routes speak about the same disagreement, and they say different things:
+  // the collision route may have MISSED a real collision, the serialized-pair
+  // route cannot establish that they never intersected. Asserting the pair of
+  // them by name rather than counting keeps either one from going quiet.
+  const spelling = warnings.filter(w => w.includes("INCOMPLETE") && w.includes("SRC/a.ts vs src/a.ts"));
+  assert.equal(spelling.length, 2, JSON.stringify(warnings));
+  assert.equal(spelling.filter(w => w.includes("the serialized pair") && w.includes("no overbroad finding")).length, 1);
+  assert.equal(spelling.filter(w => w.includes("the wave pair") && w.includes("MISSED")).length, 1);
 });
 
 test("T-159: a `..` that resolves to the other receipt's path does not fabricate overbroad", async () => {
@@ -210,7 +218,10 @@ test("T-159: a `..` that resolves to the other receipt's path does not fabricate
     });
   });
   assert.deepEqual(result.filter(item => item.kind === "overbroad"), []);
-  assert.equal(warnings.filter(w => w.includes("INCOMPLETE")).length, 1);
+  // Both routes again: same wave and a serialized pair. See the previous test.
+  assert.equal(warnings.filter(w => w.includes("INCOMPLETE")).length, 2, JSON.stringify(warnings));
+  assert.equal(warnings.filter(w => w.includes("the serialized pair")).length, 1);
+  assert.equal(warnings.filter(w => w.includes("the wave pair")).length, 1);
 });
 
 test("T-159: a legitimate overbroad between genuinely disjoint paths is still emitted", async () => {
@@ -385,4 +396,182 @@ test("T-159/T-133: a normalizable sentinel spelling is caught only by the final 
       `${spelling} normalizes to the sentinel, which asserts nothing about any file`
     );
   }
+});
+
+// ---- T-163 Part A (T-159 review, risk 4): the collision route stops missing a
+// collision in SILENCE.
+//
+// Every fixture here passes NO `serializedPairs`, so only the collision route
+// runs and the warning cannot be the serialized-pair one wearing a different
+// hat. The reviewer's measured table is the specification: case and `..` fall
+// through, a backslash does not, a real collision and a disjoint wave are
+// unchanged.
+
+test("T-163: a case-only disagreement in one wave warns and records nothing", async () => {
+  const receipts: TaskReceipt[] = [
+    { taskId: "T-001", receipt: receipt(uuid("1"), ["SRC/a.ts"]) },
+    { taskId: "T-002", receipt: receipt(uuid("2"), ["src/a.ts"]) }
+  ];
+  let result: ReturnType<typeof detectClaimViolations> = [];
+  const warnings = await captureWarnings(() => {
+    result = detectClaimViolations({
+      waves: [{ waveId: uuid("3"), taskIds: ["T-001", "T-002"] }],
+      receipts,
+      detectedAt: "2026-08-17T10:02:00.000Z"
+    });
+  });
+  // Part A records nothing: which spelling an immutable `path` would carry is
+  // Part B, and belongs with the store's recordClaimViolations.
+  assert.deepEqual(result, []);
+  const missed = warnings.filter(w => w.includes("INCOMPLETE") && w.includes("the wave pair"));
+  assert.equal(missed.length, 1, JSON.stringify(warnings));
+  assert.ok(missed[0]?.includes("T-001/T-002"), "the warning must name the pair");
+  assert.ok(missed[0]?.includes("SRC/a.ts vs src/a.ts"), "the warning must name the spellings");
+  assert.ok(missed[0]?.includes("MISSED"), "this route misses a collision rather than fabricating an absence");
+  // Not the serialized-pair warning: no serializedPairs were supplied.
+  assert.equal(warnings.filter(w => w.includes("the serialized pair")).length, 0);
+});
+
+test("T-163: a `..` disagreement in one wave warns and records nothing", async () => {
+  const receipts: TaskReceipt[] = [
+    { taskId: "T-001", receipt: receipt(uuid("1"), ["src/x/../a.ts"]) },
+    { taskId: "T-002", receipt: receipt(uuid("2"), ["src/a.ts"]) }
+  ];
+  let result: ReturnType<typeof detectClaimViolations> = [];
+  const warnings = await captureWarnings(() => {
+    result = detectClaimViolations({
+      waves: [{ waveId: uuid("3"), taskIds: ["T-001", "T-002"] }],
+      receipts,
+      detectedAt: "2026-08-17T10:02:00.000Z"
+    });
+  });
+  assert.deepEqual(result, []);
+  assert.equal(warnings.filter(w => w.includes("INCOMPLETE") && w.includes("the wave pair")).length, 1, JSON.stringify(warnings));
+});
+
+test("T-163: a real collision is unchanged and silent", async () => {
+  const receipts: TaskReceipt[] = [
+    { taskId: "T-001", receipt: receipt(uuid("1"), ["src/a.ts"]) },
+    { taskId: "T-002", receipt: receipt(uuid("2"), ["src/a.ts"]) }
+  ];
+  let result: ReturnType<typeof detectClaimViolations> = [];
+  const warnings = await captureWarnings(() => {
+    result = detectClaimViolations({
+      waves: [{ waveId: uuid("3"), taskIds: ["T-001", "T-002"] }],
+      receipts,
+      detectedAt: "2026-08-17T10:02:00.000Z"
+    });
+  });
+  // The intersection is non-empty, so there is nothing to be blind about.
+  assert.deepEqual(result.map(item => [item.kind, item.path]), [["collision", "src/a.ts"]]);
+  assert.equal(warnings.filter(w => w.includes("INCOMPLETE")).length, 0, JSON.stringify(warnings));
+});
+
+test("T-163: a genuinely disjoint wave is unchanged and silent", async () => {
+  const receipts: TaskReceipt[] = [
+    { taskId: "T-001", receipt: receipt(uuid("1"), ["src/a.ts"]) },
+    { taskId: "T-002", receipt: receipt(uuid("2"), ["docs/b.md"]) }
+  ];
+  let result: ReturnType<typeof detectClaimViolations> = [];
+  const warnings = await captureWarnings(() => {
+    result = detectClaimViolations({
+      waves: [{ waveId: uuid("3"), taskIds: ["T-001", "T-002"] }],
+      receipts,
+      detectedAt: "2026-08-17T10:02:00.000Z"
+    });
+  });
+  // The whole point of the guard being equality-only: a clean wave must stay
+  // clean and quiet, or the warning becomes noise nobody reads.
+  assert.deepEqual(result, []);
+  assert.equal(warnings.filter(w => w.includes("INCOMPLETE")).length, 0, JSON.stringify(warnings));
+});
+
+test("T-163: a backslash spelling is caught by intersectPaths, not by the warning", async () => {
+  const receipts: TaskReceipt[] = [
+    { taskId: "T-001", receipt: receipt(uuid("1"), ["src\\a.ts"]) },
+    { taskId: "T-002", receipt: receipt(uuid("2"), ["src/a.ts"]) }
+  ];
+  let result: ReturnType<typeof detectClaimViolations> = [];
+  const warnings = await captureWarnings(() => {
+    result = detectClaimViolations({
+      waves: [{ waveId: uuid("3"), taskIds: ["T-001", "T-002"] }],
+      receipts,
+      detectedAt: "2026-08-17T10:02:00.000Z"
+    });
+  });
+  // The reviewer's table: the protocol's intersectPaths folds separators, so
+  // this is a real collision and never reaches the blind-spot branch. Pinned
+  // because the doc comment now claims exactly this.
+  assert.deepEqual(result.map(item => [item.kind, item.path]), [["collision", "src/a.ts"]]);
+  assert.equal(warnings.filter(w => w.includes("INCOMPLETE")).length, 0, JSON.stringify(warnings));
+});
+
+test("T-163: a claim-covered overlap stays silent -- the pair did intersect", async () => {
+  const receipts: TaskReceipt[] = [
+    { taskId: "T-001", receipt: receipt(uuid("1"), ["src/a.ts"]) },
+    { taskId: "T-002", receipt: receipt(uuid("2"), ["src/a.ts"]) }
+  ];
+  const claims = ["T-001", "T-002"].map((taskId, index) => ({
+    claimId: uuid(String(5 + index)), taskId, domains: [], paths: ["src/**"],
+    mode: "write" as const, confidence: "high" as const, provenance: "authored" as const
+  }));
+  let result: ReturnType<typeof detectClaimViolations> = [];
+  const warnings = await captureWarnings(() => {
+    result = detectClaimViolations({
+      waves: [{ waveId: uuid("3"), taskIds: ["T-001", "T-002"] }],
+      receipts, claims,
+      detectedAt: "2026-08-17T10:02:00.000Z"
+    });
+  });
+  // Both tasks legitimately claimed the file, so no violation is recorded and
+  // the gate DOES open -- but there is no spelling-hidden pair for
+  // `schedulerSameFilePairs` to find here, so nothing warns. This stays silent
+  // for the right reason: the guard found nothing, not because the gate was
+  // shut. The next test is the case that separates the two gates.
+  assert.deepEqual(result, []);
+  assert.equal(warnings.filter(w => w.includes("INCOMPLETE")).length, 0, JSON.stringify(warnings));
+});
+
+test("T-163: the Unicode limit is real and documented, not silently covered", () => {
+  // T-159 review F1. NFC and NFD spellings of one filename are disjoint to the
+  // audit comparison AND to the scheduler's, so neither the G4 guard nor the
+  // collision-route warning fires. Pinned as a KNOWN LIMIT so that whoever
+  // later adds `.normalize()` sees this expectation flip and has to decide
+  // deliberately -- the fix widens the scheduler's comparison for every plan.
+  const nfc = "café.ts";
+  const nfd = "café.ts";
+  assert.notEqual(nfc, nfd, "the two spellings must differ byte-wise for this to mean anything");
+  assert.equal(schedulerTreatsAsSameFile(nfc, nfd), false);
+  assert.equal(normalizeSchedulerPath(nfc) === normalizeSchedulerPath(nfd), false);
+});
+
+test("T-163 F1: a covered intersection must not hide a spelling collision on another file", async () => {
+  // The reviewer's repro, and the case that distinguishes "nothing
+  // intersected" from "nothing was recorded". `src/a.ts` intersects and both
+  // tasks claim it, so no violation is recorded -- correct. `SRC/b.ts` vs
+  // `src/b.ts` is a spelling disagreement hiding an UNCOVERED collision, and
+  // gating on the intersection left that silent: the caller got an empty array
+  // indistinguishable from a clean wave.
+  const receipts: TaskReceipt[] = [
+    { taskId: "T-001", receipt: receipt(uuid("1"), ["src/a.ts", "SRC/b.ts"]) },
+    { taskId: "T-002", receipt: receipt(uuid("2"), ["src/a.ts", "src/b.ts"]) }
+  ];
+  const claims = ["T-001", "T-002"].map((taskId, index) => ({
+    claimId: uuid(String(7 + index)), taskId, domains: [], paths: ["src/a.ts"],
+    mode: "write" as const, confidence: "high" as const, provenance: "authored" as const
+  }));
+  let result: ReturnType<typeof detectClaimViolations> = [];
+  const warnings = await captureWarnings(() => {
+    result = detectClaimViolations({
+      waves: [{ waveId: uuid("3"), taskIds: ["T-001", "T-002"] }],
+      receipts, claims,
+      detectedAt: "2026-08-17T10:02:00.000Z"
+    });
+  });
+  // Still no violation row: Part A reports, it does not record.
+  assert.deepEqual(result, []);
+  const missed = warnings.filter(w => w.includes("INCOMPLETE") && w.includes("the wave pair"));
+  assert.equal(missed.length, 1, JSON.stringify(warnings));
+  assert.ok(missed[0]?.includes("SRC/b.ts vs src/b.ts"), "the warning must name the hidden pair, not the covered one");
+  assert.ok(!missed[0]?.includes("src/a.ts vs"), "the covered file is not a spelling disagreement");
 });
