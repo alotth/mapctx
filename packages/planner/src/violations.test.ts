@@ -523,9 +523,11 @@ test("T-163: a claim-covered overlap stays silent -- the pair did intersect", as
       detectedAt: "2026-08-17T10:02:00.000Z"
     });
   });
-  // Both tasks legitimately claimed the file, so no violation -- but the branch
-  // keys off the INTERSECTION, not off whether a violation was pushed, so this
-  // must not warn. Getting that backwards would warn on every covered overlap.
+  // Both tasks legitimately claimed the file, so no violation is recorded and
+  // the gate DOES open -- but there is no spelling-hidden pair for
+  // `schedulerSameFilePairs` to find here, so nothing warns. This stays silent
+  // for the right reason: the guard found nothing, not because the gate was
+  // shut. The next test is the case that separates the two gates.
   assert.deepEqual(result, []);
   assert.equal(warnings.filter(w => w.includes("INCOMPLETE")).length, 0, JSON.stringify(warnings));
 });
@@ -541,4 +543,35 @@ test("T-163: the Unicode limit is real and documented, not silently covered", ()
   assert.notEqual(nfc, nfd, "the two spellings must differ byte-wise for this to mean anything");
   assert.equal(schedulerTreatsAsSameFile(nfc, nfd), false);
   assert.equal(normalizeSchedulerPath(nfc) === normalizeSchedulerPath(nfd), false);
+});
+
+test("T-163 F1: a covered intersection must not hide a spelling collision on another file", async () => {
+  // The reviewer's repro, and the case that distinguishes "nothing
+  // intersected" from "nothing was recorded". `src/a.ts` intersects and both
+  // tasks claim it, so no violation is recorded -- correct. `SRC/b.ts` vs
+  // `src/b.ts` is a spelling disagreement hiding an UNCOVERED collision, and
+  // gating on the intersection left that silent: the caller got an empty array
+  // indistinguishable from a clean wave.
+  const receipts: TaskReceipt[] = [
+    { taskId: "T-001", receipt: receipt(uuid("1"), ["src/a.ts", "SRC/b.ts"]) },
+    { taskId: "T-002", receipt: receipt(uuid("2"), ["src/a.ts", "src/b.ts"]) }
+  ];
+  const claims = ["T-001", "T-002"].map((taskId, index) => ({
+    claimId: uuid(String(7 + index)), taskId, domains: [], paths: ["src/a.ts"],
+    mode: "write" as const, confidence: "high" as const, provenance: "authored" as const
+  }));
+  let result: ReturnType<typeof detectClaimViolations> = [];
+  const warnings = await captureWarnings(() => {
+    result = detectClaimViolations({
+      waves: [{ waveId: uuid("3"), taskIds: ["T-001", "T-002"] }],
+      receipts, claims,
+      detectedAt: "2026-08-17T10:02:00.000Z"
+    });
+  });
+  // Still no violation row: Part A reports, it does not record.
+  assert.deepEqual(result, []);
+  const missed = warnings.filter(w => w.includes("INCOMPLETE") && w.includes("the wave pair"));
+  assert.equal(missed.length, 1, JSON.stringify(warnings));
+  assert.ok(missed[0]?.includes("SRC/b.ts vs src/b.ts"), "the warning must name the hidden pair, not the covered one");
+  assert.ok(!missed[0]?.includes("src/a.ts vs"), "the covered file is not a spelling disagreement");
 });

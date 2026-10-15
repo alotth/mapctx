@@ -26,7 +26,9 @@
  *   G2 alone off                     RED    pair-filter + G3-final off RED
  *   G3-final alone off               RED    G4 alone off               RED
  *   serializedPairs pair-filter off  green  G4 widened to always-true  RED
- *   collision-route warning off      RED
+ *   collision-route warning off      RED    warning gated on empty
+ *                                           intersection instead of
+ *                                           nothing-recorded            RED
  *
  * So G2 is individually load-bearing -- it is the SOLE redaction guard of the
  * serialized-pair route, where G1 cannot help because that route reads
@@ -59,6 +61,13 @@
  * collision and an empty result that reads like a clean wave. It records no
  * violation and changes no existing output, so nothing but its own test can
  * notice if it disappears.
+ *
+ * Its GATE is in the matrix separately, because the first version got it wrong
+ * in a way no existing test could see (T-163 review F1). Gating on "nothing
+ * intersected" rather than "nothing was recorded" stays silent for a pair whose
+ * intersection is entirely claim-covered while a second pair of changed files
+ * hides an uncovered collision behind a spelling. The two conditions differ
+ * only there, which is exactly why that row exists.
  *
  * NOT IN THE MATRIX, because no guard here covers it: Unicode normalization.
  * NFC and NFD spellings of one filename are disjoint to the audit comparison
@@ -210,10 +219,12 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
         const left = waveReceipts[i]!;
         const right = waveReceipts[j]!;
         const intersection = actualIntersection(left, right);
+        let recordedForPair = false;
         for (const path of intersection) {
           if (claimCovers(claims, left.taskId, path) && claimCovers(claims, right.taskId, path)) continue;
           const [taskAId, taskBId] = [left.taskId, right.taskId].sort();
           violations.push(makeViolation({ waveId: wave.waveId, kind: "collision", taskAId, taskBId, path, detectedAt, source: "derived-from-receipts" }));
+          recordedForPair = true;
         }
         // T-163 Part A. This route uses `actualIntersection` POSITIVELY, so a
         // spelling disagreement makes it miss a collision rather than fabricate
@@ -228,7 +239,21 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
         // receipt's, the right's, or the normalized form -- is a question about
         // the audit record and belongs with the store's `recordClaimViolations`
         // (T-163 Part B, deliberately out of scope here).
-        if (intersection.length === 0) {
+        //
+        // The gate is "nothing was RECORDED", not "nothing INTERSECTED", and
+        // the two differ exactly where it matters (T-163 review F1). A pair can
+        // intersect on one file that both tasks legitimately claimed -- so
+        // nothing is recorded, correctly -- while a SECOND pair of changed
+        // files is a spelling-hidden collision that nothing covers. Gating on
+        // the intersection stayed silent there and handed the caller an empty
+        // array indistinguishable from a clean wave, which is the one case
+        // where this route's own thesis did not hold.
+        //
+        // Known property (review F2): a caller that passes the same pair both
+        // in a wave and in `serializedPairs` gets one warning from each route.
+        // They say different things -- missed collision here, unestablishable
+        // non-intersection there -- and both are true, so neither is suppressed.
+        if (!recordedForPair) {
           const sameFile = schedulerSameFilePairs(left.receipt.changedFiles, right.receipt.changedFiles);
           if (sameFile.length > 0) warnOnMissedCollisionSpelling(left.taskId, right.taskId, sameFile);
         }
