@@ -10,6 +10,9 @@ import { openDatabase, openDatabaseReadOnly, checkIntegrity } from "./db"
 import { StoreHandle } from "./store-handle"
 import { getTask, listTasks } from "./projections"
 import { MAINTENANCE_LOCK_FILENAME } from "./maintenance"
+import { listJournalSequences } from "./journal"
+import { reviseAcceptance, approveAcceptanceCriterion } from "./acceptance"
+import { listRedactionCandidates } from "./redact"
 import { cleanupDir, mkTmpDir, setupGoldenRepo } from "./__test-helpers__"
 import {
   BACKUP_MANIFEST_FILENAME,
@@ -529,4 +532,182 @@ test("redactionCount on the manifest records the privacy state at backup time", 
     fixture.restoreEnv()
     cleanupDir(fixture.repoDir)
   }
+})
+
+// ---------------------------------------------------------------------------
+// Review ALTO-1: `listJournalSequences` enumerates two journal layouts --
+// flat `<seq>.json` files AND `batch-<lo>-<hi>/` directories (a multi-event
+// transaction stages its entries together, which claim/violations/import all
+// do). The original createBackup rebuilt only the flat path and threw ENOENT
+// on every batched entry. 909 tests passed with this broken because every
+// fixture appended exactly one event per transaction.
+// ---------------------------------------------------------------------------
+
+test("MUTATION GUARD (ALTO-1): createBackup copies a batch-* journal directory, not just flat files, and the round trip survives it", () => {
+  const fixture = materialize()
+  const restoreDir = mkTmpDir("mapctx-backup-restore-target-")
+  try {
+    const handle = StoreHandle.open(fixture.storeDir)
+    const nodeId = handle.nodeId
+    // Two appends inside ONE write transaction: this is exactly what
+    // runInWriteTransaction uses for claim/violations/import, and it is what
+    // stages entries in a batch-<lo>-<hi>/ directory instead of flat files.
+    handle.runInWriteTransaction(append => {
+      append({ eventType: "task.patched", actor: "test", payload: { taskId: "T-101", patch: { title: "batch a" }, source: "test" } })
+      append({ eventType: "task.patched", actor: "test", payload: { taskId: "T-101", patch: { title: "batch b" }, source: "test" } })
+      return { ok: true }
+    })
+    handle.close()
+
+    const journalDir = path.join(fixture.storeDir, "events", nodeId)
+    const entries = fs.readdirSync(journalDir)
+    const batchDirName = entries.find(name => /^batch-\d+-\d+$/.test(name))
+    assert.ok(batchDirName, `expected a batch-* directory on disk, got: ${JSON.stringify(entries)}`)
+    const flatFiles = entries.filter(name => /^\d+\.json$/.test(name))
+    const sequences = listJournalSequences(fixture.storeDir, nodeId)
+    assert.ok(sequences.length > flatFiles.length, "listJournalSequences must report more sequences than there are flat files -- the batch entries are the difference")
+
+    const [, lo] = /^batch-(\d+)-(\d+)$/.exec(batchDirName!)!
+    const batchEntryRelPath = `events/${nodeId}/${batchDirName}/${lo}.json`
+    assert.ok(fs.existsSync(path.join(fixture.storeDir, batchEntryRelPath)), "sanity: the batched entry file must exist on disk")
+
+    const created = createBackup({ storeDir: fixture.storeDir, projectId: fixture.projectId })
+    assert.ok(fs.existsSync(path.join(created.backupDir, batchEntryRelPath)), "the batched entry must exist INSIDE the archive")
+    assert.ok(
+      created.manifest.files.some(file => file.path === batchEntryRelPath),
+      `the batched entry must be listed in the manifest's files[]: ${JSON.stringify(created.manifest.files.map(f => f.path))}`
+    )
+
+    const verification = verifyBackup(created.backupDir)
+    assert.equal(verification.ok, true, JSON.stringify(verification.problems))
+
+    const restored = restoreBackup({ backupDir: created.backupDir, storeDir: restoreDir })
+    assert.equal(restored.ok, true)
+    assert.equal(restored.eventCount, sequences.length)
+    const restoredDb = openDatabaseReadOnly(path.join(restoreDir, "mapctx.db"))
+    const restoredTask = getTask(restoredDb, "T-101")
+    assert.equal(restoredTask?.title, "batch b", "the second batched event must have actually applied")
+  } finally {
+    fixture.restoreEnv()
+    cleanupDir(fixture.repoDir)
+    cleanupDir(restoreDir)
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Review ALTO-2: the copy-order argument covers a writer that APPENDS. It
+// does not cover `mapctx redact`, which REWRITES an already-published entry
+// (commit the redaction event + UPDATE event_log + scrub projections, THEN
+// rewrite the journal entry). Landing that between STEP 1 (VACUUM INTO) and
+// STEP 2 (journal copy) used to produce an archive with a PRE-redaction
+// database and a POST-redaction journal: it verified, restored, and served
+// the plaintext again while its restored ledger claimed the redaction had
+// been applied -- with manifest.redactionCount reading 0, pointing the wrong
+// way for the exact question that field exists to answer.
+// ---------------------------------------------------------------------------
+
+/** Produces one genuinely redactable event (acceptance.approved + evidence),
+ * same pattern T-126/T-127's privacy tests use -- task.patched carries no
+ * redactable root at all. */
+function createRedactableAcceptanceEvidence(storeDir: string, secret: string): { nodeId: string; sequence: number } {
+  const handle = StoreHandle.open(storeDir)
+  try {
+    const revised = reviseAcceptance(handle, { taskId: "T-101", condition: "criteria", texts: ["one"], actor: "test", expectRevision: 0 })
+    assert.ok(revised.ok, JSON.stringify(revised))
+    if (!revised.ok) throw new Error("unreachable")
+    const approved = approveAcceptanceCriterion(handle, { taskId: "T-101", index: 0, actor: "test", expectRevision: revised.revision, evidence: { customer: secret } })
+    assert.ok(approved.ok, JSON.stringify(approved))
+    const candidates = listRedactionCandidates(handle.db)
+    const candidate = candidates.find(c => c.redactableFieldPaths.length > 0)
+    assert.ok(candidate, `expected a redactable candidate, got: ${JSON.stringify(candidates)}`)
+    return { nodeId: candidate!.nodeId, sequence: candidate!.sequence }
+  } finally {
+    handle.close()
+  }
+}
+
+test("MUTATION GUARD (ALTO-2): createBackup refuses a backup whose journal copy straddles a mapctx redact, leaving nothing written", () => {
+  const { redactEvidence } = require("./redact") as typeof import("./redact")
+  const fixture = materialize()
+  const SECRET = "shift-premium-9f31a778421"
+  try {
+    const target = createRedactableAcceptanceEvidence(fixture.storeDir, SECRET)
+    const dbPath = path.join(fixture.storeDir, "mapctx.db")
+
+    const outDir = path.join(mkTmpDir("mapctx-backup-redact-skew-"), "archive")
+    const stagingSibling = `${outDir}.partial-${process.pid}`
+
+    const realDb = openDatabaseReadOnly(dbPath)
+    const proxiedDb = wrapDbInterceptingVacuum(realDb, () => {
+      // Redaction REWRITES a published entry: by the time this runs, the
+      // database snapshot (VACUUM INTO) has already been taken, but the
+      // journal -- copied next -- will now be post-redaction.
+      const handle = StoreHandle.open(fixture.storeDir)
+      try {
+        const result = redactEvidence(handle, {
+          target,
+          fieldPath: "evidence",
+          reason: "straddle probe",
+          actor: "dpo",
+          commit: true
+        })
+        assert.ok(result.ok, JSON.stringify(result))
+      } finally {
+        handle.close()
+      }
+    })
+
+    let threw: Error | null = null
+    try {
+      createBackup({ storeDir: fixture.storeDir, projectId: fixture.projectId, db: proxiedDb, outDir })
+    } catch (error) {
+      threw = error as Error
+    } finally {
+      realDb.close()
+    }
+    assert.ok(threw, "a backup that straddles a redaction must be refused, not written")
+    assert.match(threw!.message, /redaction/i)
+    assert.equal(fs.existsSync(outDir), false, "nothing must be written to the target archive directory")
+    assert.equal(fs.existsSync(stagingSibling), false, "no .partial-<pid> staging directory must survive the refusal")
+  } finally {
+    fixture.restoreEnv()
+    cleanupDir(fixture.repoDir)
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Review BAIXA-1: manifest path confinement split on "/" only, so a
+// backslash-separated escape (`..\..\evil`) passed on POSIX (harmless there)
+// but would have escaped the target on Windows, where path.join treats `\`
+// as a separator. The module documents paths as "always POSIX-separated", so
+// a backslash anywhere is itself a signal the manifest is not one we wrote.
+// ---------------------------------------------------------------------------
+
+test("manifest path confinement rejects backslash-separated escapes, not just forward-slash ones; legitimate posix paths still pass", () => {
+  for (const unsafe of ["..\\..\\evil", "events\\..\\..\\evil", "a\\b"]) {
+    assert.throws(() => parseManifest(JSON.stringify({
+      manifestVersion: BACKUP_MANIFEST_SCHEMA_VERSION,
+      schemaVersion: currentSchemaVersion(),
+      projectId: null, nodeId: null, incarnationId: null, createdAt: new Date().toISOString(),
+      reason: "operator", eventCount: 0, journalCounts: {}, redactionCount: 0,
+      files: [{ path: unsafe, role: "canonical", bytes: 0, sha256: "0".repeat(64) }]
+    })), /unsafe path/, `expected ${JSON.stringify(unsafe)} to be refused`)
+  }
+  for (const unsafe of ["/etc/evil", "../../evil", "events/../../evil"]) {
+    assert.throws(() => parseManifest(JSON.stringify({
+      manifestVersion: BACKUP_MANIFEST_SCHEMA_VERSION,
+      schemaVersion: currentSchemaVersion(),
+      projectId: null, nodeId: null, incarnationId: null, createdAt: new Date().toISOString(),
+      reason: "operator", eventCount: 0, journalCounts: {}, redactionCount: 0,
+      files: [{ path: unsafe, role: "canonical", bytes: 0, sha256: "0".repeat(64) }]
+    })), /unsafe path/, `expected ${JSON.stringify(unsafe)} to still be refused`)
+  }
+  const safe = parseManifest(JSON.stringify({
+    manifestVersion: BACKUP_MANIFEST_SCHEMA_VERSION,
+    schemaVersion: currentSchemaVersion(),
+    projectId: null, nodeId: null, incarnationId: null, createdAt: new Date().toISOString(),
+    reason: "operator", eventCount: 0, journalCounts: {}, redactionCount: 0,
+    files: [{ path: "events/ok/1.json", role: "canonical", bytes: 0, sha256: "0".repeat(64) }]
+  }))
+  assert.equal(safe.files[0].path, "events/ok/1.json")
 })

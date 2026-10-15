@@ -3,7 +3,8 @@ import { spawnSync } from "node:child_process"
 import * as fs from "fs"
 import * as path from "path"
 import test, { type TestContext } from "node:test"
-import { readMapctxToml, resolveProjectStoreDir, StoreHandle } from "@mapctx/store"
+import { DatabaseSync } from "node:sqlite"
+import { MIGRATIONS, readMapctxToml, resolveProjectStoreDir, StoreHandle } from "@mapctx/store"
 
 // T-138: same golden-repo + isolated MAPCTX_HOME fixture used across the
 // T-127 CLI test files. Its internal helpers are deliberately not part of
@@ -146,4 +147,24 @@ test("redact --commit warns when a backup predates the redaction, naming the bac
   assert.equal(result.status, 0, result.stderr);
   assert.match(String(result.stderr), /backup\(s\) under/);
   assert.match(String(result.stderr), /were taken BEFORE this redaction/);
+});
+
+test("MUTATION GUARD (MEDIA-1): a pre-migration snapshot notice reaches stderr even when the trigger is NOT a store-prefixed command, and even on the error path", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+
+  const dbPath = path.join(f.storeDir(), "mapctx.db");
+  const lastMigrationVersion = MIGRATIONS.reduce((max, m) => Math.max(max, m.version), 0);
+  const db = new DatabaseSync(dbPath);
+  db.prepare("DELETE FROM schema_migrations WHERE version = ?").run(lastMigrationVersion);
+  db.close();
+
+  // `task move` is deliberately NOT one of the three store-prefixed commands
+  // reportSnapshotNotices() used to be hand-wired into. The pre-migration
+  // hook fires on ANY writable open, and the migration itself fails here
+  // (it is not idempotent), so this also proves the notice survives the
+  // error path, not only a clean exit.
+  const result = f.cli(["task", "move", "T-101", "--status", "ready-for-do", "--actor", "test", "--json"]);
+  assert.notEqual(result.status, 0, "the re-applied migration must fail");
+  assert.match(String(result.stderr), /Note: pre-migration snapshot/);
 });
