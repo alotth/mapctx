@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 18/27
+  - subIssueProgress: 19/27
   - priority: high
   - workload: null
   - tags: []
@@ -3371,7 +3371,7 @@
 ### [T-161] Store: fechar as outras portas de divergência entre arestas e lista de detail
 
   - id: T-161
-  - status: review
+  - status: done
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3382,7 +3382,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
   - updated: 2026-10-15
   - detail: ./tasks/T-161.md
@@ -3409,7 +3409,7 @@
 ### [T-163] Rota de collision avisa quando receipts discordam da grafia (T-159 risco 4, parte A)
 
   - id: T-163
-  - status: backlog
+  - status: doing
   - type: task
   - parent: E-017
   - subIssueProgress: null
@@ -3422,7 +3422,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-10-15
   - detail: ./tasks/T-163.md
 
 ### [T-164] postpack remove todos os pacotes que o prepack copiou
