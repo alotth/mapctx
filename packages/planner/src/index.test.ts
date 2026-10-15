@@ -481,16 +481,21 @@ test("executor capacity limits each wave without changing collision explanation"
 // file's normalizePath is not exported, it is exercised by the behaviour it
 // causes in planExecution, not by calling it directly. ----
 // ---- T-166: the scheduler's normalizePath (scheduler-paths.ts) folds Unicode
-// to NFC, so `planExecution` itself -- not just the violations.ts guard --
-// must agree that NFC and NFD spellings of one filename are the same
-// declared path, including through a glob and through dependency-free
-// scheduling into separate waves. A disjoint-accent control sits alongside
-// each positive case, same reasoning as the T-132/T-159 pairs above: a
-// scheduler that always serializes on any accented path would pass the
-// positive case for the wrong reason.
+// to a canonical normal form, so `planExecution` itself -- not just the
+// violations.ts guard -- must agree that NFC and NFD spellings of one
+// filename are the same declared path, including through a glob and through
+// dependency-free scheduling into separate waves. A disjoint-accent control
+// sits alongside each positive case, same reasoning as the T-132/T-159 pairs
+// above: a scheduler that always serializes on any accented path would pass
+// the positive case for the wrong reason.
+//
+// T-166 review F1: the chosen form is NFD, not NFC -- NFC is not
+// prefix-preserving (composing a base letter with its mark consumes the
+// letter a glob's static prefix ended on), which narrows what the scheduler
+// serializes rather than only widening it. See scheduler-paths.ts.
 //
 // Cause labels (`causes[].paths`) are built from the NORMALIZED (lowercased,
-// NFC) form on both sides (see `causePath` in index.ts), not the raw input
+// NFD) form on both sides (see `causePath` in index.ts), not the raw input
 // spelling -- so an NFC/NFD pair's cause label shows the same normalized
 // string on both sides of the arrow, which is itself part of what T-166
 // fixed: before, the two different byte sequences would have produced two
@@ -509,8 +514,9 @@ test("T-166: NFC and NFD declared paths for the same filename serialize into sep
   assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
     "the scheduler must fold Unicode and serialize these as the same declared file");
   assert.equal(report.serializedPairs.length, 1);
-  // Both sides of the cause label normalize to the same NFC-folded string.
-  assert.deepEqual(report.serializedPairs[0].causes[0].paths, [`src/${nfc} ↔ src/${nfc}`]);
+  // Both sides of the cause label normalize to the same NFD-folded string
+  // (causePath -> normalizeSchedulerPath, which normalizes to NFD).
+  assert.deepEqual(report.serializedPairs[0].causes[0].paths, [`src/${nfd} ↔ src/${nfd}`]);
 });
 
 test("T-166 control: two genuinely different accented filenames stay in one wave", () => {
@@ -539,7 +545,75 @@ test("T-166: an accented glob collides with the other normal form of a matching 
   });
   assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
   assert.equal(report.serializedPairs.length, 1);
-  assert.deepEqual(report.serializedPairs[0].causes[0].paths, [`src/${nfc}/** ↔ src/${nfc}/a.ts`]);
+  assert.deepEqual(report.serializedPairs[0].causes[0].paths, [`src/${nfd}/** ↔ src/${nfd}/a.ts`]);
+});
+
+test("T-166 F1: an NFC glob narrows and MISSES the NFD spelling of a matching concrete path (regression)", () => {
+  // T-166 review F1's exact failure mode, pinned at the scheduler level. Under
+  // NFC the static prefix of `src/cafe*` is `src/cafe`, which is NOT a prefix
+  // of the NFD spelling `cafe` + U+0301 + `.ts` -- composing the mark consumes
+  // the base letter the prefix ended on. The pair must still serialize (NFD
+  // does not narrow this); the companion test below pins the control.
+  const nfd = "cafe\u0301"; // "e" + U+0301 COMBINING ACUTE ACCENT
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob with cut prefix", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/cafe*"] },
+      { id: "T-B", title: "writes NFD file", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${nfd}.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "src/cafe* must still match the NFD spelling of café.ts -- under NFC this pair would run in parallel over one file");
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-166 F1: an NFC glob narrows and MISSES an NFD glob over the same name (regression)", () => {
+  const nfd = "cafe\u0301";
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob with cut prefix", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/cafe*"] },
+      { id: "T-B", title: "glob over NFD spelling", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${nfd}*`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-166 F1: an NFC single-char wildcard narrows and MISSES the NFD spelling (regression)", () => {
+  const nfd = "cafe\u0301";
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "single-char wildcard", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/cafe?.ts"] },
+      { id: "T-B", title: "writes NFD file", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${nfd}.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-166 F1: an NFC directory glob narrows and MISSES the NFD spelling of the directory (regression)", () => {
+  const nfd = "cafe\u0301";
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob over cut-prefix dir", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/cafe*/x.ts"] },
+      { id: "T-B", title: "writes NFD dir file", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${nfd}/x.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-166 F1 control: the cut-prefix glob stays disjoint from an unrelated path", () => {
+  // Guards the four regressions above against widening to always-true: the
+  // same glob shape used in every case above must still leave a genuinely
+  // unrelated path alone.
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob with cut prefix", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/cafe*"] },
+      { id: "T-B", title: "unrelated file", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/other.ts"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]]);
+  assert.deepEqual(report.serializedPairs, []);
 });
 
 test("T-166: an accented glob does not collide with a genuinely different accented directory", () => {

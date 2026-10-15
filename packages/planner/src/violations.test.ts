@@ -535,11 +535,12 @@ test("T-163: a claim-covered overlap stays silent -- the pair did intersect", as
 test("T-166: the former Unicode limit is closed -- NFC and NFD spellings are one file to the guard", () => {
   // Was "T-163: the Unicode limit is real and documented, not silently
   // covered" (T-159 review F1), pinning NFC/NFD as disjoint to the scheduler's
-  // comparison as a documented limit. T-166 folded `.normalize("NFC")` into
-  // `normalizeSchedulerPath`, so this guard now agrees with the scheduler: the
-  // two spellings are the same file. Written as Unicode escapes, not
-  // visually-identical accented literals, so no editor or tool can silently
-  // normalize the fixture and make this pass for the wrong reason.
+  // comparison as a documented limit. T-166 folded canonical Unicode
+  // normalization into `normalizeSchedulerPath`, so this guard now agrees
+  // with the scheduler: the two spellings are the same file. Written as
+  // Unicode escapes, not visually-identical accented literals, so no editor
+  // or tool can silently normalize the fixture and make this pass for the
+  // wrong reason.
   const nfc = "caf\u00E9.ts"; // U+00E9 LATIN SMALL LETTER E WITH ACUTE
   const nfd = "cafe\u0301.ts"; // "e" + U+0301 COMBINING ACUTE ACCENT
   assert.notEqual(nfc, nfd, "the two spellings must differ byte-wise for this to mean anything");
@@ -547,11 +548,12 @@ test("T-166: the former Unicode limit is closed -- NFC and NFD spellings are one
   assert.equal(normalizeSchedulerPath(nfc) === normalizeSchedulerPath(nfd), true);
 });
 
-// ---- T-166: the scheduler's path comparison folds Unicode to NFC, so the
-// shared guard (G4) and the collision-route warning widen along with it. Both
-// directions matter for the same reason T-159's case/`..` tests did: a guard
-// that only suppresses is indistinguishable from one that suppresses
-// everything, so a disjoint-name control sits next to every positive case.
+// ---- T-166: the scheduler's path comparison folds Unicode to a canonical
+// normal form (NFD, per T-166 review F1), so the shared guard (G4) and the
+// collision-route warning widen along with it. Both directions matter for
+// the same reason T-159's case/`..` tests did: a guard that only suppresses
+// is indistinguishable from one that suppresses everything, so a
+// disjoint-name control sits next to every positive case.
 
 test("T-166: an NFC/NFD spelling pair in serializedPairs does not fabricate overbroad and warns instead", async () => {
   const nfc = "caf\u00E9.ts";
@@ -614,9 +616,9 @@ test("T-166: `..` and case resolve across an accent-form disagreement at the gua
     "a glob is not equal to a path it would match -- equality only, as for any other pattern");
 });
 
-test("T-166 mutation sentinel: dies if `.normalize(\"NFC\")` is removed from normalizeSchedulerPath", () => {
+test("T-166 mutation sentinel: dies if `.normalize(\"NFD\")` is removed from normalizeSchedulerPath", () => {
   // Named so a failure here points straight at the one line T-166 added.
-  // Verified manually: with `.normalize("NFC")` deleted from
+  // Verified manually: with `.normalize("NFD")` deleted from
   // `normalizeSchedulerPath` (scheduler-paths.ts) and the package rebuilt,
   // this assertion fails (NFC !== NFD without normalization) while every
   // other assertion in this block (case folding, "..", lowercasing) keeps
@@ -625,6 +627,83 @@ test("T-166 mutation sentinel: dies if `.normalize(\"NFC\")` is removed from nor
   const nfd = "cafe\u0301.ts"; // "e" + U+0301 COMBINING ACUTE ACCENT
   assert.notEqual(nfc, nfd, "sentinel: the two spellings must differ byte-wise");
   assert.equal(normalizeSchedulerPath(nfc), normalizeSchedulerPath(nfd));
+});
+
+// ---- T-166 review F4: canonical, not compatibility. NFKC/NFKD would map
+// structural characters this comparator relies on (`/ . *`) onto look-alike
+// code points that are NOT those characters under NFC/NFD, turning a
+// Unicode spelling difference into path traversal or a broadened glob. This
+// pins the distinction so "normalize harder" cannot read as an improvement.
+
+test("T-166 review F4: a HORIZONTAL ELLIPSIS stays a literal segment, not a `..` traversal", () => {
+  // U+2025 TWO DOT LEADER / U+2026-adjacent look-alikes are NOT ".." under
+  // NFC or NFD. NFKC/NFKD compatibility-decompose U+2025 to "..", which would
+  // let this resolve a traversal that was never written.
+  assert.notEqual(normalizeSchedulerPath("src/x/\u2025/a.ts"), "src/a.ts");
+});
+
+test("T-166 review F4: a HORIZONTAL ELLIPSIS after `**` does not pop the wildcard into unresolvable", () => {
+  // Under NFKC/NFKD the same code point becomes ".." and pops the `**`,
+  // returning "" -- which the scheduler reads as "unknown, collide broadly".
+  // Canonical normalization must not manufacture that traversal.
+  assert.notEqual(normalizeSchedulerPath("src/**/\u2025/a.ts"), "");
+});
+
+test("T-166 review F4: fullwidth solidus and asterisk stay literal segments, not a separator or wildcard", () => {
+  // U+FF0F FULLWIDTH SOLIDUS and U+FF0A FULLWIDTH ASTERISK compatibility-fold
+  // to `/` and `*` under NFKC/NFKD, which would let a plain Unicode character
+  // split a path or introduce a wildcard it never had.
+  assert.notEqual(normalizeSchedulerPath("src\uFF0Fa.ts"), "src/a.ts");
+  assert.notEqual(normalizeSchedulerPath("src/a\uFF0A.ts"), "src/a*.ts");
+});
+
+// ---- T-166 review F6: a spelling-disagreement warning that holds a
+// non-ASCII path now also carries an escaped form in brackets, because the
+// two spellings can render identically. Pure-ASCII disagreements (case,
+// `..`, backslash) are unaffected and keep their exact pre-T-166 wording --
+// pinned here so the T-159/T-163 assertions above stay meaningful.
+
+test("T-166 review F6: an NFC/NFD warning carries a distinguishable escaped form in brackets", async () => {
+  const nfc = "caf\u00E9.ts";
+  const nfd = "cafe\u0301.ts";
+  const escapedNfc = "caf\\u00E9.ts";
+  const escapedNfd = "cafe\\u0301.ts";
+  const receipts: TaskReceipt[] = [
+    { taskId: "T-001", receipt: receipt(uuid("1"), [nfc]) },
+    { taskId: "T-002", receipt: receipt(uuid("2"), [nfd]) }
+  ];
+  const warnings = await captureWarnings(() => {
+    detectClaimViolations({
+      waves: [{ waveId: uuid("3"), taskIds: ["T-001", "T-002"] }],
+      receipts,
+      detectedAt: "2026-08-17T10:02:00.000Z"
+    });
+  });
+  const missed = warnings.filter(w => w.includes("INCOMPLETE") && w.includes("the wave pair"));
+  assert.equal(missed.length, 1, JSON.stringify(warnings));
+  assert.ok(missed[0]?.includes(`[${escapedNfc} vs ${escapedNfd}]`),
+    "the two visually-identical spellings must be distinguishable via their escaped forms");
+});
+
+test("T-166 review F6: a pure-ASCII spelling warning carries no escaped-form brackets", async () => {
+  // Exact regression guard for the T-159/T-163 wording: an ASCII-only
+  // disagreement must not grow a bracketed suffix, because those tests match
+  // the warning text exactly.
+  const receipts: TaskReceipt[] = [
+    { taskId: "T-001", receipt: receipt(uuid("1"), ["SRC/b.ts"]) },
+    { taskId: "T-002", receipt: receipt(uuid("2"), ["src/b.ts"]) }
+  ];
+  const warnings = await captureWarnings(() => {
+    detectClaimViolations({
+      waves: [{ waveId: uuid("3"), taskIds: ["T-001", "T-002"] }],
+      detectedAt: "2026-08-17T10:02:00.000Z",
+      receipts
+    });
+  });
+  const missed = warnings.filter(w => w.includes("INCOMPLETE") && w.includes("the wave pair"));
+  assert.equal(missed.length, 1, JSON.stringify(warnings));
+  assert.ok(missed[0]?.includes("SRC/b.ts vs src/b.ts"));
+  assert.ok(!missed[0]?.includes("["), "a pure-ASCII pair must not grow a bracketed escaped form");
 });
 
 test("T-163 F1: a covered intersection must not hide a spelling collision on another file", async () => {
