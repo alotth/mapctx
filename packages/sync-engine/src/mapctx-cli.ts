@@ -595,28 +595,6 @@ function refuse(payload: unknown, message: string): never {
 }
 
 /**
- * Writes the one error document for a failed run, entirely on stderr.
- *
- * Under `--json`: exactly one line of compact JSON -- the structured refusal
- * payload when there is one, otherwise a minimal `{ok:false,error}` envelope
- * so `2>` always captures something parseable -- followed by the human
- * `Error:` line. A consumer reads the FIRST LINE of stderr; it does not have
- * to find the `\nError:` boundary (review A10), though that boundary still
- * works and is documented in `mapctx --help`.
- *
- * Without `--json` only the `Error:` sentence is printed, keeping T-126's
- * condition for `redact`.
- *
- * T-134 closed the reason this mattered most: a claim refusal used to embed
- * the holder's `leaseToken` (T-124 C0), so human mode not printing the
- * payload was the only thing keeping the credential off the terminal. The
- * token is now redacted at the source (`disclosableClaim` in store/claims.ts)
- * and no longer reaches a refusal payload at all, in either mode. This
- * condition is no longer load-bearing for that secret -- it stays because
- * stdout/stderr hygiene is worth having on its own, and because a future
- * payload could carry something else that should not be sprayed.
- */
-/**
  * T-162: an INTERNAL fault is not a refusal, and must not be reported like
  * one.
  *
@@ -639,6 +617,28 @@ function isInternalFault(error: unknown): error is Error {
   return (error instanceof TypeError || error instanceof ReferenceError) && !(error instanceof CliRefusal);
 }
 
+/**
+ * Writes the one error document for a failed run, entirely on stderr.
+ *
+ * Under `--json`: exactly one line of compact JSON -- the structured refusal
+ * payload when there is one, otherwise a minimal `{ok:false,error}` envelope
+ * so `2>` always captures something parseable -- followed by the human
+ * `Error:` line. A consumer reads the FIRST LINE of stderr; it does not have
+ * to find the `\nError:` boundary (review A10), though that boundary still
+ * works and is documented in `mapctx --help`.
+ *
+ * Without `--json` only the `Error:` sentence is printed, keeping T-126's
+ * condition for `redact`.
+ *
+ * T-134 closed the reason this mattered most: a claim refusal used to embed
+ * the holder's `leaseToken` (T-124 C0), so human mode not printing the
+ * payload was the only thing keeping the credential off the terminal. The
+ * token is now redacted at the source (`disclosableClaim` in store/claims.ts)
+ * and no longer reaches a refusal payload at all, in either mode. This
+ * condition is no longer load-bearing for that secret -- it stays because
+ * stdout/stderr hygiene is worth having on its own, and because a future
+ * payload could carry something else that should not be sprayed.
+ */
 export function writeCliError(error: unknown, json: boolean): void {
   const message = error instanceof Error ? error.message : String(error);
   const payload = error instanceof CliRefusal ? error.payload : undefined;

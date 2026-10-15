@@ -493,3 +493,11 @@ holdership is a role-aware question that belongs with C5.
   validator behind `validate --snapshots` still reports the same code as a
   `warning` in `snapshots.structural`, so a `--json` consumer sees the
   observation twice with two severities; it never affects the exit code
+* **fix:** a claim's `claimedAt` and `expiresAt` now come from one clock
+  read, so `expiresAt - claimedAt` is exactly the lease that was applied.
+  Before this, both values came from two reads, so the recorded lease was a
+  few milliseconds short of the real one, and the 24 h ceiling, measured
+  from `claimedAt`, ended that much earlier.
+* **fix:** an internal CLI fault (`TypeError`/`ReferenceError`) now prints its
+  stack on stderr after the `Error:` line, so the failing module is named.
+  Refusals keep their exact shape (one JSON line under `--json`, then `Error:`).
