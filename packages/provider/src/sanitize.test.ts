@@ -21,7 +21,8 @@ import * as fs from "fs"
 import * as path from "path"
 import { compilePrivacyPatterns, replacePrivacyPatterns } from "@mapctx/store"
 import {
-  findStructuralResidues, sanitizeDryRun, sanitizeTaskForPublication, SANITIZE_TOKENS,
+  findStructuralResidues, measureStructuralSweep, sanitizeDryRun, sanitizeTaskForPublication,
+  structuralSweepSteps, SANITIZE_TOKENS,
   type PublishableTask
 } from "./sanitize"
 
@@ -236,31 +237,102 @@ test("ALTO-1: pathological bodies (base64, path-like runs, near-misses, data URI
     const started = Date.now()
     const result = sanitizeTaskForPublication({ taskId: "T-ALTO1", title: "x", body }, OK)
     const elapsed = Date.now() - started
-    // Deliberately loose: real detection of a quadratic regression is the
-    // scaling test below (t(80k) < 6x t(40k)), not this absolute value. This
-    // ceiling only needs to fail a catastrophic rule, and 3000ms still does
-    // that with ~5x margin -- a mutated quadratic artifact rule measured 16s
-    // here, the quadratic email rule 9.6s. Kept generous so disk I/O jitter
-    // on a reviewer's first run (right after npm ci) can't flake it.
+    // T-165: real detection of a quadratic regression here is `result.ok`
+    // below, not this elapsed-time ceiling. A quadratic rule blows the
+    // structural budget (STRUCTURAL_BUDGET_MS, 1000ms) long before 3000ms,
+    // so the task is refused as scan-incomplete -- measured: the historical
+    // ALTO-1 mutation (a regex star in front of the `epics/` literal)
+    // refused in 3 of these 5 shapes, a quadratic email-quantifier mutation
+    // refused 1 of 5. This 3000ms ceiling does NOT catch either mutation:
+    // the budget truncates the sweep first, so measured totals land at
+    // 1393-1654ms, all comfortably under 3000ms. (The "16s / 9.6s" this
+    // comment used to cite is from before the structural budget existed.)
+    // It stays here only as a backstop against a real hang. The class of
+    // driver -- an unbounded leftward walk or backtrack -- is what the
+    // steps-counting test below actually detects.
     assert.ok(elapsed < 3000, `${name} took ${elapsed}ms, expected linear-time sanitization`)
     assert.ok(result.ok, `${name}: ${JSON.stringify(result.ok ? undefined : result.message)}`)
   }
 })
 
-test("ALTO-1: sanitization time scales linearly, not quadratically, with pathological body size", () => {
-  const timeFor = (size: number): number => {
-    const body = "packages/store/src/".repeat(Math.ceil(size / 20))
-    const started = Date.now()
-    const result = sanitizeTaskForPublication({ taskId: "T-ALTO1-scale", title: "x", body }, OK)
-    const elapsed = Date.now() - started
-    assert.ok(result.ok)
-    return elapsed
-  }
-  // Warm the JIT so the first measurement is not skewed by cold-start cost.
-  timeFor(10000)
-  const t40k = Math.max(timeFor(40000), 1)
-  const t80k = timeFor(80000)
-  assert.ok(t80k < t40k * 6, `expected roughly linear scaling, got ${t40k}ms -> ${t80k}ms for double the input`)
+// ---- T-165: wall-clock assertions in this suite, classified. Every margin
+// below was independently measured; this table is the record of why the
+// scaling test that used to sit here was replaced, and why the other five
+// elapsed-time assertions in this file (and two in packages/store) were not.
+//
+// class A: compares two small wall-clock measurements against each other.
+//          Fragile -- the margin between them is often a few milliseconds,
+//          so a single GC pause can blow the ratio with nothing quadratic
+//          having happened.
+// class B: an absolute ceiling that only a real hang crosses. Not fragile --
+//          every ceiling below has 30x+ measured headroom over its slowest
+//          observed clean run.
+//
+// test                                                   | assertion                   | class | measured margin
+// sanitize.test.ts ~164 (unfinished privacy budget)      | elapsed < 3000, budget 80ms | B     | aborts ~80ms -> 37x
+// sanitize.test.ts ~236 (pathological bodies)             | elapsed < 3000              | B     | worst clean shape 24ms -> 125x
+// sanitize.test.ts ~250 (scaling, REPLACED by the test below) | t80k < t40k * 6         | A     | 6ms absolute -- this was the flake
+// sanitize.test.ts ~536 (tasks/*.md corpus)               | elapsed < 5000              | B     | ~70ms for ~190 files -> 71x
+// store/privacy.test.ts ~147 (catastrophic backtracking)  | elapsed < 2000, vm timeout  | B     | ~60ms -> 33x
+// store/privacy.test.ts ~258 (replace budget exhaustion)  | elapsed < 2000, budget 60ms | B     | ~61ms -> 33x
+//
+// Only the scaling test was class A. The other five are "did not hang"
+// ceilings with 33x-125x of measured headroom and are left exactly as they
+// are. ----
+
+test("ALTO-1/T-165: the structural sweep's work scales linearly in STEPS, not wall clock -- a leftward walk that lost its bound is 4x per doubling", () => {
+  // The old version of this test compared two wall-clock measurements
+  // (`t80k < t40k * 6`) and flaked about 1 in 5 runs: a body this size
+  // sanitizes in a couple of milliseconds, so the ratio's margin was a few
+  // milliseconds of GC jitter, not a quadratic signal. `measureStructuralSweep`
+  // runs the production sweep and counts the work it does as it goes
+  // (`execCalls`, `expandLeftSteps`, `charsCopied`), so this test asserts on
+  // an integer the sweep itself produced instead of the clock.
+  //
+  // The body is path-like end to end: `epics/<uuid>/artifacts/a/x.md~`,
+  // repeated. The trailing `~` is the reason this shape is pathological for
+  // `expandLeft`: `~` is one of the characters PATH_PREFIX_CHARACTER walks
+  // over, so the leftward walk keeps crossing it -- but `~` is NOT in the
+  // artifact rule's own tail class, so it also ends one match and starts the
+  // next right after it. Every character of the body ends up path-like,
+  // which is exactly the condition that makes an unbounded leftward walk
+  // visible: if `expandLeft`'s floor regresses from `start > copiedTo` to
+  // `start > 0` (the ALTO-1 shape), each match's walk re-crosses everything
+  // already consumed by the matches before it.
+  const body = (n: number) => `epics/${EPIC}/artifacts/a/x.md~`.repeat(n)
+  const smallBody = body(500)
+  const largeBody = body(1000)
+
+  // Budget is deliberately generous (60s): this measures a COMPLETE sweep,
+  // not the sweep's interaction with the structural budget.
+  const small = measureStructuralSweep(smallBody, 60000)
+  const large = measureStructuralSweep(largeBody, 60000)
+  assert.ok(!small.exhausted && !large.exhausted, "this test measures a complete sweep, not a truncated one")
+
+  const smallSteps = structuralSweepSteps(small.work)
+  const largeSteps = structuralSweepSteps(large.work)
+
+  // Measured on this body: 1012 -> 2012 steps for the doubled input, a 1.99x
+  // ratio -- linear. With ALTO-1's mutation (expandLeft's floor relaxed to
+  // `start > 0`) the same doubling measures 4.00x.
+  assert.ok(
+    largeSteps <= smallSteps * 2.5,
+    `expected roughly linear scaling, got ${smallSteps} steps (n=500) -> ${largeSteps} steps (n=1000), ` +
+      `ratio ${(largeSteps / smallSteps).toFixed(2)} ` +
+      `(execCalls ${small.work.execCalls}->${large.work.execCalls}, ` +
+      `expandLeftSteps ${small.work.expandLeftSteps}->${large.work.expandLeftSteps}, ` +
+      `charsCopied ${small.work.charsCopied}->${large.work.charsCopied})`
+  )
+
+  // Measured on this body: 2012 steps / 60000 chars = 0.034 steps/char, about
+  // 118x inside this ceiling. With ALTO-1's mutation the same body measures
+  // 29,971,013 steps -- 500 steps/char, a 14,900x overshoot.
+  assert.ok(
+    largeSteps <= largeBody.length * 4,
+    `expected a per-character ceiling on total work, got ${largeSteps} steps for ${largeBody.length} chars ` +
+      `(${(largeSteps / largeBody.length).toFixed(3)} steps/char) ` +
+      `(execCalls ${large.work.execCalls}, expandLeftSteps ${large.work.expandLeftSteps}, charsCopied ${large.work.charsCopied})`
+  )
 })
 
 test("ALTO-1: a real artifact link still collapses to its slug, and markdown link syntax survives the leftward expansion", () => {
@@ -273,6 +345,18 @@ test("ALTO-1: a real artifact link still collapses to its slug, and markdown lin
   assert.ok(!result.task.body!.includes("/Users/"))
   assert.ok(result.task.body!.startsWith("see [doc]("), result.task.body)
   assert.ok(result.task.body!.endsWith(") end"), result.task.body)
+  // The assertions above are all still true if `expandLeft` is disabled: the
+  // `absolute-path` rule that runs after the artifact rule mops up the
+  // orphaned `/Users/...` prefix on its own, producing
+  // `<local-path><internal-artifact:...>` -- two tokens where the walk is
+  // supposed to produce one. None of the checks above can see that, because
+  // they only check for absence/presence of substrings, not for what sits
+  // between them. Pinning the exact string is what makes the leftward walk
+  // load-bearing rather than redundant with the rule that follows it.
+  assert.equal(result.task.body, "see [doc](<internal-artifact:t058-walking-skeleton>) end",
+    "the leftward walk must absorb the path prefix INTO the artifact token: with it disabled, " +
+    "the absolute-path rule mops up the orphaned prefix instead, leaving " +
+    "`<local-path><internal-artifact:...>` -- two tokens where one belongs")
 })
 
 test("ALTO-1: an exhausted structural budget refuses as scan-incomplete, naming the structural budget", () => {
@@ -281,6 +365,21 @@ test("ALTO-1: an exhausted structural budget refuses as scan-incomplete, naming 
   assert.ok(!result.ok)
   assert.equal(result.reason, "scan-incomplete")
   assert.match(result.message, /structural budget/)
+})
+
+test("T-165: structuralExhausted.afterMs reports time actually spent, not the budget it ran against", () => {
+  // budgetMs: -1 exhausts on the very first deadline check, so afterMs
+  // measures ~0ms of real sweeping. That the two differ (-1 vs ~0) is the
+  // proof afterMs is reporting spent time, not just echoing budgetMs back
+  // (T-138 review BAIXA-2).
+  const result = sanitizeTaskForPublication({ taskId: "T-ALTO1d", title: "x", body: "y" }, { ...OK, structuralBudgetMs: -1 })
+  assert.equal(result.ok, false)
+  assert.ok(!result.ok)
+  assert.ok(result.report.structuralExhausted, "expected structuralExhausted on the report")
+  const { afterMs, budgetMs } = result.report.structuralExhausted!
+  assert.ok(Number.isFinite(afterMs) && afterMs >= 0, `afterMs must be a finite, non-negative number, got ${afterMs}`)
+  assert.notEqual(afterMs, budgetMs)
+  assert.match(result.message, /after \d+ms/)
 })
 
 // ---- ALTO-2: four more machine-local path families, previously declared
