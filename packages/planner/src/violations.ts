@@ -29,8 +29,8 @@
  *   collision-route warning off      RED    warning gated on empty
  *                                           intersection instead of
  *                                           nothing-recorded            RED
- *   normalize("NFD") removed         RED    NFD -> NFC (not
- *   NFD -> NFKC/NFKD                 RED    prefix-preserving)          RED
+ *   normalize("NFD") removed         RED    NFD -> NFKC                RED
+ *   NFD -> NFC                       RED    NFD -> NFKD                RED
  *
  * So G2 is individually load-bearing -- it is the SOLE redaction guard of the
  * serialized-pair route, where G1 cannot help because that route reads

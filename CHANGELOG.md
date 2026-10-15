@@ -181,10 +181,12 @@ filenames in NFD and Linux in NFC, so `café.ts` written on one host and
 
 Two consequences, and the first is the reason the second was accepted:
 
-* **`mapctx plan` serializes more, never less.** Two tasks whose declared paths
-  differ only in normal form now collide, so they land in different waves
-  instead of running in parallel over one file. Nothing that used to be
-  serialized becomes parallel.
+* **`mapctx plan` serializes more, not less, for every disagreement a mixed
+  fleet produces.** Two tasks whose declared paths differ only in the normal
+  form of one combining sequence now collide, so they land in different waves
+  instead of running in parallel over one file, and nothing in that class that
+  used to be serialized becomes parallel. The exception is canonical
+  reordering, below.
 * **The serialized-pair route stops recording a false `overbroad`.** Two
   receipts spelling one file NFC and NFD no longer read as proof that
   serializing the pair was unnecessary; guard G4 fires and the pair is skipped
@@ -199,11 +201,22 @@ truncated at the first wildcard and matched with `startsWith`, and NFC is not
 prefix-preserving: composing `e`+`◌́` into `é` consumes the base letter a
 prefix ended on, so under NFC `src/cafe*` stops matching the NFD spelling of
 `src/café.ts` and a pair that used to be serialized runs in parallel over one
-file. Over every ASCII letter against eight common marks, NFC breaks 298 of 832
-such prefixes and NFD breaks 0; across 15 declared-path shapes against a
-`52c73af` build, NFD narrows 0 and NFC narrows 4. The "never less" guarantee
-above is true only because the form is NFD, and tests pin each of those four
-shapes.
+file. Across 15 declared-path shapes against a `52c73af` build, NFD narrows 0
+and NFC narrows 4; tests pin each of those four shapes.
+
+**What no normal form fixes: canonical reordering.** Every form sorts combining
+marks by canonical combining class, so a glob whose static prefix is cut
+*between* two marks written out of canonical order does not survive the sort —
+`src/à*` against `src/à`+`◌̣`+`.ts` (grave first, dot-below second, which NFD
+swaps) serializes on `52c73af` and runs parallel here. That is a property of
+the truncation rather than of the form, and the fix belongs in `staticPrefix`,
+which must not cut inside a combining sequence: tracked as **T-170**. It needs
+a hand-typed `filesAffected` glob to reach, since macOS and Linux both report a
+single combining sequence already in canonical order, so no board state
+observed today exercises it. Note also that a prefix sweep with one mark per
+name — which is what shows NFD breaking none — has no boundary between two
+marks and therefore cannot see this class at all; over two marks, NFD breaks
+roughly a third of its probes.
 
 The form is canonical on purpose: NFKC/NFKD map 215 code points onto
 characters this comparison treats as structure (`U+2025` → `..`, `U+FF0F` → `/`,

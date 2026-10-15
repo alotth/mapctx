@@ -49,13 +49,35 @@
  * base letter with its mark consumes the letter the prefix ended on. So
  * `src/cafe*` declared by one task stops matching the NFD spelling of
  * `src/café.ts` declared by another, and a pair the scheduler used to
- * serialize runs in parallel over one file. Measured over every ASCII letter
- * against eight common marks, both spellings each: NFC breaks 298 of 832 such
- * prefixes, NFD breaks 0 (T-166 review F1, which found this with a repro).
+ * serialize runs in parallel over one file. Over every ASCII letter against a
+ * dozen common marks, one mark per name: NFC breaks a large fraction of such
+ * prefixes and NFD breaks none (T-166 review F1, which found this with a
+ * repro).
  *
  * NFD decomposes instead, so the base letter survives as its own code point
- * and every prefix that held on the raw input still holds. That makes the
- * guarantee below true rather than nearly true.
+ * and a prefix cut at a base letter still holds.
+ *
+ * WHAT NEITHER FORM FIXES — canonical REORDERING. Every normal form sorts
+ * combining marks by canonical combining class, so a prefix cut BETWEEN two
+ * marks written out of canonical order does not survive the sort. `src/à*`
+ * against `src/à`+`◌̣`+`.ts` — grave (ccc 230) written first, dot-below
+ * (ccc 220) second, so NFD swaps them — leaves `src/à` no longer a prefix,
+ * and that pair serializes on `52c73af` and runs parallel here (T-166 review
+ * attempt 2, N1). This is a property of the truncation, not of the form: no
+ * choice of normal form delivers it, and the fix belongs in `staticPrefix`,
+ * which must not cut inside a combining sequence — tracked as **T-170**.
+ *
+ * Note what the single-mark measurement above can and cannot show: a sweep
+ * with one mark per name has no prefix boundary between two marks, which is
+ * the only place NFD breaks, so "NFD breaks none" is evidence about
+ * composition and says nothing about reordering. The same sweep over two
+ * marks breaks roughly a third of its probes under NFD and slightly more
+ * under NFC.
+ *
+ * Reachability today is nil: it needs a hand-typed `filesAffected` glob cut
+ * between two marks in non-canonical order. macOS and Linux both report a
+ * single combining sequence already in canonical order, which is the whole
+ * case this task exists for.
  *
  * CANONICAL, NOT COMPATIBILITY. NFKC/NFKD would be a bug, not a stricter
  * version of this: they map 215 code points onto characters this function
@@ -71,11 +93,15 @@
  *
  * T-166 added this, for the SCHEDULER and not only for the guard below — they
  * read this one definition precisely so they cannot disagree about what one
- * filename is. With NFD the effect is only ever to widen: two paths differing
- * just in normal form become the same file, and no path comparison that
- * matched before stops matching, so a plan serializes more, never less. macOS
- * reports NFD and Linux NFC, so on a mixed-OS fleet the alternative was a
- * scheduler that ran two writers of one file in parallel.
+ * filename is. With NFD the effect is to widen for every disagreement the
+ * fleet actually produces: two paths differing only in the normal form of one
+ * combining sequence become the same file, and no comparison that matched
+ * before stops matching, so for that class a plan serializes more, never
+ * less. The one exception is the reordering case above — a glob prefix cut
+ * between two marks in non-canonical order, unreachable without a hand-typed
+ * path, fixed in `staticPrefix` under T-170. macOS reports NFD and Linux NFC,
+ * so on a mixed-OS fleet the alternative was a scheduler that ran two writers
+ * of one file in parallel.
  */
 export function normalizeSchedulerPath(value: string): string {
   const segments: string[] = [];
