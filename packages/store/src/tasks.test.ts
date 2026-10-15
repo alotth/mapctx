@@ -892,3 +892,138 @@ test("MUTATION GUARD: createTask refuses invalid acceptance shapes (criteria wit
     handle.close(); restoreEnv(); cleanupDir(repoDir);
   }
 });
+
+test("T-161 updateTask refuses detailPatch.prerequisites/blocking by name, naming the matching flag, and writes nothing", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const beforeDetail = getTaskDetail(handle.db, "T-102");
+    const beforeEdges = listDependencies(handle.db).filter(e => e.fromTaskId === "T-102");
+
+    const prereq = updateTask(handle, { taskId: "T-102", detailPatch: { prerequisites: ["E-100"] }, actor: "test" });
+    assert.equal(prereq.ok, false);
+    if (!prereq.ok) {
+      assert.equal(prereq.reason, "edge-list-not-patchable");
+      assert.match(prereq.message ?? "", /--depends-on/);
+    }
+
+    const blocking = updateTask(handle, { taskId: "T-102", detailPatch: { blocking: ["T-101"] }, actor: "test" });
+    assert.equal(blocking.ok, false);
+    if (!blocking.ok) {
+      assert.equal(blocking.reason, "edge-list-not-patchable");
+      assert.match(blocking.message ?? "", /--blocking/);
+    }
+
+    assert.deepEqual(getTaskDetail(handle.db, "T-102"), beforeDetail, "detail surface must be untouched by a refused patch");
+    assert.deepEqual(listDependencies(handle.db).filter(e => e.fromTaskId === "T-102"), beforeEdges, "edges must be untouched by a refused patch");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-161 updateTask refuses a detailPatch mixing a legal field with prerequisites/blocking as a whole, not partially", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const beforeDetail = getTaskDetail(handle.db, "T-102");
+
+    const mixedPrereq = updateTask(handle, { taskId: "T-102", detailPatch: { summary: "mixed patch must not land", prerequisites: [] }, actor: "test" });
+    assert.equal(mixedPrereq.ok, false);
+    if (!mixedPrereq.ok) assert.equal(mixedPrereq.reason, "edge-list-not-patchable");
+    assert.deepEqual(getTaskDetail(handle.db, "T-102"), beforeDetail, "legal summary field must not land alongside a refused edge-derived field");
+
+    const mixedBlocking = updateTask(handle, { taskId: "T-102", detailPatch: { summary: "mixed patch must not land either", blocking: [] }, actor: "test" });
+    assert.equal(mixedBlocking.ok, false);
+    if (!mixedBlocking.ok) assert.equal(mixedBlocking.reason, "edge-list-not-patchable");
+    assert.deepEqual(getTaskDetail(handle.db, "T-102"), beforeDetail);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-161 updateTask dependsOn/blocking still write both the edges and the detail lists (the refusal above must not have broken this)", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const target = createTask(handle, { title: "edge target for the supported-path check", actor: "test" });
+    assert.ok(target.ok);
+    if (!target.ok) return;
+
+    const applied = updateTask(handle, { taskId: "T-102", dependsOn: [target.taskId], actor: "test" });
+    assert.equal(applied.ok, true);
+    const edges = listDependencies(handle.db).filter(e => e.fromTaskId === "T-102" && e.kind === "depends-on");
+    assert.deepEqual(edges.map(e => e.toTaskId), [target.taskId]);
+    assert.deepEqual(getTaskDetail(handle.db, "T-102")!.prerequisites, [target.taskId]);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-161 createTask refuses a detail list that disagrees with its edge option, and creates nothing", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const mismatchDeps = createTask(handle, {
+      title: "mismatched prerequisites",
+      dependsOn: ["T-101"],
+      detail: { prerequisites: ["E-100"] },
+      actor: "test"
+    });
+    assert.equal(mismatchDeps.ok, false);
+    if (!mismatchDeps.ok) assert.equal(mismatchDeps.reason, "edge-list-mismatch");
+    assert.equal(getTask(handle.db, "T-103"), undefined, "next free id must still be free after the refusal");
+
+    const mismatchBlocking = createTask(handle, {
+      title: "mismatched blocking",
+      blocking: ["T-101"],
+      detail: { blocking: ["E-100"] },
+      actor: "test"
+    });
+    assert.equal(mismatchBlocking.ok, false);
+    if (!mismatchBlocking.ok) assert.equal(mismatchBlocking.reason, "edge-list-mismatch");
+    assert.equal(getTask(handle.db, "T-103"), undefined, "still free after the second refusal");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-161 createTask refuses a detail list supplied with no corresponding edge option", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const result = createTask(handle, { title: "blocking list without blocking edges", detail: { blocking: ["T-101"] }, actor: "test" });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.reason, "edge-list-mismatch");
+    assert.equal(getTask(handle.db, "T-103"), undefined);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-161 createTask accepts a detail list that agrees with its edge option as a set, order and duplicates aside", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const created = createTask(handle, {
+      title: "agreeing prerequisites, different order plus a duplicate",
+      dependsOn: ["T-101", "E-100"],
+      detail: { prerequisites: ["E-100", "T-101", "T-101"] },
+      actor: "test"
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+    const edges = listDependencies(handle.db).filter(e => e.fromTaskId === created.taskId && e.kind === "depends-on");
+    assert.deepEqual(edges.map(e => e.toTaskId).sort(), ["E-100", "T-101"]);
+    assert.deepEqual([...getTaskDetail(handle.db, created.taskId)!.prerequisites].sort(), ["E-100", "T-101"]);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("T-161 createTask accepts empty detail.prerequisites/blocking with no edges (the existing fixture shape)", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    const created = createTask(handle, { title: "empty lists, no edges", detail: { prerequisites: [], blocking: [] }, actor: "test" });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+    assert.deepEqual(listDependencies(handle.db).filter(e => e.fromTaskId === created.taskId), []);
+    assert.deepEqual(getTaskDetail(handle.db, created.taskId)!.prerequisites, []);
+    assert.deepEqual(getTaskDetail(handle.db, created.taskId)!.blocking, []);
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
