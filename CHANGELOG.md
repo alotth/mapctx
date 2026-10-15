@@ -199,6 +199,82 @@ holds, plus an `active` row that nothing could retire — claim admission refuse
 a terminal task before reaching its own expiry branch, so for an
 already-closed task reclaim is not a cleanup path at all.
 
+### Public contract: the lease is derived from the plan, not a fixed 30 minutes
+
+Every claim used to last 30 minutes, whatever the work was: an `Easy`/`30m`
+task and a `Hard`/`2d` task got the same window, and the long one expired
+mid-flight — 26 renewal events across 162 claims in this store, only 8 % of
+claims ever renewed at all. The inputs for a better number were already
+mandatory (a claim is refused without `workload` and a parseable
+`estimatedEffort`) and were simply discarded.
+
+`task claim` and `task start` now compute
+
+```
+lease = clamp(estimatedEffort × leaseFactor, defaultLease, maxLease)
+```
+
+with `leaseFactor = 0.5`, `defaultLease = 30m` and `maxLease = 8h` — the
+figures decision D10 approves **as a starting point**, to be re-derived once
+C4's heartbeat exclusion makes receipt durations trustworthy. A task with no
+parseable estimate (an epic, which is not required to carry one) gets
+`defaultLease` whole, which is exactly the old behaviour.
+
+**`task renew` extends by the same derived duration**, re-read from the plan at
+renewal time rather than remembered from the claim. So re-classifying a task
+mid-flight (`task update --set workload=Hard` with the estimate, which the
+skills ask for) is honoured by the next renewal; leaving renewal on the
+constant would have reproduced the original bug one step later — claimed for
+8 h, renewed for 30 min. `--lease` is not offered on `renew`: it is one number
+with one decision behind it.
+
+New `--lease <duration>` on `task claim`/`task start` takes `30m`, `4h`, `1d`,
+`1w` (the `estimatedEffort` vocabulary) and **wins over config and over the
+derived value**. It is not clamped by `maxLease`: the flag is the operator's
+explicit choice, and silently shrinking `--lease 12h` to 8 h is the sort of
+quiet adjustment this CLI refuses elsewhere. An unparseable value is refused
+with the accepted formats.
+
+Not clamped is not unbounded, though: **above 24 hours `--lease` is refused**
+(exit non-zero, naming the ceiling), rather than shrunk. That is D4's absolute
+ceiling, declared once as `ABSOLUTE_LEASE_CEILING_MS` and enforced here on the
+only surface that can currently exceed it; C4 extends the same number to the
+renewal paths. `--lease 9999w` used to be accepted and wrote an expiry in 2072.
+
+`task renew` **refuses `--lease`** instead of ignoring it. The flag has to live
+in the CLI's single flag table for claim/start to accept it, so the parser took
+it on `renew` too and dropped it on the floor while this file said it "is not
+offered" — a reader takes that for a refusal, and it now is one.
+
+**Known coupling, by design and worth stating:** a renewal re-reads
+`detail.estimatedEffort`, and nothing requires whoever edits that field to hold
+the claim. So a third party raising it lengthens the holder's next renewal, and
+lowering it pins their renewals to `defaultLease`. That is the price of
+honouring a mid-flight re-classification, which is the behaviour the skills
+ask for; whether editing the estimate under a live claim should require being
+the holder is a C3/C5 decision, not a C2 one.
+
+Optional tuning in `mapctx.toml`, absent by default:
+
+```toml
+[coordination]
+leaseFactor = 0.5
+defaultLease = "30m"
+maxLease = "8h"
+```
+
+An absent file, an absent table and an absent key all mean the defaults above.
+Unlike `[privacy]`, a malformed value here is **refused when the file is read**
+rather than degraded to the default — including `defaultLease > maxLease`,
+which leaves the clamp no room. A lease is an exclusivity window, and an
+operator who typed `maxLease = "2h"` must not silently get eight hours.
+
+Migration: nothing to do, but expect longer leases than 30 minutes wherever
+`estimatedEffort` exceeds one hour, and a correspondingly longer wait before
+another agent can reclaim a task whose holder died. That trade is why
+evidence-based liveness (C4) is designed alongside this change rather than
+after it.
+
 ### Features
 
 * **feature:** `mapctx --help` prints an "Enumerated values" table for every

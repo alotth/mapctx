@@ -1,11 +1,67 @@
 import * as crypto from "crypto"
 import { parseEstimatedEffortMs, workloadSchema } from "@mapctx/protocol"
+import { resolveCoordinationSettings, type CoordinationSettings } from "./config"
 import { getActiveClaimForTask, getClaim, getTask, getTaskDetail } from "./projections"
 import type { AppendEventInput, StoreHandle } from "./store-handle"
 import type { EventLogEntry } from "@mapctx/protocol"
 import type { DisclosableClaimRecord, ResourceClaimRecord } from "./types"
 
+/**
+ * The lease a task gets when nothing can be derived: no parseable
+ * `estimatedEffort` (a container/epic claim) and no `[coordination]` tuning.
+ * It is the same 30 minutes every claim used to get, kept as the floor of the
+ * clamp rather than as the answer -- see `deriveLeaseDurationMs`.
+ */
 export const DEFAULT_LEASE_DURATION_MS = 30 * 60 * 1000;
+
+/**
+ * D4's absolute ceiling on a lease: 24 hours. C4 will enforce it on every
+ * renewal path, where its purpose is to stop a wedged-but-still-heartbeating
+ * agent from renewing forever. T-141 declares the number here and applies it
+ * to the one surface that can already exceed it -- an explicit `--lease` --
+ * so C4 extends the reach of one constant instead of inventing a second.
+ *
+ * It bounds the *explicit* lease only. A derived lease cannot reach it
+ * (`maxLease` defaults to 8 h and is itself the clamp), and a caller passing
+ * `leaseDurationMs` in-process is trusted the way every in-process caller of
+ * this store is.
+ */
+export const ABSOLUTE_LEASE_CEILING_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * T-141 (C2 / D3, D10): the lease is read from the plan instead of from a
+ * constant. `appendTaskClaim` already refuses an executable task without both
+ * `workload` and a parseable `estimatedEffort`, so the inputs for a sensible
+ * lease are mandatory at claim time and were simply being thrown away: a
+ * `Hard`/`2d` task received the same 30 minutes as an `Easy`/`30m` one.
+ *
+ *     lease = clamp(estimatedEffort x leaseFactor, defaultLease, maxLease)
+ *
+ * with the D10 starting figures (0.5, 30m, 8h), each overridable through
+ * `[coordination]` in mapctx.toml. D10 approves those numbers as a first
+ * guess to be re-derived once C4's heartbeat exclusion makes receipt
+ * durations trustworthy again -- so this function is the one place to change
+ * when that happens.
+ *
+ * `workload` is deliberately NOT a term: D10 approved an effort-based figure,
+ * and workload stays what it already is -- a claim precondition and the
+ * forecast's pool key. Adding a second multiplier nobody calibrated would be
+ * inventing a number, not deriving one.
+ *
+ * A task with no parseable estimate gets `defaultLease` whole: the clamp has
+ * nothing to clamp, and refusing the claim here is not this function's job
+ * (admission already refuses executable tasks that lack the plan).
+ */
+export function deriveLeaseDurationMs(options: {
+  estimatedEffort?: string | null;
+  coordination?: CoordinationSettings;
+}): number {
+  const settings = options.coordination ?? resolveCoordinationSettings(undefined);
+  const effortMs = options.estimatedEffort ? parseEstimatedEffortMs(options.estimatedEffort) : null;
+  if (effortMs === null) return settings.defaultLeaseMs;
+  const derived = Math.round(effortMs * settings.leaseFactor);
+  return Math.min(Math.max(derived, settings.defaultLeaseMs), settings.maxLeaseMs);
+}
 
 /**
  * Byte length of a lease token. Exported so the regression test derives its
@@ -45,7 +101,18 @@ export type ClaimOptions = {
   taskId: string;
   actor: string;
   holder?: Record<string, unknown>;
+  /**
+   * An explicit lease, which wins over config and over the derived default --
+   * the `--lease` flag's precedence (T-141). Left unset, the lease comes from
+   * `deriveLeaseDurationMs`.
+   */
   leaseDurationMs?: number;
+  /**
+   * Resolved `[coordination]`. The CLI reads it from mapctx.toml; a caller
+   * that omits it gets the D10 defaults, which is the honest fallback for a
+   * caller that has no project file in hand.
+   */
+  coordination?: CoordinationSettings;
   now?: () => Date;
 };
 
@@ -70,7 +137,6 @@ export function appendTaskClaim(
   options: ClaimOptions,
   append: (input: AppendEventInput) => EventLogEntry
 ): ClaimResult {
-  const leaseDurationMs = options.leaseDurationMs ?? DEFAULT_LEASE_DURATION_MS;
   const now = options.now ?? (() => new Date());
 
   const task = getTask(store.db, options.taskId);
@@ -80,11 +146,14 @@ export function appendTaskClaim(
     return { ok: false, reason: "terminal-state" };
   }
 
+  // Read once: the same row answers the admission check below and the lease
+  // derivation further down.
+  const detail = getTaskDetail(store.db, options.taskId);
+
   // Containers do not execute. Every executable claim must carry both the
   // forecast class and an explicit agent-active plan; do not let the prior
   // silently fill either gap.
   if (task.type !== "epic") {
-    const detail = getTaskDetail(store.db, options.taskId);
     const missingWorkload = !task.workload?.trim();
     const missingEstimate = !detail?.estimatedEffort?.trim();
     const invalidWorkload = !missingWorkload && !workloadSchema.safeParse(task.workload).success;
@@ -129,6 +198,12 @@ export function appendTaskClaim(
     // held task, which is the bearer credential for renew and release.
     return { ok: false, reason: "active-claim-held", activeClaim: disclosableClaim(active) };
   }
+
+  // Precedence (T-141): an explicit `leaseDurationMs` (the `--lease` flag)
+  // wins; otherwise the lease is derived from this task's own plan under the
+  // project's `[coordination]` figures.
+  const leaseDurationMs = options.leaseDurationMs
+    ?? deriveLeaseDurationMs({ estimatedEffort: detail?.estimatedEffort, coordination: options.coordination });
 
   const claimId = crypto.randomUUID();
   const leaseToken = crypto.randomBytes(LEASE_TOKEN_BYTES).toString("hex");
@@ -176,6 +251,7 @@ export type LeaseOptions = {
   claimId: string;
   leaseToken: string;
   actor: string;
+  coordination?: CoordinationSettings;
   now?: () => Date;
 };
 
@@ -183,8 +259,26 @@ export type RenewResult =
   | { ok: true; claim: ResourceClaimRecord }
   | { ok: false; reason: "not-active" | "token-mismatch" | "expired" };
 
+/**
+ * T-141 decision -- a renewal extends by the SAME derived size as the claim,
+ * not by a fixed 30 minutes.
+ *
+ * The alternative was to extend by the length the claim itself was minted
+ * with (`expiresAt - claimedAt`, recoverable from the row until the first
+ * renewal rewrites `expiresAt`). Re-deriving from the plan wins on two
+ * counts: it needs no history, and it is self-correcting -- the skills tell
+ * an agent to re-classify a task the moment the work turns out harder
+ * (`task update --set workload=Hard`, and the estimate with it), and the next
+ * renewal should honour the new plan rather than the one that was wrong.
+ * Leaving renewal on the constant would have been the original bug in a
+ * second place: a `Hard`/`2d` task claimed for 8 h, then renewed for 30 min.
+ *
+ * `--lease` is deliberately NOT offered on `task renew`: D3 approves it for
+ * `task claim`/`task start`, and a per-renewal override is a second way to
+ * set the same number with no decision behind it. A caller that needs one
+ * can still pass `leaseDurationMs` in-process.
+ */
 export function renewClaim(store: StoreHandle, options: LeaseOptions & { leaseDurationMs?: number }): RenewResult {
-  const leaseDurationMs = options.leaseDurationMs ?? DEFAULT_LEASE_DURATION_MS;
   const now = options.now ?? (() => new Date());
 
   return store.runInWriteTransaction(append => {
@@ -205,6 +299,12 @@ export function renewClaim(store: StoreHandle, options: LeaseOptions & { leaseDu
       });
       return { ok: false, reason: "expired" };
     }
+
+    const leaseDurationMs = options.leaseDurationMs
+      ?? deriveLeaseDurationMs({
+        estimatedEffort: getTaskDetail(store.db, options.taskId)?.estimatedEffort,
+        coordination: options.coordination
+      });
 
     const expiresAt = new Date(nowMs + leaseDurationMs).toISOString();
     append({
