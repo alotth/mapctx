@@ -155,6 +155,205 @@ additive there and no existing caller breaks. The batch-only shape applies to
 `--index` with a list and to `--all`, both of which are new in this release and
 never had the old shape. No consumer in this repository read either field.
 
+### Public contract: closing a task expires a dead lease instead of "releasing" it
+
+`task move --status done` (and `cancelled`/`archived`) used to journal a
+`task.claim-released` for whatever claim row the task still had marked
+`active`, without looking at the lease. A claim row stays `active` until
+something re-claims the task or a sweeper touches it, so a task whose lease
+expired days earlier was closed with a release event for a lease nobody held —
+a fiction in an append-only log, attributed to whoever ran the close.
+
+Closing a task now reads the lease and journals what is true of it:
+
+| At close time | Journaled | Result field |
+| --- | --- | --- |
+| live claim | `task.claim-released` by the closing actor (unchanged) | `releasedClaimId` |
+| expired claim | `task.claim-expired` by `system` | `expiredClaimId` |
+| no claim | nothing (unchanged) | neither |
+
+`task.claim-expired` is the same event claim admission already journals when it
+reclaims over a dead lease, so a closed task ends in the same state a reclaim
+would have left it in: the row moves to `expired` and `executionState` leaves
+`claimed`. Both events are appended in the same transaction as the planning
+move, so a close is still all-or-nothing.
+
+For a consumer, a close over a dead lease stops reporting a release and starts
+reporting an expiry: pair a close with **either** event, not with
+`task.claim-released` alone.
+
+Both fields are reported by every closing path — `task move --status
+done|cancelled|archived` and `task finish`, the latter including
+`--no-snapshot` and the checkpoint-failure result, whose job is to make a split
+state explicit and so has to name the claim effect too. Each field is present
+only when it happened, so `"releasedClaimId" in result` is now an honest test;
+it used to be an always-present `undefined`, answering `true` for a close that
+released nothing. `--json` output is unchanged by that detail, since
+`JSON.stringify` already dropped the undefined — the difference is visible to
+an in-process caller.
+
+Why the event rather than silence: `task.claim-expired` is also what clears
+`executionState` and moves the row out of `active`, so journaling nothing would
+leave a closed task reading `executionState: "claimed"` over a lease nobody
+holds, plus an `active` row that nothing could retire — claim admission refuses
+a terminal task before reaching its own expiry branch, so for an
+already-closed task reclaim is not a cleanup path at all.
+
+### Public contract: the lease is derived from the plan, not a fixed 30 minutes
+
+Every claim used to last 30 minutes, whatever the work was: an `Easy`/`30m`
+task and a `Hard`/`2d` task got the same window, and the long one expired
+mid-flight — 26 renewal events across 162 claims in this store, only 8 % of
+claims ever renewed at all. The inputs for a better number were already
+mandatory (a claim is refused without `workload` and a parseable
+`estimatedEffort`) and were simply discarded.
+
+`task claim` and `task start` now compute
+
+```
+lease = clamp(estimatedEffort × leaseFactor, defaultLease, maxLease)
+```
+
+with `leaseFactor = 0.5`, `defaultLease = 30m` and `maxLease = 8h` — the
+figures decision D10 approves **as a starting point**, to be re-derived once
+C4's heartbeat exclusion makes receipt durations trustworthy. A task with no
+parseable estimate (an epic, which is not required to carry one) gets
+`defaultLease` whole, which is exactly the old behaviour.
+
+**`task renew` extends by the same derived duration**, re-read from the plan at
+renewal time rather than remembered from the claim. So re-classifying a task
+mid-flight (`task update --set workload=Hard` with the estimate, which the
+skills ask for) is honoured by the next renewal; leaving renewal on the
+constant would have reproduced the original bug one step later — claimed for
+8 h, renewed for 30 min. `--lease` is not offered on `renew`: it is one number
+with one decision behind it.
+
+New `--lease <duration>` on `task claim`/`task start` takes `30m`, `4h`, `1d`,
+`1w` (the `estimatedEffort` vocabulary) and **wins over config and over the
+derived value**. It is not clamped by `maxLease`: the flag is the operator's
+explicit choice, and silently shrinking `--lease 12h` to 8 h is the sort of
+quiet adjustment this CLI refuses elsewhere. An unparseable value is refused
+with the accepted formats.
+
+Not clamped is not unbounded, though: **above 24 hours `--lease` is refused**
+(exit non-zero, naming the ceiling), rather than shrunk. That is D4's absolute
+ceiling, declared once as `ABSOLUTE_LEASE_CEILING_MS` and enforced here on the
+only surface that can currently exceed it; C4 extends the same number to the
+renewal paths. `--lease 9999w` used to be accepted and wrote an expiry in 2072.
+
+`task renew` **refuses `--lease`** instead of ignoring it. The flag has to live
+in the CLI's single flag table for claim/start to accept it, so the parser took
+it on `renew` too and dropped it on the floor while this file said it "is not
+offered" — a reader takes that for a refusal, and it now is one.
+
+**Known coupling, by design and worth stating:** a renewal re-reads
+`detail.estimatedEffort`, and nothing requires whoever edits that field to hold
+the claim. So a third party raising it lengthens the holder's next renewal, and
+lowering it pins their renewals to `defaultLease`. That is the price of
+honouring a mid-flight re-classification, which is the behaviour the skills
+ask for; whether editing the estimate under a live claim should require being
+the holder is a C3/C5 decision, not a C2 one.
+
+Optional tuning in `mapctx.toml`, absent by default:
+
+```toml
+[coordination]
+leaseFactor = 0.5
+defaultLease = "30m"
+maxLease = "8h"
+```
+
+An absent file, an absent table and an absent key all mean the defaults above.
+Unlike `[privacy]`, a malformed value here is **refused when the file is read**
+rather than degraded to the default — including `defaultLease > maxLease`,
+which leaves the clamp no room. A lease is an exclusivity window, and an
+operator who typed `maxLease = "2h"` must not silently get eight hours.
+
+Migration: nothing to do, but expect longer leases than 30 minutes wherever
+`estimatedEffort` exceeds one hour, and a correspondingly longer wait before
+another agent can reclaim a task whose holder died. That trade is why
+evidence-based liveness (C4) is designed alongside this change rather than
+after it.
+
+### Public contract: a claim carries two capabilities, and renewal has a dispatch address
+
+Renewal used to require `--claim <id> --token <leaseToken>`, and `leaseToken`
+is printed once, to whoever ran `task claim`/`task start`. An orchestrator that
+dispatched the work holds the `dispatchId` and not the token, so it could not
+keep the lane alive; the executing agent had to interrupt itself to do it by
+hand, and the measurement says it does not happen (26 renewals across 162
+claims; 8 % of claims ever renewed).
+
+A claim now carries **two independent capabilities**, both minted from the same
+CSPRNG at claim time and both scoped to the `claimId`:
+
+| Credential | Renews | Releases |
+| --- | --- | --- |
+| `leaseToken` | yes | yes |
+| `renewToken` | yes | **no** |
+
+`task claim` and `task start` return both to the holder — it already has the
+stronger one — so an agent can hand `renewToken` to its orchestrator and keep
+release authority to itself. The split is by **possession**, not by derivation:
+an earlier draft proposed `HMAC(leaseToken, …)`, which still requires reading
+the secret it was meant to avoid. Two random values compared for equality need
+no algorithm and no second lookup. Release has no `renewToken` branch at all,
+which is what makes the split real rather than checked. Both comparisons are
+constant-time.
+
+`task renew` takes **exactly one address and exactly one credential**:
+
+```
+mapctx task renew <task-id> (--claim id | --dispatch id) (--token leaseToken | --renew-token renewToken)
+```
+
+`--dispatch` is a **lookup**, not a scope: dispatch → task → that task's active
+claim. A claim carries no dispatch reference (`task claim` mints one with no
+dispatch at all, and one claim legitimately spans the attempts of a retry), so
+`task_id` is the only edge there is, and the token's lifetime stays the claim's.
+With `--dispatch` the task id in the command is checked rather than used, and a
+dispatch belonging to another task is refused. `--claim/--token` is unchanged
+and remains the only renewal path for a claim that has no dispatch.
+
+Two new refusals on that path, each by name: a dispatch whose **latest attempt
+already has a receipt** cannot renew (that lane reported itself finished — admit
+a new attempt first), and a lookup that resolves **more than one** active claim
+refuses and asks for `--claim` instead of picking one. The second is
+unreachable today, since the partial unique index allows one active claim per
+task; it exists so that stays an index guarantee rather than a coincidence when
+C5 introduces shared review claims.
+
+**A renewal discloses exactly what the presented credential already proves.**
+With `--token` the result is the claim record as before, tokens included — that
+caller holds the stronger capability already, and it stays the tested contract
+0.4.0 shipped. With `--renew-token` the result carries **no token at all**: an
+orchestrator that may renew must not be handed release authority as a reward for
+renewing, which would void the split. Either way `expiresAt` is the answer a
+renewal owes, so a consumer that reads only that works on both paths.
+
+`task renew` also **refuses `--dispatch-id`** by name, pointing at `--dispatch`.
+It is the spelling `task start` uses for the same identifier and a known global
+flag, so the parser would have accepted it and renewed nothing while exiting 0.
+
+**Legacy claims keep working and gain nothing.** Migration **12** adds a
+nullable `renew_token` column with no backfill and no default. A claim made
+before this release has no `renewToken` and never will — its holder was handed
+one token, and minting a second now would create a capability nobody was ever
+given. A `DEFAULT` would be worse: every legacy row would share one value, and
+presenting it would renew any of them. `--renew-token` against such a claim is
+refused as `renew-token-unavailable`, naming the remedy (`--token`), rather than
+compared against NULL. Schema 11 is deployed, so it is frozen; this is additive
+on top of it, and a CLI that knows only versions ≤ 11 never reads the column.
+
+**Editing the estimate under a live claim now says so.** A renewal re-derives
+the lease from `detail.estimatedEffort` (0.4.0, above) and nothing requires the
+editor to be the holder, so `task update --set detail.estimatedEffort=…` prints
+a note on stderr when the task has a live claim, naming the claim by id (never
+a token) and stating that the next renewal will use the new figure. The edit
+still lands: freezing the duration on the claim would undo the deliberate
+decision that a mid-flight re-classification is honoured, and requiring
+holdership is a role-aware question that belongs with C5.
+
 ### Features
 
 * **feature:** `mapctx --help` prints an "Enumerated values" table for every
@@ -250,3 +449,19 @@ never had the old shape. No consumer in this repository read either field.
 * **fix:** list elements may not contain a comma, and a `{...}` group split
   across a comma is refused: the generated snapshots cannot represent either,
   and the resulting drift did not converge
+* **fix:** `task update --depends-on a,b` with no `--blocking` (and the mirror
+  case) no longer deletes the other kind's dependency edges. Supplying one list
+  used to drop BOTH the `depends-on` and the `blocks` edges and re-add only the
+  kind the patch carried, while the detail list was rewritten only for the list
+  supplied — so the edges lost a real `blocks` relation while
+  `detail.blocking` still advertised it, which is the one thing these flags
+  exist to prevent. Under `plansAuthority: store` the loss is silent: `plan`
+  and `gantt` read the edges, and `export` rebuilds both detail lists FROM the
+  edges, so the regenerated `tasks/<ID>.md` looks self-consistent and the next
+  export erases the orphaned list for good. Each flag now replaces exactly its
+  own kind and an omitted flag leaves its kind untouched. `mapctx validate`
+  reports an existing divergence per task and kind as
+  `dependency-detail-divergence`; **repair an affected task by replaying BOTH
+  lists through one update** — `mapctx task update <id> --depends-on a,b
+  --blocking x,y`, spelling an empty list as `""` (omitting the flag is now a
+  no-op on that kind, so it would leave the divergence in place)
