@@ -12,7 +12,7 @@ import {
   writeWorkspaceRegistry,
   type WorkspaceRegistry
 } from '@mapctx/core/workspace';
-import { generateTaskDetailFile, parseBareAcceptanceChecklist, parseTaskDetailFile, parseTasksFile, readTaskDetailFile } from '@mapctx/core';
+import { generateTaskDetailFile, parseAcceptanceChecklist, parseBareAcceptanceChecklist, parseTaskDetailFile, parseTasksFile, readTaskDetailFile, replaceTaskDetailDescription } from '@mapctx/core';
 import {
   ABSOLUTE_LEASE_CEILING_MS,
   buildExport,
@@ -61,7 +61,9 @@ import {
   searchTasks,
   filterTaskSearchHits,
   getSingleProject,
+  getTask,
   getTaskDetail,
+  renderStoreDescription,
   toPlanningState,
   updateTask,
   listDependencies,
@@ -261,8 +263,9 @@ function printEnumHelp(): void {
   console.log('  this CLI and repair drift with `mapctx reconcile <task-id>`.');
   console.log('  The `description:` block of tasks/<ID>.md is the exception: it is Git-authored');
   console.log('  prose, owned by the repository and never by the store. `task create --description`');
-  console.log('  / `--description-file` seeds it once; after that you edit tasks/<ID>.md in Git and');
-  console.log('  commit. There is no `--set description`, and `mapctx task update` cannot touch it.');
+  console.log('  / `--description-file` seeds it; `task update <id> --description` / `--description-file`');
+  console.log('  rewrites only that block of tasks/<ID>.md, in any planning state (or edit the file by');
+  console.log('  hand), and you commit it. There is no `--set description`: the store never holds prose.');
   console.log('  Everything written through this CLI lands in an append-only event log: keep');
   console.log('  secrets, tokens and personal data out of titles, summaries, descriptions,');
   console.log('  evidence and receipts. Declare `[privacy] patterns` in mapctx.toml to get warned,');
@@ -522,7 +525,8 @@ function printHelp(): void {
   console.log('    Store-authority only: Markdown stays the editor pre-cutover.');
   console.log('  mapctx task reopen <task-id> --status review [--json] [--actor name]');
   console.log('    Reopens a done, cancelled, or archived task for review, clears completedOn, and records an audit event. Publish mirrors at an explicit checkpoint.');
-  console.log('  mapctx task update <task-id> [--set key=value ...] [--depends-on a,b] [--blocking x,y] [--json] [--actor name]');
+  console.log('  mapctx task update <task-id> [--set key=value ...] [--depends-on a,b] [--blocking x,y]');
+  console.log('    [--description text | --description-file path] [--json] [--actor name]');
   console.log('    Whitelisted fields only (title,type,parentTaskId,priority,workload,tags,domains,startDate,dueDate,');
   console.log('    predictedStart,externalId,externalLinks,specMode,assignees,iteration,milestone; detail.* for');
   console.log('    role,impact,estimatedEffort,filesAffected,testsRequired,summary,prerequisites,blocking;');
@@ -532,7 +536,12 @@ function printHelp(): void {
   console.log('    --set externalLinks=https://…,github:issue:42 validates every entry as a URI.');
   console.log('    --depends-on/--blocking replace both');
   console.log('    the dependency edges and the detail prerequisites/blocking so the two surfaces never diverge.');
-  console.log('    The Git-authored `description:` prose of tasks/<ID>.md is NOT patchable here.');
+  console.log('    The Git-authored `description:` prose of tasks/<ID>.md is NOT patchable here via --set.');
+  console.log('    --description / --description-file rewrite only that block of the file (structured fields,');
+  console.log('    an epic budget section and the store-owned ## Acceptance checklist are kept), in any');
+  console.log('    planning state including done/archived. A one-line --description with literal \\n is');
+  console.log('    unescaped to line breaks; --description-file is read verbatim. An empty or whitespace-only');
+  console.log('    description is refused (empty-description). Commit the file change.');
   console.log('  mapctx dispatch create <task-id> [--dispatch-id id] [--status claimed|running] (default claimed) [--executor kind] [--context-hash hash] [--json] [--actor name]');
   console.log('    New dispatch (fresh id, attempt 1) or --dispatch-id to append attempt max+1 to an existing one.');
   console.log('    Prints the dispatchId/attempt to feed `mapctx dispatch receipt`.');
@@ -2280,6 +2289,46 @@ export function splitList(value?: string, label = 'list value'): string[] | unde
 }
 
 /**
+ * T-136: the description prose from `--description <text>` or
+ * `--description-file <path>` (text wins, as it always did on create). A
+ * one-line flag value carrying literal `\n` is how a shell hands over
+ * "## Scope\n\nbody" -- stored verbatim it becomes a single unreadable line
+ * -- so it is unescaped, and the caller is told. A file is read verbatim.
+ */
+function readDescriptionInput(options: MapctxOptions, cwd: string, refusal: { verb: 'Create' | 'Update'; taskId?: string }): string | undefined {
+  const description = readRawDescription(options, cwd);
+  // Review F4: an empty value is the usual shell accident (`--description
+  // "$NOTES"` with NOTES unset), and on update it would silently erase
+  // Git-authored prose -- the one CLI path that destroys it. Refused, not
+  // flagged: a task without prose is invalid anyway (import's
+  // missing-description), and clearing it on purpose is a hand edit.
+  if (description !== undefined && description.trim() === '') {
+    const flag = options.description !== undefined ? '--description' : `--description-file ${options.descriptionFile}`;
+    refuse(
+      { ok: false, reason: 'empty-description', ...(refusal.taskId ? { to: refusal.taskId } : {}) },
+      `${refusal.verb} refused: empty-description -- ${flag} is empty or whitespace-only, which would leave ${refusal.taskId ?? 'the task'} with no description. An unset shell variable is the usual cause; pass the text, or edit tasks/<ID>.md by hand.`
+    );
+  }
+  return description;
+}
+
+function readRawDescription(options: MapctxOptions, cwd: string): string | undefined {
+  if (options.description !== undefined) {
+    const raw = options.description;
+    if (raw.includes('\n') || !raw.includes('\\n')) return raw;
+    console.error('Note: --description had literal \\n and no line breaks; converted \\n to line breaks. Use --description-file to keep the text verbatim.');
+    return raw.replace(/\\r\\n|\\n/g, '\n');
+  }
+  if (options.descriptionFile === undefined) return undefined;
+  const descriptionPath = path.resolve(cwd, options.descriptionFile);
+  try {
+    return fs.readFileSync(descriptionPath, 'utf8');
+  } catch (error) {
+    throw new Error(`--description-file ${options.descriptionFile} could not be read at ${descriptionPath}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
  * Registers a new task under store authority. Auto-assigns the next free
  * sequential id for the type's prefix (E for epic, T otherwise) unless --id
  * is given. The description prose (--description / --description-file) is
@@ -2294,7 +2343,6 @@ export function taskCreateCommand(options: MapctxOptions): void {
   warnPrivacy('task create', {
     title: options.title,
     summary: options.summary,
-    description: options.description,
     tags: options.tags,
     domains: options.domains
   }, cwd);
@@ -2308,8 +2356,11 @@ export function taskCreateCommand(options: MapctxOptions): void {
   // ---- T-129 criterion 0: acceptance in the SAME command ----
   // Resolved here, before the writable open, so a bad source file refuses
   // without having created anything.
-  const description = options.description
-    ?? (options.descriptionFile ? fs.readFileSync(path.resolve(cwd, options.descriptionFile), 'utf8') : undefined);
+  const description = readDescriptionInput(options, cwd, { verb: 'Create' });
+  // T-136 review F3: the description is linted as resolved, so prose from
+  // --description-file (headed for a public Git file) is covered too, not
+  // only the raw --description flag value.
+  if (description !== undefined) warnPrivacy('task create', { description }, cwd);
   let acceptance: { condition: 'criteria' | 'empty'; texts: string[] } | undefined;
   let acceptanceNote: string | undefined;
   if (options.acceptanceFile) {
@@ -2396,8 +2447,9 @@ export function taskCreateCommand(options: MapctxOptions): void {
 
 export function taskUpdateCommand(taskId: string, options: MapctxOptions): void {
   const setPairs = options.setPairs ?? [];
-  if (setPairs.length === 0 && options.dependsOn === undefined && options.blocking === undefined) {
-    throw new Error('task update requires --set key=value, --depends-on a,b, or --blocking x,y');
+  const wantsDescription = options.description !== undefined || options.descriptionFile !== undefined;
+  if (setPairs.length === 0 && options.dependsOn === undefined && options.blocking === undefined && !wantsDescription) {
+    throw new Error('task update requires --set key=value, --depends-on a,b, --blocking x,y, or --description text / --description-file path');
   }
   const patch: Record<string, unknown> = {};
   const detailPatch: Record<string, unknown> = {};
@@ -2432,21 +2484,54 @@ export function taskUpdateCommand(taskId: string, options: MapctxOptions): void 
   const dependsOn = splitList(options.dependsOn, '--depends-on');
   const blocking = splitList(options.blocking, '--blocking');
   const cwd = process.cwd();
-  warnPrivacy(`task update ${taskId}`, { patch, detail: detailPatch }, cwd);
+  const description = readDescriptionInput(options, cwd, { verb: 'Update', taskId });
+  warnPrivacy(`task update ${taskId}`, { patch, detail: detailPatch, ...(description === undefined ? {} : { description }) }, cwd);
+  const storeChange = setPairs.length > 0 || dependsOn !== undefined || blocking !== undefined;
   const { handle, tasksRoot } = requireStoreAuthority(cwd);
   try {
-    const result = updateTask(handle, {
+    // T-136: the description is Git-authored prose, so it goes to the detail
+    // file and never to the store. The new file is fully computed (acceptance
+    // rendered from the store, refusals raised) BEFORE any store write, so a
+    // bad description refuses without having patched anything.
+    let detailWrite: { path: string; content: string; changed: boolean } | undefined;
+    if (description !== undefined) {
+      const task = getTask(handle.db, taskId);
+      if (!task) refuse({ ok: false, reason: 'unknown-task', to: taskId }, `Update refused: unknown-task -- ${taskId}`);
+      if (!task.detailPath) refuse({ ok: false, reason: 'no-detail-file', to: taskId }, `Update refused: no-detail-file -- ${taskId} has no tasks/<ID>.md to hold a description`);
+      const detailPath = path.resolve(tasksRoot, task.detailPath);
+      if (!fs.existsSync(detailPath)) {
+        refuse({ ok: false, reason: 'no-detail-file', to: taskId }, `Update refused: no-detail-file -- ${task.detailPath} is missing; run \`mapctx export\` to materialize it first`);
+      }
+      const current = fs.readFileSync(detailPath, 'utf8');
+      const rendered = renderStoreDescription(handle.db, taskId, description);
+      const supplied = parseAcceptanceChecklist(description);
+      if (supplied.found && JSON.stringify(supplied.items) !== JSON.stringify(parseAcceptanceChecklist(rendered).items)) {
+        console.error(`Note: the ## Acceptance checklist of ${taskId} is store-owned; the file shows the store's criteria, not the ones supplied. Change criteria with \`mapctx task acceptance revise ${taskId}\`.`);
+      }
+      const content = replaceTaskDetailDescription(current, rendered);
+      detailWrite = { path: detailPath, content, changed: content !== current };
+    }
+    let result: Extract<ReturnType<typeof updateTask>, { ok: true }> | undefined;
+    if (storeChange) {
+      const updated = updateTask(handle, {
+        taskId,
+        patch: Object.keys(patch).length > 0 ? patch as never : undefined,
+        detailPatch: Object.keys(detailPatch).length > 0 ? detailPatch as never : undefined,
+        dependsOn,
+        blocking,
+        actor: defaultActor(options.actor)
+      });
+      if (!updated.ok) refuse(updated, `Update refused: ${updated.reason}${updated.message ? ` -- ${updated.message}` : ''}`);
+      result = updated;
+      const effortNote = effortChangedUnderLiveClaimWarning(handle, taskId, detailPatch);
+      if (effortNote) console.error(effortNote);
+    }
+    if (detailWrite?.changed) fs.writeFileSync(detailWrite.path, detailWrite.content, 'utf8');
+    print({
       taskId,
-      patch: Object.keys(patch).length > 0 ? patch as never : undefined,
-      detailPatch: Object.keys(detailPatch).length > 0 ? detailPatch as never : undefined,
-      dependsOn,
-      blocking,
-      actor: defaultActor(options.actor)
-    });
-    if (!result.ok) refuse(result, `Update refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}`);
-    const effortNote = effortChangedUnderLiveClaimWarning(handle, taskId, detailPatch);
-    if (effortNote) console.error(effortNote);
-    print({ taskId, ...result }, options.json);
+      ...(result ?? { ok: true, applied: { fields: [], detailFields: [], edges: false } }),
+      ...(detailWrite ? { description: { detailPath: path.relative(tasksRoot, detailWrite.path), changed: detailWrite.changed } } : {})
+    }, options.json);
   } finally {
     handle.close();
   }

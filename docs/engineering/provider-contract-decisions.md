@@ -110,3 +110,95 @@ Worth knowing before trusting a green run.
 - **Claims, dispatches, receipts and history stay out of the contract**, as the
   study and ADR 0005 both say. Nothing here changes that, and the spike confirmed
   GitHub offers no compare-and-swap that could host a provider-side claim.
+
+## T-150: the GitHub read adapter, and four gaps closed
+
+The T-139 review left seven gaps. **Five** were contract gaps and are closed
+here; **two** were not, and are registered in T-152's description rather than
+invented into the interface. The counts are stated because the T-150 description
+enumerates seven and a reader should be able to make them close.
+
+### Closed
+
+| Gap | Shape | Why it had to be contract surface |
+| --- | --- | --- |
+| Single-select option discovery | `describeFields` → `ProviderFieldDescriptor[]`, plus `resolveOptionId` | A GitHub single-select write needs the OPTION id, and an option id cannot be derived from a value. Without this, every caller needed provider-specific code to find one, and `FieldRef.optionId` was a field nobody could fill. |
+| Per-species capabilities | `capabilities.primarySpecies`, `capabilities.species`, `capabilitiesForItem` | GitHub puts draft issues and issues on one board. A draft has no `Issue` object behind it: no relations, no sub-issues, no comments, no timeline, no open/closed state. One static record describing both is a record that is wrong for one of them. |
+| Field budget | `capabilities.fieldBudget` | A board holds at most 49 observable fields (T-135 measured 49; GitHub's refusal message says 50). 13 are built-ins, so 36 are left for everything MapCtx wants to project. That is a design constraint on day one, not a runtime surprise. |
+| Proactive rate limit | `rateLimit()` + `capabilities.rateLimit` | A mirror sizing a batch needs the balance before sending. The rule matches preconditions: a provider that cannot measure one must refuse, because a fabricated balance is worse than none. |
+| Key resolution | `findByKey({project, keys})` | The mirror reconciles 136 tasks against a board whose ids it does not own. Otherwise that is a full `listItems` walk per pass plus an undeclared title convention. |
+
+Two directions were decided rather than discovered, and both could reasonably
+have gone the other way:
+
+- **A species may only narrow.** `capabilities` describes `primarySpecies`, and
+  `widenedSpeciesClaims` is checked by the suite. The alternative — a
+  conservative floor that species widen — would have made the primary record
+  safe to act on but useless to read, because every caller would under-use the
+  provider while believing it had the truth. Narrowing keeps the record a
+  description and makes `capabilitiesForItem` the thing a caller asks before a
+  write.
+- **`planningState` carries the provider's own value.** The GitHub adapter
+  returns the `Status` option name, or the issue's `open`/`closed` when the board
+  has no value — never a MapCtx planning state. Translating inside the adapter
+  would mean it had decided that "In progress" is `in-progress`, and the day a
+  column is renamed it would be inventing states silently.
+  `GITHUB_STATUS_TO_PLANNING` and `PLANNING_TO_GITHUB_STATUS` are exported for
+  callers that want the translation, cover `cancelled` and `blocked` (which
+  `mapctx.toml`'s statusMap never did), and are pinned in both directions by a
+  test, so the write side cannot emit a label the read side will not understand.
+
+### Registered for T-152
+
+Two of the seven:
+
+- **`bundleDependencies`** — the CLI does not import the provider yet, so
+  nothing was touched. The day it does, the provider joins the sync-engine's
+  bundle and `pack:smoke` has to pass with it, fixtures included.
+- **The read-modify-write window** — a write-path concern, and one both
+  providers share: neither has a precondition, and the store replaces its whole
+  edge set rather than appending.
+
+A third item is registered alongside them but is **not** one of the seven: the
+REST **dependency write** path. That came from T-135, which measured that no
+GraphQL mutation for issue dependencies exists and that the REST endpoints read
+`200 []` but were never exercised for writing. It is listed in `tasks/T-152.md`
+with the other two because it gates the same work, not because the T-139 review
+raised it.
+
+The detail for all three is in `tasks/T-152.md`.
+
+### What the suite gained, and what it caught
+
+Four groups: `species`, `keys`, `field-descriptors`, `rate-limit`. The
+precondition check also stopped skipping when no field is writable — which was
+exactly the provider most likely to drop a precondition silently.
+
+It caught two mistakes while being written, the same mistake twice: the store's
+`tags`/`assignees` and GitHub's `Labels` built-in were all typed as enumerated
+when none of them has an option set at that layer. `ProviderFieldDataType` now
+separates `text-list` from `multi-select`, which is a real distinction rather
+than a workaround.
+
+### Fixtures: two provenances, never mixed
+
+`npm test` runs offline. `github-recorded.json` is captured read-only from the
+live API by a recorder that drives this same adapter and this same suite, so the
+recorded keys are exactly the keys the tests ask for; it aborts if a mutation
+document appears, and bodies are truncated and absolute paths scrubbed because
+these bytes are committed to a public repository.
+
+`github-synthetic.json` is hand-built in the recorded shape and says so.
+It exists because every issue reachable for T-135 and T-150 has zero dependency
+edges and zero sub-issues — so a recorded fixture proves the query and its cost
+and proves nothing at all about the mapping. Its node ids contain the word
+SYNTHETIC. Keeping the two files apart is what lets a later reader tell a
+measurement from a construction.
+
+### Read-only, and why the capabilities say so
+
+Every write refuses with `unsupported` and names its capability. This is the
+measured truth: no GraphQL mutation for issue dependencies exists, no write
+precondition of any kind exists, and a failing batch leaves its valid writes
+applied. Declaring any of it writable before T-152 validates the REST path would
+be precisely the lie the suite exists to catch.

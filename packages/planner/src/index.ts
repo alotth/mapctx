@@ -6,6 +6,7 @@ import type {
   WorkflowGate
 } from "@mapctx/protocol";
 import { STATUS_TO_PLANNING } from "@mapctx/protocol";
+import { CAUSE_LABEL_SEPARATOR, normalizeSchedulerPath } from "./scheduler-paths";
 
 /** Task fields accepted by the planner. `dependsOn` keeps board input ergonomic. */
 export type PlannerTask = Partial<Task> & {
@@ -183,41 +184,15 @@ export function deriveResourceClaims(tasks: readonly PlannerTask[]): ResourceCla
 }
 
 /**
- * Reduce a declared path to one comparable form by walking its segments: separators
- * fold, `.` and empty segments drop, `..` pops, and a leading `/` disappears. So
- * `/src/a.ts`, `src/../src/a.ts`, `.//src/a.ts` and `src\a.ts` all become `src/a.ts`.
- * `..` clamps at the root rather than escaping it, so `../a.ts` compares as `a.ts`;
- * a repo-relative path leaving the root is nonsense data, and conflating it with the
- * root-relative one errs toward collision. Case folds for macOS/Windows default
- * filesystems. Two known limits, both pre-existing and both conservative: there is no
- * Unicode normalization, so NFC and NFD spellings of the same name stay disjoint; and
- * folding `\` to `/` means `src/\*.ts` becomes the glob `src/*.ts` — escapes are not
- * supported, they over-serialize.
+ * The scheduler's declared-path normalization, now shared.
  *
- * NOT the `normalizePath` in @mapctx/protocol/claim-paths, and T-133 deliberately
- * did not merge them. This one compares DECLARED claims before work runs, so it
- * resolves `..`, refuses to pop a `**`, and folds case because the scheduler must
- * err toward serializing on filesystems that do. That one compares OBSERVED paths
- * — what a receipt reported against what a violation row recorded — where case is
- * meaningful and `..` does not occur. Merging them would make the audit record
- * lossy or the scheduler case-blind; equivalence was never proven, so the two
- * comparisons stay two functions with two names' worth of documentation.
+ * It moved to `./scheduler-paths` in T-159 because `violations.ts` has to ask
+ * the same question the scheduler asks — "would these two be the same file?" —
+ * and a second copy of this transformation is exactly the twin T-133 removed.
+ * The rationale for why it differs from @mapctx/protocol's `normalizePath`
+ * lives at the moved function; nothing about the comparison changed here.
  */
-function normalizePath(value: string): string {
-  const segments: string[] = [];
-  for (const segment of value.trim().replaceAll("\\", "/").split("/")) {
-    if (segment === "" || segment === ".") continue;
-    if (segment === "..") {
-      // A single-segment wildcard consumes exactly one segment, so popping it is exact.
-      // `**` spans zero or more, so popping it would narrow a pattern that still
-      // matches: leave the path unresolvable instead, which collides broadly.
-      if (segments.pop()?.includes("**")) return "";
-      continue;
-    }
-    segments.push(segment);
-  }
-  return segments.join("/").toLowerCase();
-}
+const normalizePath = normalizeSchedulerPath;
 
 /**
  * Index of the first glob construct, or -1. `?`, `*` and `[` always count. A `(`
@@ -317,7 +292,7 @@ function causePath(value: string): string {
 
 function pathsOverlap(left: ResourceClaim, right: ResourceClaim): string[] {
   return sortedUnique(
-    left.paths.flatMap(leftPath => right.paths.filter(rightPath => pathOverlap(leftPath, rightPath)).map(rightPath => `${causePath(leftPath)} ↔ ${causePath(rightPath)}`))
+    left.paths.flatMap(leftPath => right.paths.filter(rightPath => pathOverlap(leftPath, rightPath)).map(rightPath => `${causePath(leftPath)}${CAUSE_LABEL_SEPARATOR}${causePath(rightPath)}`))
   );
 }
 
@@ -623,4 +598,5 @@ export function planExecution(input: PlannerInput): PlanReport {
 
 export const planWaves = planExecution;
 export const plan = planExecution;
+export * from "./scheduler-paths";
 export * from "./violations";

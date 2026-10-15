@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 16/25
+  - subIssueProgress: 17/25
   - priority: high
   - workload: null
   - tags: []
@@ -2842,7 +2842,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 4/13
+  - subIssueProgress: 5/13
   - priority: null
   - workload: null
   - tags: []
@@ -2896,7 +2896,7 @@
 ### Editar descrição de task pela CLI em qualquer estado (task update --description)
 
   - id: T-136
-  - status: review
+  - status: done
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -2907,9 +2907,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-136.md
 
 ### [T-137] Editar título, descrição e metadados de task pela workspace UI
@@ -3029,7 +3029,7 @@
 ### [T-143] C4: mapctx run event renova o claim; heartbeats fora da medição de tempo ativo
 
   - id: T-143
-  - status: backlog
+  - status: doing
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3042,7 +3042,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-143.md
 
 ### [T-144] C5: dispatch kind e claim de revisão compartilhado (migração + troca do índice único)
@@ -3124,7 +3124,7 @@
 ### [T-148] validate: bulk-updated-timestamp passa de erro para info
 
   - id: T-148
-  - status: backlog
+  - status: done
   - type: chore
   - parent: E-017
   - subIssueProgress: null
@@ -3135,9 +3135,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-148.md
 
 ### [T-149] Triagem do board antes do espelho no GitHub (proposta, sem aplicar)
@@ -3162,7 +3162,7 @@
 ### [T-150] Adapter GitHub de leitura atrás da TaskProvider
 
   - id: T-150
-  - status: review
+  - status: done
   - type: feature
   - parent: E-018
   - subIssueProgress: null
@@ -3173,9 +3173,9 @@
   - dependsOn: [T-139]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-150.md
 
 ### [T-151] Sanitização para publicar tasks num repo público
@@ -3371,7 +3371,7 @@
 ### [T-161] Store: fechar as outras portas de divergência entre arestas e lista de detail
 
   - id: T-161
-  - status: backlog
+  - status: doing
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3384,7 +3384,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-161.md
 
 ### [T-162] Teste intermitente: claim-redaction 'reading open' de undefined

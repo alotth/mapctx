@@ -327,7 +327,8 @@ function unknownFieldMessage(field: string, side: "task" | "detail"): string {
     + ` Task fields: ${taskFields}.`
     + ` Detail fields (prefix each with \`detail.\`): ${detailFields}.`
     + ` \`waitReason\` is also accepted unprefixed as a shorthand for \`detail.waitReason\`.`
-    + ` Prose lives in the Git-authored \`description:\` block of tasks/<ID>.md and is never patchable here.`;
+    + ` Prose lives in the Git-authored \`description:\` block of tasks/<ID>.md and is never patchable here;`
+    + ` edit it with \`mapctx task update <id> --description <text>\` or \`--description-file <path>\` (writes the file, not the store).`;
 }
 
 /**

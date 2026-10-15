@@ -170,32 +170,7 @@ export function buildExport(db: DatabaseSync, options: { tasksRoot: string }): E
     const detail = getTaskDetail(db, task.taskId);
     if (!detail) continue;
     const detailFilePath = path.resolve(options.tasksRoot, task.detailPath);
-    let description = readExistingDescription(detailFilePath);
-    // T-120/T-121: once a task carries canonical acceptance revisioning, the
-    // ## Acceptance section in the mirror is rendered from the store
-    // (approved -> [x], pending -> [ ]) IN PLACE, clearly marked as
-    // store-owned. Non-checkbox Git-authored prose inside the section
-    // (notes, evidence, links, nested headings, fenced examples, authored
-    // plain bullets) is preserved byte-for-byte at its authored position;
-    // only managed spans (checkboxes, guard comment, plain bullets that
-    // exactly match a current criterion) are replaced. Tasks without
-    // revisioning keep their Git-authored prose untouched, so pre-adoption
-    // exports stay byte-compatible.
-    const acceptance = getAcceptance(db, task.taskId);
-    if (acceptance) {
-      // Review N1/T-121: ambiguous prose (unclosed code fence anywhere,
-      // multiple real Acceptance sections) is refused BEFORE anything is
-      // written; the prose itself stays unmodified.
-      try {
-        description = renderAcceptanceProse(
-          description,
-          acceptance.criteria.map(criterion => ({ text: criterion.text, completed: criterion.state === "approved" })),
-          acceptance.revision
-        );
-      } catch (error) {
-        throw new Error(`acceptance-render-refused: task ${task.taskId}: ${(error as Error).message.replace(/^acceptance-render-refused: /, "")}`);
-      }
-    }
+    const description = renderStoreDescription(db, task.taskId, readExistingDescription(detailFilePath));
     const detailFile: TaskDetailFile = {
       id: task.taskId,
       role: detail.role,
@@ -218,6 +193,38 @@ export function buildExport(db: DatabaseSync, options: { tasksRoot: string }): E
   }
 
   return { tasksMd, taskDetailFiles };
+}
+
+/**
+ * T-120/T-121: once a task carries canonical acceptance revisioning, the
+ * ## Acceptance section in the mirror is rendered from the store
+ * (approved -> [x], pending -> [ ]) IN PLACE, clearly marked as
+ * store-owned. Non-checkbox Git-authored prose inside the section
+ * (notes, evidence, links, nested headings, fenced examples, authored
+ * plain bullets) is preserved byte-for-byte at its authored position;
+ * only managed spans (checkboxes, guard comment, plain bullets that
+ * exactly match a current criterion) are replaced. Tasks without
+ * revisioning keep their Git-authored prose untouched, so pre-adoption
+ * exports stay byte-compatible.
+ *
+ * Shared by export and by `task update --description` (T-136), so an edited
+ * description lands in the file exactly as the next export would render it.
+ */
+export function renderStoreDescription(db: DatabaseSync, taskId: string, description: string): string {
+  const acceptance = getAcceptance(db, taskId);
+  if (!acceptance) return description;
+  // Review N1/T-121: ambiguous prose (unclosed code fence anywhere,
+  // multiple real Acceptance sections) is refused BEFORE anything is
+  // written; the prose itself stays unmodified.
+  try {
+    return renderAcceptanceProse(
+      description,
+      acceptance.criteria.map(criterion => ({ text: criterion.text, completed: criterion.state === "approved" })),
+      acceptance.revision
+    );
+  } catch (error) {
+    throw new Error(`acceptance-render-refused: task ${taskId}: ${(error as Error).message.replace(/^acceptance-render-refused: /, "")}`);
+  }
 }
 
 /**
