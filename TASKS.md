@@ -2896,7 +2896,7 @@
 ### Editar descrição de task pela CLI em qualquer estado (task update --description)
 
   - id: T-136
-  - status: review
+  - status: done
   - type: feature
   - parent: null
   - subIssueProgress: null
@@ -2907,9 +2907,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-136.md
 
 ### [T-137] Editar título, descrição e metadados de task pela workspace UI
@@ -3029,7 +3029,7 @@
 ### [T-143] C4: mapctx run event renova o claim; heartbeats fora da medição de tempo ativo
 
   - id: T-143
-  - status: backlog
+  - status: doing
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3042,7 +3042,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-143.md
 
 ### [T-144] C5: dispatch kind e claim de revisão compartilhado (migração + troca do índice único)
@@ -3124,7 +3124,7 @@
 ### [T-148] validate: bulk-updated-timestamp passa de erro para info
 
   - id: T-148
-  - status: backlog
+  - status: review
   - type: chore
   - parent: E-017
   - subIssueProgress: null
@@ -3137,7 +3137,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-15
   - detail: ./tasks/T-148.md
 
 ### [T-149] Triagem do board antes do espelho no GitHub (proposta, sem aplicar)
