@@ -18,6 +18,7 @@ export {
   parseTaskDetailFile,
   generateTaskDetailFile,
   readTaskDetailFile,
+  replaceTaskDetailDescription,
   parseAcceptanceChecklist,
   parseBareAcceptanceChecklist,
   stripAcceptanceSection,

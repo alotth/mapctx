@@ -64,6 +64,8 @@ function wrapProvider(inner: TaskProvider, overrides: Partial<TaskProvider>): Ta
     capabilities: overrides.capabilities ?? inner.capabilities,
     listItems: overrides.listItems ?? inner.listItems.bind(inner),
     getItem: overrides.getItem ?? inner.getItem.bind(inner),
+    findByKey: overrides.findByKey ?? inner.findByKey.bind(inner),
+    describeFields: overrides.describeFields ?? inner.describeFields.bind(inner),
     getProject: overrides.getProject ?? inner.getProject.bind(inner),
     setProjectField: overrides.setProjectField ?? inner.setProjectField.bind(inner),
     createItem: overrides.createItem ?? inner.createItem.bind(inner),

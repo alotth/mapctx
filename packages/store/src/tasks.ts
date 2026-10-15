@@ -303,10 +303,31 @@ const PATCHABLE_DETAIL_FIELDS = new Set([
   "waitReason",
   "filesAffected",
   "testsRequired",
-  "summary",
-  "prerequisites",
-  "blocking"
+  "summary"
 ]);
+
+/**
+ * T-161: `prerequisites` and `blocking` are not fields, they are a rendering
+ * of the task's dependency edges -- `export` builds both lists from
+ * dependency_projection, `reconcile` diffs `blocking` against the edges
+ * rather than against the stored list, and `plan`/`gantt` read only the
+ * edges. Patching one on its own writes the projection while the thing it
+ * projects stays put, which is the divergence T-157 fixed in the other
+ * direction and `validate` now reports as `dependency-detail-divergence`.
+ * They are refused here, by name, pointing at the flags that write both
+ * surfaces in one event.
+ */
+const EDGE_DERIVED_DETAIL_FIELDS = new Map([
+  ["prerequisites", { flag: "--depends-on", kind: "depends-on" }],
+  ["blocking", { flag: "--blocking", kind: "blocks" }]
+]);
+
+function edgeListNotPatchableMessage(field: string, taskId: string): string {
+  const { flag, kind } = EDGE_DERIVED_DETAIL_FIELDS.get(field) as { flag: string; kind: string };
+  return `detail "${field}" is derived from the task's ${kind} edges and cannot be patched on its own:`
+    + ` the list would move while the edges stayed put, and every planning read (\`plan\`, \`gantt\`) follows the edges.`
+    + ` Use \`mapctx task update ${taskId} ${flag} a,b\`, which replaces the edges AND this list in one write (\`${flag} ""\` clears both).`;
+}
 
 /**
  * T-127 (R4): the unknown-field refusal used to list only the half of the
@@ -327,7 +348,8 @@ function unknownFieldMessage(field: string, side: "task" | "detail"): string {
     + ` Task fields: ${taskFields}.`
     + ` Detail fields (prefix each with \`detail.\`): ${detailFields}.`
     + ` \`waitReason\` is also accepted unprefixed as a shorthand for \`detail.waitReason\`.`
-    + ` Prose lives in the Git-authored \`description:\` block of tasks/<ID>.md and is never patchable here.`;
+    + ` Prose lives in the Git-authored \`description:\` block of tasks/<ID>.md and is never patchable here;`
+    + ` edit it with \`mapctx task update <id> --description <text>\` or \`--description-file <path>\` (writes the file, not the store).`;
 }
 
 /**
@@ -460,7 +482,7 @@ export type UpdateTaskResult =
   | { ok: true; applied: { fields: string[]; detailFields: string[]; edges: boolean } }
   | {
       ok: false;
-      reason: "unknown-task" | "no-changes" | "unknown-field" | "unknown-dependency" | "invalid-workload" | "invalid-estimated-effort" | "invalid-wait-reason" | "invalid-predicted-start" | "invalid-external-links" | "comma-in-list-element";
+      reason: "unknown-task" | "no-changes" | "unknown-field" | "edge-list-not-patchable" | "unknown-dependency" | "invalid-workload" | "invalid-estimated-effort" | "invalid-wait-reason" | "invalid-predicted-start" | "invalid-external-links" | "comma-in-list-element";
       to: string;
       message?: string;
     };
@@ -475,6 +497,13 @@ export function updateTask(store: StoreHandle, options: UpdateTaskOptions): Upda
     }
   }
   for (const field of Object.keys(options.detailPatch ?? {})) {
+    // T-161: checked BEFORE the generic unknown-field refusal, and against
+    // the CALLER's patch only -- the edge options below legitimately write
+    // these same two keys into `detailPatch` further down, after both
+    // surfaces have been computed together.
+    if (EDGE_DERIVED_DETAIL_FIELDS.has(field)) {
+      return { ok: false, reason: "edge-list-not-patchable", to, message: edgeListNotPatchableMessage(field, to) };
+    }
     if (!PATCHABLE_DETAIL_FIELDS.has(field)) {
       return { ok: false, reason: "unknown-field", to, message: unknownFieldMessage(field, "detail") };
     }
@@ -694,10 +723,34 @@ export type CreateTaskResult =
         | "invalid-wait-reason"
         | "state-not-exportable"
         | "comma-in-list-element"
+        | "edge-list-mismatch"
         | "invalid-acceptance";
       message?: string;
       taskId?: string;
     };
+
+/**
+ * T-161: compares a supplied detail list against the edge option it mirrors.
+ * Order and duplicates are not a disagreement -- both surfaces are sets, and
+ * the stored list is rebuilt from the edges anyway.
+ */
+function createEdgeListMismatch(options: CreateTaskOptions): string | null {
+  const requested = (options.detail ?? {}) as Partial<TaskDetailRecord>;
+  const pairs: Array<{ field: "prerequisites" | "blocking"; list?: string[]; edges?: string[]; flag: string }> = [
+    { field: "prerequisites", list: requested.prerequisites, edges: options.dependsOn, flag: "dependsOn" },
+    { field: "blocking", list: requested.blocking, edges: options.blocking, flag: "blocking" }
+  ];
+  for (const pair of pairs) {
+    if (pair.list === undefined) continue;
+    const fromList = [...new Set(pair.list)].sort();
+    const fromEdges = [...new Set(pair.edges ?? [])].sort();
+    if (JSON.stringify(fromList) === JSON.stringify(fromEdges)) continue;
+    return `detail.${pair.field} ${JSON.stringify(fromList)} disagrees with \`${pair.flag}\` ${JSON.stringify(fromEdges)}.`
+      + ` They are one relation on two surfaces -- the edges are what \`plan\`, \`gantt\` and \`export\` read -- so a task cannot be created holding both.`
+      + ` Pass \`${pair.flag}\` alone and the detail list is derived from it.`;
+  }
+  return null;
+}
 
 /**
  * Registers a new task under store authority: a `task.upserted` event with a
@@ -737,6 +790,17 @@ export function createTask(store: StoreHandle, options: CreateTaskOptions): Crea
     ?? commaInListElement(SNAPSHOT_LIST_DETAIL_FIELDS, requested as unknown as Record<string, unknown>)
     ?? commaInListElement(["dependsOn", "blocking"], { dependsOn: options.dependsOn, blocking: options.blocking });
   if (createCommaProblem) return { ok: false, reason: "comma-in-list-element", message: createCommaProblem };
+  // T-161: the other door onto the same divergence. `createTask` writes the
+  // edges from `dependsOn`/`blocking` and the detail lists from
+  // `detail.prerequisites`/`detail.blocking`, so a caller supplying both
+  // could seed a task whose two surfaces disagreed from its first event --
+  // the state T-157's `validate` check reports and nothing could have
+  // produced legitimately. Here both surfaces arrive in ONE call, so a
+  // redundant list that AGREES is harmless and stays accepted (several
+  // fixtures pass `prerequisites: []`); only a disagreement is refused, and
+  // the stored lists are derived from the edges below either way.
+  const edgeListProblem = createEdgeListMismatch(options);
+  if (edgeListProblem) return { ok: false, reason: "edge-list-mismatch", message: edgeListProblem };
   if (options.acceptance) {
     const { condition, texts } = options.acceptance;
     if (condition === "criteria" && texts.length === 0) {
@@ -845,8 +909,12 @@ export function createTask(store: StoreHandle, options: CreateTaskOptions): Crea
       // field that the claim gate will make the operator fill later.
       estimatedEffortSource: normalizedEffort ? "agent-active" : undefined,
       waitReason: requested.waitReason,
-      prerequisites: requested.prerequisites ?? [...(options.dependsOn ?? [])],
-      blocking: requested.blocking ?? [...(options.blocking ?? [])],
+      // T-161: derived from the edges, never from `requested` -- a supplied
+      // list has already been proven to agree with them, so taking the edges
+      // keeps ONE source for both surfaces instead of two that happen to
+      // match today.
+      prerequisites: [...(options.dependsOn ?? [])],
+      blocking: [...(options.blocking ?? [])],
       filesAffected: requested.filesAffected ?? [],
       testsRequired: requested.testsRequired ?? [],
       summary: requested.summary ?? options.title.trim()

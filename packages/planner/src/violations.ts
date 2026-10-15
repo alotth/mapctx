@@ -24,22 +24,34 @@
  *
  *   G1 alone off                     RED    G1 + G3-final off          RED
  *   G2 alone off                     RED    pair-filter + G3-final off RED
- *   G3-final alone off               RED    (independent review, T-133)
- *   serializedPairs pair-filter off  green
+ *   G3-final alone off               RED    G4 alone off               RED
+ *   serializedPairs pair-filter off  green  G4 widened to always-true  RED
  *
- * So G2 is individually load-bearing -- it is the SOLE guard of the
+ * So G2 is individually load-bearing -- it is the SOLE redaction guard of the
  * serialized-pair route, where G1 cannot help because that route reads
  * non-intersection as evidence. The final `isRedactedPath` filter on the
  * return is ALSO individually load-bearing: a plan path spelled
  * `./mapctx:redacted` (or `mapctx:redacted/`, `.\mapctx:redacted`) passes the
  * per-route filter, because the raw value is not the sentinel, and only
  * normalizePath turns it INTO the sentinel -- so only the final filter catches
- * it. (An earlier version of this comment measured it green; the review's
- * fixture with a normalizable spelling proved otherwise.) The per-route filter
- * is the redundant member: it pairs with the final filter on the overbroad
- * route, so removing it alone is invisible and removing both brings the
- * fabricated violation back. Do not delete either guard because a single
- * mutation shows one dead.
+ * it. The per-route filter is the redundant member: it pairs with the final
+ * filter on the overbroad route, so removing it alone is invisible and removing
+ * both brings the fabricated violation back. Do not delete either guard because
+ * a single mutation shows one dead.
+ *
+ * G3-final's RED is now reproducible from this repository. T-133 measured it
+ * with a reviewer's temporary fixture and committed none, so the only sentinel
+ * fixture here used the BARE value -- which the per-route filter catches, which
+ * left this row green when T-159 re-ran the matrix. The normalizable spelling
+ * is a committed test now ("a normalizable sentinel spelling is caught only by
+ * the final filter"). A matrix that can only be reproduced from a transcript is
+ * a claim, not a measurement.
+ *
+ * G4 is new in T-159 and is the second guard of the same route, for a different
+ * reason than G2: see it below. Both of its rows matter, because a guard that
+ * suppresses too much is as wrong as one that suppresses too little -- widening
+ * it to always-true turns the whole overbroad route dead and takes eight tests
+ * with it.
  *
  * WHAT THIS STILL IS NOT. The store's recordClaimViolations is the version
  * that JOURNALS violations, with idempotent re-detection and a declared
@@ -56,6 +68,7 @@ import {
   claimCovers, intersectPaths, isRedactedPath, normalizePath,
   redactedPathCount, makeClaimViolation as makeViolation
 } from "@mapctx/protocol";
+import { CAUSE_LABEL_SEPARATOR, schedulerTreatsAsSameFile } from "./scheduler-paths";
 
 /**
  * Published since the first version of this module, and now the shared
@@ -77,9 +90,26 @@ export type ViolationWave = {
 export type SerializedPairForViolations = {
   taskAId: string;
   taskBId: string;
-  /** Planning-time claim/path explanation from planExecution.serializedPairs. */
+  /**
+   * DISPLAY LABELS, not paths.
+   *
+   * `planExecution` fills `ClaimCollision.paths` and `causes[].paths` with
+   * `"<left> ↔ <right>"` strings for a human to read. T-133 review MEDIA-2
+   * found this detector consuming them as paths, which records
+   * `path: "src/a.ts ↔ src/a.ts"` in an immutable violation. They are still
+   * accepted, because a caller may legitimately pass real paths here, and every
+   * value is screened for the separator before use.
+   */
   paths?: readonly string[];
-  causes?: readonly { paths: readonly string[] }[];
+  /**
+   * The real declared paths live on the CLAIMS inside each cause, which is
+   * where this reads them from. `causes[].paths` is the label array again.
+   */
+  causes?: readonly {
+    paths?: readonly string[];
+    claimA?: { paths?: readonly string[] };
+    claimB?: { paths?: readonly string[] };
+  }[];
 };
 
 export type ClaimViolationInput = {
@@ -99,6 +129,46 @@ function actualIntersection(a: TaskReceipt, b: TaskReceipt): string[] {
 
 function pairKey(a: string, b: string): string {
   return a.localeCompare(b) <= 0 ? `${a}:${b}` : `${b}:${a}`;
+}
+
+/**
+ * The real declared paths of a serialized pair.
+ *
+ * T-133 review MEDIA-2: `ClaimCollision.paths` and `causes[].paths` are display
+ * labels, so the paths are read from the CLAIMS inside each cause. The label
+ * arrays are still consulted, because a caller may pass real paths there, but
+ * every candidate is screened: a value carrying the label separator is a label
+ * and is dropped rather than normalized into a violation. Dropping is right
+ * rather than splitting the label on the separator -- a split would resurrect
+ * the guess, and a label is not evidence of anything the claims do not already
+ * say.
+ */
+function declaredPathsOf(pair: SerializedPairForViolations): string[] {
+  const causes = pair.causes ?? [];
+  const candidates = [
+    ...(pair.paths ?? []),
+    ...causes.flatMap(cause => [
+      ...(cause.claimA?.paths ?? []),
+      ...(cause.claimB?.paths ?? []),
+      ...(cause.paths ?? [])
+    ])
+  ];
+  return [...new Set(candidates.filter(path => typeof path === "string" && !path.includes(CAUSE_LABEL_SEPARATOR)))];
+}
+
+/** Observed-path pairs the scheduler would call one file. See guard G4. */
+function schedulerSameFilePairs(left: readonly string[], right: readonly string[]): string[] {
+  const pairs: string[] = [];
+  for (const a of left) {
+    if (isRedactedPath(a)) continue;
+    for (const b of right) {
+      if (isRedactedPath(b)) continue;
+      // Already-equal paths are handled by `actualIntersection`, which runs
+      // first; only a disagreement between the two comparisons matters here.
+      if (a !== b && schedulerTreatsAsSameFile(a, b)) pairs.push(`${a} vs ${b}`);
+    }
+  }
+  return [...new Set(pairs)].sort();
 }
 
 /**
@@ -149,11 +219,41 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
     // they did not. G1 does not cover this one; nothing else does either.
     if (redactedPathCount(left.receipt.changedFiles) > 0 || redactedPathCount(right.receipt.changedFiles) > 0) continue;
     if (actualIntersection(left, right).length > 0) continue;
+    // Guard G4 (T-159, from T-133 review MEDIA-1). Same shape as G2 and for the
+    // same reason: do not assert an absence that cannot be established.
+    //
+    // `actualIntersection` compares what the receipts literally recorded, where
+    // case is meaningful and `..` does not occur -- correct for an audit trail,
+    // which must not rewrite evidence. The SCHEDULER compares declared claims
+    // with case folded and `..` resolved, because it has to err toward
+    // serializing on macOS and Windows. So `planExecution` serializes
+    // `SRC/a.ts` against `src/a.ts`, the receipts come back spelling the same
+    // file both ways, the audit comparison finds no intersection, and this
+    // route would record a permanent "these tasks did not conflict" about two
+    // tasks that wrote the same bytes.
+    //
+    // The pair is skipped and the incompleteness reported, rather than the
+    // paths being folded: folding them here would make the recorded violation
+    // path lossy, which is the merge T-133 refused.
+    //
+    // DELIBERATELY ASYMMETRIC. The collision route above uses
+    // `actualIntersection` POSITIVELY, so the same spelling disagreement makes
+    // it MISS a collision rather than fabricate a non-collision. That is a
+    // real limitation and it is left alone: a missed finding is recoverable by
+    // looking again, while a recorded "they did not conflict" is an immutable
+    // false fact. Closing it means deciding what a violation row should say
+    // when two receipts disagree about a filename, which is a question about
+    // the audit record, not about this guard.
+    const schedulerCollisions = schedulerSameFilePairs(left.receipt.changedFiles, right.receipt.changedFiles);
+    if (schedulerCollisions.length > 0) {
+      warnOnSchedulerDisagreement(pair.taskAId, pair.taskBId, schedulerCollisions);
+      continue;
+    }
     const wave = waves.find(candidate => candidate.taskIds.includes(pair.taskAId)) ?? waves[0];
     if (!wave) continue;
     // A caller-supplied path can be a redacted one too; a violation whose path
     // is the sentinel asserts nothing about any file.
-    const paths = [...new Set([...(pair.paths ?? []), ...(pair.causes ?? []).flatMap(cause => cause.paths)])]
+    const paths = declaredPathsOf(pair)
       .filter(path => !isRedactedPath(path))
       .map(normalizePath).filter(Boolean).sort();
     for (const path of paths) {
@@ -183,6 +283,24 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
  * them is safe to act on, so a redacted receipt is never silently treated as
  * clean evidence.
  */
+/**
+ * Guard G4's blind spot, said out loud.
+ *
+ * Silence here would be the bug: the pair is skipped precisely so that an
+ * `overbroad` is NOT recorded, and without a warning the caller sees the same
+ * empty result it would see from a clean pair. Same reasoning as
+ * `warnOnIncompleteDetection` -- "no violations" and "could not look" are
+ * different answers.
+ */
+function warnOnSchedulerDisagreement(taskAId: string, taskBId: string, samePairs: readonly string[]): void {
+  process.emitWarning(
+    `claim-violation detection over the serialized pair ${taskAId}/${taskBId} is INCOMPLETE: ` +
+    `${samePairs.length} changed-file pair(s) are different spellings of one file under the scheduler's comparison ` +
+    `(${samePairs.join(", ")}), so "they never intersected" cannot be established and no overbroad finding is emitted. ` +
+    `The audit comparison keeps receipts verbatim by design; the scheduler folds case and resolves "..".`
+  );
+}
+
 function warnOnIncompleteDetection(receipts: readonly TaskReceipt[]): void {
   for (const item of receipts) {
     const redacted = redactedPathCount(item.receipt.changedFiles);

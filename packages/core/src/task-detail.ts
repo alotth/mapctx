@@ -183,6 +183,26 @@ export function generateTaskDetailFile(detail: TaskDetailFile): string {
   return `${out.join("\n")}\n`
 }
 
+/**
+ * T-136: swap ONLY the `description:` block of an existing detail file. The
+ * structured fields above it and anything the parser stops at below it (an
+ * epic's `  - budget*:` section) are kept byte-for-byte, so editing prose
+ * never doubles as a snapshot regeneration. The blank lines that separated
+ * the old block from what follows are kept too.
+ */
+export function replaceTaskDetailDescription(content: string, description: string): string {
+  const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")
+  const start = lines.findIndex(line => line === "  - description: |")
+  if (start < 0) throw new Error("detail file has no `  - description: |` block")
+  let end = start + 1
+  while (end < lines.length && !TOP_LEVEL_FIELD_RE.test(lines[end])) end++
+  let trailing = end
+  while (trailing > start + 1 && lines[trailing - 1] === "") trailing--
+  const body = description.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n+$/, "")
+    .split("\n").map(line => line === "" ? "" : `${DESCRIPTION_INDENT}${line}`)
+  return [...lines.slice(0, start + 1), ...body, ...lines.slice(trailing)].join("\n")
+}
+
 export function readTaskDetailFile(filePath: string): TaskDetailFile {
   return parseTaskDetailFile(fs.readFileSync(filePath, "utf8"))
 }
