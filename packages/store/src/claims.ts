@@ -543,15 +543,34 @@ function ceilingNote(claim: ResourceClaimRecord, nowMs: number): string {
 }
 
 /**
- * T-144: the lane a dispatch runs in, read from its own attempts.
+ * T-144: the lane a dispatch runs in, read from its LATEST attempt.
  *
- * Every attempt of one `dispatchId` carries the same `kind`
- * (`appendDispatchAttempt` refuses one that contradicts the attempts already
- * recorded), so the first row answers for all of them. `?? "implement"` covers
- * every attempt written before the column existed, which is what they were.
+ * Both writer paths now refuse a `kind` that contradicts the attempts already
+ * recorded under an id -- `appendDispatchAttempt` for the guarded path and
+ * `assertNewEventAdmission` for a raw `dispatch.attempted` -- so for anything
+ * this binary appends, every attempt of one `dispatchId` carries the same kind
+ * and any row answers for all of them.
+ *
+ * Attempt 2 (review B1): it reads the LATEST attempt rather than
+ * `attempts[0]` anyway, because that invariant is enforced per append and the
+ * one thing no writer guard can reach is a journal merged from another node.
+ * `repairStore` replays a foreign journal through the applier alone, with no
+ * admission re-adjudication (deliberately -- a historical fact is projected,
+ * never re-judged), so a chain whose attempt 1 is `review` and attempt 2
+ * `implement` can exist on disk without this binary having admitted it. Asked
+ * about such a chain, "the lane of the attempt that is actually running" is a
+ * true answer where "the lane of attempt 1" is a stale one, and the renewal
+ * callers are always asking about the latest attempt: the run-event path
+ * refuses a stale `--attempt` before it gets here, and the dispatch-addressed
+ * renewal resolves the latest open attempt by definition. One line, and the
+ * guarantee no longer rests on an invariant that one code path cannot police.
+ *
+ * `?? "implement"` covers every attempt written before the column existed,
+ * which is what they were.
  */
-function laneRoleOf(attempts: readonly { kind?: DispatchKind }[]): ClaimRole {
-  return attempts[0]?.kind ?? "implement";
+function laneRoleOf(attempts: readonly { attempt: number; kind?: DispatchKind }[]): ClaimRole {
+  if (attempts.length === 0) return "implement";
+  return attempts.reduce((latest, item) => (item.attempt > latest.attempt ? item : latest), attempts[0]!).kind ?? "implement";
 }
 
 /**

@@ -125,6 +125,27 @@
   let a completed review receipt carry the task's planning state to `review`.
   Until then the lane exists in the store API and in the schema, and nothing a
   user can type reaches it.
+* **fix:** starting a new attempt on an existing dispatch takes that
+  dispatch's own lane. Previously the claim's lane came from the caller
+  (defaulting to `implement`) while the attempt's came from the dispatch, so
+  continuing a review dispatch without naming the kind minted an exclusive
+  implement claim for a review attempt — and the run's heartbeats, which
+  resolve by the dispatch's lane, then renewed the *reviewer's* claim while
+  the implement claim nobody was renewing expired in silence. An absent kind
+  now inherits the dispatch's lane and a contradicting one is refused by name.
+  Unreachable from the CLI in this release; it would have become the natural
+  mistake the moment `--kind` shipped.
+* **fix:** "a dispatch id names one lane" now holds for a raw
+  `dispatch.attempted` append too, not only for `dispatch create`. Replay is
+  unaffected — a mixed chain already on disk still projects as the historical
+  fact it is — and the lane a renewal resolves is read from the attempt that
+  is actually running rather than from attempt 1, so a chain merged from
+  another node behaves sensibly instead of answering for a lane it left.
+* **fix:** a `task.claimed` event carrying an unknown `role` is refused
+  instead of being quietly read as `implement`. The dispatch side never had
+  this hole — migration 13's `CHECK` refuses an unknown `kind` loudly — and an
+  absent `role` is still legal, which is what keeps the historical events
+  replayable.
 
 ### Features: the store backs itself up (T-138)
 

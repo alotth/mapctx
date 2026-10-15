@@ -90,15 +90,23 @@ export const DEFAULT_LEASE_FACTOR = 0.5;
  *
  * The factor scales the whole derivation INCLUDING the clamp's ceiling --
  * `clamp(effort x leaseFactor x reviewLeaseFactor, defaultLease,
- * min(maxLease x reviewLeaseFactor, ABSOLUTE_LEASE_CEILING_MS))`. Scaling only
- * the multiplier would leave review leases pinned at `maxLease`, so on a
- * `Hard`/`2w` task the review lease would come out at exactly 8 h -- the same
- * as the implement lease -- and D11's decision would have no effect on the big
- * tasks where it matters most. Scaling the multiplier and ignoring `maxLease`
- * would do the opposite and overrun the one lease figure the operator
- * configures. Scaling both keeps the operator's proportion, keeps "review >=
- * implement" true even at saturation, and leaves the 24 h ceiling as the bound
- * that actually bites (`maxLease = "24h"` would derive 48 h and is cut to 24).
+ * min(maxLease x reviewLeaseFactor, ABSOLUTE_LEASE_CEILING_MS))` -- and the
+ * two alternatives are rejected for two different reasons.
+ *
+ * Scaling only the multiplier leaves review leases pinned at `maxLease`, so on
+ * a `Hard`/`2w` task the review lease comes out at exactly 8 h, the same as
+ * the implement lease, and D11 has no effect on the big tasks where it matters
+ * most.
+ *
+ * Scaling the clamp's RESULT instead (`min(clamp(...) x factor, ceiling)`) is
+ * the subtler one, and T-144's review caught this comment getting its reason
+ * wrong: it does NOT overrun `maxLease` in any way the chosen form avoids --
+ * both forms give 4 h for an 8 h task under `maxLease = "2h"`, and 16 h for a
+ * `2w` task under the defaults. What it actually does is double the FLOOR.
+ * `defaultLease` is the lease a task with no derivable estimate gets, and
+ * under that reading such a task's review claim would be 1 h rather than the
+ * configured 30 m. D11 scales the derivation; it does not get to redefine what
+ * "nothing to derive from" is worth. The two readings differ nowhere else.
  */
 export const DEFAULT_REVIEW_LEASE_FACTOR = 2;
 /**

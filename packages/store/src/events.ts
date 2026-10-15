@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite"
 import type { EventLogEntry } from "@mapctx/protocol"
-import { assertTransition, claimLaneFor, type Account, type Budget, type ClaimExclusivity, type ClaimRole, type CostEvent, type DispatchKind, type EstimateSnapshot, type PlanPeriod, type RunEvent, type RunReceipt } from "@mapctx/protocol"
+import { assertTransition, claimLaneFor, claimRoleSchema, type Account, type Budget, type ClaimExclusivity, type ClaimRole, type CostEvent, type DispatchKind, type EstimateSnapshot, type PlanPeriod, type RunEvent, type RunReceipt } from "@mapctx/protocol"
 import {
   getTaskDetail,
   getTask,
@@ -25,6 +25,7 @@ import {
   insertRunEvent,
   invalidateHistoryEvidence,
   listAcceptanceCriteria,
+  listDispatchAttempts,
   patchTask,
   replaceAcceptanceCriteria,
   replaceOutgoingDependencies,
@@ -297,7 +298,18 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
       const payload = entry.payload as unknown as TaskClaimedPayload;
       // T-144: the ONE place an absent lane is decided, so a journal replay and
       // migration 13's column defaults cannot disagree.
-      const { exclusivity, role } = claimLaneFor(payload.role ?? "implement");
+      //
+      // Attempt 2 (review B2): PARSED, not coerced. `claimLaneFor` treats
+      // anything that is not `"review"` as implement, so `role: "audit"` used
+      // to project a perfectly ordinary `exclusive`/`implement` claim and carry
+      // `executionState` to `claimed` -- a lane nobody asked for, silently
+      // renamed to one that exists. The dispatch side never had this hole:
+      // `kind` is passed through to the row and migration 13's CHECK refuses an
+      // unknown value loudly. This is the claim side's CHECK, in the one place
+      // it can be applied before anything is written. Absent stays legal, which
+      // is what keeps the historical events replayable.
+      const role = claimRoleSchema.parse(payload.role ?? "implement");
+      const { exclusivity } = claimLaneFor(role);
       // Refused BEFORE the insert, not after. The pair is derived from `role`
       // rather than read field-by-field from the payload -- there is no such
       // thing as a shared implement claim or an exclusive review claim, and an
@@ -614,6 +626,31 @@ export function assertNewEventAdmission(db: DatabaseSync, entry: EventLogEntry):
     const task = getTask(db, dispatch.taskId);
     if (!task) throw new Error(`Cannot dispatch unknown task: ${dispatch.taskId}`);
     if (["done", "cancelled", "archived"].includes(task.planningState)) throw new Error(`Cannot dispatch terminal task: ${dispatch.taskId}`);
+    // T-144 attempt 2 (review B1): "a dispatch id names one lane" is now
+    // enforced on BOTH writer paths, not just the guarded one.
+    // `appendDispatchAttempt` refuses a contradictory `kind`, but a raw
+    // `appendEvent` reached none of that, so a hand-written or
+    // programmatically-built `dispatch.attempted` could open a chain whose
+    // attempt 1 is `review` and attempt 2 `implement` -- and the CHANGELOG
+    // claims the refusal without qualification. The check belongs here
+    // because this function already looks the dispatch up, and because a
+    // guard on new history is exactly what this function is for.
+    //
+    // Replay is unaffected: this runs only on fresh appends
+    // (`store-handle.ts`), never from the applier that `repairStore` uses, so
+    // a mixed chain that already exists on disk still projects as the
+    // historical fact it is rather than being rejected by today's rules.
+    const existingAttempts = listDispatchAttempts(db, dispatch.dispatchId);
+    const recordedKind = existingAttempts.length > 0
+      ? existingAttempts.reduce((latest, item) => (item.attempt > latest.attempt ? item : latest), existingAttempts[0]!).kind
+      : undefined;
+    const attemptedKind = dispatch.kind ?? "implement";
+    if (recordedKind !== undefined && attemptedKind !== recordedKind) {
+      throw new Error(
+        `Dispatch ${dispatch.dispatchId} is a ${recordedKind} dispatch; attempt ${dispatch.attempt} cannot be ${attemptedKind}. `
+        + `Open a separate dispatch for the ${attemptedKind} lane.`
+      );
+    }
     // T-144: the terminal-planning refusal applies to both lanes (claim
     // admission refuses a terminal task the same way, so a review lane could
     // not be opened on one anyway), but the EXECUTION transition is the
