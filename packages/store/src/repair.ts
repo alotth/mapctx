@@ -5,7 +5,7 @@ import { checkIntegrity, openDatabase, writeMetaValue } from "./db"
 import { applyEventToProjections } from "./events"
 import { readStoreMetaFile } from "./identity"
 import { acquireMaintenanceLock, assertNotUnderMaintenance } from "./maintenance"
-import { autoSnapshot, pushSnapshotNotice } from "./backup"
+import { autoSnapshot, pushSnapshotNotice, withMaintenanceSnapshot } from "./backup"
 import { listJournalNodeIds, listJournalSequences, readJournalEntry } from "./journal"
 import { attestedEntries, loadNodeAttestations, verifyAttestationAgainstDb, type NodeAttestation } from "./attestation"
 import { reconcilePendingRedactions } from "./redact"
@@ -78,10 +78,30 @@ export function repairStore(storeDir: string): RepairResult {
     // way, so the operator still learns whether a rollback point exists.
     const snapshot = autoSnapshot(storeDir, "pre-repair", { underMaintenanceLock: true });
     pushSnapshotNotice(snapshot.ok
-      ? `pre-repair snapshot: ${snapshot.backupDir}`
+      ? `pre-repair snapshot of schema ${snapshot.manifest.storeSchemaVersion ?? "unknown"}: ${snapshot.backupDir}`
         + (snapshot.pruned.length > 0 ? ` (pruned ${snapshot.pruned.length} older auto-snapshot(s))` : "")
       : `pre-repair snapshot SKIPPED (${snapshot.skipped}); repair proceeded`);
-    return repairStoreUnderLock(storeDir);
+    // T-167: everything below opens the database, and an open is what applies
+    // a PENDING MIGRATION -- `intactDatabaseFloor` migrates the very database
+    // it only wants to read a watermark from. The pre-migration hook fires
+    // there, inside the lock this function holds, and used to be refused by
+    // `assertNotUnderMaintenance` with the lock holder's own pid: the operator
+    // was told the snapshot was SKIPPED while the store migrated anyway, and
+    // the rollback point existed only because the snapshot above happens to
+    // run first.
+    //
+    // Publishing that archive turns the accident into a checked fact: the hook
+    // verifies it holds this exact pre-migration state and names it, or takes
+    // its own snapshot. The lock is unchanged -- still acquired before this,
+    // still released after, still refusing every other process.
+    return withMaintenanceSnapshot(
+      {
+        storeDir,
+        archive: snapshot.ok ? { backupDir: snapshot.backupDir, manifest: snapshot.manifest } : null,
+        skipped: snapshot.ok ? null : snapshot.skipped
+      },
+      () => repairStoreUnderLock(storeDir)
+    );
   } finally {
     maintenanceLock.release();
   }
