@@ -371,14 +371,32 @@ no active claim or more than one, when the claim has expired, or past the
 ceiling below. `--attempt` defaults to the latest attempt and naming an older
 one is refused; `--sequence` defaults to the next unused one for that attempt.
 
-**The 24-hour ceiling (D4) now binds every renewal path**, this one and `task
-renew` alike, measured from the claim's original `claimedAt` rather than from
-its current expiry — a ceiling measured from the thing it constrains is no
-ceiling. Inside the window a renewal that would reach past it is clamped to it;
-past it nothing extends the claim and only a fresh `task start` opens a lane.
-`task renew` therefore has a new refusal, `ceiling-reached`. The clock is the
-local clock of whichever process renews, which is the same trust level as the
-rest of the local CLI.
+**The 24-hour ceiling (D4) now binds how long a claim can live at all**, not
+just how long renewals may extend it, measured from the claim's original
+`claimedAt` rather than from its current expiry — a ceiling measured from the
+thing it constrains is no ceiling. Two halves:
+
+- **Minting.** `[coordination] maxLease` above 24 h is now **refused** when the
+  config is read, with the message naming the ceiling, rather than quietly
+  minting a claim nobody may renew. Before this, `maxLease = "30h"` produced a
+  30-hour claim through the derived path while `task start --lease 30h` was
+  refused by name for exactly the same number. The default (`8h`) is unchanged,
+  and no claim in any store was ever held past the ceiling.
+- **Renewal.** Inside the window a renewal that would reach past the ceiling is
+  clamped to it; past it nothing extends the claim and only a fresh `task
+  start` opens a lane. `task renew` gains the refusal `ceiling-reached` for
+  that case — reachable only outside the default configuration, since with any
+  lease of 24 h or less the clamp means you meet plain `expired` at the ceiling
+  first. When that happens the expiry message now says the 24-hour limit was
+  also reached, so a lane that dies exactly at the ceiling says why.
+
+The clock is the local clock of whichever process renews, which is the same
+trust level as the rest of the local CLI.
+
+A `run event` that records its event but renews nothing still exits 0 — the
+event is the deliverable — and now also prints one warning line to stderr
+naming the reason, so a renewal loop that only checks exit codes cannot miss
+that its lane stopped being kept alive. `stdout` is unchanged.
 
 **Measurement change, observable:** `heartbeat` and `progress` events no longer
 count as interior events when a receipt's active time is measured. Proving you

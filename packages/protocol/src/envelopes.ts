@@ -49,8 +49,23 @@ export const runEventTypeSchema = z.enum([
  * than the honest one it replaced.
  *
  * The exclusion is drawn around this whole vocabulary rather than around the
- * word "heartbeat", because the collapse is a property of the cadence, not of
- * the type name: `progress` at the same spacing reproduces it exactly. One
+ * word "heartbeat": `progress` at the same spacing reproduces the collapse
+ * exactly.
+ *
+ * What makes this list the right one is NOT "anything emitted on a cadence" --
+ * T-143's review measured that `question` every 20 minutes collapses the same
+ * way, and `question` must keep counting. The line is **what emits the
+ * event**: these two are emitted by a clock, while `started`, `question`,
+ * `blocked` and `completed` are emitted by something happening. An interval
+ * between two real state changes is legitimately not measured work; an
+ * interval between two ticks says nothing at all.
+ *
+ * So the rule for whoever extends this: a new `mapctx run event --type` that a
+ * clock emits belongs in this list, and widening the command's vocabulary
+ * without widening this constant is the bug the single list exists to make
+ * impossible. C5 and C9 both touch that command.
+ *
+ * One
  * list, exported here, is what keeps the CLI's `--type` vocabulary and the
  * forecast's exclusion from drifting apart -- adding a type to the command
  * without excluding it from measurement is the bug this constant prevents.

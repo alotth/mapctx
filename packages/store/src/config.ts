@@ -66,6 +66,25 @@ export type CoordinationSettings = {
 
 /** D10, approved as a starting point and to be re-derived after C4. */
 export const DEFAULT_LEASE_FACTOR = 0.5;
+/**
+ * D4's absolute ceiling on a lease: 24 hours.
+ *
+ * Declared here, beside the lease settings it bounds, rather than in
+ * `claims.ts` where T-141 first put it (`claims.ts` re-exports it, so every
+ * importer is unaffected). The move is what F1 of T-143's review asks for:
+ * the ceiling has to be readable by `resolveCoordinationSettings`, and
+ * `claims.ts` already imports this module, so the dependency only goes this
+ * way.
+ *
+ * It bounds BOTH halves now, which is the point of the single number: how
+ * long a lease may be minted for (`maxLease`, and the derived lease the clamp
+ * produces from it) and how long any renewal may keep it alive (measured from
+ * the original `claimedAt`). Before this, `maxLease = "30h"` minted a 30 h
+ * claim through the derived path while `task start --lease 30h` was refused by
+ * name -- a constant called ABSOLUTE that limited only renewals.
+ */
+export const ABSOLUTE_LEASE_CEILING_MS = 24 * 60 * 60 * 1000;
+
 export const DEFAULT_LEASE_DURATION = "30m";
 export const DEFAULT_MAX_LEASE_DURATION = "8h";
 
@@ -103,6 +122,18 @@ export function resolveCoordinationSettings(
 
   const defaultLeaseMs = requireDuration(binding?.defaultLease ?? DEFAULT_LEASE_DURATION, "defaultLease", context);
   const maxLeaseMs = requireDuration(binding?.maxLease ?? DEFAULT_MAX_LEASE_DURATION, "maxLease", context);
+  // T-143 (review F1): REFUSED, not clamped. A silent clamp would answer a
+  // configured 30 h with a 24 h claim and no word about why, and this file
+  // already refuses a malformed `[coordination]` outright (C2) -- the operator
+  // who wrote a number the policy cannot honour should be told, in the same
+  // voice `task start --lease 30h` already uses.
+  if (maxLeaseMs > ABSOLUTE_LEASE_CEILING_MS) {
+    throw new Error(
+      `Invalid ${context}: [coordination] maxLease (${binding?.maxLease ?? DEFAULT_MAX_LEASE_DURATION}) exceeds the absolute lease ceiling of `
+      + `${ABSOLUTE_LEASE_CEILING_MS / (60 * 60 * 1000)}h. No claim may be held longer than that without being re-opened, `
+      + `and --lease is refused above it for the same reason. Lower maxLease to 24h or less.`
+    );
+  }
   if (defaultLeaseMs > maxLeaseMs) {
     throw new Error(
       `Invalid ${context}: [coordination] defaultLease (${binding?.defaultLease ?? DEFAULT_LEASE_DURATION}) must not exceed maxLease (${binding?.maxLease ?? DEFAULT_MAX_LEASE_DURATION}); `

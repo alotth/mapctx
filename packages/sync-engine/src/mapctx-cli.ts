@@ -1945,6 +1945,17 @@ function runEventCommand(dispatchId: string, options: MapctxOptions): void {
           : '')
       );
     }
+    // T-143 (review F3): exit stays 0 -- the event IS the deliverable and it
+    // landed -- but an agent in a `while sleep 1200; do mapctx run event ...;
+    // done` loop that checks the exit code would never learn its lane stopped
+    // being renewed, which is precisely what this command exists to let it
+    // see. Same remedy T-142 chose for an estimate changed under a live
+    // claim: one line on stderr, stdout's contract untouched.
+    if (result.renewal && !result.renewal.renewed) {
+      console.error(
+        `Warning: the event was recorded but renewed nothing (${result.renewal.reason}). ${result.renewal.message}`
+      );
+    }
     print(result, options.json);
   } finally {
     handle.close();

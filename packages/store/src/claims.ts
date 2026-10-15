@@ -1,6 +1,6 @@
 import * as crypto from "crypto"
 import { parseEstimatedEffortMs, workloadSchema } from "@mapctx/protocol"
-import { resolveCoordinationSettings, type CoordinationSettings } from "./config"
+import { ABSOLUTE_LEASE_CEILING_MS, resolveCoordinationSettings, type CoordinationSettings } from "./config"
 import { getActiveClaimForTask, getClaim, getRunReceipt, getTask, getTaskDetail, listActiveClaimsForTask, listDispatchAttempts } from "./projections"
 import type { AppendEventInput, StoreHandle } from "./store-handle"
 import type { EventLogEntry } from "@mapctx/protocol"
@@ -15,18 +15,12 @@ import type { DisclosableClaimRecord, ResourceClaimRecord } from "./types"
 export const DEFAULT_LEASE_DURATION_MS = 30 * 60 * 1000;
 
 /**
- * D4's absolute ceiling on a lease: 24 hours. C4 will enforce it on every
- * renewal path, where its purpose is to stop a wedged-but-still-heartbeating
- * agent from renewing forever. T-141 declares the number here and applies it
- * to the one surface that can already exceed it -- an explicit `--lease` --
- * so C4 extends the reach of one constant instead of inventing a second.
- *
- * It bounds the *explicit* lease only. A derived lease cannot reach it
- * (`maxLease` defaults to 8 h and is itself the clamp), and a caller passing
- * `leaseDurationMs` in-process is trusted the way every in-process caller of
- * this store is.
+ * Re-exported so T-141's importers keep working; the declaration moved to
+ * `config.ts` in T-143 so `resolveCoordinationSettings` can refuse a
+ * `maxLease` above it (review F1). It now bounds minting as well as renewal,
+ * which is what a constant named ABSOLUTE should always have meant.
  */
-export const ABSOLUTE_LEASE_CEILING_MS = 24 * 60 * 60 * 1000;
+export { ABSOLUTE_LEASE_CEILING_MS };
 
 /**
  * T-141 (C2 / D3, D10): the lease is read from the plan instead of from a
@@ -413,6 +407,26 @@ export type RenewResult =
  * Accepted at the same level as the rest of the local CLI's trust, and stated
  * rather than discovered.
  */
+/**
+ * T-143 (review F2): why a lane really died.
+ *
+ * The ceiling is almost never the refusal an agent sees, and that is
+ * structural rather than accidental: the clamp pulls `expiresAt` down to the
+ * ceiling, and both renewal paths test expiry BEFORE they test the ceiling, so
+ * a heartbeating agent -- the exact case the ceiling exists for -- gets
+ * `expired` at +24 h. The advice it carries ("re-claim with task start") is
+ * right; what was missing is that a 24 h policy limit fired rather than a
+ * missed heartbeat. Whoever debugs "why did my lane die at exactly 24 hours?"
+ * should not have to read this file to find out.
+ */
+function ceilingNote(claim: ResourceClaimRecord, nowMs: number): string {
+  const ceilingMs = new Date(claim.claimedAt).getTime() + ABSOLUTE_LEASE_CEILING_MS;
+  if (nowMs < ceilingMs) return "";
+  return ` This claim had also reached its 24 h maximum lifetime (claimed ${claim.claimedAt}, ceiling `
+    + `${new Date(ceilingMs).toISOString()}), so no renewal path would have extended it either -- a fresh`
+    + " task start is the only way to open the lane again.";
+}
+
 function ceilingBoundedExpiry(
   claim: ResourceClaimRecord,
   nowMs: number,
@@ -532,7 +546,11 @@ export function renewClaim(store: StoreHandle, options: RenewOptions): RenewResu
         occurredAt: now().toISOString(),
         payload: { claimId: claim.claimId, taskId }
       });
-      return { ok: false, reason: "expired" };
+      return {
+        ok: false,
+        reason: "expired",
+        message: `Claim ${claim.claimId} expired at ${claim.expiresAt}.${ceilingNote(claim, nowMs)}`
+      };
     }
 
     const leaseDurationMs = options.leaseDurationMs
@@ -681,6 +699,7 @@ export function appendRunEventClaimRenewal(
       renewed: false,
       reason: "claim-expired",
       message: `Claim ${claim.claimId} expired at ${claim.expiresAt}; re-claim the task with task start instead.`
+        + ceilingNote(claim, nowMs)
     };
   }
 
