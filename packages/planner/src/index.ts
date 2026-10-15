@@ -190,7 +190,16 @@ export function deriveResourceClaims(tasks: readonly PlannerTask[]): ResourceCla
  * the same question the scheduler asks — "would these two be the same file?" —
  * and a second copy of this transformation is exactly the twin T-133 removed.
  * The rationale for why it differs from @mapctx/protocol's `normalizePath`
- * lives at the moved function; nothing about the comparison changed here.
+ * lives at the moved function; the move itself changed nothing. T-166 then
+ * added canonical Unicode folding (NFD) there, which widens this comparison —
+ * two declared paths differing only in normal form now collide — in one place,
+ * so the scheduler and the guard in `violations.ts` cannot disagree about it.
+ *
+ * NFD rather than NFC specifically because of `pathOverlap` below: it compares
+ * `staticPrefix`-truncated globs with `startsWith`, and NFC is not
+ * prefix-preserving, so it would have made `src/cafe*` stop matching the NFD
+ * spelling of `src/café.ts` — serializing LESS than before. See the form
+ * argument at `normalizeSchedulerPath` (T-166 review F1).
  */
 const normalizePath = normalizeSchedulerPath;
 
