@@ -235,6 +235,15 @@ export function detectClaimViolations(input: ClaimViolationInput): ClaimViolatio
     // The pair is skipped and the incompleteness reported, rather than the
     // paths being folded: folding them here would make the recorded violation
     // path lossy, which is the merge T-133 refused.
+    //
+    // DELIBERATELY ASYMMETRIC. The collision route above uses
+    // `actualIntersection` POSITIVELY, so the same spelling disagreement makes
+    // it MISS a collision rather than fabricate a non-collision. That is a
+    // real limitation and it is left alone: a missed finding is recoverable by
+    // looking again, while a recorded "they did not conflict" is an immutable
+    // false fact. Closing it means deciding what a violation row should say
+    // when two receipts disagree about a filename, which is a question about
+    // the audit record, not about this guard.
     const schedulerCollisions = schedulerSameFilePairs(left.receipt.changedFiles, right.receipt.changedFiles);
     if (schedulerCollisions.length > 0) {
       warnOnSchedulerDisagreement(pair.taskAId, pair.taskBId, schedulerCollisions);
