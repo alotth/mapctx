@@ -2842,7 +2842,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 5/13
+  - subIssueProgress: 6/13
   - priority: null
   - workload: null
   - tags: []
@@ -2934,7 +2934,7 @@
 ### [T-138] Store: backup e restore próprios, snapshot automático antes de migração
 
   - id: T-138
-  - status: review
+  - status: done
   - type: feature
   - parent: E-018
   - subIssueProgress: null
@@ -2945,7 +2945,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-15
   - externalId: null
   - updated: 2026-10-15
   - detail: ./tasks/T-138.md
