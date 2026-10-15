@@ -475,4 +475,7 @@ holdership is a role-aware question that belongs with C5.
   no baseline entry can suppress one, so an observation cannot be hidden by
   accepting it. A baseline recorded before this change reports its
   `bulk-updated-timestamp` entry as stale `not-reported` — the warning it
-  recorded no longer exists, so drop that entry
+  recorded no longer exists, so drop that entry. The legacy Markdown
+  validator behind `validate --snapshots` still reports the same code as a
+  `warning` in `snapshots.structural`, so a `--json` consumer sees the
+  observation twice with two severities; it never affects the exit code
