@@ -125,6 +125,93 @@ test("a wrong leaseToken and a wrong renewToken each refuse as token-mismatch", 
 });
 
 // ---------------------------------------------------------------------------
+// Mutation-testing finding: credentialMatches must compare the WHOLE value,
+// not a prefix, and must refuse (not throw) on a length mismatch. A prefix
+// collision and a short/long credential are both deliberately built FROM the
+// real token so a random foreign token (which already differs in the first
+// byte) could never catch either regression.
+// ---------------------------------------------------------------------------
+
+test("matching the prefix is not enough: a wrong credential sharing the first 8 chars of the real one still refuses as token-mismatch (renew with either token, and release), and the claim is renewable with the real credential afterward", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-913");
+    const claim = claimTask(handle, { taskId: "T-913", actor: "worker", now: () => new Date("2026-10-16T09:00:00.000Z") });
+    assert.ok(claim.ok, JSON.stringify(claim));
+    if (!claim.ok) return;
+    const { claimId, leaseToken, renewToken } = claim.claim;
+
+    // Same first 8 characters as the real token, everything after replaced --
+    // a truncated comparison (e.g. stored.slice(0,8) === presented.slice(0,8))
+    // would accept this; a full comparison must not.
+    const prefixCollide = (real: string): string => {
+      const collided = real.slice(0, 8) + "f".repeat(real.length - 8);
+      assert.notEqual(collided, real, "sanity: the constructed value must actually differ from the real one");
+      assert.equal(collided.length, real.length);
+      return collided;
+    };
+
+    const leaseCollision = prefixCollide(leaseToken);
+    const renewCollision = prefixCollide(renewToken!);
+
+    const renewByLease = renewClaim(handle, { taskId: "T-913", claimId, leaseToken: leaseCollision, actor: "x" });
+    assert.equal(renewByLease.ok, false);
+    if (!renewByLease.ok) assert.equal(renewByLease.reason, "token-mismatch");
+
+    const renewByRenew = renewClaim(handle, { taskId: "T-913", claimId, renewToken: renewCollision, actor: "x" });
+    assert.equal(renewByRenew.ok, false);
+    if (!renewByRenew.ok) assert.equal(renewByRenew.reason, "token-mismatch");
+
+    const released = releaseClaim(handle, { taskId: "T-913", claimId, leaseToken: leaseCollision, actor: "x" });
+    assert.equal(released.ok, false);
+    if (!released.ok) assert.equal(released.reason, "token-mismatch");
+
+    assert.ok(getActiveClaimForTask(handle.db, "T-913"), "the claim must still be active after all three prefix-collision attempts");
+
+    const renewedForReal = renewClaim(handle, { taskId: "T-913", claimId, leaseToken, actor: "x", now: () => new Date("2026-10-16T09:05:00.000Z") });
+    assert.ok(renewedForReal.ok, "the real credential must still work after the collisions were refused");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+test("a credential of the wrong length (shorter or longer than the real one, same prefix) refuses as token-mismatch and never throws -- the length check guards timingSafeEqual's own exception", () => {
+  const { repoDir, restoreEnv, handle } = materialize();
+  try {
+    claimableTask(handle, "T-914");
+    const claim = claimTask(handle, { taskId: "T-914", actor: "worker" });
+    assert.ok(claim.ok, JSON.stringify(claim));
+    if (!claim.ok) return;
+    const { claimId, leaseToken, renewToken } = claim.claim;
+
+    const shortCredential = leaseToken.slice(0, 10); // 10 hex chars: well short of the real width
+    const longCredential = leaseToken + "00"; // two bytes longer, same prefix
+
+    for (const badLength of [shortCredential, longCredential]) {
+      let renewByLease: ReturnType<typeof renewClaim> | undefined;
+      assert.doesNotThrow(() => { renewByLease = renewClaim(handle, { taskId: "T-914", claimId, leaseToken: badLength, actor: "x" }); }, `renew by leaseToken must refuse, not throw, for length ${badLength.length}`);
+      assert.equal(renewByLease!.ok, false);
+      if (!renewByLease!.ok) assert.equal(renewByLease!.reason, "token-mismatch");
+
+      let renewByRenew: ReturnType<typeof renewClaim> | undefined;
+      const badRenewCredential = badLength === shortCredential ? renewToken!.slice(0, 10) : renewToken! + "00";
+      assert.doesNotThrow(() => { renewByRenew = renewClaim(handle, { taskId: "T-914", claimId, renewToken: badRenewCredential, actor: "x" }); }, `renew by renewToken must refuse, not throw, for length ${badRenewCredential.length}`);
+      assert.equal(renewByRenew!.ok, false);
+      if (!renewByRenew!.ok) assert.equal(renewByRenew!.reason, "token-mismatch");
+
+      let released: ReturnType<typeof releaseClaim> | undefined;
+      assert.doesNotThrow(() => { released = releaseClaim(handle, { taskId: "T-914", claimId, leaseToken: badLength, actor: "x" }); }, `release must refuse, not throw, for length ${badLength.length}`);
+      assert.equal(released!.ok, false);
+      if (!released!.ok) assert.equal(released!.reason, "token-mismatch");
+    }
+
+    assert.ok(getActiveClaimForTask(handle.db, "T-914"), "the claim must still be active after every wrong-length attempt");
+  } finally {
+    handle.close(); restoreEnv(); cleanupDir(repoDir);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 3. invalid-request: zero or two addresses, zero or two credentials.
 // ---------------------------------------------------------------------------
 
