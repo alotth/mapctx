@@ -807,10 +807,13 @@ export function pushSnapshotNotice(notice: string): void {
 export type MaintenanceSnapshotContext = {
   /** Store whose maintenance lock the publisher holds. */
   storeDir: string
-  /** What it archived under that lock, or null when the snapshot failed. */
+  /**
+   * What it archived under that lock, or null when the snapshot failed. The
+   * REASON a snapshot failed is not carried here: the holder reports its own
+   * outcome on the notice queue, and a second copy of that sentence inside
+   * this hook's SKIPPED line said nothing the operator was not already told.
+   */
   archive: { backupDir: string; manifest: BackupManifest } | null
-  /** Why there is no archive, when `archive` is null. */
-  skipped: string | null
 }
 
 let activeMaintenanceSnapshot: MaintenanceSnapshotContext | null = null
@@ -832,15 +835,25 @@ export function withMaintenanceSnapshot<T>(context: MaintenanceSnapshotContext, 
 
 /**
  * The context, but only for the store it was published about and only while
- * this process is still the recorded lock holder. The context is a claim; the
- * lock file is the fact, and an exemption from `assertNotUnderMaintenance`
- * that outlived its lock (released, or stolen as stale) would be exactly the
+ * this process STILL HOLDS a lock that is still exclusive. The context is a
+ * claim; the lock file is the fact, and an exemption from
+ * `assertNotUnderMaintenance` that outlived its lock would be exactly the
  * loosening this fix must not introduce.
+ *
+ * "Still exclusive" is why `stale` is read and not just `pid` (review
+ * BAIXA-1). A lock carrying our own pid but older than
+ * `MAINTENANCE_LOCK_STALE_MS` is stale by the module's policy: any other
+ * process may steal it and open or write the store. The reuse branch below
+ * declines to snapshot precisely BECAUSE the lock excludes everyone else, so
+ * a lock that has stopped excluding anyone must stop buying that silence --
+ * the hook then takes its own snapshot, which is the safe direction.
  */
 function maintenanceSnapshotFor(storeDir: string): MaintenanceSnapshotContext | null {
   const context = activeMaintenanceSnapshot
   if (!context || path.resolve(storeDir) !== context.storeDir) return null
-  return readMaintenanceLock(context.storeDir)?.pid === process.pid ? context : null
+  const lock = readMaintenanceLock(context.storeDir)
+  if (!lock || lock.pid !== process.pid || lock.stale) return null
+  return context
 }
 
 /**

@@ -95,11 +95,7 @@ export function repairStore(storeDir: string): RepairResult {
     // its own snapshot. The lock is unchanged -- still acquired before this,
     // still released after, still refusing every other process.
     return withMaintenanceSnapshot(
-      {
-        storeDir,
-        archive: snapshot.ok ? { backupDir: snapshot.backupDir, manifest: snapshot.manifest } : null,
-        skipped: snapshot.ok ? null : snapshot.skipped
-      },
+      { storeDir, archive: snapshot.ok ? { backupDir: snapshot.backupDir, manifest: snapshot.manifest } : null },
       () => repairStoreUnderLock(storeDir)
     );
   } finally {

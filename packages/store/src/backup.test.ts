@@ -606,7 +606,7 @@ test("MUTATION GUARD: the lock-holder exemption is granted only to the real hold
     // HOOK's behaviour -- does it grant the exemption to a context that is
     // not really the lock holder? -- that is under test here.
     const db = withMaintenanceSnapshot(
-      { storeDir: fixture.storeDir, archive: { backupDir: archive.backupDir, manifest: archive.manifest }, skipped: null },
+      { storeDir: fixture.storeDir, archive: { backupDir: archive.backupDir, manifest: archive.manifest } },
       () => openDatabase(path.join(fixture.storeDir, "mapctx.db"))
     )
     db.close()
