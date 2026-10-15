@@ -195,8 +195,16 @@ export type SanitizeReport = {
   patternsReviewedAsAbsent?: boolean
   /** Set when the privacy budget ran out; the task is refused when it is. */
   aborted?: PrivacyScanAbort
-  /** Set when the structural budget ran out; the task is refused when it is. */
-  structuralExhausted?: { rule: string; budgetMs: number }
+  /**
+   * Set when the structural budget ran out; the task is refused when it is.
+   *
+   * `afterMs` is the time the sweep actually spent, which is NOT `budgetMs`:
+   * the deadline is checked between rules, so the rule that ran long
+   * overshoots it (T-138 review BAIXA-2). The two together are the diagnosis
+   * -- "ran out at 1000ms" says the budget is tight, "ran out at 1000ms
+   * after 3400ms" says one rule is pathological.
+   */
+  structuralExhausted?: { rule: string; afterMs: number; budgetMs: number }
 }
 
 export type PublishableTask = {
@@ -383,15 +391,51 @@ function collectFields(task: PublishableTask): FieldText[] {
   return fields
 }
 
-type StructuralOutcome = {
+/**
+ * What the sweep DID, counted in steps rather than measured in milliseconds.
+ *
+ * T-165: the linearity of this pass used to be asserted by comparing the wall
+ * clock of two input sizes, which flaked (a GC pause in the second
+ * measurement blew a ratio whose base was a few milliseconds). These counters
+ * are the same property expressed structurally, so the assertion is
+ * deterministic and machine-independent: every loop the sweep itself drives
+ * increments one of them, and on a linear sweep every one of them is bounded
+ * by a constant times the input length.
+ *
+ * They are instrumentation, not a result: `sanitizeTaskForPublication`
+ * ignores them, and they cost three integer increments per match. What they
+ * CANNOT see is work done inside the regex engine -- a rule that backtracks
+ * quadratically finds the same matches with the same counts. That class is
+ * caught by the structural budget instead (`STRUCTURAL_BUDGET_MS`): it blows
+ * the budget by more than an order of magnitude and the task is refused as
+ * `scan-incomplete`, which is an outcome, not a duration.
+ */
+export type StructuralSweepWork = {
+  /** `regex.exec` calls, including the final failing one that ends each rule's loop. */
+  execCalls: number
+  /** Iterations of the leftward path-prefix walk -- the one loop not bounded by a single match. */
+  expandLeftSteps: number
+  /** Characters copied out of the input while rebuilding a rewritten text. */
+  charsCopied: number
+}
+
+const noSweepWork = (): StructuralSweepWork => ({ execCalls: 0, expandLeftSteps: 0, charsCopied: 0 })
+
+/** The three counters as one number, for a single scaling assertion. */
+export const structuralSweepSteps = (work: StructuralSweepWork): number =>
+  work.execCalls + work.expandLeftSteps + work.charsCopied
+
+export type StructuralOutcome = {
   text: string
   hits: Array<{ category: StructuralCategory; occurrences: number }>
+  /** What the sweep cost, in steps. Instrumentation; the caller ignores it. */
+  work: StructuralSweepWork
   /** The budget ran out partway; the text is NOT safe to publish. */
   exhausted?: { rule: string; afterMs: number; budgetMs: number }
 }
 
 /** Applies one rule across one text, left-expanding where the rule asks. */
-function applyRule(text: string, rule: StructuralRule): { text: string; occurrences: number } {
+function applyRule(text: string, rule: StructuralRule, work: StructuralSweepWork): { text: string; occurrences: number } {
   // A fresh regex per application: the shared literal carries `g`, so its
   // `lastIndex` would otherwise leak between fields.
   const regex = new RegExp(rule.regex.source, rule.regex.flags)
@@ -400,19 +444,30 @@ function applyRule(text: string, rule: StructuralRule): { text: string; occurren
   let occurrences = 0
   let match: RegExpExecArray | null
   while ((match = regex.exec(text)) !== null) {
+    work.execCalls += 1
     if (match[0].length === 0) { regex.lastIndex += 1; continue }
     let start = match.index
     if (rule.expandLeft) {
-      while (start > copiedTo && PATH_PREFIX_CHARACTER.test(text[start - 1])) start -= 1
+      while (start > copiedTo && PATH_PREFIX_CHARACTER.test(text[start - 1])) { start -= 1; work.expandLeftSteps += 1 }
     }
-    out += text.slice(copiedTo, start) + rule.tokenFor(match)
+    const copied = text.slice(copiedTo, start)
+    work.charsCopied += copied.length
+    out += copied + rule.tokenFor(match)
     copiedTo = regex.lastIndex
     occurrences += 1
   }
-  return { text: occurrences === 0 ? text : out + text.slice(copiedTo), occurrences }
+  work.execCalls += 1 // the exec that returned null and ended the loop above
+  if (occurrences === 0) return { text, occurrences }
+  const tail = text.slice(copiedTo)
+  work.charsCopied += tail.length
+  return { text: out + tail, occurrences }
 }
 
-function applyStructuralRules(text: string, deadline: { endsAt: number; budgetMs: number }): StructuralOutcome {
+function applyStructuralRules(
+  text: string,
+  deadline: { endsAt: number; budgetMs: number },
+  work: StructuralSweepWork = noSweepWork()
+): StructuralOutcome {
   const perCategory = new Map<StructuralCategory, number>()
   let current = text
   for (const rule of STRUCTURAL_RULES) {
@@ -420,31 +475,38 @@ function applyStructuralRules(text: string, deadline: { endsAt: number; budgetMs
       return {
         text: current,
         hits: [...perCategory.entries()].map(([category, occurrences]) => ({ category, occurrences })),
+        work,
         // T-138 review BAIXA-2: report the time actually spent, not the
         // budget. The deadline is checked BETWEEN rules, so a single slow
         // rule overshoots -- and a report that says "exhausted after 1000ms"
         // when it took 3400ms misleads exactly the person investigating why.
-        //
-        // NOTE, because the correction is currently unobservable: the caller
-        // below narrows this to `{rule, budgetMs}` when building
-        // `SanitizeResult.structuralExhausted`, so `afterMs` is computed and
-        // then dropped -- it reaches no public surface, no refusal message
-        // and no test. The value is right rather than wrong now, which costs
-        // nothing, but making the review's point actually true means either
-        // surfacing this field on `SanitizeResult` or deleting it. That is a
-        // change to this module's public result type and belongs to whoever
-        // owns it, not to T-138.
+        // T-165 carries that value through to `SanitizeResult` and the
+        // refusal message, which is what makes the distinction observable.
         exhausted: { rule: rule.category, afterMs: Date.now() - (deadline.endsAt - deadline.budgetMs), budgetMs: deadline.budgetMs }
       }
     }
-    const applied = applyRule(current, rule)
+    const applied = applyRule(current, rule, work)
     current = applied.text
     if (applied.occurrences > 0) perCategory.set(rule.category, (perCategory.get(rule.category) ?? 0) + applied.occurrences)
   }
   return {
     text: current,
-    hits: [...perCategory.entries()].map(([category, occurrences]) => ({ category, occurrences }))
+    hits: [...perCategory.entries()].map(([category, occurrences]) => ({ category, occurrences })),
+    work
   }
+}
+
+/**
+ * The structural sweep over one text, with its work counters -- the seam the
+ * linearity test measures (T-165).
+ *
+ * It runs the production sweep, with the production rule set and the
+ * production budget: the counters a test reads are the ones
+ * `sanitizeTaskForPublication` produced on the same input, not a reimplemented
+ * model of it. Exported for that reason, like `structuralResiduesIn` below.
+ */
+export function measureStructuralSweep(text: string, budgetMs: number = STRUCTURAL_BUDGET_MS): StructuralOutcome {
+  return applyStructuralRules(text, { endsAt: Date.now() + budgetMs, budgetMs }, noSweepWork())
 }
 
 function emptyTotals(): Record<SanitizeCategory, number> {
@@ -551,11 +613,11 @@ export function sanitizeTaskForPublication(task: PublishableTask, options: Sanit
   }
 
   const structuralDeadline = { endsAt: Date.now() + structuralBudgetMs, budgetMs: structuralBudgetMs }
-  let structuralExhausted: { rule: string; budgetMs: number } | undefined
+  let structuralExhausted: { rule: string; afterMs: number; budgetMs: number } | undefined
   const afterStructural = fields.map(field => {
     const outcome = applyStructuralRules(field.text, structuralDeadline)
     if (outcome.exhausted && !structuralExhausted) {
-      structuralExhausted = { rule: outcome.exhausted.rule, budgetMs: outcome.exhausted.budgetMs }
+      structuralExhausted = { ...outcome.exhausted }
     }
     for (const hit of outcome.hits) {
       totals[hit.category] += hit.occurrences
@@ -603,7 +665,7 @@ export function sanitizeTaskForPublication(task: PublishableTask, options: Sanit
     return {
       ok: false,
       reason: "scan-incomplete",
-      message: `Sanitization of ${task.taskId} did not finish: the structural budget (${structuralExhausted.budgetMs}ms) ran out at the "${structuralExhausted.rule}" rule. Text that was not fully swept is not clean text, so publication is refused.`,
+      message: `Sanitization of ${task.taskId} did not finish: the structural budget (${structuralExhausted.budgetMs}ms) ran out at the "${structuralExhausted.rule}" rule, after ${structuralExhausted.afterMs}ms of sweeping. Text that was not fully swept is not clean text, so publication is refused.`,
       residues: [],
       report
     }
