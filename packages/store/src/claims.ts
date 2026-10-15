@@ -546,10 +546,20 @@ export function renewClaim(store: StoreHandle, options: RenewOptions): RenewResu
         occurredAt: now().toISOString(),
         payload: { claimId: claim.claimId, taskId }
       });
+      // The message appears ONLY when the ceiling has something to add. This
+      // refusal's shape is a documented decision of T-142 -- `not-active`,
+      // `token-mismatch` and `expired` keep exactly the shape callers assert
+      // today (see `RenewResult` above), and `dispatch.test.ts:221` asserts
+      // this one with `deepEqual`. An unconditional `message` broke that for
+      // every ordinary expiry in order to say something only the ceiling case
+      // needs, which is the wrong trade: F2 asked for a diagnosis when the
+      // 24 h limit fired, not for a new key on a refusal that already had its
+      // shape fixed by another task.
+      const note = ceilingNote(claim, nowMs);
       return {
         ok: false,
         reason: "expired",
-        message: `Claim ${claim.claimId} expired at ${claim.expiresAt}.${ceilingNote(claim, nowMs)}`
+        ...(note ? { message: `Claim ${claim.claimId} expired at ${claim.expiresAt}.${note}` } : {})
       };
     }
 
