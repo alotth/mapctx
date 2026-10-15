@@ -16,6 +16,8 @@ import {
 } from "@mapctx/protocol"
 import {
   assertReceiptPlanningAdmission, getActiveClaimForTask, getDispatchAttempt, getRunEvent, getTask, listDispatchAttempts, listRunReceipts } from "./projections"
+import { appendRunEventClaimRenewal, type RunEventRenewal } from "./claims"
+import type { CoordinationSettings } from "./config"
 import type { DispatchAttemptRecord } from "./types"
 import { StoreHandle, type AppendEventInput } from "./store-handle"
 import type { EventLogEntry } from "@mapctx/protocol"
@@ -37,7 +39,14 @@ export type ReceiptWriteResult =
     }
 
 export type RunEventWriteResult =
-  | { ok: true; event: RunEvent }
+  /**
+   * `renewal` is present only when the caller asked for one (T-143), so every
+   * existing caller keeps the exact result shape it asserts today. Renewal is
+   * opt-in rather than automatic for the same reason: `mapctx run event` is
+   * the surface C4 ships, and a store-internal writer should not acquire a
+   * lease side effect because a CLI command wanted one.
+   */
+  | { ok: true; event: RunEvent; renewal?: RunEventRenewal }
   | { ok: false; reason: "dispatch-mismatch" | "unknown-attempt" | "duplicate-run-event" | "conflicting-run-event" }
 
 /** Persist one dispatch attempt and move its task into the executor-running state. */
@@ -178,12 +187,22 @@ export function recordRunReceipt(
 
 export const submitRunReceipt = recordRunReceipt;
 
-/** Validate and append one executor event; identity is (dispatch, attempt, sequence). */
+/**
+ * Validate and append one executor event; identity is (dispatch, attempt, sequence).
+ *
+ * With `options.renew` the event also keeps the lane's lease alive (T-143 /
+ * C4), in this same transaction and with no credential -- the renewal rules
+ * and their rationale live in `appendRunEventClaimRenewal`. A duplicate or
+ * conflicting event cannot renew by construction: it is refused here before
+ * anything is appended, so a replayed heartbeat extends nothing and needs no
+ * rule of its own.
+ */
 export function recordRunEvent(
   store: StoreHandle,
   rawEvent: RunEvent,
   actor = "store",
-  expectedDispatchId?: string
+  expectedDispatchId?: string,
+  options: { renew?: { coordination?: CoordinationSettings; leaseDurationMs?: number; actor?: string; now?: () => Date } } = {}
 ): RunEventWriteResult {
   const parsed = runEventSchema.safeParse(rawEvent);
   if (!parsed.success) throw new Error(`Invalid RunEvent: ${parsed.error.message}`);
@@ -206,7 +225,23 @@ export function recordRunEvent(
       actor,
       payload: { event }
     });
-    return { ok: true, event };
+    if (!options.renew) return { ok: true, event };
+    // After the event, never before: the renewal is a consequence of evidence
+    // that is already in the journal, and both live or die with this one
+    // transaction.
+    const renewal = appendRunEventClaimRenewal(
+      store,
+      {
+        dispatchId: event.dispatchId,
+        attempt: event.attempt,
+        actor: options.renew.actor ?? actor,
+        coordination: options.renew.coordination,
+        leaseDurationMs: options.renew.leaseDurationMs,
+        now: options.renew.now
+      },
+      append
+    );
+    return { ok: true, event, renewal };
   });
 }
 

@@ -354,6 +354,67 @@ still lands: freezing the duration on the claim would undo the deliberate
 decision that a mid-flight re-classification is honoured, and requiring
 holdership is a role-aware question that belongs with C5.
 
+### Public contract: liveness events renew a lease and never count as work
+
+`mapctx run event <dispatch-id> --type heartbeat|progress` records one liveness
+event and, as a by-product, renews that lane's claim — addressed by the
+dispatch id, with **no token**. It exists because renewal needed a credential
+printed once to whoever opened the lane, so the agent doing the work had to
+interrupt itself to stay alive, and measurably did not: 26 renewal events
+across 162 claims, 8% of claims ever renewed. Emit one where the run already
+pauses — after a suite, between slices.
+
+The event is always recorded; whether it renewed is reported separately in
+`renewal`. It does **not** renew when the event is on an attempt older than the
+dispatch's latest, when that attempt already has a receipt, when the task has
+no active claim or more than one, when the claim has expired, or past the
+ceiling below. `--attempt` defaults to the latest attempt and naming an older
+one is refused; `--sequence` defaults to the next unused one for that attempt.
+
+**The 24-hour ceiling (D4) now binds how long a claim can live at all**, not
+just how long renewals may extend it, measured from the claim's original
+`claimedAt` rather than from its current expiry — a ceiling measured from the
+thing it constrains is no ceiling. Two halves:
+
+- **Minting.** `[coordination] maxLease` above 24 h is now **refused** when the
+  config is read, with the message naming the ceiling, rather than quietly
+  minting a claim nobody may renew. Before this, `maxLease = "30h"` produced a
+  30-hour claim through the derived path while `task start --lease 30h` was
+  refused by name for exactly the same number. The default (`8h`) is unchanged,
+  and no claim in any store was ever held past the ceiling.
+- **Renewal.** Inside the window a renewal that would reach past the ceiling is
+  clamped to it; past it nothing extends the claim and only a fresh `task
+  start` opens a lane. `task renew` gains the refusal `ceiling-reached` for
+  that case — reachable only outside the default configuration, since with any
+  lease of 24 h or less the clamp means you meet plain `expired` at the ceiling
+  first. When that happens the expiry message now says the 24-hour limit was
+  also reached, so a lane that dies exactly at the ceiling says why.
+
+The clock is the local clock of whichever process renews, which is the same
+trust level as the rest of the local CLI.
+
+A `run event` that records its event but renews nothing still exits 0 — the
+event is the deliverable — and now also prints one warning line to stderr
+naming the reason, so a renewal loop that only checks exit codes cannot miss
+that its lane stopped being kept alive. `stdout` is unchanged.
+
+**Measurement change, observable:** `heartbeat` and `progress` events no longer
+count as interior events when a receipt's active time is measured. Proving you
+are alive is not evidence of work, and counting it as such inverts the
+measurement — a four-hour run emitting one every ~20 minutes has no gap under
+the 10-minute idle threshold, so it would measure ≈0 active time **and** lose
+the honest `substituted` coverage label, making the corrupted sample look more
+trustworthy than the one it replaced. The exclusion covers the whole vocabulary
+this command can write, not just `heartbeat`, because the collapse is a
+property of the cadence: `progress` at the same spacing reproduces it exactly.
+Work measurement still comes from `timeEvidence`, which takes precedence, and
+from executor boundary events, neither of which this command writes.
+
+**Nothing in the store is re-measured by this:** there are 0 run events against
+152 receipts today, because nothing has ever emitted one. The change is
+forward-looking, and a receipt whose events are all liveness measures exactly
+what it measured before — wall clock, labelled `substituted`.
+
 ### Features
 
 * **feature:** `mapctx --help` prints an "Enumerated values" table for every

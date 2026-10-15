@@ -9,6 +9,7 @@ import {
   resolveCoordinationSettings,
   readMapctxToml,
   serializeMapctxToml,
+  ABSOLUTE_LEASE_CEILING_MS,
   type MapctxTomlConfig,
   type CoordinationSettings
 } from "./config"
@@ -122,6 +123,35 @@ test("resolveCoordinationSettings refuses a non-duration defaultLease/maxLease, 
   assert.throws(
     () => resolveCoordinationSettings({ maxLease: "forever" }),
     (error: Error) => { assert.match(error.message, /maxLease/); return true; }
+  );
+});
+
+test("T-143 review F1: resolveCoordinationSettings refuses a maxLease above the 24h absolute ceiling, naming the number; exactly 24h is accepted at the boundary", () => {
+  assert.equal(ABSOLUTE_LEASE_CEILING_MS, 24 * 60 * 60 * 1000, "sanity: the ceiling this test probes against");
+
+  // Exactly at the ceiling: accepted.
+  const atCeiling = resolveCoordinationSettings({ maxLease: "24h" });
+  assert.equal(atCeiling.maxLeaseMs, ABSOLUTE_LEASE_CEILING_MS);
+
+  // 1 minute over (1441m = 24h + 1m; the duration grammar takes one unit at a
+  // time, no "24h1m" combined form): refused, citing the ceiling.
+  assert.throws(
+    () => resolveCoordinationSettings({ maxLease: "1441m" }),
+    (error: Error) => {
+      assert.match(error.message, /maxLease/);
+      assert.match(error.message, /24h/, `must name the 24h ceiling: ${error.message}`);
+      return true;
+    }
+  );
+
+  // Comfortably over: same refusal, same ceiling named.
+  assert.throws(
+    () => resolveCoordinationSettings({ maxLease: "30h" }),
+    (error: Error) => {
+      assert.match(error.message, /maxLease/);
+      assert.match(error.message, /24h/, `must name the 24h ceiling: ${error.message}`);
+      return true;
+    }
   );
 });
 

@@ -38,6 +38,46 @@ export const runEventTypeSchema = z.enum([
   "cancelled"
 ]);
 
+/**
+ * T-143 (C4 / D3): the run-event types `mapctx run event` can emit, and so
+ * exactly the types that must never be read as evidence of work.
+ *
+ * These are liveness signals. A four-hour run that emits one every ~20 minutes
+ * has no gap under `DEFAULT_IDLE_THRESHOLD_MS` (10 min), so measuring active
+ * time from them yields ~0 instead of four hours -- while the coverage label
+ * stops saying `substituted`, making the corrupted sample look MORE trustworthy
+ * than the honest one it replaced.
+ *
+ * The exclusion is drawn around this whole vocabulary rather than around the
+ * word "heartbeat": `progress` at the same spacing reproduces the collapse
+ * exactly.
+ *
+ * What makes this list the right one is NOT "anything emitted on a cadence" --
+ * T-143's review measured that `question` every 20 minutes collapses the same
+ * way, and `question` must keep counting. The line is **what emits the
+ * event**: these two are emitted by a clock, while `started`, `question`,
+ * `blocked` and `completed` are emitted by something happening. An interval
+ * between two real state changes is legitimately not measured work; an
+ * interval between two ticks says nothing at all.
+ *
+ * So the rule for whoever extends this: a new `mapctx run event --type` that a
+ * clock emits belongs in this list, and widening the command's vocabulary
+ * without widening this constant is the bug the single list exists to make
+ * impossible. C5 and C9 both touch that command.
+ *
+ * One
+ * list, exported here, is what keeps the CLI's `--type` vocabulary and the
+ * forecast's exclusion from drifting apart -- adding a type to the command
+ * without excluding it from measurement is the bug this constant prevents.
+ */
+export const LIVENESS_RUN_EVENT_TYPES = ["heartbeat", "progress"] as const;
+
+export type LivenessRunEventType = (typeof LIVENESS_RUN_EVENT_TYPES)[number];
+
+export function isLivenessRunEventType(type: string): type is LivenessRunEventType {
+  return (LIVENESS_RUN_EVENT_TYPES as readonly string[]).includes(type);
+}
+
 export const runEventSchema = z.object({
   schemaVersion: schemaVersionSchema,
   dispatchId: uuidSchema,

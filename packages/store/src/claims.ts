@@ -1,6 +1,6 @@
 import * as crypto from "crypto"
 import { parseEstimatedEffortMs, workloadSchema } from "@mapctx/protocol"
-import { resolveCoordinationSettings, type CoordinationSettings } from "./config"
+import { ABSOLUTE_LEASE_CEILING_MS, resolveCoordinationSettings, type CoordinationSettings } from "./config"
 import { getActiveClaimForTask, getClaim, getRunReceipt, getTask, getTaskDetail, listActiveClaimsForTask, listDispatchAttempts } from "./projections"
 import type { AppendEventInput, StoreHandle } from "./store-handle"
 import type { EventLogEntry } from "@mapctx/protocol"
@@ -15,18 +15,12 @@ import type { DisclosableClaimRecord, ResourceClaimRecord } from "./types"
 export const DEFAULT_LEASE_DURATION_MS = 30 * 60 * 1000;
 
 /**
- * D4's absolute ceiling on a lease: 24 hours. C4 will enforce it on every
- * renewal path, where its purpose is to stop a wedged-but-still-heartbeating
- * agent from renewing forever. T-141 declares the number here and applies it
- * to the one surface that can already exceed it -- an explicit `--lease` --
- * so C4 extends the reach of one constant instead of inventing a second.
- *
- * It bounds the *explicit* lease only. A derived lease cannot reach it
- * (`maxLease` defaults to 8 h and is itself the clamp), and a caller passing
- * `leaseDurationMs` in-process is trusted the way every in-process caller of
- * this store is.
+ * Re-exported so T-141's importers keep working; the declaration moved to
+ * `config.ts` in T-143 so `resolveCoordinationSettings` can refuse a
+ * `maxLease` above it (review F1). It now bounds minting as well as renewal,
+ * which is what a constant named ABSOLUTE should always have meant.
  */
-export const ABSOLUTE_LEASE_CEILING_MS = 24 * 60 * 60 * 1000;
+export { ABSOLUTE_LEASE_CEILING_MS };
 
 /**
  * T-141 (C2 / D3, D10): the lease is read from the plan instead of from a
@@ -370,6 +364,7 @@ export type RenewResult =
         | "receipt-landed"
         | "unknown-dispatch"
         | "ambiguous-claim"
+        | "ceiling-reached"
         | "invalid-request";
       /**
        * Context only, never a new field on an existing shape: T-142 adds no
@@ -400,6 +395,62 @@ export type RenewResult =
  * set the same number with no decision behind it. A caller that needs one
  * can still pass `leaseDurationMs` in-process.
  */
+/**
+ * T-143 (C4 / D4): where the 24 h ceiling is actually applied, for EVERY
+ * renewal path -- the explicit `task renew` below and the run-event path that
+ * follows it. T-141 declared the number and bounded an explicit `--lease` with
+ * it; this is the half that stops a wedged-but-still-heartbeating agent from
+ * renewing forever, which is the whole reason evidence-based liveness is
+ * allowed to be secret-free in the first place (§2).
+ *
+ * Measured from the ORIGINAL `claimedAt`, never from the current `expiresAt`:
+ * a ceiling measured from the thing it constrains is no ceiling at all, since
+ * every renewal would push it along. Past the ceiling nothing extends the
+ * claim -- only a fresh `task start`, which mints a new claim with a new
+ * `claimedAt` and is a deliberate act by someone who looked.
+ *
+ * Inside the window a renewal is CLAMPED rather than refused: a lease that
+ * would end after the ceiling ends at the ceiling instead. Refusing there
+ * would make a 5 h lease unrenewable from hour 20 onward while a 30-minute
+ * lease kept working, which has nothing to do with liveness.
+ *
+ * The clock is the trust boundary §2 declares: this is the local clock of
+ * whichever process renews, so a clock skewed backwards extends the lease.
+ * Accepted at the same level as the rest of the local CLI's trust, and stated
+ * rather than discovered.
+ */
+/**
+ * T-143 (review F2): why a lane really died.
+ *
+ * The ceiling is almost never the refusal an agent sees, and that is
+ * structural rather than accidental: the clamp pulls `expiresAt` down to the
+ * ceiling, and both renewal paths test expiry BEFORE they test the ceiling, so
+ * a heartbeating agent -- the exact case the ceiling exists for -- gets
+ * `expired` at +24 h. The advice it carries ("re-claim with task start") is
+ * right; what was missing is that a 24 h policy limit fired rather than a
+ * missed heartbeat. Whoever debugs "why did my lane die at exactly 24 hours?"
+ * should not have to read this file to find out.
+ */
+function ceilingNote(claim: ResourceClaimRecord, nowMs: number): string {
+  const ceilingMs = new Date(claim.claimedAt).getTime() + ABSOLUTE_LEASE_CEILING_MS;
+  if (nowMs < ceilingMs) return "";
+  return ` This claim had also reached its 24 h maximum lifetime (claimed ${claim.claimedAt}, ceiling `
+    + `${new Date(ceilingMs).toISOString()}), so no renewal path would have extended it either -- a fresh`
+    + " task start is the only way to open the lane again.";
+}
+
+function ceilingBoundedExpiry(
+  claim: ResourceClaimRecord,
+  nowMs: number,
+  leaseDurationMs: number
+): { expiresAt: string; cappedByCeiling: boolean } | { ceilingReached: true; ceilingAt: string } {
+  const ceilingMs = new Date(claim.claimedAt).getTime() + ABSOLUTE_LEASE_CEILING_MS;
+  if (nowMs >= ceilingMs) return { ceilingReached: true, ceilingAt: new Date(ceilingMs).toISOString() };
+  const requestedMs = nowMs + leaseDurationMs;
+  const cappedByCeiling = requestedMs > ceilingMs;
+  return { expiresAt: new Date(cappedByCeiling ? ceilingMs : requestedMs).toISOString(), cappedByCeiling };
+}
+
 export function renewClaim(store: StoreHandle, options: RenewOptions): RenewResult {
   const now = options.now ?? (() => new Date());
 
@@ -507,7 +558,21 @@ export function renewClaim(store: StoreHandle, options: RenewOptions): RenewResu
         occurredAt: now().toISOString(),
         payload: { claimId: claim.claimId, taskId }
       });
-      return { ok: false, reason: "expired" };
+      // The message appears ONLY when the ceiling has something to add. This
+      // refusal's shape is a documented decision of T-142 -- `not-active`,
+      // `token-mismatch` and `expired` keep exactly the shape callers assert
+      // today (see `RenewResult` above), and `dispatch.test.ts:221` asserts
+      // this one with `deepEqual`. An unconditional `message` broke that for
+      // every ordinary expiry in order to say something only the ceiling case
+      // needs, which is the wrong trade: F2 asked for a diagnosis when the
+      // 24 h limit fired, not for a new key on a refusal that already had its
+      // shape fixed by another task.
+      const note = ceilingNote(claim, nowMs);
+      return {
+        ok: false,
+        reason: "expired",
+        ...(note ? { message: `Claim ${claim.claimId} expired at ${claim.expiresAt}.${note}` } : {})
+      };
     }
 
     const leaseDurationMs = options.leaseDurationMs
@@ -516,7 +581,16 @@ export function renewClaim(store: StoreHandle, options: RenewOptions): RenewResu
         coordination: options.coordination
       });
 
-    const expiresAt = new Date(nowMs + leaseDurationMs).toISOString();
+    const bounded = ceilingBoundedExpiry(claim, nowMs, leaseDurationMs);
+    if ("ceilingReached" in bounded) {
+      return {
+        ok: false,
+        reason: "ceiling-reached",
+        message: `Claim ${claim.claimId} has been alive for the 24 h maximum (claimed ${claim.claimedAt}, ceiling ${bounded.ceilingAt});`
+          + " no renewal extends it further. Release it and open a new lane with task start, which is a decision somebody makes rather than a lease that never ends."
+      };
+    }
+    const expiresAt = bounded.expiresAt;
     append({
       eventType: "task.claim-renewed",
       actor: options.actor,
@@ -528,6 +602,158 @@ export function renewClaim(store: StoreHandle, options: RenewOptions): RenewResu
     if (!renewed) throw new Error("Claim projection missing immediately after task.claim-renewed.");
     return { ok: true, claim: presentsRenew ? disclosableClaim(renewed) : renewed };
   });
+}
+
+/**
+ * What a run event did to the lane's lease (T-143 / C4). Reported rather than
+ * thrown: the event itself is the record the caller asked for, and whether it
+ * also renewed is a second, independent answer.
+ */
+export type RunEventRenewal =
+  | { renewed: true; claimId: string; taskId: string; expiresAt: string; cappedByCeiling: boolean }
+  | {
+      renewed: false;
+      reason: "no-active-claim" | "ambiguous-claim" | "claim-expired" | "receipt-landed" | "stale-attempt" | "ceiling-reached";
+      message: string;
+    };
+
+/**
+ * T-143 (C4 / D3, 1C): renewal as a by-product of working, addressed by
+ * `dispatchId` with no credential.
+ *
+ * This is deliberately secret-free, which is a trust decision and not an
+ * oversight: anyone who can reach the local store already has that trust level
+ * (§8), and the worst a spurious event can do is keep a lease alive a little
+ * longer -- never seize it, never release it. What bounds a wedged agent is
+ * the 24 h ceiling above, plus the attempt-chain warning from the other side.
+ *
+ * Runs inside the caller's write transaction, AFTER the event has been
+ * appended, so the renewal is atomic with the evidence for it: there is no
+ * state where the lease was extended by an event the journal does not hold.
+ *
+ * An event renews only when all of these hold. Each `renewed: false` reason is
+ * a real case, not a defensive branch:
+ * - the event's attempt IS the dispatch's latest. A late or replayed event
+ *   from a superseded attempt is still journaled -- it happened, and the
+ *   record is the point -- but extending whoever holds the claim NOW on the
+ *   strength of a dead attempt's heartbeat is exactly the confusion §2 names;
+ * - the latest attempt has no landed receipt. A lane that reported itself
+ *   finished is over; keeping its lease alive would hold the task against a
+ *   run that already ended;
+ * - the task has exactly one active claim. Pre-C5 the partial unique index
+ *   makes that an invariant; refusing to guess keeps it an index guarantee
+ *   instead of a coincidence, and C5 is where `role` narrows the lookup;
+ * - the claim is unexpired, and inside the ceiling.
+ *
+ * On the expired branch this writes NOTHING -- not even the
+ * `task.claim-expired` that `renewClaim` journals there. The explicit path has
+ * a caller who presented a credential and asked for a renewal, so recording
+ * why it was refused is part of the answer; a liveness event is a by-product,
+ * and a by-product that quietly journals claim lifecycle for a lane it does
+ * not address is how audit trails fill with events nobody asked for. The next
+ * admission, renewal or close journals that expiry honestly.
+ *
+ * **Implement-only until C5, and this is safe by construction rather than by
+ * assertion.** Resolution is by `taskId` alone, which would be wrong once
+ * shared review claims exist -- a heartbeat on a review dispatch must not
+ * extend the implement lease. It cannot be wrong yet: `dispatchSchema` is a
+ * plain `z.object` with no `.passthrough()`, so Zod DROPS a `kind` field, no
+ * review dispatch can exist, and every dispatch that can exist resolves
+ * unambiguously. C5 owns the role-aware resolver, and the test that a review
+ * heartbeat renews nothing is not writable before it -- there is no way to
+ * construct a review dispatch to write it against.
+ */
+export function appendRunEventClaimRenewal(
+  store: StoreHandle,
+  options: {
+    dispatchId: string;
+    attempt: number;
+    actor: string;
+    coordination?: CoordinationSettings;
+    leaseDurationMs?: number;
+    now?: () => Date;
+  },
+  append: (input: AppendEventInput) => EventLogEntry
+): RunEventRenewal {
+  const now = options.now ?? (() => new Date());
+  const nowMs = now().getTime();
+
+  const attempts = listDispatchAttempts(store.db, options.dispatchId);
+  if (attempts.length === 0) {
+    return {
+      renewed: false,
+      reason: "no-active-claim",
+      message: `Unknown dispatch: ${options.dispatchId}.`
+    };
+  }
+  const latestAttempt = Math.max(...attempts.map(attempt => attempt.attempt));
+  if (options.attempt !== latestAttempt) {
+    return {
+      renewed: false,
+      reason: "stale-attempt",
+      message: `Event is on attempt ${options.attempt} while attempt ${latestAttempt} is the latest; it is recorded but renews nothing.`
+    };
+  }
+  if (getRunReceipt(store.db, options.dispatchId, latestAttempt)) {
+    return {
+      renewed: false,
+      reason: "receipt-landed",
+      message: `Attempt ${latestAttempt} already has a receipt, so this lane is finished; the event is recorded but renews nothing.`
+    };
+  }
+
+  const taskId = attempts[0]!.taskId;
+  const active = listActiveClaimsForTask(store.db, taskId);
+  if (active.length === 0) {
+    return { renewed: false, reason: "no-active-claim", message: `${taskId} holds no active claim to renew.` };
+  }
+  if (active.length > 1) {
+    return {
+      renewed: false,
+      reason: "ambiguous-claim",
+      message: `${taskId} holds ${active.length} active claims; an event cannot choose between them. Renew the one you mean with task renew --claim <id>.`
+    };
+  }
+  const claim = active[0]!;
+
+  if (new Date(claim.expiresAt).getTime() <= nowMs) {
+    return {
+      renewed: false,
+      reason: "claim-expired",
+      message: `Claim ${claim.claimId} expired at ${claim.expiresAt}; re-claim the task with task start instead.`
+        + ceilingNote(claim, nowMs)
+    };
+  }
+
+  const leaseDurationMs = options.leaseDurationMs
+    ?? deriveLeaseDurationMs({
+      estimatedEffort: getTaskDetail(store.db, taskId)?.estimatedEffort,
+      coordination: options.coordination
+    });
+  const bounded = ceilingBoundedExpiry(claim, nowMs, leaseDurationMs);
+  if ("ceilingReached" in bounded) {
+    return {
+      renewed: false,
+      reason: "ceiling-reached",
+      message: `Claim ${claim.claimId} has been alive for the 24 h maximum (claimed ${claim.claimedAt}, ceiling ${bounded.ceilingAt});`
+        + " no event extends it further. Release it and open a new lane with task start."
+    };
+  }
+
+  append({
+    eventType: "task.claim-renewed",
+    actor: options.actor,
+    occurredAt: now().toISOString(),
+    payload: { claimId: claim.claimId, taskId, expiresAt: bounded.expiresAt }
+  });
+
+  return {
+    renewed: true,
+    claimId: claim.claimId,
+    taskId,
+    expiresAt: bounded.expiresAt,
+    cappedByCeiling: bounded.cappedByCeiling
+  };
 }
 
 export type ReleaseResult =
