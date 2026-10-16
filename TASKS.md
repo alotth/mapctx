@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 25/32
+  - subIssueProgress: 26/33
   - priority: high
   - workload: null
   - tags: []
@@ -3463,10 +3463,10 @@
   - updated: 2026-10-15
   - detail: ./tasks/T-165.md
 
-### [T-166] Scheduler: normalizar paths para NFC (NFC x NFD do macOS/Linux)
+### [T-166] Scheduler: normalizar paths em forma canonica Unicode (NFD) para NFC x NFD do macOS/Linux
 
   - id: T-166
-  - status: review
+  - status: done
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3477,9 +3477,9 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-16
   - externalId: null
-  - updated: 2026-10-15
+  - updated: 2026-10-16
   - detail: ./tasks/T-166.md
 
 ### [T-167] Snapshot pre-migracao pulado quando a migracao roda via store repair
@@ -3538,6 +3538,25 @@
   - externalId: null
   - updated: 2026-10-15
   - detail: ./tasks/T-169.md
+
+### [T-170] Planner: staticPrefix nao pode cortar o prefixo no meio de uma sequencia de marcas combinantes (NFD, 2 marcas fora de ordem)
+
+  - id: T-170
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: low
+  - workload: Easy
+  - tags: []
+  - domains: [PLANNER, TEST]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-15
+  - detail: ./tasks/T-170.md
 
 ## Notes
 
