@@ -4,11 +4,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import { z } from "zod";
-import { canonicalJson } from "./canonical";
 import { ENTITY_SCHEMAS } from "./entities";
 import { ENVELOPE_SCHEMAS } from "./envelopes";
 import { ENTITY_FIXTURES, ENVELOPE_FIXTURES, externalRefsFixture } from "./fixtures";
 import { writeGeneratedSchemas } from "./generate-schemas";
+import { writeGoldenFixtures } from "./write-fixtures";
 import {
   OPTIONAL_TASKS_MD_FIELDS,
   REQUIRED_DETAIL_FIELDS,
@@ -34,21 +34,14 @@ const FIXTURE_DIR = path.join(ROOT, "fixtures");
 const SCHEMA_DIR = path.join(ROOT, "schemas");
 
 const ALL_SCHEMAS = { ...ENTITY_SCHEMAS, ...ENVELOPE_SCHEMAS };
-const ALL_FIXTURES = { ...ENTITY_FIXTURES, ...ENVELOPE_FIXTURES };
-
-test("every entity and envelope has a schema and a versioned golden fixture", () => {
-  for (const name of Object.keys(ALL_SCHEMAS)) {
-    const fixturePath = path.join(FIXTURE_DIR, `${name}.v${PROTOCOL_SCHEMA_VERSION}.json`);
-    const schemaPath = path.join(SCHEMA_DIR, `${name}.v${PROTOCOL_SCHEMA_VERSION}.json`);
-    assert.equal(fs.existsSync(fixturePath), true, `missing fixture ${fixturePath}`);
-    assert.equal(fs.existsSync(schemaPath), true, `missing generated schema ${schemaPath}`);
-  }
-});
 
 test("T-168: every generated schema file matches what the generator produces today -- existence was checked, content was not", () => {
   // T-126 regressed `EventLogEntry.v1.json` (dropped `redactions`) with a
   // fully green suite, because the only coverage of `schemas/*.v1.json` was
-  // the test above -- `fs.existsSync`, never the bytes. Golden fixtures were
+  // a per-name `fs.existsSync` check, never the bytes -- that check lived in
+  // its own test until T-168 removed it as subsumed (review BAIXA-3, attempt
+  // 2: this test now does the same existence check, by file rather than by
+  // name, right before the byte comparison below). Golden fixtures were
   // (and are) checked byte-for-byte; the generated schemas were not.
   //
   // This calls the PRODUCTION generator (`writeGeneratedSchemas`) rather
@@ -58,17 +51,41 @@ test("T-168: every generated schema file matches what the generator produces tod
   // committed schema stays wrong -- the same "model instead of production"
   // mistake T-165 already paid for once, this time for the generator
   // instead of the sweep.
+  //
+  // NOTE on coverage: this compares the dist/ build against schemas/, so a
+  // `src/entities.ts` edit is only visible here through the *compiled* zod
+  // schema. `npm run test --workspace @mapctx/protocol` rebuilds first and
+  // sees it; running `node --test dist/**/*.test.js` directly against a
+  // stale `dist/` (e.g. a reviewer re-running just the test binary) will
+  // not. That is a property of this package's `build && node --test dist/**`
+  // test script, shared by every workspace in this repo, not something this
+  // test introduces or can fix on its own.
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mapctx-protocol-contract-"));
   try {
     const written = writeGeneratedSchemas(tmp);
 
-    // Content: every schema `ALL_SCHEMAS` knows about must be byte-identical
-    // to what the generator writes today. Catches a zod schema (e.g.
-    // `entities.ts`) edited without regenerating.
-    for (const name of Object.keys(ALL_SCHEMAS)) {
-      const fileName = `${name}.v${PROTOCOL_SCHEMA_VERSION}.json`;
-      const generated = fs.readFileSync(path.join(tmp, fileName), "utf8");
-      const committed = fs.readFileSync(path.join(SCHEMA_DIR, fileName), "utf8");
+    // Review MÉDIA-1 (attempt 2): drive this by `written` -- what the
+    // generator ACTUALLY wrote just now -- not by `Object.keys(ALL_SCHEMAS)`,
+    // a set this test reconstructs itself. The two happen to agree today
+    // (both are `{ ...ENTITY_SCHEMAS, ...ENVELOPE_SCHEMAS }`), but the
+    // generator's own set in `generate-schemas.ts` is the authoritative one;
+    // iterating our own reconstruction of it is the same "existence was
+    // checked, content was not" shape one layer up -- a schema present in
+    // the generator's set but absent or wrong in `ALL_SCHEMAS`'s view would
+    // never be visited by this loop. `existsSync` runs before the read so a
+    // schema the generator produces but that was never committed fails with
+    // a message naming the file, not a raw ENOENT.
+    for (const filePath of written) {
+      const fileName = path.basename(filePath);
+      const committedPath = path.join(SCHEMA_DIR, fileName);
+      assert.equal(
+        fs.existsSync(committedPath),
+        true,
+        `the generator produces ${fileName}, but it is not committed in schemas/. ` +
+          `Fix: run "npm run generate:schemas --workspace @mapctx/protocol" and commit the result.`
+      );
+      const generated = fs.readFileSync(filePath, "utf8");
+      const committed = fs.readFileSync(committedPath, "utf8");
       assert.equal(
         committed,
         generated,
@@ -80,8 +97,8 @@ test("T-168: every generated schema file matches what the generator produces tod
     // File set: catches the other direction -- a `.v1.json` left behind
     // after its zod schema was removed (orphan), or one hand-edited into
     // `schemas/` without a matching generator entry. The loop above only
-    // ever walks names FROM `ALL_SCHEMAS`, so it cannot see either case on
-    // its own.
+    // ever walks names FROM `written`, so it cannot see either case on its
+    // own.
     const generatedNames = written.map((filePath) => path.basename(filePath)).sort();
     const committedNames = fs
       .readdirSync(SCHEMA_DIR)
@@ -101,13 +118,61 @@ test("T-168: every generated schema file matches what the generator produces tod
 });
 
 test("golden fixtures parse and stay byte-stable", () => {
+  // Review BAIXA-2 (attempt 2): this used to compare against
+  // `canonicalJson(ALL_FIXTURES[name])` -- a second implementation of
+  // exactly what `writeGoldenFixtures` (`write-fixtures.ts`) already does,
+  // which is the same "model instead of production" shape the schema test
+  // above exists to avoid. Call the production writer instead.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mapctx-protocol-fixtures-"));
+  try {
+    const written = writeGoldenFixtures(tmp);
+
+    for (const filePath of written) {
+      const fileName = path.basename(filePath);
+      const committedPath = path.join(FIXTURE_DIR, fileName);
+      assert.equal(
+        fs.existsSync(committedPath),
+        true,
+        `the generator produces ${fileName}, but it is not committed in fixtures/. ` +
+          `Fix: run "npm run generate:fixtures --workspace @mapctx/protocol" and commit the result.`
+      );
+      const generated = fs.readFileSync(filePath, "utf8");
+      const committed = fs.readFileSync(committedPath, "utf8");
+      assert.equal(
+        committed,
+        generated,
+        `${fileName} drifted from the source fixture. ` +
+          `Fix: run "npm run generate:fixtures --workspace @mapctx/protocol" and commit the result.`
+      );
+    }
+
+    // Same symmetry as the schema test: an orphaned or hand-edited
+    // `fixtures/*.v1.json` that no longer corresponds to any fixture in
+    // `fixtures.ts` would not be visited by the loop above either.
+    const generatedNames = written.map((filePath) => path.basename(filePath)).sort();
+    const committedNames = fs
+      .readdirSync(FIXTURE_DIR)
+      .filter((entry) => entry.endsWith(".json"))
+      .sort();
+    assert.deepEqual(
+      committedNames,
+      generatedNames,
+      `fixtures/ (${committedNames.length} file(s)) does not match the generator's output set (${generatedNames.length} file(s)). ` +
+        `Fix: run "npm run generate:fixtures --workspace @mapctx/protocol" and commit the result.`
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+
+  // Independent of bytes: every committed fixture must still satisfy its
+  // own zod schema. `ALL_SCHEMAS` is a legitimate use here -- this check has
+  // nothing to do with byte comparison, only with "does this fixture parse".
   for (const [name, schema] of Object.entries(ALL_SCHEMAS)) {
     const fixturePath = path.join(FIXTURE_DIR, `${name}.v${PROTOCOL_SCHEMA_VERSION}.json`);
     const raw = fs.readFileSync(fixturePath, "utf8");
     const parsed = JSON.parse(raw);
     const result = (schema as z.ZodType).safeParse(parsed);
     assert.equal(result.success, true, `${name} fixture failed schema: ${JSON.stringify(result)}`);
-    assert.equal(raw, canonicalJson(ALL_FIXTURES[name as keyof typeof ALL_FIXTURES]), `${name} drifted from source fixture`);
   }
 });
 
