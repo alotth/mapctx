@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 26/33
+  - subIssueProgress: 27/34
   - priority: high
   - workload: null
   - tags: []
@@ -3048,7 +3048,7 @@
 ### [T-144] C5: dispatch kind e claim de revisão compartilhado (migração + troca do índice único)
 
   - id: T-144
-  - status: review
+  - status: done
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3059,9 +3059,9 @@
   - dependsOn: [T-143]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-17
   - externalId: null
-  - updated: 2026-10-15
+  - updated: 2026-10-17
   - detail: ./tasks/T-144.md
 
 ### [T-145] C6: receipt de revisão não move planning; forecast exclui kind != implement
@@ -3557,6 +3557,25 @@
   - externalId: null
   - updated: 2026-10-15
   - detail: ./tasks/T-170.md
+
+### [T-171] Replay: role desconhecido em task.claimed torna a store irreparavel e a mensagem nao nomeia o evento
+
+  - id: T-171
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: low
+  - workload: Easy
+  - tags: []
+  - domains: [STORE, TEST]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-17
+  - detail: ./tasks/T-171.md
 
 ## Notes
 
