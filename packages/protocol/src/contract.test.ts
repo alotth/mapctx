@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import { z } from "zod";
@@ -7,6 +8,7 @@ import { canonicalJson } from "./canonical";
 import { ENTITY_SCHEMAS } from "./entities";
 import { ENVELOPE_SCHEMAS } from "./envelopes";
 import { ENTITY_FIXTURES, ENVELOPE_FIXTURES, externalRefsFixture } from "./fixtures";
+import { writeGeneratedSchemas } from "./generate-schemas";
 import {
   OPTIONAL_TASKS_MD_FIELDS,
   REQUIRED_DETAIL_FIELDS,
@@ -40,6 +42,61 @@ test("every entity and envelope has a schema and a versioned golden fixture", ()
     const schemaPath = path.join(SCHEMA_DIR, `${name}.v${PROTOCOL_SCHEMA_VERSION}.json`);
     assert.equal(fs.existsSync(fixturePath), true, `missing fixture ${fixturePath}`);
     assert.equal(fs.existsSync(schemaPath), true, `missing generated schema ${schemaPath}`);
+  }
+});
+
+test("T-168: every generated schema file matches what the generator produces today -- existence was checked, content was not", () => {
+  // T-126 regressed `EventLogEntry.v1.json` (dropped `redactions`) with a
+  // fully green suite, because the only coverage of `schemas/*.v1.json` was
+  // the test above -- `fs.existsSync`, never the bytes. Golden fixtures were
+  // (and are) checked byte-for-byte; the generated schemas were not.
+  //
+  // This calls the PRODUCTION generator (`writeGeneratedSchemas`) rather
+  // than re-running `zodToJsonSchema` here with our own copy of its options.
+  // A second implementation that drifted from the generator's own
+  // `{ name, $refStrategy: "none" }` would make this test pass while the
+  // committed schema stays wrong -- the same "model instead of production"
+  // mistake T-165 already paid for once, this time for the generator
+  // instead of the sweep.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mapctx-protocol-contract-"));
+  try {
+    const written = writeGeneratedSchemas(tmp);
+
+    // Content: every schema `ALL_SCHEMAS` knows about must be byte-identical
+    // to what the generator writes today. Catches a zod schema (e.g.
+    // `entities.ts`) edited without regenerating.
+    for (const name of Object.keys(ALL_SCHEMAS)) {
+      const fileName = `${name}.v${PROTOCOL_SCHEMA_VERSION}.json`;
+      const generated = fs.readFileSync(path.join(tmp, fileName), "utf8");
+      const committed = fs.readFileSync(path.join(SCHEMA_DIR, fileName), "utf8");
+      assert.equal(
+        committed,
+        generated,
+        `${fileName} is stale: it does not match what the generator produces from the current zod schema. ` +
+          `Fix: run "npm run generate:schemas --workspace @mapctx/protocol" and commit the result.`
+      );
+    }
+
+    // File set: catches the other direction -- a `.v1.json` left behind
+    // after its zod schema was removed (orphan), or one hand-edited into
+    // `schemas/` without a matching generator entry. The loop above only
+    // ever walks names FROM `ALL_SCHEMAS`, so it cannot see either case on
+    // its own.
+    const generatedNames = written.map((filePath) => path.basename(filePath)).sort();
+    const committedNames = fs
+      .readdirSync(SCHEMA_DIR)
+      .filter((entry) => entry.endsWith(".json"))
+      .sort();
+    assert.deepEqual(
+      committedNames,
+      generatedNames,
+      `schemas/ (${committedNames.length} file(s)) does not match the generator's output set (${generatedNames.length} file(s)). ` +
+        `Fix: run "npm run generate:schemas --workspace @mapctx/protocol" and commit the result.`
+    );
+  } finally {
+    // This epic already has accumulated /tmp/mapctx-store-test-home-* litter;
+    // don't add to it, and clean up even if an assertion above threw.
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
