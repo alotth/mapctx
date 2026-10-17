@@ -108,6 +108,20 @@
   Editing the estimate while a reviewer held the only live claim moved that
   reviewer's renewal window with no word about it — and a review lease is
   twice as long, so the window it silently reshaped was the bigger one.
+* **fix:** `--kind` is refused by every command that does not open a lane.
+  Because the flag is global to the parser and only `task start` and `dispatch
+  create` read it, `mapctx task claim <id> --kind review` used to take the
+  flag, ignore it, mint an **exclusive implement** claim and carry planning to
+  `in-progress` — taking an exclusive claim on somebody's work in progress,
+  which is the exact outcome the typo refusal exists to prevent, and leaving
+  the implementer refused by the "reviewer". The misspelling got through there
+  too. The refusal names the command and points at `task start --kind review`,
+  and carries a `kind-not-accepted` reason for `--json` consumers. The dispatch
+  gate's advice is lane-specific for the same reason: it used to say "task
+  claim followed by dispatch create" for both lanes, which for review sent the
+  reader down exactly that path. (The general case — any globally-known flag
+  accepted and ignored by a command that does not read it — is separate and
+  pre-existing; this is the one instance that mints the wrong lane.)
 * **fix:** `task start --kind review` warns — exit 0, a line on stderr and a
   `reviewLaneAmbiguity` field under `--json` — when it creates a *second* live
   review claim on a task. Shared claims are uncapped by design, but with two

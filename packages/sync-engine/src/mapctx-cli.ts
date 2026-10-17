@@ -988,6 +988,47 @@ function parseArgs(argv: string[]): {
     }
   }
 
+  /**
+   * T-145 (review F1): `--kind` is refused by every command that does not
+   * read it.
+   *
+   * `--kind` lives in the global `VALUE_FLAGS` table because `task start` and
+   * `dispatch create` need it, which -- with no per-command allowlist in this
+   * parser -- made every other command accept and drop it. For most flags that
+   * is the harmless, pre-existing class T-173 covers generally. For this one it
+   * was not harmless: `task claim <id> --kind review` took the flag, ignored
+   * it, minted an `exclusive`/`implement` claim and carried planning to
+   * `in-progress` -- precisely "take an exclusive claim on somebody's work in
+   * progress", the outcome this release's own typo refusal exists to prevent,
+   * and the inversion §3 forbids, since the implementer is then refused by the
+   * "reviewer". The path was not exotic either: the dispatch gate's own advice
+   * used to read "task claim followed by dispatch create", so a reviewer
+   * following the tool's instructions typed exactly that.
+   *
+   * Refused here rather than in each command because here is the one place
+   * that knows both the command and its subcommand, so a flag cannot be
+   * forgotten by a command added later. `refuse` (not `throw`) for the same
+   * reason `task renew` refuses `--lease`, which is the precedent this
+   * follows: the caller's input is answered by name, with a reason code a
+   * `--json` consumer can read, never silently discarded.
+   *
+   * Deliberately one flag, not a mechanism: the general per-command allowlist
+   * is T-173's, and building it here would be building that task.
+   */
+  if (options.kind !== undefined) {
+    const acceptsKind = (command === 'task' && positional[0] === 'start')
+      || (command === 'dispatch' && positional[0] === 'create');
+    if (!acceptsKind) {
+      const named = [command, positional[0]].filter(Boolean).join(' ') || '(no command)';
+      refuse(
+        { ok: false, reason: 'kind-not-accepted', command: named, kind: options.kind },
+        `--kind is not accepted by ${named}; only task start and dispatch create open a lane.`
+        + ` To review a task, use \`mapctx task start <task-id> --kind review\`, which takes the SHARED review claim --`
+        + ` task claim would have taken the exclusive implement claim and blocked the implementation it meant to review.`
+      );
+    }
+  }
+
   return { command, subcommand: positional[0], options, positional, help };
 }
 

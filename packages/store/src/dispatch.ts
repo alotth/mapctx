@@ -129,8 +129,17 @@ export function appendDispatchAttempt(
       : listActiveClaimsForTask(store.db, input.taskId, { role: "review" });
     const held = lane.find(claim => new Date(claim!.expiresAt).getTime() > nowMs);
     if (!held) {
+      // T-145 (review F1): the advice is lane-specific, because for review it
+      // used to be actively wrong. This message read "Use mapctx task start
+      // <id>, or task claim followed by dispatch create" for BOTH lanes --
+      // but `task claim` has no `--kind`, so a reviewer following it took an
+      // exclusive implement claim and blocked the work they meant to review.
+      // `task start --kind review` is the only command that opens this lane.
       throw new Error(
-        `Dispatch requires an active ${kind} claim. Use mapctx task start ${input.taskId}, or task claim followed by dispatch create.`
+        kind === "review"
+          ? `Dispatch requires an active review claim. Use mapctx task start ${input.taskId} --kind review, which takes the shared `
+            + `review claim; task claim cannot open the review lane (it has no --kind, and would take the exclusive implement claim).`
+          : `Dispatch requires an active implement claim. Use mapctx task start ${input.taskId}, or task claim followed by dispatch create.`
       );
     }
   }
