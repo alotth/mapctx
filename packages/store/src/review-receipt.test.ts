@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { recordDispatchAttempt, recordRunReceipt } from "./dispatch"
-import { getTask, listNonImplementAttemptKeys } from "./projections"
+import { getTask, listDispatchAttempts, listNonImplementAttemptKeys } from "./projections"
 import { repairStore } from "./repair"
 import { StoreHandle } from "./store-handle"
 import { cleanupDir, mkTmpDir } from "./__test-helpers__"
@@ -76,7 +76,15 @@ test("review-then-implement: the review receipt leaves planning/execution byte-i
 
     const reviewReceipt = recordRunReceipt(handle, receiptFor(REVIEW_DISPATCH, "completed", "2026-10-17T09:00:00.000Z", "2026-10-17T09:10:00.000Z"), "reviewer");
     assert.equal(reviewReceipt.ok, true, JSON.stringify(reviewReceipt));
-    if (reviewReceipt.ok) assert.equal(reviewReceipt.dispatch.status, "completed", "the review dispatch's OWN attempt still advances");
+    // Read from the PROJECTION, not the returned object: `recordRunReceipt`
+    // builds its `dispatch.status` as `{...dispatch, status: value.outcome}`
+    // in the return statement itself, so asserting against the returned
+    // value can never fail regardless of what the applier actually wrote to
+    // dispatch_projection -- it would pass even if the write were suppressed
+    // entirely. Reading the row back from storage is the only way this
+    // assertion has an oracle.
+    const reviewAttemptRow = listDispatchAttempts(handle.db, REVIEW_DISPATCH)[0];
+    assert.equal(reviewAttemptRow?.status, "completed", "the review dispatch's OWN attempt still advances, in the PROJECTION");
 
     assert.equal(getTask(handle.db, "T-100")!.planningState, planningBefore, "planning must be byte-identical after the review receipt");
     assert.equal(getTask(handle.db, "T-100")!.executionState, executionBefore, "execution must be byte-identical after the review receipt");

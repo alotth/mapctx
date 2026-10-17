@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
 import * as path from "path"
 import test, { type TestContext } from "node:test"
-import { getClaim, readMapctxToml, StoreHandle } from "@mapctx/store"
+import { getClaim, getTask, listActiveClaimsForTask, readMapctxToml, StoreHandle } from "@mapctx/store"
 
 /**
  * T-145 (C6 / D6, D8): `--kind implement|review` on `task start` /
@@ -37,7 +37,12 @@ function fixture(t: TestContext) {
     const result = cli([...args, "--json"]);
     assert.notEqual(result.status, 0, "expected a refusal");
     assert.equal(result.signal, null);
-    return result;
+    assert.equal(String(result.stdout).trim(), "", "stdout is the result channel; a refusal is not a result");
+    // T-127/0.4.0 convention: the FIRST line of stderr under --json is the
+    // compact JSON refusal payload, regardless of where the \nError: line falls.
+    const lines = String(result.stderr).split("\n").filter(Boolean);
+    const payload = lines.length > 0 ? (() => { try { return JSON.parse(lines[0]); } catch { return undefined; } })() : undefined;
+    return Object.assign(result, { payload });
   };
   return { ...f, cli, success, refused };
 }
@@ -54,6 +59,18 @@ function readClaimDirectly(f: ReturnType<typeof fixture>, claimId: string) {
   const handle = StoreHandle.openReadOnly(storeDir);
   try {
     return getClaim(handle.db, claimId);
+  } finally {
+    handle.close();
+  }
+}
+
+/** Reads task row + its active claims directly from the store, bypassing the CLI entirely. */
+function readTaskStateDirectly(f: ReturnType<typeof fixture>, taskId: string) {
+  const toml = readMapctxToml(path.join(f.repoDir, "mapctx.toml"));
+  const storeDir = path.join(f.mapctxHome, "projects", toml.projectId);
+  const handle = StoreHandle.openReadOnly(storeDir);
+  try {
+    return { task: getTask(handle.db, taskId), activeClaims: listActiveClaimsForTask(handle.db, taskId) };
   } finally {
     handle.close();
   }
@@ -206,4 +223,88 @@ test("--help mentions --kind and reviewLeaseFactor", t => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /--kind/);
   assert.match(result.stdout, /reviewLeaseFactor/);
+});
+
+// ---------------------------------------------------------------------------
+// F1 (T-145 review, attempt 1, ALTO): `--kind` is refused by every command
+// that does not open a lane. Before the fix, `task claim <id> --kind review`
+// took the flag, dropped it, minted an exclusive/implement claim and carried
+// planning to in-progress -- exactly the outcome `--kind review` exists to
+// avoid, and the inversion §3 forbids (the "reviewer" then blocks the real
+// implementer). The typo spelling got through the same door.
+// ---------------------------------------------------------------------------
+
+test("F1: task claim --kind review is refused -- exit != 0, names task claim and task start --kind review, reason kind-not-accepted, and mints NOTHING", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const taskId = createClaimableTask(f, "F1 task claim kind review task");
+
+  const result = f.refused(["task", "claim", taskId, "--kind", "review", "--actor", "reviewer"]);
+  assert.match(String(result.stderr), /task claim/, `must name the refusing command: ${result.stderr}`);
+  assert.match(String(result.stderr), /task start.*--kind review/, `must point at the remedy: ${result.stderr}`);
+  assert.ok(result.payload, `--json refusal must carry a parseable payload: ${result.stderr}`);
+  assert.equal(result.payload.reason, "kind-not-accepted");
+
+  // The defect was never about the exit code -- it minted a claim and moved
+  // the board IN SILENCE. Assert the state, not just the refusal.
+  const state = readTaskStateDirectly(f, taskId);
+  assert.equal(state.activeClaims.length, 0, "no claim row must exist after a refused task claim --kind review");
+  assert.equal(state.task?.planningState, "backlog");
+  assert.equal(state.task?.executionState, "unclaimed");
+});
+
+test("F1: both spellings (--kind review and the typo --kind reveiw) are refused equally by task claim", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+
+  const properTaskId = createClaimableTask(f, "F1 task claim proper spelling task");
+  const proper = f.refused(["task", "claim", properTaskId, "--kind", "review", "--actor", "reviewer"]);
+  assert.equal(proper.payload?.reason, "kind-not-accepted");
+  assert.equal(readTaskStateDirectly(f, properTaskId).activeClaims.length, 0);
+
+  const typoTaskId = createClaimableTask(f, "F1 task claim typo task");
+  const typo = f.refused(["task", "claim", typoTaskId, "--kind", "reveiw", "--actor", "reviewer"]);
+  assert.equal(typo.payload?.reason, "kind-not-accepted", "the typo must be refused the SAME way as the correct spelling -- by the parser, before the value is ever judged");
+  assert.equal(readTaskStateDirectly(f, typoTaskId).activeClaims.length, 0);
+});
+
+test("F1: --kind is also refused by task move and by plan (at least two other commands that do not open a lane)", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const taskId = createClaimableTask(f, "F1 task move kind task");
+
+  const moveRefusal = f.refused(["task", "move", taskId, "--status", "ready", "--kind", "review", "--actor", "test"]);
+  assert.equal(moveRefusal.payload?.reason, "kind-not-accepted");
+  assert.match(String(moveRefusal.stderr), /task move/);
+
+  const planRefusal = f.refused(["plan", "--kind", "review"]);
+  assert.equal(planRefusal.payload?.reason, "kind-not-accepted");
+  assert.match(String(planRefusal.stderr), /plan/);
+});
+
+test("F1: both lane-opening surfaces are UNCHANGED -- task start --kind review and dispatch create --kind review still succeed", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+
+  const startTaskId = createClaimableTask(f, "F1 regression task start task");
+  const started = f.success(["task", "start", startTaskId, "--kind", "review", "--actor", "reviewer"]);
+  assert.equal(started.ok, true, JSON.stringify(started));
+  assert.equal(started.claimRole, "review");
+
+  const dispatchTaskId = createClaimableTask(f, "F1 regression dispatch create task");
+  f.success(["task", "start", dispatchTaskId, "--kind", "review", "--actor", "reviewer"]);
+  const dispatched = f.success(["dispatch", "create", dispatchTaskId, "--kind", "review", "--actor", "reviewer"]);
+  assert.equal(dispatched.ok, true, JSON.stringify(dispatched));
+  assert.equal(dispatched.kind, "review");
+});
+
+test("F1: the dispatch create --kind review gate's message (no live review claim) now points at task start --kind review, and never at 'task claim followed by dispatch create'", t => {
+  const f = fixture(t);
+  f.success(["import", "--commit", "--actor", "test"]);
+  const taskId = createClaimableTask(f, "F1 gate message task");
+
+  const { stderr, status } = f.refused(["dispatch", "create", taskId, "--kind", "review", "--actor", "reviewer"]);
+  assert.notEqual(status, 0);
+  assert.match(String(stderr), /task start .*--kind review/, `must point at task start --kind review: ${stderr}`);
+  assert.ok(!/task claim followed by dispatch create/.test(String(stderr)), `must NOT send a reviewer toward task claim: ${stderr}`);
 });
