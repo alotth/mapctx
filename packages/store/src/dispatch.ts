@@ -9,13 +9,14 @@ import {
   planPeriodSchema,
   type DispatchAttemptHistory,
   type CostEvent,
+  type DispatchKind,
   type EstimateSnapshot,
   type PlanPeriod,
   type RunEvent,
   type RunReceipt
 } from "@mapctx/protocol"
 import {
-  assertReceiptPlanningAdmission, getActiveClaimForTask, getDispatchAttempt, getRunEvent, getTask, listDispatchAttempts, listRunReceipts } from "./projections"
+  assertReceiptPlanningAdmission, getActiveExclusiveClaimForTask, getDispatchAttempt, getRunEvent, getTask, latestDispatchKind, listActiveClaimsForTask, listDispatchAttempts, listRunReceipts } from "./projections"
 import { appendRunEventClaimRenewal, type RunEventRenewal } from "./claims"
 import type { CoordinationSettings } from "./config"
 import type { DispatchAttemptRecord } from "./types"
@@ -23,7 +24,15 @@ import { StoreHandle, type AppendEventInput } from "./store-handle"
 import type { EventLogEntry } from "@mapctx/protocol"
 import type { DatabaseSync } from "node:sqlite"
 
-export type DispatchAttemptInput = Omit<DispatchAttemptRecord, "status"> & { status?: DispatchAttemptRecord["status"]; actor?: string }
+/**
+ * T-144: `kind` is optional on the INPUT and required on the record. Every
+ * caller that predates lanes keeps compiling and keeps meaning `implement`,
+ * while every reader of a stored attempt still learns the lane without
+ * deciding what absent means.
+ */
+export type DispatchAttemptInput =
+  Omit<DispatchAttemptRecord, "status" | "kind">
+  & { status?: DispatchAttemptRecord["status"]; kind?: DispatchKind; actor?: string }
 export type DispatchAttemptEnvelopeInput = { dispatch: DispatchAttemptInput; actor?: string }
 
 export type DispatchWriteResult =
@@ -75,16 +84,97 @@ export function appendDispatchAttempt(
   const task = getTask(store.db, input.taskId);
   if (!task) throw new Error(`Cannot dispatch unknown task: ${input.taskId}`);
   if (["done", "cancelled", "archived"].includes(task.planningState)) throw new Error(`Cannot dispatch terminal task: ${input.taskId}`);
+  const history = listDispatchAttempts(store.db, input.dispatchId);
+  // T-144 (C5): a dispatch id names a LANE, for its whole life. Attempt N+1 is
+  // a retry of the same work in the same lane, and `evaluateRunReceipt` is
+  // scoped per `dispatchId` -- so letting a later attempt change kind would
+  // make one attempt chain half implement and half review, with the receipts
+  // of each invalidating the other's. Refused by name rather than silently
+  // inheriting, because a caller that passed the other kind believes something
+  // false about what it is dispatching.
+  // The chain's lane by the SAME rule every other reader uses (attempt 2:
+  // `latestDispatchKind`, not `history[0]`). It matters only for a chain this
+  // binary did not admit -- a journal merged from another node -- but a guard
+  // that judged attempt 1 while the renewal lookup judged the latest attempt
+  // would be two answers to one question.
+  const existingKind = history.length > 0 ? latestDispatchKind(history) : undefined;
+  const kind: DispatchKind = input.kind ?? existingKind ?? "implement";
+  if (existingKind !== undefined && kind !== existingKind) {
+    throw new Error(
+      `Dispatch ${input.dispatchId} is a ${existingKind} dispatch; attempt ${input.attempt} cannot be ${kind}. `
+      + `Open a separate dispatch for the ${kind} lane.`
+    );
+  }
   if (requireActiveClaim) {
-    const claim = getActiveClaimForTask(store.db, input.taskId);
-    if (!claim || new Date(claim.expiresAt).getTime() <= Date.now()) {
-      throw new Error(`Dispatch requires an active claim. Use mapctx task start ${input.taskId}, or task claim followed by dispatch create.`);
+    // T-144 (review N1): validate against the dispatch's OWN lane. This block
+    // is the one place in this file that reads "this task's active claim", and
+    // on the single-row getter it read whichever lane the query planner
+    // reached -- so a review claim could satisfy an implement dispatch's gate,
+    // or an implement claim a review dispatch's.
+    //
+    // The two lanes resolve differently because their cardinalities differ:
+    // `implement` has at most one exclusive claim by index, while `review`
+    // may have several shared ones, and here ANY live claim in the lane
+    // satisfies the gate. That is deliberately weaker than the renewal
+    // lookup's "exactly one": this gate asks whether the lane is held at all,
+    // and two reviewers both holding it is a yes, not an ambiguity -- nothing
+    // is being addressed, only checked.
+    const nowMs = Date.now();
+    const lane = kind === "implement"
+      ? [getActiveExclusiveClaimForTask(store.db, input.taskId)].filter(claim => claim !== undefined)
+      : listActiveClaimsForTask(store.db, input.taskId, { role: "review" });
+    const held = lane.find(claim => new Date(claim!.expiresAt).getTime() > nowMs);
+    if (!held) {
+      throw new Error(
+        `Dispatch requires an active ${kind} claim. Use mapctx task start ${input.taskId}, or task claim followed by dispatch create.`
+      );
     }
   }
-  if (listDispatchAttempts(store.db, input.dispatchId).some(a => a.attempt === input.attempt)) {
+  if (history.some(a => a.attempt === input.attempt)) {
     return { ok: false, reason: "duplicate-attempt" };
   }
   const desiredExecution = status === "claimed" ? "claimed" : "running";
+  // T-144: everything from here to the `dispatch.attempted` append moves the
+  // task's `executionState` -- the retry-admission reset and the legality
+  // assertion alike -- and all of it belongs to the implement lane alone. A
+  // review dispatch records itself and changes nothing about the task: it must
+  // not reset a running implementation to `unclaimed` (which the reset would
+  // do when the implement attempt had failed), and it must not be refused by
+  // `assertTransition` for failing to move a state it has no business moving.
+  if (kind === "implement") {
+    applyImplementExecutionAdmission(task, desiredExecution, input, append);
+  }
+  // T-071: the store freezes the planned workload at hand-off. Server-side
+  // read, never client-supplied -- the stamp must record what the board
+  // believed when the executor took the task, not what a caller asserts.
+  // Untagged tasks stamp null and stay null.
+  const dispatch = {
+    ...input,
+    status,
+    kind,
+    workloadAtDispatch: task.workload ?? null,
+    executorModel: input.executorModel ?? null
+  };
+  delete dispatch.actor;
+  append({
+    eventType: "dispatch.attempted",
+    actor: input.actor ?? "store",
+    payload: { dispatch }
+  });
+  return { ok: true, dispatch };
+}
+
+/**
+ * The implement lane's execution-state admission, lifted out of
+ * `appendDispatchAttempt` by T-144 so the lane check reads as one decision
+ * rather than as an `if` wrapped around forty lines.
+ */
+function applyImplementExecutionAdmission(
+  task: { executionState: string; taskId: string },
+  desiredExecution: "claimed" | "running",
+  input: DispatchAttemptInput,
+  append: (input: AppendEventInput) => EventLogEntry
+): void {
   if (task.executionState === "failed" || task.executionState === "blocked" || task.executionState === "completed") {
     // New-attempt admission: dispatching a new attempt re-opens a terminal-
     // for-the-attempt execution through a journaled reset to unclaimed
@@ -110,23 +200,6 @@ export function appendDispatchAttempt(
   } else if (task.executionState !== desiredExecution) {
     assertTransition("execution", task.executionState, desiredExecution);
   }
-  // T-071: the store freezes the planned workload at hand-off. Server-side
-  // read, never client-supplied -- the stamp must record what the board
-  // believed when the executor took the task, not what a caller asserts.
-  // Untagged tasks stamp null and stay null.
-  const dispatch = {
-    ...input,
-    status,
-    workloadAtDispatch: task.workload ?? null,
-    executorModel: input.executorModel ?? null
-  };
-  delete dispatch.actor;
-  append({
-    eventType: "dispatch.attempted",
-    actor: input.actor ?? "store",
-    payload: { dispatch }
-  });
-  return { ok: true, dispatch };
 }
 
 function receiptHistory(store: StoreHandle, dispatchId: string) {

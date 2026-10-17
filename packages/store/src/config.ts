@@ -45,6 +45,8 @@ export type PrivacyBinding = {
  * - `defaultLease` the clamp's floor, and the whole lease for a task with no
  *   parseable estimate -- which is what the fixed 30-minute lease used to be
  * - `maxLease`     the clamp's ceiling
+ * - `reviewLeaseFactor` (T-144 / D11) how much longer a review lease is than
+ *   the implement lease the same plan derives
  *
  * Unlike `[privacy]`, a malformed value here REFUSES at read time instead of
  * degrading to the default. A lease is an exclusivity window: an operator who
@@ -55,6 +57,11 @@ export type CoordinationBinding = {
   leaseFactor?: number
   defaultLease?: string
   maxLease?: string
+  /**
+   * T-144 (C5 / D11): how much longer a REVIEW lease is than the implement
+   * lease derived from the same plan. See `DEFAULT_REVIEW_LEASE_FACTOR`.
+   */
+  reviewLeaseFactor?: number
 }
 
 /** Resolved `[coordination]`, in milliseconds, with the D10 defaults applied. */
@@ -62,10 +69,46 @@ export type CoordinationSettings = {
   leaseFactor: number
   defaultLeaseMs: number
   maxLeaseMs: number
+  reviewLeaseFactor: number
 }
 
 /** D10, approved as a starting point and to be re-derived after C4. */
 export const DEFAULT_LEASE_FACTOR = 0.5;
+
+/**
+ * T-144 (C5 / D11, decided by the operator 2026-10-15): a review lease is
+ * LONGER than the implement lease the same plan derives, by this factor.
+ *
+ * D11 chose (b) "longer" over (a) "same schedule" and (c) "no expiry": an idle
+ * reviewer is less harmful than a stalled implementer, which rules out (a),
+ * while (c) would accumulate ghosts in a lane the C9 sweeper would then have to
+ * special-case. So a review claim still expires -- it just gets more room.
+ *
+ * 2x is this task's proposal, recorded in §10/D11 of the design. It is the
+ * smallest factor that is unambiguously "longer", and it is one number in one
+ * place for the re-derivation D10 already schedules after C4.
+ *
+ * The factor scales the whole derivation INCLUDING the clamp's ceiling --
+ * `clamp(effort x leaseFactor x reviewLeaseFactor, defaultLease,
+ * min(maxLease x reviewLeaseFactor, ABSOLUTE_LEASE_CEILING_MS))` -- and the
+ * two alternatives are rejected for two different reasons.
+ *
+ * Scaling only the multiplier leaves review leases pinned at `maxLease`, so on
+ * a `Hard`/`2w` task the review lease comes out at exactly 8 h, the same as
+ * the implement lease, and D11 has no effect on the big tasks where it matters
+ * most.
+ *
+ * Scaling the clamp's RESULT instead (`min(clamp(...) x factor, ceiling)`) is
+ * the subtler one, and T-144's review caught this comment getting its reason
+ * wrong: it does NOT overrun `maxLease` in any way the chosen form avoids --
+ * both forms give 4 h for an 8 h task under `maxLease = "2h"`, and 16 h for a
+ * `2w` task under the defaults. What it actually does is double the FLOOR.
+ * `defaultLease` is the lease a task with no derivable estimate gets, and
+ * under that reading such a task's review claim would be 1 h rather than the
+ * configured 30 m. D11 scales the derivation; it does not get to redefine what
+ * "nothing to derive from" is worth. The two readings differ nowhere else.
+ */
+export const DEFAULT_REVIEW_LEASE_FACTOR = 2;
 /**
  * D4's absolute ceiling on a lease: 24 hours.
  *
@@ -120,6 +163,17 @@ export function resolveCoordinationSettings(
     throw new Error(`Invalid ${context}: [coordination] leaseFactor must be a positive number (got ${JSON.stringify(binding?.leaseFactor)}).`);
   }
 
+  // T-144: judged exactly like its sibling, and for the same reason -- a lease
+  // is an exclusivity window, so an operator who typed a figure the policy
+  // cannot honour is told rather than silently given the default. Only
+  // positivity is required: a value below 1 inverts D11 (shorter review
+  // leases), which is a choice this file lets the operator make deliberately
+  // and does not make for them.
+  const reviewLeaseFactor = binding?.reviewLeaseFactor ?? DEFAULT_REVIEW_LEASE_FACTOR;
+  if (typeof reviewLeaseFactor !== "number" || !Number.isFinite(reviewLeaseFactor) || reviewLeaseFactor <= 0) {
+    throw new Error(`Invalid ${context}: [coordination] reviewLeaseFactor must be a positive number (got ${JSON.stringify(binding?.reviewLeaseFactor)}).`);
+  }
+
   const defaultLeaseMs = requireDuration(binding?.defaultLease ?? DEFAULT_LEASE_DURATION, "defaultLease", context);
   const maxLeaseMs = requireDuration(binding?.maxLease ?? DEFAULT_MAX_LEASE_DURATION, "maxLease", context);
   // T-143 (review F1): REFUSED, not clamped. A silent clamp would answer a
@@ -141,7 +195,7 @@ export function resolveCoordinationSettings(
     );
   }
 
-  return { leaseFactor, defaultLeaseMs, maxLeaseMs };
+  return { leaseFactor, defaultLeaseMs, maxLeaseMs, reviewLeaseFactor };
 }
 
 export type ResolvedMapctxToml = {
@@ -222,7 +276,8 @@ function assertValidConfig(value: unknown, sourcePath: string): MapctxTomlConfig
     coordination = {
       ...(binding.leaseFactor !== undefined ? { leaseFactor: binding.leaseFactor } : {}),
       ...(binding.defaultLease !== undefined ? { defaultLease: binding.defaultLease } : {}),
-      ...(binding.maxLease !== undefined ? { maxLease: binding.maxLease } : {})
+      ...(binding.maxLease !== undefined ? { maxLease: binding.maxLease } : {}),
+      ...(binding.reviewLeaseFactor !== undefined ? { reviewLeaseFactor: binding.reviewLeaseFactor } : {})
     };
   }
 

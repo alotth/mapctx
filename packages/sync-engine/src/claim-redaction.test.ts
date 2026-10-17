@@ -94,7 +94,7 @@ test("MUTATION GUARD: task claim against a held task never discloses the holder'
   }
 });
 
-test("--json refusal's activeClaim has exactly the 8 allowlisted keys and no leaseToken (pins a new secret field leaking through the allowlist)", t => {
+test("--json refusal's activeClaim has exactly the 10 allowlisted keys and no leaseToken (pins a new secret field leaking through the allowlist)", t => {
   const f = fixture(t);
   f.success(["import", "--commit", "--actor", "test"]);
   const taskId = createClaimableTask(f, "allowlist shape target");
@@ -109,11 +109,15 @@ test("--json refusal's activeClaim has exactly the 8 allowlisted keys and no lea
   assert.equal(payload.ok, false);
   assert.equal(payload.reason, "active-claim-held");
   assert.ok(payload.activeClaim, JSON.stringify(payload));
+  // T-144: 8 -> 10 keys. `exclusivity`/`role` name the lane that refused; the
+  // two assertions that matter (no `leaseToken`, no `renewToken` anywhere in
+  // the observable refusal) are unchanged and are what this file exists for.
   assert.deepEqual(
     Object.keys(payload.activeClaim).sort(),
-    ["claimId", "claimedAt", "eventNode", "eventSequence", "expiresAt", "holder", "state", "taskId"].sort()
+    ["claimId", "claimedAt", "eventNode", "eventSequence", "exclusivity", "expiresAt", "holder", "role", "state", "taskId"].sort()
   );
   assert.equal("leaseToken" in payload.activeClaim, false);
+  assert.equal("renewToken" in payload.activeClaim, false);
 });
 
 test("criterion 3: the holder still gets its own leaseToken from claim/start/renew; release works; a wrong token is token-mismatch", t => {

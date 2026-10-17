@@ -484,5 +484,68 @@ CREATE INDEX IF NOT EXISTS idx_redaction_target ON redaction_projection(target_n
     sql: `
 ALTER TABLE resource_claim_projection ADD COLUMN renew_token TEXT;
 `.trim()
+  },
+  {
+    // T-144 (C5 / D5): the review lane becomes a first-class lane. A dispatch
+    // declares which lane it runs in (`kind`), and a claim declares whether it
+    // excludes other claims (`exclusivity`) and which lane it holds (`role`),
+    // so a review can run concurrently with the implementation it reviews
+    // instead of being refused by `active-claim-held`.
+    //
+    // A NEW version, like 12 before it: 11 and 12 are applied to the real
+    // store, and editing an applied migration trips the checksum guard and
+    // refuses to open the store at all (`db.ts:37-42`). Order within
+    // MIGRATIONS is load-bearing here beyond the usual reason -- on a fresh
+    // database migration 001 still creates
+    // `idx_resource_claim_active_task` with the OLD predicate, and this
+    // migration is what swaps it.
+    //
+    // NOT NULL DEFAULT + CHECK, not nullable, and that choice is the whole
+    // safety argument rather than a style preference. SQLite accepts
+    // `NOT NULL DEFAULT` with a `CHECK` on `ADD COLUMN` and fills every
+    // existing row with the default as part of the same statement, so there is
+    // never a NULL window and no separate backfill. With a NULLABLE column the
+    // new predicate (`exclusivity = 'exclusive'`) would not match a legacy
+    // NULL row, that row would silently stop being covered by the uniqueness
+    // constraint while the application layer still treated it as exclusive, and
+    // a second explicitly-exclusive claim would insert on the same task with no
+    // UNIQUE violation: two effective holders. Verified in a scratch database,
+    // not reasoned about -- with a nullable column the second insert succeeds.
+    //
+    // Statement ORDER is likewise load-bearing, and in the direction that is
+    // easy to get backwards: the columns are added BEFORE anything references
+    // them. An `UPDATE ... SET exclusivity = 'exclusive'` placed first fails
+    // with `no such column: exclusivity`, and since the runner wraps each
+    // migration in one `BEGIN IMMEDIATE` with `ROLLBACK` on error
+    // (`db.ts:45-53`) the whole migration aborts and the store fails to open.
+    // Atomicity was never the problem; order was.
+    //
+    // The index is dropped and recreated under the EXACT SAME NAME. One name
+    // holds exactly one definition, so reusing it is what makes the old
+    // predicate impossible to leave behind anywhere -- there is no second
+    // index for a stale `WHERE state = 'active'` to survive in. (It is not,
+    // as an earlier draft of the design claimed, because 001 re-runs its
+    // `CREATE ... IF NOT EXISTS` on every open: it does not. `runMigrations`
+    // skips any version already recorded with a matching checksum, so 001
+    // executes once per database.)
+    //
+    // `dispatch_projection.kind` gets the identical treatment even though it
+    // sits in no unique index -- one migration pattern for this change, not
+    // two null-handling philosophies for an operator to reconcile.
+    //
+    // Downgrade-safe: a CLI that only knows versions <= 12 never selects the
+    // new columns, and `SELECT *` readers tolerate the extra fields. Such a
+    // binary would, however, read the swapped index as the old constraint it
+    // no longer is -- it would permit a second exclusive claim only if it also
+    // wrote `exclusivity` values, which it cannot, so its inserts land as
+    // `exclusive` by default and the index still refuses them.
+    version: 13,
+    sql: `
+ALTER TABLE resource_claim_projection ADD COLUMN exclusivity TEXT NOT NULL DEFAULT 'exclusive' CHECK (exclusivity IN ('exclusive', 'shared'));
+ALTER TABLE resource_claim_projection ADD COLUMN role TEXT NOT NULL DEFAULT 'implement' CHECK (role IN ('implement', 'review'));
+ALTER TABLE dispatch_projection ADD COLUMN kind TEXT NOT NULL DEFAULT 'implement' CHECK (kind IN ('implement', 'review'));
+DROP INDEX IF EXISTS idx_resource_claim_active_task;
+CREATE UNIQUE INDEX idx_resource_claim_active_task ON resource_claim_projection(task_id) WHERE state = 'active' AND exclusivity = 'exclusive';
+`.trim()
   }
 ]

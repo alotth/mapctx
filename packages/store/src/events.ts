@@ -1,9 +1,10 @@
 import type { DatabaseSync } from "node:sqlite"
 import type { EventLogEntry } from "@mapctx/protocol"
-import { assertTransition, type Account, type Budget, type CostEvent, type EstimateSnapshot, type PlanPeriod, type RunEvent, type RunReceipt } from "@mapctx/protocol"
+import { assertTransition, claimLaneFor, claimRoleSchema, type Account, type Budget, type ClaimExclusivity, type ClaimRole, type CostEvent, type DispatchKind, type EstimateSnapshot, type PlanPeriod, type RunEvent, type RunReceipt } from "@mapctx/protocol"
 import {
   getTaskDetail,
   getTask,
+  getClaim,
   getDispatchAttempt,
   applyRunReceipt,
   assertReceiptPlanningAdmission,
@@ -24,6 +25,8 @@ import {
   insertRunEvent,
   invalidateHistoryEvidence,
   listAcceptanceCriteria,
+  latestDispatchKind,
+  listDispatchAttempts,
   patchTask,
   replaceAcceptanceCriteria,
   replaceOutgoingDependencies,
@@ -109,12 +112,34 @@ export type TaskClaimedPayload = {
    * a claim with a fabricated one.
    */
   renewToken?: string;
+  /**
+   * T-144 (C5 / D5): the lane this claim holds. Optional for exactly the
+   * reason `renewToken` is -- the 231 historical `task.claimed` events were
+   * written before lanes existed, and they must replay as what they were:
+   * exclusive claims on the implement lane. Absent is normalized once, in the
+   * applier, so a database rebuilt from the journal matches one migrated in
+   * place field for field.
+   */
+  exclusivity?: ClaimExclusivity;
+  role?: ClaimRole;
   holder: Record<string, unknown>;
   claimedAt: string;
   expiresAt: string;
 };
 
 export type TaskClaimRenewedPayload = { claimId: string; taskId: string; expiresAt: string };
+/**
+ * T-144: deliberately NOT carrying the lane.
+ *
+ * The appliers for these two need to know whether the claim being retired held
+ * the implement lane (so they can return `executionState` to `unclaimed`) or a
+ * review lane (where touching `executionState` would reset the implementation
+ * out from under a holder who is still working). They read it from the claim
+ * ROW, which the earlier `task.claimed` already projected -- rather than from a
+ * new payload field, which would be absent on every historical event and would
+ * have to be defaulted anyway. Reading the row gets legacy replay right for
+ * free, and keeps one source of truth for a claim's lane.
+ */
 export type TaskClaimReleasedPayload = { claimId: string; taskId: string };
 export type TaskClaimExpiredPayload = { claimId: string; taskId: string };
 
@@ -137,6 +162,12 @@ export type DispatchAttemptedPayload = {
     attempt: number;
     contextHash: string;
     status: "claimed" | "running" | "completed" | "failed" | "blocked" | "cancelled" | "expired";
+    /**
+     * T-144 (C5 / D5): which lane the attempt runs in. Absent on every
+     * dispatch recorded before lanes existed, and normalized to `implement` by
+     * the applier -- which is what all 235 of them were.
+     */
+    kind?: DispatchKind;
     /** T-071: planned workload frozen at hand-off; null for untagged/pre-005 events. */
     workloadAtDispatch?: string | null;
     /** T-071/D5: raw executor identity fact; tiers are derived, never stored. */
@@ -213,6 +244,21 @@ export type EvidenceRedactedPayload = {
 };
 
 /**
+ * T-144: which lane a claim being released or expired held.
+ *
+ * A missing row defaults to `implement`, which is the behaviour every one of
+ * these events had before lanes existed -- so a release whose claim row cannot
+ * be found (a journal whose `task.claimed` was dropped by a rebuild, a
+ * hand-built replay fixture) projects exactly as it did before this change
+ * rather than silently becoming a no-op on `executionState`. Choosing the
+ * legacy behaviour for the unknown case is what keeps "replay matches the
+ * in-place migration" true for histories that are not perfectly formed.
+ */
+function claimRoleOf(db: DatabaseSync, claimId: string): ClaimRole {
+  return getClaim(db, claimId)?.role ?? "implement";
+}
+
+/**
  * Applies one journal entry to the SQLite projections. Used both by the live
  * append path and by repair/reindex replay, so projections stay a pure
  * function of the event log.
@@ -251,18 +297,56 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
     }
     case "task.claimed": {
       const payload = entry.payload as unknown as TaskClaimedPayload;
+      // T-144: the ONE place an absent lane is decided, so a journal replay and
+      // migration 13's column defaults cannot disagree.
+      //
+      // Attempt 2 (review B2): PARSED, not coerced. `claimLaneFor` treats
+      // anything that is not `"review"` as implement, so `role: "audit"` used
+      // to project a perfectly ordinary `exclusive`/`implement` claim and carry
+      // `executionState` to `claimed` -- a lane nobody asked for, silently
+      // renamed to one that exists. The dispatch side never had this hole:
+      // `kind` is passed through to the row and migration 13's CHECK refuses an
+      // unknown value loudly. This is the claim side's CHECK, in the one place
+      // it can be applied before anything is written. Absent stays legal, which
+      // is what keeps the historical events replayable.
+      const role = claimRoleSchema.parse(payload.role ?? "implement");
+      const { exclusivity } = claimLaneFor(role);
+      // Refused BEFORE the insert, not after. The pair is derived from `role`
+      // rather than read field-by-field from the payload -- there is no such
+      // thing as a shared implement claim or an exclusive review claim, and an
+      // event asserting one describes a lane this code cannot reason about.
+      // `exclusivity` still rides on the event, because it is what the index
+      // predicate reads and a reader of the journal alone should not have to
+      // know the mapping; so it is checked for agreement rather than trusted,
+      // and a contradiction stops the applier before any row exists. Both
+      // callers wrap this in a transaction that would roll the insert back
+      // anyway, which is exactly why the order is worth getting right here
+      // instead of relying on someone else's rollback.
+      if (payload.exclusivity !== undefined && payload.exclusivity !== exclusivity) {
+        throw new Error(
+          `task.claimed ${payload.claimId} carries exclusivity "${payload.exclusivity}" for role "${role}", which pairs with "${exclusivity}".`
+        );
+      }
       insertClaim(db, {
         claimId: payload.claimId,
         taskId: payload.taskId,
         leaseToken: payload.leaseToken,
         renewToken: payload.renewToken ?? null,
         state: "active",
+        exclusivity,
+        role,
         claimedAt: payload.claimedAt,
         expiresAt: payload.expiresAt,
         holder: payload.holder,
         eventNode: entry.nodeId,
         eventSequence: entry.sequence
       });
+      // T-144: a REVIEW claim stops here. Everything below moves the task's
+      // `executionState`, and that scalar describes the implement run -- a
+      // review is a second, concurrent run (§3, 2A rejected). Letting a review
+      // claim carry the task to `claimed` would both misreport the
+      // implementation's state and hand the review lane the power to reset it.
+      if (role !== "implement") return;
       // A new claim is new-attempt admission: a failed execution is terminal
       // for the attempt, not for the task. Re-open it through the machine's
       // one legal edge (failed -> unclaimed) before claiming, so retry works
@@ -280,12 +364,20 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
     }
     case "task.claim-renewed": {
       const payload = entry.payload as unknown as TaskClaimRenewedPayload;
+      // Lane-agnostic on purpose: a renewal moves one row's `expires_at` and
+      // nothing else, so there is no task-level state for the wrong lane to
+      // disturb.
       updateClaimState(db, payload.claimId, "active", payload.expiresAt);
       return;
     }
     case "task.claim-released": {
       const payload = entry.payload as unknown as TaskClaimReleasedPayload;
+      // T-144: read the lane BEFORE retiring the row -- `updateClaimState`
+      // does not erase `role`, but reading first keeps the order obvious and
+      // survives any future applier that does.
+      const releasedRole = claimRoleOf(db, payload.claimId);
       updateClaimState(db, payload.claimId, "released");
+      if (releasedRole !== "implement") return;
       if (getTask(db, payload.taskId)?.executionState === "claimed") {
         patchTask(db, payload.taskId, { executionState: "unclaimed" }, revision);
       }
@@ -293,7 +385,14 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
     }
     case "task.claim-expired": {
       const payload = entry.payload as unknown as TaskClaimExpiredPayload;
+      const expiredRole = claimRoleOf(db, payload.claimId);
       updateClaimState(db, payload.claimId, "expired");
+      // T-144: this is the interleaving §3 names as the one that silently
+      // corrupts a live lane -- a reviewer's claim expiring (or being
+      // released) while the implementation is still running would otherwise
+      // reset `executionState` to `unclaimed` out from under the holder who is
+      // still working.
+      if (expiredRole !== "implement") return;
       if (getTask(db, payload.taskId)?.executionState === "claimed") {
         patchTask(db, payload.taskId, { executionState: "unclaimed" }, revision);
       }
@@ -331,7 +430,16 @@ export function applyEventToProjections(db: DatabaseSync, entry: EventLogEntry):
       // fact: replay must project it -- including dispatches recorded under
       // older admission rules (e.g. dispatched while archived, or before the
       // retry-admission reset existed) -- never reject it with today's rules.
-      insertDispatchAttempt(db, dispatch);
+      const kind = dispatch.kind ?? "implement";
+      insertDispatchAttempt(db, { ...dispatch, kind });
+      // T-144: a REVIEW dispatch records itself and touches nothing else. The
+      // task's `executionState` is the implement run's state; a review attempt
+      // moving it to `claimed`/`running` would report the implementation as
+      // something it is not, and -- worse -- a review dispatch opened while
+      // the implementation is `running` would be asserting a transition
+      // (`running` -> `claimed`) the machine rightly refuses, which would make
+      // the review lane unusable exactly when it is most wanted.
+      if (kind !== "implement") return;
       const desiredExecution = dispatch.status === "claimed" ? "claimed" : "running";
       if (task.executionState !== desiredExecution) {
         patchTask(db, task.taskId, { executionState: desiredExecution }, revision);
@@ -519,9 +627,41 @@ export function assertNewEventAdmission(db: DatabaseSync, entry: EventLogEntry):
     const task = getTask(db, dispatch.taskId);
     if (!task) throw new Error(`Cannot dispatch unknown task: ${dispatch.taskId}`);
     if (["done", "cancelled", "archived"].includes(task.planningState)) throw new Error(`Cannot dispatch terminal task: ${dispatch.taskId}`);
-    const desiredExecution = dispatch.status === "claimed" ? "claimed" : "running";
-    if (task.executionState !== desiredExecution) {
-      assertTransition("execution", task.executionState, desiredExecution);
+    // T-144 attempt 2 (review B1): "a dispatch id names one lane" is now
+    // enforced on BOTH writer paths, not just the guarded one.
+    // `appendDispatchAttempt` refuses a contradictory `kind`, but a raw
+    // `appendEvent` reached none of that, so a hand-written or
+    // programmatically-built `dispatch.attempted` could open a chain whose
+    // attempt 1 is `review` and attempt 2 `implement` -- and the CHANGELOG
+    // claims the refusal without qualification. The check belongs here
+    // because this function already looks the dispatch up, and because a
+    // guard on new history is exactly what this function is for.
+    //
+    // Replay is unaffected: this runs only on fresh appends
+    // (`store-handle.ts`), never from the applier that `repairStore` uses, so
+    // a mixed chain that already exists on disk still projects as the
+    // historical fact it is rather than being rejected by today's rules.
+    const existingAttempts = listDispatchAttempts(db, dispatch.dispatchId);
+    const recordedKind = existingAttempts.length > 0 ? latestDispatchKind(existingAttempts) : undefined;
+    const attemptedKind = dispatch.kind ?? "implement";
+    if (recordedKind !== undefined && attemptedKind !== recordedKind) {
+      throw new Error(
+        `Dispatch ${dispatch.dispatchId} is a ${recordedKind} dispatch; attempt ${dispatch.attempt} cannot be ${attemptedKind}. `
+        + `Open a separate dispatch for the ${attemptedKind} lane.`
+      );
+    }
+    // T-144: the terminal-planning refusal applies to both lanes (claim
+    // admission refuses a terminal task the same way, so a review lane could
+    // not be opened on one anyway), but the EXECUTION transition is the
+    // implement lane's alone. A review dispatch asserts nothing about
+    // `executionState` here because its applier changes nothing about it --
+    // and asserting it would refuse every review opened against a running
+    // implementation, which is the entire use case.
+    if ((dispatch.kind ?? "implement") === "implement") {
+      const desiredExecution = dispatch.status === "claimed" ? "claimed" : "running";
+      if (task.executionState !== desiredExecution) {
+        assertTransition("execution", task.executionState, desiredExecution);
+      }
     }
     return;
   }

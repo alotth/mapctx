@@ -7,7 +7,7 @@ import {
   approveAcceptanceCriterion,
   claimTask,
   createTask,
-  getActiveClaimForTask,
+  getActiveExclusiveClaimForTask,
   getClaim,
   reviseAcceptance,
   StoreHandle,
@@ -126,7 +126,7 @@ test("finish over a ghost claim (default, published): move.expiredClaimId set, n
     assert.equal((expired[0]!.payload as { claimId: string }).claimId, claim.claim!.claimId);
     assert.equal(expired[0]!.actor, "system");
 
-    assert.equal(getActiveClaimForTask(fixture.handle.db, fixture.taskId), undefined);
+    assert.equal(getActiveExclusiveClaimForTask(fixture.handle.db, fixture.taskId), undefined);
     const retired = getClaim(fixture.handle.db, claim.claim!.claimId);
     assert.ok(retired);
     assert.equal(retired!.state, "expired");

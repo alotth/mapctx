@@ -394,7 +394,7 @@ flowchart LR
 | Store | **C0, independent:** claim refusals stop carrying token fields at the source (`claims.ts:93`), so no print site can leak them | **PENDING OPERATOR APPROVAL** (removes `activeClaim.leaseToken` from observable CLI output — a fix, but a visible one) |
 | Store | `claims.ts` derives lease duration, mints `renewToken`, resolves renewal through dispatch → task → live claim, enforces the 24 h absolute ceiling; `projections.ts` adds `getLiveActiveClaim` alongside the unchanged `getActiveClaimForTask`; `forecast/src/duration.ts` excludes heartbeats from interior events | **PENDING OPERATOR APPROVAL** (observable semantics of an existing event) |
 | CLI | `--lease <duration>` on `task claim`/`task start`; `task renew --dispatch/--renew-token` (with `--claim/--token` unchanged); new `mapctx run event` with `--attempt`/`--sequence`; redacted refusal/renew output | **PENDING OPERATOR APPROVAL** |
-| Config | `[coordination] defaultLease`, `maxLease`, `leaseFactor` in `mapctx.toml` | **PENDING OPERATOR APPROVAL** (new public config surface) |
+| Config | `[coordination] defaultLease`, `maxLease`, `leaseFactor` and — added by C5 under D11 — `reviewLeaseFactor` in `mapctx.toml` | **PENDING OPERATOR APPROVAL** (new public config surface) |
 
 **Data migration.** `resource_claim_projection` gains a `renew_token` column
 (backfilled `NULL` for the 162 historical rows — none of them is still
@@ -958,9 +958,13 @@ Still open, for the operator:
   once C4 ships the heartbeat exclusion (§2), because without it the arrival
   of heartbeats would rewrite `activeTimeMs` for every run and the
   re-derivation would be reading its own artifact rather than the work.
-- Should a shared review claim expire on the same schedule as an implement
-  claim? A reviewer idle for hours is less harmful than a stalled implementer,
-  which argues for a longer or non-expiring review lease.
+- ~~Should a shared review claim expire on the same schedule as an implement
+  claim?~~ **Answered (D11, operator, 2026-10-15): longer, not non-expiring.**
+  A reviewer idle for hours is less harmful than a stalled implementer, but a
+  non-expiring review lease accumulates ghosts in a lane the C9 sweeper would
+  have to special-case. C5 (T-144) sets the factor at 2× with the clamp scaled
+  to match; the arithmetic and the two readings it rules out are in §10.2 under
+  D11.
 
 ---
 
@@ -1076,6 +1080,7 @@ existing event. Approving the design does not approve these individually.
 | D4 | 24 h absolute renewal ceiling, measured on the local clock | §2 | (a) 24 h; (b) another figure; (c) no ceiling, rely on the sweeper | **(a)**, with the clock caveat stated in §2 — evidence-based liveness with no ceiling renews a wedged agent forever |
 | D5 | `dispatchSchema` gains `kind`; claim payloads gain `exclusivity` and `role` — **and, the operationally risky part, a migration over the live store: two `NOT NULL` columns with `CHECK` enums, plus dropping and recreating `idx_resource_claim_active_task`, the index that today guarantees one holder per task, under a new predicate.** C5 also moves claim admission onto a role-aware lookup and retires the single-row getter (§3), without which a review claim can refuse an implement claim | §3 | (a) all of it; (b) dispatch `kind` only; (c) neither — review stays outside MapCtx | **(a).** (b) makes the review lane invisible to lease accounting; (c) is today's status quo, in which the board cannot say a task was reviewed. Note that (a) is not a payload-only change: approving it approves the index swap, which is why the migration order and the same-name requirement are spelled out in §3 |
 | D6 | CLI: `task start --kind review`, `dispatch create --kind review`, review columns in `plan` | §3 | (a) ship with C5+C6 together; (b) ship earlier alongside C5 | **(a).** Exposing the lane before the receipt-admission guard lets a review receipt move the task's planning state |
+| D6b | **Config: `[coordination] reviewLeaseFactor`** — the new public key C5 adds to implement D11, defaulting to 2 and validated like `leaseFactor` (a non-positive or non-numeric value is refused by name, never silently defaulted) | §3, §10.2 | (a) configurable key, default 2; (b) hard-coded constant, no key; (c) no separate factor — review uses the implement lease (this is D11 (a), already rejected by the operator) | **(a).** Listed here rather than only under D11 because it is public config surface in the same sense its three siblings are: an operator reading §10.1 for "what new knobs does this add" must find it there. (b) would leave one of the four lease figures untunable for no reason beyond its being newer, and the re-derivation §7 already schedules would then need a code change |
 | D7 | CLI: `mapctx task split --slice <title> --effort <x>` | §4 | (a) paired flags; (b) `"title:effort"` in one argument; (c) no command, documentation only | **(a).** (b) has no unambiguous parse against titles containing colons. (c) was tried — the normative rule alone is what produced the slices-as-attempts pattern |
 | D8 | Attempt-chain warning at `attempt >= 4`, **without** forecast exclusion | §4 | (a) warning only; (b) warning plus permanent calibration exclusion; (c) neither | **(a).** (b) was this document's previous position and the measurement refutes it: the predicate catches 38 of 112 receipts, all `completed` review loops, including this document's own dispatch |
 
@@ -1085,10 +1090,30 @@ existing event. Approving the design does not approve these individually.
 | --- | --- | --- | --- | --- |
 | D9 | Write two `history.correction-recorded` events against T-107/T-108 | §5 | (a) record corrections; (b) delete the false receipts; (c) leave the mis-attribution | **(a).** The backfill is contradicted in the audit trail rather than erased. (b) destroys history; (c) leaves both tasks reading `completed` for work never done |
 | D10 | Lease factor and cap (`estimatedEffort × 0.5`, clamp 30 min…8 h) | §2, §7 | (a) adopt as the starting point and re-derive after C4; (b) pick different numbers now; (c) keep the fixed 30 min | **(a).** The figures are an honest first guess; re-deriving them before C4's heartbeat exclusion would read the measurement artifact rather than the work |
-| D11 | Does a shared review claim expire on the implement schedule? | §7 | (a) same schedule; (b) longer; (c) no expiry for review claims | **Decided by the operator (2026-10-15): (b) longer.** A review lease uses the same derivation with a larger factor, still clamped by the 24 h absolute ceiling, so it expires and does not accumulate ghosts. The factor is set in C5 (T-144). An idle reviewer is less harmful than a stalled implementer, which argues against (a), but (c) accumulates ghosts in a lane the sweeper would then have to special-case |
+| D11 | Does a shared review claim expire on the implement schedule? | §7 | (a) same schedule; (b) longer; (c) no expiry for review claims | **Decided by the operator (2026-10-15): (b) longer.** A review lease uses the same derivation with a larger factor, still clamped by the 24 h absolute ceiling, so it expires and does not accumulate ghosts. **Factor set in C5 (T-144): `reviewLeaseFactor = 2`, configurable under `[coordination]`** — see the note below for the shape of the clamp, which is the part D11 left open. An idle reviewer is less harmful than a stalled implementer, which argues against (a), but (c) accumulates ghosts in a lane the sweeper would then have to special-case |
 | D12 | **A0 or B** in ADR 0005, and whether Git-ref CAS is accepted at all | §8 | per ADR 0005; the first ADR accepted fixes the other | Not T-124's call, and this document no longer writes as if B had won. §8 holds under either; C10 stays out of wave until this lands |
 | D13 | **Execute §5's re-scope of T-107 and T-108**: move the `bulk-updated-timestamp` severity change from T-107 to T-127, and **revise T-108's acceptance** to drop criterion `a7e927fd` ("Heartbeat registrado como follow-up: os dados do scan decidem se varredor basta ou se precisa de heartbeat"), which exists and is `pending` — §2 of this document decides that question, so the criterion is now answered rather than outstanding | §5 | (a) execute both via `task update` and `task acceptance revise`; (b) leave T-108's criterion pending and let whoever implements T-108 discover it is already decided; (c) keep `bulk-updated-timestamp` in T-107 | **(a).** §5 says "this document decides it", but T-124 **cannot** execute it: these are planning changes to two other tasks, and acceptance revision in particular is an operator act. Flagged here precisely because the earlier drafts decided it in prose and left no one holding the action |
 | D14 | **Does C1's one-fewer-journal-event count as an observable change requiring approval?** After C1, `move done` over a ghost claim stops journaling a fictitious `task.claim-released` | §2, §6 | (a) yes — C1 carries the marker (current position); (b) no — the banner is amended to say that *removing* a provably false event is outside the definition | **(a)**, chosen as the conservative reading: the banner's test is "observable semantics of an existing event", and one fewer event meets it whether or not the event was a fiction. (b) is defensible and cheaper, but it means writing an exemption into the banner, and an exemption is the kind of thing that gets reused later for changes that deserve the marker |
+
+**D11's factor, as implemented by C5 (T-144), and why the clamp has the shape
+it does.** D11 fixed the direction ("longer") and left the arithmetic to C5.
+"The same derivation with a larger factor" admits three readings, and they are
+not equivalent:
+
+| Reading | Review lease | Why not |
+| --- | --- | --- |
+| scale the multiplier only — `clamp(effort × leaseFactor × 2, defaultLease, maxLease)` | pinned at `maxLease` | On a `Hard`/`2w` task (80 h agent-active) the implement lease already saturates at 8 h, so the review lease comes out at 8 h too — **identical**, and D11 has no effect on the big tasks where a slow review is most likely |
+| scale the clamp's *result* — `min(clamp(effort × leaseFactor, defaultLease, maxLease) × 2, 24 h)` | rejected, and for a narrower reason than an earlier draft of this table claimed | It doubles the **floor** as well: `defaultLease` is the lease a task with no derivable estimate gets, and under this reading that task's review claim is 1 h rather than the configured 30 m. D11 scales the *derivation*; it does not redefine what "nothing to derive from" is worth. Everywhere the floor does not bind, this reading and the chosen one are the **same number** — measured: `maxLease = "2h"` with an 8 h task gives 4 h under both, a `2w` task 16 h under both; they part company only at a 20 m task, 1 h against 30 m |
+| **scale the derivation *and* the clamp's ceiling** — `clamp(effort × leaseFactor × reviewLeaseFactor, defaultLease, min(maxLease × reviewLeaseFactor, 24 h))` | **chosen** | Keeps the operator's proportion (`maxLease = "2h"` → review ≤ 4 h), keeps review ≥ implement even at saturation (defaults: implement ≤ 8 h, review ≤ 16 h), leaves `defaultLease` meaning exactly what it means in the implement lane, and leaves the 24 h ceiling as the bound that actually bites (`maxLease = "24h"` derives 48 h and is cut to 24 h) |
+
+`reviewLeaseFactor` defaults to 2 and is tunable under `[coordination]`
+alongside `leaseFactor`, validated the same way (a non-positive or
+non-numeric value is refused by name, never silently defaulted). As public
+config surface it also carries its own approval line in §10.1 (**D6b**), with
+its three siblings, rather than living only inside this note. An explicit
+`--lease` still wins over both and is still refused above 24 h
+(`lease-above-ceiling`), unchanged. The figure is a first guess in the same
+sense D10's are, and the one place to change when §7's re-derivation happens.
 
 ### 10.3 What this document does *not* ask for
 

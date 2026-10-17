@@ -3,7 +3,7 @@ import test from "node:test"
 import { importCommit } from "./cutover"
 import { moveTask, updateTask } from "./tasks"
 import { approveAcceptanceCriterion, reviseAcceptance } from "./acceptance"
-import { getActiveClaimForTask, getClaim, getLiveActiveClaim, getTask } from "./projections"
+import { getActiveExclusiveClaimForTask, getClaim, getLiveActiveClaim, getTask } from "./projections"
 import { claimTask } from "./claims"
 import { StoreHandle } from "./store-handle"
 import { repairStore } from "./repair"
@@ -56,7 +56,7 @@ function claimExpiredEvents(handle: StoreHandle, taskId: string) {
   );
 }
 
-test("getLiveActiveClaim's expiry boundary is exact (expiresAt <= now is expired); getActiveClaimForTask takes no `now` and so cannot be filtered by it", () => {
+test("getLiveActiveClaim's expiry boundary is exact (expiresAt <= now is expired); getActiveExclusiveClaimForTask takes no `now` and so cannot be filtered by it", () => {
   const { repoDir, restoreEnv, handle } = materialize();
   try {
     const claim = claimNormalTask(handle, "T-101", { now: () => new Date("2026-10-14T10:00:00.000Z") });
@@ -70,11 +70,11 @@ test("getLiveActiveClaim's expiry boundary is exact (expiresAt <= now is expired
     assert.equal(getLiveActiveClaim(handle.db, "T-101", exactly), undefined, "at the exact expiry instant: not live");
     assert.equal(getLiveActiveClaim(handle.db, "T-101", justAfter), undefined, "1ms after expiry: not live");
 
-    // getActiveClaimForTask has no `now` parameter, so it reads the same row
+    // getActiveExclusiveClaimForTask has no `now` parameter, so it reads the same row
     // regardless of what instant getLiveActiveClaim was just probed at above
     // -- one call here is the whole proof, a loop over the three `now`s would
     // just invoke it three times with nothing to vary.
-    const active = getActiveClaimForTask(handle.db, "T-101");
+    const active = getActiveExclusiveClaimForTask(handle.db, "T-101");
     assert.ok(active, "admission getter stays unfiltered");
     assert.equal(active!.claimId, claim.claim!.claimId);
     assert.equal(active!.state, "active");
@@ -96,7 +96,7 @@ test("getLiveActiveClaim is a pure read: journal and projection are unchanged by
     const eventsAfter = handle.listEvents().length;
 
     assert.equal(eventsAfter, eventsBefore, "reading an expired claim journals no event");
-    const row = getActiveClaimForTask(handle.db, "T-101");
+    const row = getActiveExclusiveClaimForTask(handle.db, "T-101");
     assert.ok(row, "projection row is untouched by the read");
     assert.equal(row!.state, "active");
     assert.equal(row!.claimId, claim.claim!.claimId);
@@ -145,7 +145,7 @@ function assertGhostClosed(handle: StoreHandle, taskId: string, oldClaimId: stri
   assert.equal(expired.length, 1, "exactly one task.claim-expired for the ghost");
   assert.equal((expired[0]!.payload as { claimId: string }).claimId, oldClaimId);
   assert.equal(expired[0]!.actor, "system", "the close's own actor never appears on this event -- the row was true before it closed anything");
-  assert.equal(getActiveClaimForTask(handle.db, taskId), undefined, "the row is retired: no longer active");
+  assert.equal(getActiveExclusiveClaimForTask(handle.db, taskId), undefined, "the row is retired: no longer active");
   const retired = getClaim(handle.db, oldClaimId);
   assert.ok(retired);
   assert.equal(retired!.state, "expired");
@@ -159,7 +159,7 @@ function assertLiveClosed(handle: StoreHandle, taskId: string, liveClaimId: stri
   assert.equal(released.length, 1, "exactly one task.claim-released for a live claim");
   assert.equal((released[0]!.payload as { claimId: string }).claimId, liveClaimId);
   assert.equal(claimExpiredEvents(handle, taskId).length, 0, "no task.claim-expired comes from closing a live claim");
-  assert.equal(getActiveClaimForTask(handle.db, taskId), undefined, "the live claim row is retired on release");
+  assert.equal(getActiveExclusiveClaimForTask(handle.db, taskId), undefined, "the live claim row is retired on release");
   assert.equal(getTask(handle.db, taskId)!.executionState, "unclaimed", "releasing a live claim flips executionState back");
 }
 
@@ -282,7 +282,7 @@ test("replay: closing over a ghost reproduces from the journal alone -- the clai
     assert.equal(repairStore(committed.storeDir).status, "ok", "full rebuild from the journal alone");
     const replayed = StoreHandle.open(committed.storeDir);
     try {
-      assert.equal(getActiveClaimForTask(replayed.db, "T-101"), undefined, "replay reproduces the row as not-active");
+      assert.equal(getActiveExclusiveClaimForTask(replayed.db, "T-101"), undefined, "replay reproduces the row as not-active");
       const retired = getClaim(replayed.db, claim.claim!.claimId);
       assert.ok(retired);
       assert.equal(retired!.state, "expired", "replay reproduces the row as expired, not a surviving ghost");

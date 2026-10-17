@@ -3,7 +3,7 @@ export type WorkDomain = {
   description: string
 }
 
-import type { PredictedStart } from "@mapctx/protocol"
+import type { ClaimExclusivity, ClaimRole, DispatchKind, PredictedStart } from "@mapctx/protocol"
 
 export type ProjectMetadata = {
   projectId: string
@@ -98,6 +98,21 @@ export type ResourceClaimRecord = {
    */
   renewToken: string | null
   state: ResourceClaimState
+  /**
+   * T-144 (C5 / D5): whether this claim excludes other claims on its task.
+   * NOT optional, unlike `renewToken`: migration 13 adds the column with
+   * `NOT NULL DEFAULT 'exclusive'`, which fills every historical row in the
+   * same statement, so there is no row anywhere -- migrated or replayed --
+   * that does not answer this. A nullable column here would be unsafe rather
+   * than merely untidy: the new index predicate reads
+   * `exclusivity = 'exclusive'`, so a NULL row would fall out of the
+   * uniqueness constraint while the application layer still treated it as
+   * exclusive, and a second explicitly-exclusive claim would insert beside it
+   * with no UNIQUE violation -- two effective holders of one task.
+   */
+  exclusivity: ClaimExclusivity
+  /** T-144: the lane this claim holds. Legacy rows are `implement`. */
+  role: ClaimRole
   claimedAt: string
   expiresAt: string
   holder: Record<string, unknown>
@@ -120,6 +135,16 @@ export type DisclosableClaimRecord = {
   claimId: string
   taskId: string
   state: ResourceClaimState
+  /**
+   * T-144: disclosed, deliberately. Neither field is a secret, and together
+   * they are the answer a refused caller most needs: a `task start` turned away
+   * by `active-claim-held` learns that an EXCLUSIVE IMPLEMENT claim holds the
+   * task, rather than being left to guess which of two possible lanes refused
+   * it. The allowlist above is about credentials, not about the shape of a
+   * lane.
+   */
+  exclusivity: ClaimExclusivity
+  role: ClaimRole
   claimedAt: string
   expiresAt: string
   holder: Record<string, unknown>
@@ -157,6 +182,17 @@ export type DispatchAttemptRecord = {
   attempt: number
   contextHash: string
   status: DispatchAttemptStatus
+  /**
+   * T-144 (C5 / D5): the lane this attempt runs in. Required for the same
+   * reason `exclusivity` is: migration 13 fills every historical row with
+   * `implement`, and the replay path normalizes an absent payload `kind` to the
+   * same value, so a reader never has to decide what a missing lane means.
+   *
+   * Fixed per `dispatchId`, not per attempt: attempt N+1 of a dispatch is a
+   * retry of the same lane, and `appendDispatchAttempt` refuses a kind that
+   * contradicts the attempts already recorded under that id.
+   */
+  kind: DispatchKind
   /**
    * T-071: the task's declared workload, frozen by the store at dispatch
    * creation (the PLANNED guess). Null for untagged tasks and pre-005 rows --

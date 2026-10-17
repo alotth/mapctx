@@ -213,13 +213,86 @@ export const dispatchStatusSchema = z.enum([
 ]);
 export type DispatchStatus = z.infer<typeof dispatchStatusSchema>;
 
+/**
+ * T-144 (C5 / D5): which lane a dispatch belongs to.
+ *
+ * The dispatch -- not the task row -- is where concurrency lives (§3, decision
+ * 2B). A review of a task under implementation is a SECOND, concurrent run, so
+ * it gets its own `dispatchId`, its own attempt counter and its own receipt,
+ * and `evaluateRunReceipt` (scoped per `dispatchId`) keeps implement and review
+ * attempts from ever invalidating each other. Encoding review as an
+ * `executionState` instead was rejected: `execution_state` is one scalar
+ * describing the task's own run, and one scalar cannot describe two concurrent
+ * runs.
+ *
+ * Absent means `implement`, which is what every dispatch written before this
+ * existed actually was.
+ */
+export const dispatchKindSchema = z.enum(["implement", "review"]);
+export type DispatchKind = z.infer<typeof dispatchKindSchema>;
+
+/**
+ * T-144 (C5 / D5): whether a claim excludes other claims on the same task.
+ *
+ * `exclusive` is what every claim has always been: the partial unique index
+ * admits one per task. `shared` claims are deliberately unlimited, because a
+ * task can legitimately be reviewed by two reviewers at once -- the ambiguity
+ * that creates is refused at lookup time (`ambiguous-claim`), never resolved by
+ * guessing.
+ *
+ * Named `exclusivity` rather than `mode` on purpose: `ResourceClaim.mode:
+ * "read" | "write"` already exists above for the planner's file-level resource
+ * locking. Same entity name, unrelated concept, different layer -- the two do
+ * not collide in the database (the lease record is a different table), but they
+ * would collide in review and in anybody's mental model.
+ */
+export const claimExclusivitySchema = z.enum(["exclusive", "shared"]);
+export type ClaimExclusivity = z.infer<typeof claimExclusivitySchema>;
+
+/**
+ * T-144: the lane a claim holds, and deliberately the SAME vocabulary as
+ * `dispatchKindSchema` rather than a parallel enum.
+ *
+ * One lane has two halves -- a claim that holds it and the dispatches that run
+ * in it -- and `task start --kind review` opens both from one word. Keeping one
+ * vocabulary is what lets the renewal lookup take a dispatch's `kind` straight
+ * to the claim's `role` with no mapping table to drift: a heartbeat on a review
+ * dispatch can only ever address a review claim.
+ */
+export const claimRoleSchema = dispatchKindSchema;
+export type ClaimRole = DispatchKind;
+
+/**
+ * T-144: the (exclusivity, role) pair a lane's claim carries, derived from the
+ * one word the caller passed.
+ *
+ * Two columns rather than one because each answers a different question that
+ * cannot be asked of the other: the unique index's predicate needs
+ * `exclusivity` (it is what "one holder per task" means), and the renewal and
+ * admission lookups need `role` (it is what "my lane" means). Derived in one
+ * place rather than at each call site so the pairing cannot drift -- there is
+ * no such thing as an exclusive review claim or a shared implement claim, and
+ * nothing in this design invents one.
+ */
+export function claimLaneFor(kind: DispatchKind): { exclusivity: ClaimExclusivity; role: ClaimRole } {
+  return kind === "review"
+    ? { exclusivity: "shared", role: "review" }
+    : { exclusivity: "exclusive", role: "implement" };
+}
+
 export const dispatchSchema = z.object({
   dispatchId: uuidSchema,
   taskId: taskIdSchema,
   executorKind: nonEmptyStringSchema,
   attempt: z.number().int().positive(),
   contextHash: nonEmptyStringSchema,
-  status: dispatchStatusSchema
+  status: dispatchStatusSchema,
+  /**
+   * Defaulted, not optional: a reader of a parsed dispatch always learns the
+   * lane, and the 235 dispatch attempts in the live store at migration time parse
+   * as the `implement` lane they were.
+   */
+  kind: dispatchKindSchema.default("implement")
 });
 export type Dispatch = z.infer<typeof dispatchSchema>;
 
