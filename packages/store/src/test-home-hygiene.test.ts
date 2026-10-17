@@ -6,7 +6,7 @@ import test from "node:test"
 import { importCommit } from "./cutover"
 import { resolveProjectStoreDir } from "./config"
 import { backupsRootFor, createBackup } from "./backup"
-import { cleanupDir, mkTmpDir, setupGoldenRepo } from "./__test-helpers__"
+import { cleanupDir, setupGoldenRepo } from "./__test-helpers__"
 
 // T-169: `setupGoldenRepo` materializes a whole store -- database, journal,
 // backups -- inside a fresh MAPCTX_HOME. `restoreEnv` used to put the env var
@@ -46,10 +46,16 @@ test("MUTATION GUARD: setupGoldenRepo's restoreEnv removes the populated MAPCTX_
 })
 
 test("the store test helper leaves none of its own temporary homes in os.tmpdir()", () => {
+  const previousEnv = process.env.MAPCTX_HOME
   const fixtures = [setupGoldenRepo(), setupGoldenRepo(), setupGoldenRepo()]
   const homes = fixtures.map(f => f.mapctxHome)
   try {
-    for (const fixture of fixtures) fixture.restoreEnv()
+    // Teardown is LIFO, because each setup saved the env var as it found it:
+    // fixture[1] remembers fixture[0]'s home. Restoring in creation order
+    // would leave MAPCTX_HOME pointing at a home that has just been removed,
+    // which is a trap for whatever test runs next in this process.
+    for (const fixture of [...fixtures].reverse()) fixture.restoreEnv()
+    assert.equal(process.env.MAPCTX_HOME, previousEnv, "nested fixtures torn down in reverse must leave the env exactly as it was")
 
     for (const home of homes) {
       assert.equal(fs.existsSync(home), false, `restoreEnv must remove ${home}`)
