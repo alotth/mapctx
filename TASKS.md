@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 27/34
+  - subIssueProgress: 28/35
   - priority: high
   - workload: null
   - tags: []
@@ -3067,7 +3067,7 @@
 ### [T-145] C6: receipt de revisão não move planning; forecast exclui kind != implement
 
   - id: T-145
-  - status: backlog
+  - status: doing
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3504,7 +3504,7 @@
 ### [T-168] Protocol: schemas JSON gerados podem divergir do zod sem teste que pegue (EventLogEntry sem redactions)
 
   - id: T-168
-  - status: backlog
+  - status: review
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3523,7 +3523,7 @@
 ### [T-169] Testes do store vazam MAPCTX_HOME temporario em /tmp (milhares de diretorios por rodada)
 
   - id: T-169
-  - status: backlog
+  - status: done
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3534,15 +3534,15 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-17
   - externalId: null
-  - updated: 2026-10-15
+  - updated: 2026-10-17
   - detail: ./tasks/T-169.md
 
 ### [T-170] Planner: staticPrefix nao pode cortar o prefixo no meio de uma sequencia de marcas combinantes (NFD, 2 marcas fora de ordem)
 
   - id: T-170
-  - status: backlog
+  - status: review
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3555,7 +3555,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-15
+  - updated: 2026-10-17
   - detail: ./tasks/T-170.md
 
 ### [T-171] Replay: role desconhecido em task.claimed torna a store irreparavel e a mensagem nao nomeia o evento
@@ -3576,6 +3576,25 @@
   - externalId: null
   - updated: 2026-10-17
   - detail: ./tasks/T-171.md
+
+### [T-172] Testes ainda vazam diretorios mkdtemp em /tmp fora do helper do store (~41 por rodada)
+
+  - id: T-172
+  - status: backlog
+  - type: chore
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: low
+  - workload: Easy
+  - tags: []
+  - domains: [TEST]
+  - dependsOn: []
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-17
+  - detail: ./tasks/T-172.md
 
 ## Notes
 
