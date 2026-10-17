@@ -1040,6 +1040,16 @@ export function listRunReceipts(db: DatabaseSync, dispatchId?: string, taskId?: 
  *
  * `claimed -> running -> outcome` in two hops because the machine has no
  * direct edge: a receipt may land on an attempt that never reported starting.
+ *
+ * Extracting this moved one assertion later for the implement path: the
+ * `claimed -> running` hop used to be asserted BEFORE the execution hops and
+ * is now asserted after them. That reorder is unobservable, and provably so
+ * rather than merely untested -- `DISPATCH_TRANSITIONS.claimed` includes
+ * `"running"` (`protocol/src/state-machines.ts`), and the assertion runs only
+ * under `status === "claimed"`, so its `from`/`to` pair is always legal and it
+ * cannot throw. There is therefore no input for which the old order surfaced
+ * one error and the new order surfaces another. The remaining assertions kept
+ * their relative order.
  */
 function advanceDispatchStatusForReceipt(
   db: DatabaseSync,
