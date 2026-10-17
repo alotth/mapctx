@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 30/36
+  - subIssueProgress: 31/36
   - priority: high
   - workload: null
   - tags: []
@@ -3067,7 +3067,7 @@
 ### [T-145] C6: receipt de revisão não move planning; forecast exclui kind != implement
 
   - id: T-145
-  - status: review
+  - status: done
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3078,7 +3078,7 @@
   - dependsOn: [T-144]
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-17
   - externalId: null
   - updated: 2026-10-17
   - detail: ./tasks/T-145.md
