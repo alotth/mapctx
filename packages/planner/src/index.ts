@@ -260,6 +260,11 @@ function wildcardIndex(path: string): number {
  * review attempt 1, MÉDIA-1). Trimming the PREFIX only ever shortens it, which
  * compares more broadly; it was `partial` moving that could narrow.
  *
+ * Only a TRAILING run comes off, which is what the `$` anchor is for. A mark
+ * further back in the head belongs to a real directory name rather than to the
+ * truncation, so eating it produces a prefix that fails to match the glob's own
+ * files: without the anchor, `src/à/b*` stops colliding with `src/à/bc.ts`.
+ *
  * `\p{M}` and not `\p{Mn}`: 27 of the combining marks that canonical ordering
  * reorders are SPACING marks (Mc) rather than nonspacing — U+302E/U+302F Hangul
  * tone marks, U+1B44 Balinese adeg adeg, U+1715 Tagalog pamudpod — and a
