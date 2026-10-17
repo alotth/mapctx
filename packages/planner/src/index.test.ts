@@ -789,6 +789,35 @@ test("T-170 review M\u00C9DIA-2: a literal path ending in a combining mark still
   assert.equal(report.serializedPairs.length, 1);
 });
 
+test("T-170 review MÉDIA-1: `partial` must come from the UNTRIMMED head, or a dir-boundary glob stops colliding with its string prefix", () => {
+  // The head here is `src/` + a trailing combining mark -- trimming the mark
+  // exposes the `/` that was already there, so `head.endsWith("/")` becomes
+  // true and `partial` (read from the TRIMMED head) would flip to false. That
+  // sends `pathOverlap` down the strict `/`-boundary branch instead of the
+  // broad string-prefix one, and the literal "sr" -- a string prefix of "src"
+  // but not a path-boundary prefix of it -- stops colliding. `partial` must
+  // therefore come from the UNTRIMMED head: the wildcard truncated inside a
+  // segment, and the head only *looks* like it ends on a boundary once the
+  // mark comes off.
+  //
+  // The pair itself is a benign false positive either way -- "sr" and "src"
+  // are different directories, never the same file -- so what this test
+  // actually pins is MONOTONICITY (nothing that used to serialize may start
+  // running in parallel), not this specific pair's correctness. This is the
+  // shape of all 8 pairs the reviewer's full ordered-pair sweep found
+  // narrowed by the bug (T-170 review attempt 1, MÉDIA-1).
+  const grave = "̀"; // COMBINING GRAVE ACCENT
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "dir-boundary glob ending in a combining mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}*`] },
+      { id: "T-B", title: "string prefix, not a path-boundary prefix", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["sr"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "partial read from the trimmed head would flip this collision off -- it must come from the untrimmed head instead");
+  assert.equal(report.serializedPairs.length, 1);
+});
+
 test("T-170 control: sibling literal paths with a shared prefix stay disjoint", () => {
   const report = planExecution({
     tasks: [
