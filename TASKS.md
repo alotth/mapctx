@@ -3080,7 +3080,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: 2026-10-14
+  - updated: 2026-10-17
   - detail: ./tasks/T-145.md
 
 ### [T-146] C7: mapctx task split e aviso de cadeia de attempts
@@ -3517,7 +3517,7 @@
   - due: null
   - completed: null
   - externalId: null
-  - updated: null
+  - updated: 2026-10-17
   - detail: ./tasks/T-168.md
 
 ### [T-169] Testes do store vazam MAPCTX_HOME temporario em /tmp (milhares de diretorios por rodada)
