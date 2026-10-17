@@ -627,6 +627,288 @@ test("T-166: an accented glob does not collide with a genuinely different accent
   assert.deepEqual(report.serializedPairs, []);
 });
 
+// ---- T-170 (T-166 review attempt 2, N1): `staticPrefix` cuts a declared
+// pattern at its first wildcard and `pathOverlap` compares the pieces with
+// `startsWith`. Canonical normalization SORTS a run of combining marks by
+// canonical combining class, so a cut landing BETWEEN two marks written out
+// of canonical order is not a reliable prefix of anything -- no choice of
+// normal form fixes this, because the defect is in the truncation, not the
+// form. `staticPrefix` now drops trailing combining marks (`\p{M}+$`) so its
+// head always ends on a base character.
+//
+// GRAVE = U+0300 COMBINING GRAVE ACCENT (Mn, ccc 230)
+// DOTBELOW = U+0323 COMBINING DOT BELOW (Mn, ccc 220 -- sorts BEFORE grave)
+// TILDEOVER = U+0334 COMBINING TILDE OVERLAY (Mn, ccc 1)
+// HANGUL2 = U+302F HANGUL DOUBLE DOT TONE MARK (Mc, ccc 224 -- spacing, reorders)
+// BALI = U+1B44 BALINESE ADEG ADEG (Mc, ccc 9 -- spacing, reorders)
+// VISARGA = U+0903 DEVANAGARI SIGN VISARGA (Mc, ccc 0 -- spacing, does NOT reorder)
+//
+// Escapes throughout, never raw combining marks: the marks are themselves
+// invisible in a terminal/editor, which is worse than T-166's accented
+// literals -- a tool that silently re-orders or re-normalizes the file would
+// make this fail (or pass) for the wrong reason without any visible diff.
+
+test("T-170: the N1 repro -- a glob ending in a combining mark serializes against the canonically-equivalent out-of-order file", () => {
+  const grave = "a\u0300"; // "a" + COMBINING GRAVE ACCENT (ccc 230)
+  const dotBelowThenGrave = "a\u0323\u0300"; // dot-below (ccc 220) + grave (ccc 230): canonical order
+  const graveThenDotBelow = "a\u0300\u0323"; // grave + dot-below: NOT canonical order
+  assert.notEqual(graveThenDotBelow, dotBelowThenGrave, "sentinel: the two mark orderings must differ byte-wise");
+  // The file is written grave-then-dot-below (non-canonical); normalizePath's
+  // NFD step sorts it to dot-below-then-grave, so the glob's trimmed head
+  // (`src/a`, mark dropped) must still match it.
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob ending in a combining mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}*`] },
+      { id: "T-B", title: "file with marks in non-canonical order", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${graveThenDotBelow}.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "without the trim, the head keeps the grave mark and stops matching the sorted (canonical) spelling of the file");
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-170: the N1 repro still serializes when the file is already in canonical mark order", () => {
+  const grave = "a\u0300";
+  const dotBelowThenGrave = "a\u0323\u0300"; // already canonical order
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob ending in a combining mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}*`] },
+      { id: "T-B", title: "file already in canonical mark order", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${dotBelowThenGrave}.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-170: a single-character wildcard right after a combining mark still serializes", () => {
+  const grave = "a\u0300";
+  const graveThenDotBelowX = "a\u0300\u0323x"; // non-canonical order, extra trailing char
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "single-char wildcard after a mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}?.ts`] },
+      { id: "T-B", title: "out-of-order file", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${graveThenDotBelowX}.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-170: a directory-boundary wildcard after a combining mark still serializes", () => {
+  const grave = "a\u0300";
+  const graveThenDotBelow = "a\u0300\u0323";
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "directory glob after a mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}*/x.ts`] },
+      { id: "T-B", title: "out-of-order directory file", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${graveThenDotBelow}/x.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+// ---- T-170: the two spacing marks (Mc) that canonical ordering reorders.
+// `\p{Mn}` (nonspacing-only) would miss both; `\p{M}` (any mark) is required.
+
+test("T-170: a HANGUL DOUBLE DOT TONE MARK (Mc, reorders) glob still serializes -- \\p{Mn} alone would miss this", () => {
+  const hangul = "a\u302F"; // U+302F HANGUL DOUBLE DOT TONE MARK (Mc, ccc 224)
+  const hangulThenTilde = "a\u302F\u0334"; // + U+0334 COMBINING TILDE OVERLAY (Mn, ccc 1 -- lower ccc, so NFD reorders it to sort BEFORE the ccc-224 mark, ahead of the one dropped by the \p{M} trim)
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob ending in a spacing mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${hangul}*`] },
+      { id: "T-B", title: "file with a second, lower-ccc mark appended", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${hangulThenTilde}.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "a nonspacing-only trim (\\p{Mn}) would leave this Mc mark in the head and miss the match");
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-170: a BALINESE ADEG ADEG (Mc, reorders) glob still serializes -- \\p{Mn} alone would miss this", () => {
+  const bali = "a\u1B44"; // U+1B44 BALINESE ADEG ADEG (Mc, ccc 9)
+  const baliThenTilde = "a\u1B44\u0334"; // + U+0334 COMBINING TILDE OVERLAY (Mn, ccc 1)
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob ending in a spacing mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${bali}*`] },
+      { id: "T-B", title: "file with a second, lower-ccc mark appended", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${baliThenTilde}.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "a nonspacing-only trim (\\p{Mn}) would leave this Mc mark in the head and miss the match");
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+// ---- T-170: the reviewer's four non-suppression controls. Unchanged by the
+// trim -- it must not have widened to always-true.
+
+test("T-170 control: an unrelated path stays disjoint from an accented glob", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/a*"] },
+      { id: "T-B", title: "unrelated", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["docs/b.md"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]]);
+  assert.deepEqual(report.serializedPairs, []);
+});
+
+test("T-170 control: two concrete (non-glob) paths with genuinely different accents stay disjoint", () => {
+  // No wildcard on either side, so `staticPrefix` returns before the trim
+  // ever runs. Both fixtures end in ".ts" (not a mark), so the trim would be a
+  // no-op on them even if it DID run -- this is a non-widening control, not
+  // coverage of the early return itself. The early return's necessity --
+  // that it must gate the trim at all -- is covered by the literal/child
+  // collision test below instead.
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "acute", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/caf\u00E9.ts"] },
+      { id: "T-B", title: "grave", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/caf\u00E8.ts"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]]);
+  assert.deepEqual(report.serializedPairs, []);
+});
+
+test("T-170 review M\u00C9DIA-2: a literal path ending in a combining mark still collides with its own child -- the trim must not run on a literal", () => {
+  // `staticPrefix`'s early return (`if (wildcard < 0) ...`) must gate the
+  // trim: a literal path is a complete name, not a truncated head, so
+  // trimming it would drop a mark the filesystem actually has. Under the
+  // mutation that applies the trim unconditionally, the literal `src/a`+GRAVE
+  // becomes the bare prefix `src/a`, which is no longer a `/`-boundary prefix
+  // of `src/a`+GRAVE+`/x.ts` -- a real parent/child collision goes missed and
+  // the pair runs in parallel. With the early return intact, the literal
+  // keeps its mark and the collision is found.
+  const grave = "a\u0300"; // "a" + COMBINING GRAVE ACCENT
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "literal ending in a combining mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}`] },
+      { id: "T-B", title: "child of that literal", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}/x.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "a literal ending in a combining mark must still collide with its own child -- the trim is for truncated glob heads, not literal names");
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-170 review MÉDIA-1: `partial` must come from the UNTRIMMED head, or a dir-boundary glob stops colliding with its string prefix", () => {
+  // The head here is `src/` + a trailing combining mark -- trimming the mark
+  // exposes the `/` that was already there, so `head.endsWith("/")` becomes
+  // true and `partial` (read from the TRIMMED head) would flip to false. That
+  // sends `pathOverlap` down the strict `/`-boundary branch instead of the
+  // broad string-prefix one, and the literal "sr" -- a string prefix of "src"
+  // but not a path-boundary prefix of it -- stops colliding. `partial` must
+  // therefore come from the UNTRIMMED head: the wildcard truncated inside a
+  // segment, and the head only *looks* like it ends on a boundary once the
+  // mark comes off.
+  //
+  // The pair itself is a benign false positive either way -- "sr" and "src"
+  // are different directories, never the same file -- so what this test
+  // actually pins is MONOTONICITY (nothing that used to serialize may start
+  // running in parallel), not this specific pair's correctness. This is the
+  // shape of all 8 pairs the reviewer's full ordered-pair sweep found
+  // narrowed by the bug (T-170 review attempt 1, MÉDIA-1).
+  const grave = "\u0300"; // COMBINING GRAVE ACCENT
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "dir-boundary glob ending in a combining mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}*`] },
+      { id: "T-B", title: "string prefix, not a path-boundary prefix", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["sr"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "partial read from the trimmed head would flip this collision off -- it must come from the untrimmed head instead");
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-170: a combining mark in the MIDDLE of the head must survive the trim -- only a trailing run is dropped", () => {
+  // The trim is `/\p{M}+$/u` -- anchored to the END of the head. A mark
+  // partway through the head is part of the real name of a directory the
+  // glob is inside, not a truncation artifact, and dropping it would produce
+  // a prefix that fails to match the glob's OWN declared files. Here the
+  // mark sits right after "a", well before the wildcard that truncates at
+  // "/b*": the head is `src/a`+GRAVE+`/b`, which has no trailing mark at all,
+  // so the trim must be a no-op and the collision must still be found.
+  //
+  // This is the mutation-killer for the `$` anchor specifically: without it,
+  // `.replace(/\p{M}+/u, "")` (no anchor) eats the FIRST run of marks found
+  // anywhere in the string -- here, the internal one -- turning the head into
+  // `src/a/b`, which does not match `src/a`+GRAVE+`/bc.ts` at all.
+  const grave = "a\u0300"; // "a" + COMBINING GRAVE ACCENT, in the MIDDLE of the head
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob with a mark mid-head, not at the end", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}/b*`] },
+      { id: "T-B", title: "file sharing the same mid-head mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}/bc.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "an unanchored trim would eat the mid-head mark and the glob would stop matching its own declared file");
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-170 control: sibling literal paths with a shared prefix stay disjoint", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "store", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["packages/store"] },
+      { id: "T-B", title: "store-ui", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["packages/store-ui"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]]);
+  assert.deepEqual(report.serializedPairs, []);
+});
+
+test("T-170 control: a partial-prefix glob still matches its sibling as before", () => {
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/foo*.ts"] },
+      { id: "T-B", title: "matching file", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/foobar.ts"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]]);
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+// ---- T-170: the cost of the trim, pinned so it is not rediscovered as a
+// defect later. Deliberate over-serialization: an accented glob's trimmed
+// head now also matches its bare base letter, in the conservative direction
+// this comparison is required to err in.
+
+test("T-170 cost: an accented glob now also serializes against its bare base-letter spelling", () => {
+  const grave = "caf\u0300"; // "caf" + COMBINING GRAVE ACCENT
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "accented glob", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}*`] },
+      { id: "T-B", title: "bare base letter, no accent at all", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/cafe.ts"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "deliberate breadth cost: the trimmed head no longer distinguishes an accented glob from its unaccented base letter");
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-170 cost: an accented glob now also serializes against a DIFFERENT accent on the same base letter", () => {
+  const grave = "caf\u0300";
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "accented glob (grave)", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}*`] },
+      { id: "T-B", title: "different accent (acute)", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/caf\u00E9.ts"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "deliberate breadth cost: the trim cannot tell this accent from any other once the mark is dropped from the head");
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-170 control: a non-reordering spacing mark (VISARGA, Mc, ccc 0) does not accidentally widen an unrelated collision", () => {
+  const visarga = "a\u0903"; // U+0903 DEVANAGARI SIGN VISARGA (Mc, ccc 0 -- does not reorder)
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob ending in a non-reordering mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${visarga}*`] },
+      { id: "T-B", title: "unrelated file", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/b.ts"] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]]);
+  assert.deepEqual(report.serializedPairs, []);
+});
+
+
 test("T-133 point 6: the scheduler's normalizePath case-folds declared claims; protocol's pathsOverlap does not fold observed paths", () => {
   const report = planExecution({
     tasks: [

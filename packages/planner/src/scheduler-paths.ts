@@ -57,27 +57,33 @@
  * NFD decomposes instead, so the base letter survives as its own code point
  * and a prefix cut at a base letter still holds.
  *
- * WHAT NEITHER FORM FIXES — canonical REORDERING. Every normal form sorts
- * combining marks by canonical combining class, so a prefix cut BETWEEN two
- * marks written out of canonical order does not survive the sort. `src/à*`
- * against `src/à`+`◌̣`+`.ts` — grave (ccc 230) written first, dot-below
- * (ccc 220) second, so NFD swaps them — leaves `src/à` no longer a prefix,
- * and that pair serializes on `52c73af` and runs parallel here (T-166 review
- * attempt 2, N1). This is a property of the truncation, not of the form: no
- * choice of normal form delivers it, and the fix belongs in `staticPrefix`,
- * which must not cut inside a combining sequence — tracked as **T-170**.
+ * WHAT NO NORMAL FORM FIXES, AND WHERE IT IS FIXED INSTEAD — canonical
+ * REORDERING. Every normal form sorts combining marks by canonical combining
+ * class, so a prefix cut BETWEEN two marks written out of canonical order does
+ * not survive the sort. `src/à*` against `src/à`+`◌̣`+`.ts` — grave (ccc 230)
+ * written first, dot-below (ccc 220) second, so NFD swaps them — left `src/à`
+ * no longer a prefix, and that pair serialized on `52c73af` and ran parallel
+ * under T-166 (T-166 review attempt 2, N1).
  *
- * Note what the single-mark measurement above can and cannot show: a sweep
- * with one mark per name has no prefix boundary between two marks, which is
- * the only place NFD breaks, so "NFD breaks none" is evidence about
- * composition and says nothing about reordering. The same sweep over two
- * marks breaks roughly a third of its probes under NFD and slightly more
- * under NFC.
+ * That is a property of the TRUNCATION, not of the form: no choice of normal
+ * form delivers it. **T-170 fixed it where it lives**, in `staticPrefix`,
+ * which now drops trailing combining marks so a static prefix always ends on a
+ * base character. The exception is closed — see that function for the `\p{M}`
+ * versus `\p{Mn}` argument and for what the trim costs in breadth.
  *
- * Reachability today is nil: it needs a hand-typed `filesAffected` glob cut
- * between two marks in non-canonical order. macOS and Linux both report a
- * single combining sequence already in canonical order, which is the whole
- * case this task exists for.
+ * Note meanwhile what the single-mark measurement above can and cannot show: a
+ * sweep with one mark per name has no prefix boundary between two marks, which
+ * is the only place NFD breaks, so "NFD breaks none" is evidence about
+ * composition and says nothing about reordering. The same sweep over two marks
+ * breaks roughly a third of its probes under NFD and slightly more under NFC.
+ * Those breaks are now absorbed by the trim rather than reaching a comparison.
+ *
+ * It was never reachable from an observed board either — it needs a hand-typed
+ * `filesAffected` glob cut between two marks in non-canonical order, and macOS
+ * and Linux both report a single combining sequence already in canonical
+ * order, which is the whole case this task exists for. Fixed anyway, because a
+ * comparison that is conservative only for the inputs seen so far is not
+ * conservative.
  *
  * CANONICAL, NOT COMPATIBILITY. NFKC/NFKD would be a bug, not a stricter
  * version of this: they map 215 code points onto characters this function
@@ -95,11 +101,14 @@
  * read this one definition precisely so they cannot disagree about what one
  * filename is. With NFD the effect is to widen for every disagreement the
  * fleet actually produces: two paths differing only in the normal form of one
- * combining sequence become the same file, and no comparison that matched
- * before stops matching, so for that class a plan serializes more, never
- * less. The one exception is the reordering case above — a glob prefix cut
- * between two marks in non-canonical order, unreachable without a hand-typed
- * path, fixed in `staticPrefix` under T-170. macOS reports NFD and Linux NFC,
+ * combining sequence become the same file. The intended direction is that no
+ * comparison which matched before stops matching, and the reordering case
+ * above was the known exception until T-170 closed it in `staticPrefix`. Treat
+ * that as measured rather than proved: it is an all-ordered-pairs A/B against
+ * the pre-change build (2601 pairs, 0 narrowing), and the two narrowings found
+ * so far — this one and T-170's own first attempt — were both invisible to a
+ * hand-picked shape list, so re-measure that way before widening the claim.
+ * macOS reports NFD and Linux NFC,
  * so on a mixed-OS fleet the alternative was a scheduler that ran two writers
  * of one file in parallel.
  */
