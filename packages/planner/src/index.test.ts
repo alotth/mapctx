@@ -711,7 +711,7 @@ test("T-170: a directory-boundary wildcard after a combining mark still serializ
 
 test("T-170: a HANGUL DOUBLE DOT TONE MARK (Mc, reorders) glob still serializes -- \\p{Mn} alone would miss this", () => {
   const hangul = "a\u302F"; // U+302F HANGUL DOUBLE DOT TONE MARK (Mc, ccc 224)
-  const hangulThenTilde = "a\u302F\u0334"; // + U+0334 COMBINING TILDE OVERLAY (Mn, ccc 1 -- lower, sorts after under NFD... )
+  const hangulThenTilde = "a\u302F\u0334"; // + U+0334 COMBINING TILDE OVERLAY (Mn, ccc 1 -- lower ccc, so NFD reorders it to sort BEFORE the ccc-224 mark, ahead of the one dropped by the \p{M} trim)
   const report = planExecution({
     tasks: [
       { id: "T-A", title: "glob ending in a spacing mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${hangul}*`] },
@@ -753,7 +753,11 @@ test("T-170 control: an unrelated path stays disjoint from an accented glob", ()
 
 test("T-170 control: two concrete (non-glob) paths with genuinely different accents stay disjoint", () => {
   // No wildcard on either side, so `staticPrefix` returns before the trim
-  // ever runs -- this control exists to confirm the trim did not change that.
+  // ever runs. Both fixtures end in ".ts" (not a mark), so the trim would be a
+  // no-op on them even if it DID run -- this is a non-widening control, not
+  // coverage of the early return itself. The early return's necessity --
+  // that it must gate the trim at all -- is covered by the literal/child
+  // collision test below instead.
   const report = planExecution({
     tasks: [
       { id: "T-A", title: "acute", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: ["src/caf\u00E9.ts"] },
@@ -762,6 +766,27 @@ test("T-170 control: two concrete (non-glob) paths with genuinely different acce
   });
   assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A", "T-B"]]);
   assert.deepEqual(report.serializedPairs, []);
+});
+
+test("T-170 review M\u00C9DIA-2: a literal path ending in a combining mark still collides with its own child -- the trim must not run on a literal", () => {
+  // `staticPrefix`'s early return (`if (wildcard < 0) ...`) must gate the
+  // trim: a literal path is a complete name, not a truncated head, so
+  // trimming it would drop a mark the filesystem actually has. Under the
+  // mutation that applies the trim unconditionally, the literal `src/a`+GRAVE
+  // becomes the bare prefix `src/a`, which is no longer a `/`-boundary prefix
+  // of `src/a`+GRAVE+`/x.ts` -- a real parent/child collision goes missed and
+  // the pair runs in parallel. With the early return intact, the literal
+  // keeps its mark and the collision is found.
+  const grave = "a\u0300"; // "a" + COMBINING GRAVE ACCENT
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "literal ending in a combining mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}`] },
+      { id: "T-B", title: "child of that literal", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}/x.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "a literal ending in a combining mark must still collide with its own child -- the trim is for truncated glob heads, not literal names");
+  assert.equal(report.serializedPairs.length, 1);
 });
 
 test("T-170 control: sibling literal paths with a shared prefix stay disjoint", () => {
