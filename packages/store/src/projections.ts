@@ -1033,27 +1033,62 @@ export function listRunReceipts(db: DatabaseSync, dispatchId?: string, taskId?: 
   return rows.map(row => JSON.parse(row.receipt_json) as RunReceipt);
 }
 
+/**
+ * T-145 (C6): the review lane's own dispatch lifecycle, which a review receipt
+ * DOES advance -- shared with the implement path so the two cannot drift on
+ * what a receipt does to its own attempt row.
+ *
+ * `claimed -> running -> outcome` in two hops because the machine has no
+ * direct edge: a receipt may land on an attempt that never reported starting.
+ */
+function advanceDispatchStatusForReceipt(
+  db: DatabaseSync,
+  receipt: RunReceipt,
+  dispatch: DispatchAttemptRecord
+): void {
+  let status = dispatch.status;
+  if (status === "claimed") {
+    assertTransition("dispatch", status, "running");
+    status = "running";
+  }
+  assertTransition("dispatch", status, receipt.outcome);
+  updateDispatchStatus(db, receipt.dispatchId, receipt.attempt, receipt.outcome);
+}
+
 export function applyRunReceipt(db: DatabaseSync, receipt: RunReceipt, revision: EventRevision, workloadAtReceipt: string | null = null): void {
   const dispatch = getDispatchAttempt(db, receipt.dispatchId, receipt.attempt);
   if (!dispatch) throw new Error(`Cannot record receipt for unknown dispatch attempt: ${receipt.dispatchId}/${receipt.attempt}`);
   const task = getTask(db, dispatch.taskId);
   if (!task) throw new Error(`Cannot record receipt for unknown task: ${dispatch.taskId}`);
 
+  // T-145 (C6 / §3): a REVIEW receipt records the review, and nothing else.
+  // It advances its own attempt's status and lands its own row; it does not
+  // touch the task's `executionState` or `planningState`, because those
+  // describe the IMPLEMENT run and a review is a second, concurrent one. The
+  // compatibility note §3 makes is the whole of this change: a `completed`
+  // review receipt no longer carries planning to `review`. That is new
+  // surface rather than changed surface -- before T-144 no review dispatch
+  // could exist, so no receipt ever took this branch.
+  //
+  // Promoting `review -> done`, or sending the work back to `in-progress`,
+  // stays an explicit orchestrator or operator decision. A review that says
+  // "this is wrong" must not be able to move the board on its own, and a
+  // review that says "this is right" must not either.
+  if (dispatch.kind === "review") {
+    advanceDispatchStatusForReceipt(db, receipt, dispatch);
+    insertRunReceipt(db, receipt, workloadAtReceipt);
+    return;
+  }
+
   const targetExecution = receipt.outcome;
   let currentExecution = task.executionState;
-  let currentDispatch = dispatch.status;
-  if (currentDispatch === "claimed") {
-    assertTransition("dispatch", currentDispatch, "running");
-    currentDispatch = "running";
-    if (currentExecution !== "running") {
-      assertTransition("execution", currentExecution, "running");
-      currentExecution = "running";
-      patchTask(db, task.taskId, { executionState: currentExecution }, revision);
-    }
+  if (dispatch.status === "claimed" && currentExecution !== "running") {
+    assertTransition("execution", currentExecution, "running");
+    currentExecution = "running";
+    patchTask(db, task.taskId, { executionState: currentExecution }, revision);
   }
-  assertTransition("dispatch", currentDispatch, targetExecution);
   assertTransition("execution", currentExecution, targetExecution);
-  updateDispatchStatus(db, receipt.dispatchId, receipt.attempt, targetExecution);
+  advanceDispatchStatusForReceipt(db, receipt, dispatch);
 
   const taskPatch: Partial<TaskRecord> = { executionState: targetExecution };
   // R9: a blocked RUN is recorded (dispatch + execution carry blocked), but
@@ -1514,6 +1549,34 @@ export function listHistoryCorrections(db: DatabaseSync, query: { taskId?: strin
 export function listInvalidatedReceiptKeys(db: DatabaseSync): Set<string> {
   const rows = db.prepare("SELECT target_id FROM history_correction_projection WHERE target_kind = 'receipt' AND verdict = 'invalid'").all() as Array<{ target_id: string }>;
   return new Set(rows.map(row => row.target_id));
+}
+
+/**
+ * T-145 (C6 / §3): attempt identity keys (dispatchId/attempt) that belong to a
+ * lane other than `implement`.
+ *
+ * Deliberately the same shape as `listInvalidatedReceiptKeys` above, because
+ * it answers the same kind of question for the same consumer: which receipts
+ * must never calibrate. The two exclusions are independent and both apply --
+ * a review receipt that was also invalidated by a history correction is
+ * excluded twice over, and neither list knows about the other.
+ *
+ * Why the forecast must not see these at all: `forecast/src/store.ts` reads
+ * every receipt as a workload-duration sample. Review time and implementation
+ * time are different populations -- a quick review receipt on a `Hard` task
+ * would otherwise be read as "`Hard` tasks finish fast", corrupting exactly
+ * the estimate `estimatedEffort` now has to earn its keep for, since T-141
+ * derives the lease from it.
+ *
+ * A FACT lookup, not the policy: the decision to exclude lives beside the
+ * other calibration exclusions in the forecast package. This only reports
+ * which attempts are in which lane.
+ */
+export function listNonImplementAttemptKeys(db: DatabaseSync): Set<string> {
+  const rows = db.prepare(
+    "SELECT dispatch_id, attempt FROM dispatch_projection WHERE kind <> 'implement'"
+  ).all() as Array<{ dispatch_id: string; attempt: number }>;
+  return new Set(rows.map(row => `${row.dispatch_id}/${row.attempt}`));
 }
 
 /**

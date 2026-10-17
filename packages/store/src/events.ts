@@ -672,6 +672,13 @@ export function assertNewEventAdmission(db: DatabaseSync, entry: EventLogEntry):
     if (!dispatch) throw new Error(`Cannot record receipt for unknown dispatch attempt: ${receipt.dispatchId}/${receipt.attempt}`);
     const task = getTask(db, dispatch.taskId);
     if (!task) throw new Error(`Cannot record receipt for unknown task: ${dispatch.taskId}`);
+    // T-145 (C6): the third of the three receipt admission points, kept in
+    // step with `dispatch.ts`'s by hand because this is the raw-append door
+    // and T-118's whole point is that the two must not drift. A review
+    // receipt asserts nothing about the task: it moves no planning state, so
+    // neither the completed-receipt planning refusal below nor
+    // `assertReceiptPlanningAdmission` has anything to adjudicate.
+    if (dispatch.kind === "review") return;
     if (receipt.outcome === "completed" && !["in-progress", "review"].includes(task.planningState)) {
       throw new Error(
         `Cannot record completed receipt: task ${task.taskId} is "${task.planningState}" -- completed receipts land in review from in-progress only. ` +
