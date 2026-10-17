@@ -54,6 +54,71 @@
           "pattern": "^[a-f0-9]{64}$",
           "type": "string"
         },
+        "redactions": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "actor": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "fieldPaths": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "priorPayloadSha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "reason": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "redactedAt": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
+                "type": "string"
+              },
+              "redactedPayloadSha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "redactionEvent": {
+                "additionalProperties": false,
+                "properties": {
+                  "nodeId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "exclusiveMinimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "nodeId",
+                  "sequence"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "fieldPaths",
+              "reason",
+              "actor",
+              "redactedAt",
+              "priorPayloadSha256",
+              "redactedPayloadSha256",
+              "redactionEvent"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
         "schemaVersion": {
           "exclusiveMinimum": 0,
           "type": "integer"
