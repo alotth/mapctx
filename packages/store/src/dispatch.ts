@@ -101,7 +101,11 @@ export function appendDispatchAttempt(
   const kind: DispatchKind = input.kind ?? existingKind ?? "implement";
   if (existingKind !== undefined && kind !== existingKind) {
     throw new Error(
-      `Dispatch ${input.dispatchId} is a ${existingKind} dispatch; attempt ${input.attempt} cannot be ${kind}. `
+      // T-145: phrased as lanes, matching `startTask`'s refusal, now that
+      // `--kind` makes this message user-reachable for the first time (it
+      // also read "is a implement dispatch", which nobody saw while the lane
+      // had no CLI).
+      `Dispatch ${input.dispatchId} runs in the ${existingKind} lane; attempt ${input.attempt} cannot run in the ${kind} one. `
       + `Open a separate dispatch for the ${kind} lane.`
     );
   }
@@ -125,8 +129,17 @@ export function appendDispatchAttempt(
       : listActiveClaimsForTask(store.db, input.taskId, { role: "review" });
     const held = lane.find(claim => new Date(claim!.expiresAt).getTime() > nowMs);
     if (!held) {
+      // T-145 (review F1): the advice is lane-specific, because for review it
+      // used to be actively wrong. This message read "Use mapctx task start
+      // <id>, or task claim followed by dispatch create" for BOTH lanes --
+      // but `task claim` has no `--kind`, so a reviewer following it took an
+      // exclusive implement claim and blocked the work they meant to review.
+      // `task start --kind review` is the only command that opens this lane.
       throw new Error(
-        `Dispatch requires an active ${kind} claim. Use mapctx task start ${input.taskId}, or task claim followed by dispatch create.`
+        kind === "review"
+          ? `Dispatch requires an active review claim. Use mapctx task start ${input.taskId} --kind review, which takes the shared `
+            + `review claim; task claim cannot open the review lane (it has no --kind, and would take the exclusive implement claim).`
+          : `Dispatch requires an active implement claim. Use mapctx task start ${input.taskId}, or task claim followed by dispatch create.`
       );
     }
   }
@@ -383,6 +396,14 @@ export function recordEstimateSnapshot(
  */
 function receiptPlanningGuard(store: StoreHandle, receipt: RunReceipt, dispatch: DispatchAttemptRecord): Extract<ReceiptWriteResult, { ok: false }> | null {
   if (receipt.outcome !== "completed") return null;
+  // T-145 (C6): this guard exists to stop a completed receipt landing on a
+  // task whose planning state does not say the work was started -- and it
+  // teaches the retroactive-attestation remedy. Neither applies to a review
+  // receipt, which moves no planning state at all: there is nothing for the
+  // planning state to be wrong FOR. Refusing here would make a task's
+  // planning state decide whether its review may be recorded, which is the
+  // coupling §3 removes.
+  if (dispatch.kind === "review") return null;
   const task = getTask(store.db, dispatch.taskId);
   if (!task) return null;
   if (task.planningState === "in-progress" || task.planningState === "review") return null;
@@ -396,17 +417,28 @@ function receiptPlanningGuard(store: StoreHandle, receipt: RunReceipt, dispatch:
 function assertReceiptTransitions(store: StoreHandle, receipt: RunReceipt, dispatch: DispatchAttemptRecord): void {
   const task = getTask(store.db, dispatch.taskId);
   if (!task) throw new Error(`Cannot record receipt for unknown task: ${dispatch.taskId}`);
-  let execution = task.executionState;
   let dispatchStatus = dispatch.status;
+  // T-145 (C6): the review lane asserts only its OWN attempt's lifecycle.
+  //
+  // Skipping the execution and planning assertions is not a relaxation of
+  // safety -- it is what keeps them meaningful. A review receipt completing
+  // while the implementation is `claimed` would otherwise assert
+  // `claimed -> completed` on the task's execution state and pass, marking
+  // the implementation finished because somebody finished reviewing it. The
+  // assertions that remain are the ones that describe something this receipt
+  // actually is: its own dispatch attempt's hops.
+  const laneIsReview = dispatch.kind === "review";
+  let execution = task.executionState;
   if (dispatchStatus === "claimed") {
     assertTransition("dispatch", dispatchStatus, "running");
     dispatchStatus = "running";
-    if (execution !== "running") {
+    if (!laneIsReview && execution !== "running") {
       assertTransition("execution", execution, "running");
       execution = "running";
     }
   }
   assertTransition("dispatch", dispatchStatus, receipt.outcome);
+  if (laneIsReview) return;
   assertTransition("execution", execution, receipt.outcome);
   // T-118: shared with the new-event writer gate (events.ts) so command and
   // raw admission can never drift apart on any outcome.

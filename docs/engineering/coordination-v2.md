@@ -958,6 +958,29 @@ Still open, for the operator:
   once C4 ships the heartbeat exclusion (§2), because without it the arrival
   of heartbeats would rewrite `activeTimeMs` for every run and the
   re-derivation would be reading its own artifact rather than the work.
+- **Two live review claims make heartbeat renewal unusable for both, and the
+  precise fix needs a schema decision this document declined.** Shared claims
+  are deliberately uncapped (§3: two reviewers on one task is legitimate), so
+  `task start --kind review` on a task that already has a live review claim
+  mints a second one — and with two live claims in one lane `resolveLaneClaim`
+  refuses `ambiguous-claim` at *both* renewal doors until a lease lapses, for
+  both reviewers. D11 doubles exactly that window. The common way in is not
+  two reviewers at all: it is one reviewer retrying their own lane
+  (`--dispatch-id <review chain>`) while their previous claim is still alive.
+  C6 (T-145) ships the cheap half — `task start` warns, on stderr and in
+  `--json`, at the moment it creates that state, and names the way out
+  (`task renew --claim <id>`, or release before retrying). The expensive half
+  is a *refusal* scoped to "a second claim for THIS dispatch", and it is not
+  expressible today: a claim row carries no dispatch reference, because §2
+  weighed persisting that edge and declined it (it would have to survive
+  retries, and the token scope is `claimId`, not `(dispatchId, attempt)`).
+  Refusing on the only predicate that IS available — "any live review claim on
+  this task" — would contradict §3 in letter. So the choice is: accept the
+  warning as the answer, or **reopen §2's decision and persist a
+  claim↔dispatch edge**, which would also make §9's "claims that outlived one
+  lease" metric computable (§9 already notes it is not, for the same missing
+  edge). That is an operator decision, and it is the only thing standing
+  between this and a precise refusal.
 - ~~Should a shared review claim expire on the same schedule as an implement
   claim?~~ **Answered (D11, operator, 2026-10-15): longer, not non-expiring.**
   A reviewer idle for hours is less harmful than a stalled implementer, but a
@@ -1091,6 +1114,7 @@ existing event. Approving the design does not approve these individually.
 | D9 | Write two `history.correction-recorded` events against T-107/T-108 | §5 | (a) record corrections; (b) delete the false receipts; (c) leave the mis-attribution | **(a).** The backfill is contradicted in the audit trail rather than erased. (b) destroys history; (c) leaves both tasks reading `completed` for work never done |
 | D10 | Lease factor and cap (`estimatedEffort × 0.5`, clamp 30 min…8 h) | §2, §7 | (a) adopt as the starting point and re-derive after C4; (b) pick different numbers now; (c) keep the fixed 30 min | **(a).** The figures are an honest first guess; re-deriving them before C4's heartbeat exclusion would read the measurement artifact rather than the work |
 | D11 | Does a shared review claim expire on the implement schedule? | §7 | (a) same schedule; (b) longer; (c) no expiry for review claims | **Decided by the operator (2026-10-15): (b) longer.** A review lease uses the same derivation with a larger factor, still clamped by the 24 h absolute ceiling, so it expires and does not accumulate ghosts. **Factor set in C5 (T-144): `reviewLeaseFactor = 2`, configurable under `[coordination]`** — see the note below for the shape of the clamp, which is the part D11 left open. An idle reviewer is less harmful than a stalled implementer, which argues against (a), but (c) accumulates ghosts in a lane the sweeper would then have to special-case |
+| D15 | **Persist a claim↔dispatch edge?** §2 declined it (the token's scope is `claimId`, and the edge would have to survive retries), and C6 (T-145) found the two places that now pay for the absence: a second live review claim in one lane cannot be refused precisely — only warned about, which is what C6 ships — and §9's "claims that outlived one lease" stays uncomputable | §2, §7, §9 | (a) keep the runtime lookup, accept the warning and the missing metric; (b) persist the edge (a migration plus a decision about what it means across retries) | **(a) for now**, which is what is implemented. (b) buys a precise refusal and one metric, and costs a schema column whose meaning across a retry chain §2 could not settle — worth revisiting only if the ambiguity is actually hit in practice, which the C6 warning will now make visible |
 | D12 | **A0 or B** in ADR 0005, and whether Git-ref CAS is accepted at all | §8 | per ADR 0005; the first ADR accepted fixes the other | Not T-124's call, and this document no longer writes as if B had won. §8 holds under either; C10 stays out of wave until this lands |
 | D13 | **Execute §5's re-scope of T-107 and T-108**: move the `bulk-updated-timestamp` severity change from T-107 to T-127, and **revise T-108's acceptance** to drop criterion `a7e927fd` ("Heartbeat registrado como follow-up: os dados do scan decidem se varredor basta ou se precisa de heartbeat"), which exists and is `pending` — §2 of this document decides that question, so the criterion is now answered rather than outstanding | §5 | (a) execute both via `task update` and `task acceptance revise`; (b) leave T-108's criterion pending and let whoever implements T-108 discover it is already decided; (c) keep `bulk-updated-timestamp` in T-107 | **(a).** §5 says "this document decides it", but T-124 **cannot** execute it: these are planning changes to two other tasks, and acceptance revision in particular is an operator act. Flagged here precisely because the earlier drafts decided it in prose and left no one holding the action |
 | D14 | **Does C1's one-fewer-journal-event count as an observable change requiring approval?** After C1, `move done` over a ghost claim stops journaling a fictitious `task.claim-released` | §2, §6 | (a) yes — C1 carries the marker (current position); (b) no — the banner is amended to say that *removing* a provably false event is outside the definition | **(a)**, chosen as the conservative reading: the banner's test is "observable semantics of an existing event", and one fewer event meets it whether or not the event was a fiction. (b) is defensible and cheaper, but it means writing an exemption into the banner, and an exemption is the kind of thing that gets reused later for changes that deserve the marker |

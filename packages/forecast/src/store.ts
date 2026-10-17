@@ -1,4 +1,4 @@
-import { getTask, listCostEvents, listDispatchAttempts, listInvalidatedReceiptKeys, listRunEvents, listRunReceipts, listWorkloadDeltaRows } from "@mapctx/store"
+import { getTask, listCostEvents, listDispatchAttempts, listInvalidatedReceiptKeys, listNonImplementAttemptKeys, listRunEvents, listRunReceipts, listWorkloadDeltaRows } from "@mapctx/store"
 import type { EstimateSnapshot } from "@mapctx/protocol"
 import { durationMeasuresFromReceipt } from "./duration"
 import { buildEstimateSnapshot, estimationErrorByPlannedWorkload } from "./estimate"
@@ -20,6 +20,47 @@ function withoutInvalidated<T extends { dispatchId: string; attempt: number }>(i
 }
 
 /**
+ * T-145 (C6 / §3): calibration is IMPLEMENT-ONLY, unconditionally.
+ *
+ * Review time and implementation time are different populations. Every
+ * receipt reaching this package becomes a workload-duration sample, so a
+ * ten-minute review receipt on a `Hard` task would otherwise teach the prior
+ * that `Hard` tasks finish in ten minutes -- and since T-141 the lease is
+ * derived from `estimatedEffort`, that corruption feeds straight back into
+ * how long an agent is given to do the work.
+ *
+ * Unconditional, with no option to include them: there is no caller who wants
+ * review durations pooled with implementation durations, and an option would
+ * only be a way to get it wrong. A review lane's own duration statistics, if
+ * anyone ever wants them, are a separate population that would need its own
+ * pool rather than a flag on this one.
+ *
+ * `withoutInvalidated`'s twin by design -- same signature, same place in the
+ * pipeline, applied at the same two entry points -- so the two calibration
+ * exclusions read as one idea with two reasons rather than as two mechanisms.
+ * This is the shared helper both calibration paths go through; adding a third
+ * entry point means calling it there too, and the review-receipt test is what
+ * notices if you do not.
+ *
+ * NOT applied to display. `gantt.ts` reads receipts to draw the roadmap, and
+ * a review that happened should be visible as a thing that happened; what it
+ * must not do is calibrate. Lane-aware display is C8's.
+ */
+function implementLaneOnly<T extends { dispatchId: string; attempt: number }>(items: readonly T[], db: StoreDatabase): T[] {
+  const nonImplement = listNonImplementAttemptKeys(db)
+  if (nonImplement.size === 0) return [...items]
+  return items.filter(item => !nonImplement.has(`${item.dispatchId}/${item.attempt}`))
+}
+
+/**
+ * The two calibration exclusions, in one place so an entry point cannot pick
+ * up one and miss the other.
+ */
+function calibrationSamples<T extends { dispatchId: string; attempt: number }>(items: readonly T[], db: StoreDatabase): T[] {
+  return implementLaneOnly(withoutInvalidated(items, db), db)
+}
+
+/**
  * Canonical-workload coercion. Store rows carry free strings; the forecast
  * pools speak the four-value enum. Anything else (typos, future values)
  * degrades to untagged rather than poisoning a pool with a class nothing
@@ -36,7 +77,7 @@ export function buildEstimateFromStore(
   taskId: string,
   options: EstimateOptions = {}
 ): EstimateSnapshot {
-  const receipts = withoutInvalidated(listRunReceipts(db, undefined, taskId), db)
+  const receipts = calibrationSamples(listRunReceipts(db, undefined, taskId), db)
   // T-071: dispatch attempts carry the planned workload frozen at hand-off.
   const plannedByAttempt = new Map(
     listDispatchAttempts(db, undefined, taskId).map(
@@ -73,9 +114,10 @@ export const forecastTaskFromStore = buildEstimateFromStore
  * stamp; both undefined when untagged.
  */
 export function workloadDeltaSamplesFromStore(db: StoreDatabase, taskId?: string): ForecastSample[] {
-  const invalidated = listInvalidatedReceiptKeys(db)
-  return listWorkloadDeltaRows(db, taskId)
-    .filter(row => !invalidated.has(`${row.dispatchId}/${row.attempt}`))
+  // T-145: through the shared pair rather than re-filtering `invalidated`
+  // inline, which is how this entry point would have kept the history
+  // exclusion and silently missed the lane one.
+  return calibrationSamples(listWorkloadDeltaRows(db, taskId), db)
     .map(row => ({
     duration: durationMeasuresFromReceipt(row.startedAt, row.endedAt, { timeEvidence: listRunReceipts(db, row.dispatchId).find(receipt => receipt.attempt === row.attempt)?.timeEvidence }),
     historyTier: listRunReceipts(db, row.dispatchId).find(receipt => receipt.attempt === row.attempt)?.historyTier,

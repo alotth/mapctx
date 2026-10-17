@@ -91,7 +91,7 @@ import {
   approveAcceptanceCriteria,
   unapproveAcceptanceCriterion,
   getAcceptance,
-  getLiveActiveClaim,
+  listActiveClaimsForTask,
   checkTaskAcceptance,
   type CoordinationSettings,
   type MapctxTomlConfig
@@ -139,6 +139,15 @@ type MapctxOptions = SyncOptions & {
   id?: string;
   executor?: string;
   contextHash?: string;
+  /**
+   * T-145 (C6 / D6): which lane `task start` / `dispatch create` opens.
+   * `implement` (the default, and what every dispatch before T-144 was) or
+   * `review`. Deliberately NOT shipped by T-144, which built the lane in the
+   * store: D6 holds the flag back until the receipt-admission guard exists,
+   * because without it a completed review receipt would carry the task's
+   * planning state to `review`.
+   */
+  kind?: string;
   title?: string;
   type?: string;
   parent?: string;
@@ -330,7 +339,7 @@ export const VALUE_FLAGS: ReadonlySet<string> = new Set([
   '--description-file', '--dispatch', '--dispatch-id', '--domains', '--due', '--effort',
   '--emit-approval-template', '--end', '--evidence', '--executor', '--expect-revision', '--field',
   '--acceptance-file', '--expect-title',
-  '--file', '--from-file', '--holder', '--id', '--idle-threshold-ms', '--impact', '--index',
+  '--file', '--from-file', '--holder', '--id', '--idle-threshold-ms', '--impact', '--index', '--kind',
   '--lease', '--limit', '--minutes', '--node', '--note', '--opencode-db', '--other-session-activity',
   '--parent', '--parked-threshold-ms', '--payload', '--plan-name', '--priority', '--query', '--reason',
   '--reason-file', '--receipt', '--renew-token', '--repo', '--review-threshold-ms', '--role', '--seats',
@@ -519,8 +528,19 @@ function printHelp(): void {
   console.log('    issues/status/dates in the GitHub repo+project bound in mapctx.toml [github].');
   console.log('    Requires the gh CLI authenticated.');
   console.log('  mapctx task claim <task-id> [--lease duration] [--json] [--actor name] [--holder json]');
-  console.log('  mapctx task start <task-id> [--dispatch-id id] [--executor kind] [--context-hash hash] [--status claimed|running] [--lease duration] [--holder json] [--actor name] [--json]');
+  console.log('  mapctx task start <task-id> [--kind implement|review] [--dispatch-id id] [--executor kind] [--context-hash hash] [--status claimed|running] [--lease duration] [--holder json] [--actor name] [--json]');
   console.log('    Atomically claims the task and creates a dispatch. Returns claimId, leaseToken, renewToken, dispatchId and attempt; preferred execution entry point.');
+  console.log('    `--kind review` opens the REVIEW lane: a shared claim plus a review dispatch, for reviewing work that is still being implemented.');
+  console.log('      It is never refused because an implement claim is held, and never blocks one -- review must not stall the work it reviews.');
+  console.log('      A review receipt records the review and nothing else: it does not move the task\'s planning or execution state, so promoting');
+  console.log('      review -> done, or sending the work back, stays an explicit decision. Review durations never calibrate the forecast.');
+  console.log('      `--kind implement` is the default and is what every dispatch before this flag existed was. With --dispatch-id the lane comes');
+  console.log('      from the named dispatch: omitting --kind inherits it, and a --kind that contradicts it is refused rather than half-applied.');
+  console.log('      Shared claims are uncapped (two reviewers on one task is legitimate), but with two LIVE review claims heartbeat renewal cannot');
+  console.log('      choose between them and reports ambiguous-claim for both; task start warns when it creates that state. Renew yours with');
+  console.log('      `task renew --claim <id>`, or release the previous claim before retrying your own review lane.');
+  console.log('    A review lease is LONGER than the implement lease the same plan derives -- [coordination] reviewLeaseFactor, default 2 --');
+  console.log('      because an idle reviewer is less harmful than a stalled implementer. It still expires, and still cannot exceed the 24h ceiling.');
   console.log('    Lease duration is derived from the plan, not fixed: clamp(estimatedEffort x leaseFactor, defaultLease, maxLease),');
   console.log('    so an Easy/30m task and a Hard/2d task no longer get the same window. Defaults: leaseFactor 0.5, defaultLease 30m, maxLease 8h.');
   console.log('    `--lease <duration>` (30m, 4h, 1d, 1w) overrides both config and the derived value, and is NOT clamped -- it is an explicit choice.');
@@ -589,9 +609,11 @@ function printHelp(): void {
   console.log('    planning state including done/archived. A one-line --description with literal \\n is');
   console.log('    unescaped to line breaks; --description-file is read verbatim. An empty or whitespace-only');
   console.log('    description is refused (empty-description). Commit the file change.');
-  console.log('  mapctx dispatch create <task-id> [--dispatch-id id] [--status claimed|running] (default claimed) [--executor kind] [--context-hash hash] [--json] [--actor name]');
+  console.log('  mapctx dispatch create <task-id> [--kind implement|review] [--dispatch-id id] [--status claimed|running] (default claimed) [--executor kind] [--context-hash hash] [--json] [--actor name]');
   console.log('    New dispatch (fresh id, attempt 1) or --dispatch-id to append attempt max+1 to an existing one.');
   console.log('    Prints the dispatchId/attempt to feed `mapctx dispatch receipt`.');
+  console.log('    `--kind review` needs a live REVIEW claim (an implement claim does not satisfy it, and vice versa); see `task start --kind`.');
+  console.log('    A dispatch id names one lane for its whole life: on an existing dispatch --kind is inherited, and a contradicting one is refused.');
   console.log('  mapctx dispatch receipt <dispatch-id> --receipt path [--claude-transcript path] [--other-session-activity path] [--idle-threshold-ms n] [--review-threshold-ms n] [--parked-threshold-ms n] [--time-zone zone] [--json]');
   console.log('  mapctx dispatch receipt <dispatch-id> --read --json');
   console.log('  mapctx reconcile <task-id> [--accept | --discard] [--json] [--actor name]');
@@ -844,6 +866,7 @@ function parseArgs(argv: string[]): {
     else if (a === '--dispatch-id') options.dispatchId = valueFor(a);
     else if (a === '--id') options.id = valueFor(a);
     else if (a === '--executor') options.executor = valueFor(a);
+    else if (a === '--kind') options.kind = valueFor(a);
     else if (a === '--context-hash') options.contextHash = valueFor(a);
     else if (a === '--title') options.title = valueFor(a);
     else if (a === '--type') options.type = valueFor(a);
@@ -962,6 +985,47 @@ function parseArgs(argv: string[]): {
         const alternative = base === '--no-snapshot' ? ' Use it on its own, or --snapshot=none.' : ' Use it on its own.';
         throw new Error(`${base} takes no value.${alternative}`);
       }
+    }
+  }
+
+  /**
+   * T-145 (review F1): `--kind` is refused by every command that does not
+   * read it.
+   *
+   * `--kind` lives in the global `VALUE_FLAGS` table because `task start` and
+   * `dispatch create` need it, which -- with no per-command allowlist in this
+   * parser -- made every other command accept and drop it. For most flags that
+   * is the harmless, pre-existing class T-173 covers generally. For this one it
+   * was not harmless: `task claim <id> --kind review` took the flag, ignored
+   * it, minted an `exclusive`/`implement` claim and carried planning to
+   * `in-progress` -- precisely "take an exclusive claim on somebody's work in
+   * progress", the outcome this release's own typo refusal exists to prevent,
+   * and the inversion §3 forbids, since the implementer is then refused by the
+   * "reviewer". The path was not exotic either: the dispatch gate's own advice
+   * used to read "task claim followed by dispatch create", so a reviewer
+   * following the tool's instructions typed exactly that.
+   *
+   * Refused here rather than in each command because here is the one place
+   * that knows both the command and its subcommand, so a flag cannot be
+   * forgotten by a command added later. `refuse` (not `throw`) for the same
+   * reason `task renew` refuses `--lease`, which is the precedent this
+   * follows: the caller's input is answered by name, with a reason code a
+   * `--json` consumer can read, never silently discarded.
+   *
+   * Deliberately one flag, not a mechanism: the general per-command allowlist
+   * is T-173's, and building it here would be building that task.
+   */
+  if (options.kind !== undefined) {
+    const acceptsKind = (command === 'task' && positional[0] === 'start')
+      || (command === 'dispatch' && positional[0] === 'create');
+    if (!acceptsKind) {
+      const named = [command, positional[0]].filter(Boolean).join(' ') || '(no command)';
+      refuse(
+        { ok: false, reason: 'kind-not-accepted', command: named, kind: options.kind },
+        `--kind is not accepted by ${named}; only task start and dispatch create open a lane.`
+        + ` To review a task, use \`mapctx task start <task-id> --kind review\`, which takes the SHARED review claim --`
+        + ` task claim would have taken the exclusive implement claim and blocked the implementation it meant to review.`
+      );
     }
   }
 
@@ -1754,9 +1818,23 @@ export function renderHolder(holder: Record<string, unknown> | undefined): strin
   return joined.length > HOLDER_RENDER_LIMIT ? `${joined.slice(0, HOLDER_RENDER_LIMIT)}…` : joined;
 }
 
+/**
+ * T-145 (C6, review B4 item 1 of T-144): the human line names the LANE.
+ *
+ * T-144 added `exclusivity`/`role` to the disclosable claim and justified them
+ * by saying a refused caller "learns that an EXCLUSIVE IMPLEMENT claim holds
+ * the task" -- but only a `--json` consumer learned it, because this line,
+ * which is what a person actually reads, still said only who held it and
+ * until when. Now that `--kind review` exists there are two lanes a refusal
+ * could be about, and "which lane turned me away" is the first thing the
+ * reader needs: a reviewer refused by an implement claim has a different next
+ * step (none -- review is never refused by implementation, so the refusal
+ * means something else) than an implementer refused by another implementer.
+ */
 function activeClaimSuffix(activeClaim: DisclosableClaimRecord | undefined): string {
   if (!activeClaim) return '';
-  return ` -- claim ${activeClaim.claimId} held by ${renderHolder(activeClaim.holder)}, expires ${activeClaim.expiresAt}`;
+  return ` -- ${activeClaim.exclusivity} ${activeClaim.role} claim ${activeClaim.claimId}`
+    + ` held by ${renderHolder(activeClaim.holder)}, expires ${activeClaim.expiresAt}`;
 }
 
 /**
@@ -2800,18 +2878,47 @@ export function taskUpdateCommand(taskId: string, options: MapctxOptions): void 
  * succeeded, and no read for a warning may turn a successful update into an
  * error.
  */
+/**
+ * T-145 (C6, review B4 item 2 of T-144): EVERY live lane, not just the
+ * exclusive one.
+ *
+ * T-142 added this warning because editing `detail.estimatedEffort` silently
+ * changes the window of the next renewal for whoever holds the task. T-144
+ * then pointed `getLiveActiveClaim` at the exclusive lane -- correct for its
+ * own callers, but it left this warning blind to review claims, so editing
+ * the estimate while a reviewer held the only live claim moved THAT
+ * reviewer's window with no word about it. Worse under D11: a review lease is
+ * twice as long, so the edit it silently reshapes is the bigger one.
+ *
+ * Every live claim is listed rather than counted, because the holder who
+ * needs to know is a specific one and the lane tells them whether it is them.
+ */
 function effortChangedUnderLiveClaimWarning(
-  handle: { db: Parameters<typeof getLiveActiveClaim>[0] },
+  handle: { db: Parameters<typeof listActiveClaimsForTask>[0] },
   taskId: string,
   detailPatch: Record<string, unknown>
 ): string | undefined {
   if (!Object.prototype.hasOwnProperty.call(detailPatch, 'estimatedEffort')) return undefined;
   try {
-    const claim = getLiveActiveClaim(handle.db, taskId, () => new Date());
-    if (!claim) return undefined;
-    return `Note: ${taskId} has a live claim (${claim.claimId}, expires ${claim.expiresAt}).`
-      + ` Its next renewal re-derives the lease from detail.estimatedEffort, so this edit changes the lane's window`
-      + ` even though you are not necessarily its holder.`;
+    const nowMs = Date.now();
+    const live = listActiveClaimsForTask(handle.db, taskId)
+      .filter(claim => new Date(claim.expiresAt).getTime() > nowMs);
+    if (live.length === 0) return undefined;
+    const held = live
+      .map(claim => `${claim.role} claim ${claim.claimId} (expires ${claim.expiresAt})`)
+      .join('; ');
+    // "claims", not "lanes": two of these can be two reviewers in ONE lane,
+    // and telling an operator this edit moved "both lanes" when it moved two
+    // review windows would be a confident falsehood about their board.
+    const reviewLive = live.some(claim => claim.role === 'review');
+    return `Note: ${taskId} has ${live.length} live ${live.length === 1 ? 'claim' : 'claims'} -- ${held}.`
+      + ` The next renewal of each re-derives its lease from detail.estimatedEffort, so this edit changes`
+      + ` ${live.length === 1 ? 'its' : 'every one of those'} window${live.length === 1 ? '' : 's'}`
+      + ` even though you are not necessarily a holder.`
+      + (reviewLive
+        ? ` A review claim re-derives on the review factor ([coordination] reviewLeaseFactor), so the same edit moves`
+          + ` a review window and an implement window by different amounts.`
+        : '');
   } catch {
     return undefined;
   }
@@ -3044,11 +3151,72 @@ export function taskFinishCommand(taskId: string, options: MapctxOptions): void 
   } finally { handle.close(); }
 }
 
+/**
+ * T-145 (C6 / D6): `--kind implement|review`, the flag T-144 built the lane
+ * for and deliberately did not expose.
+ *
+ * Refused by name rather than silently defaulted: a typo (`--kind reveiw`)
+ * that fell back to `implement` would take an EXCLUSIVE claim on a task
+ * somebody is implementing, which is the one outcome a reviewer never wants
+ * and the refusal `--kind review` exists to avoid.
+ */
+function laneKindOption(options: MapctxOptions, command: string): 'implement' | 'review' | undefined {
+  if (options.kind === undefined) return undefined;
+  if (options.kind !== 'implement' && options.kind !== 'review') {
+    throw new Error(`${command} --kind must be implement or review, got: ${options.kind}`);
+  }
+  return options.kind;
+}
+
+/**
+ * T-145 (C6, review N1 of T-144): the moment a second live review claim comes
+ * into being, say so.
+ *
+ * Shared claims are deliberately uncapped -- two reviewers on one task is
+ * legitimate (§3) -- but with two live review claims neither renewal door can
+ * choose between them, so heartbeat renewal stops for BOTH reviewers until a
+ * lease lapses, and D11 doubles exactly that window. The common way to land
+ * here is not two reviewers at all: it is one reviewer retrying their own lane
+ * (`task start --dispatch-id <review chain>`) while their previous claim is
+ * still alive.
+ *
+ * A WARNING, not a refusal, and that is an operator decision (2026-10-17):
+ * refusing would need to turn away any new review claim on a task that
+ * already has one, which contradicts §3 in letter, and a precise refusal --
+ * "not a second claim for THIS dispatch" -- is not expressible, because a
+ * claim row carries no dispatch reference (§2 weighed persisting that edge and
+ * declined). So the gap is visibility, not permission: exit 0, name the count,
+ * and name the way out. The house precedent is T-142's `estimatedEffort`
+ * warning and T-143's F3, both exit 0 with a line on stderr.
+ */
+function reviewLaneAmbiguityWarning(
+  handle: { db: Parameters<typeof listActiveClaimsForTask>[0] },
+  taskId: string,
+  mintedClaimId: string
+): { liveReviewClaims: number; message: string } | undefined {
+  try {
+    const nowMs = Date.now();
+    const live = listActiveClaimsForTask(handle.db, taskId, { role: 'review' })
+      .filter(claim => new Date(claim.expiresAt).getTime() > nowMs);
+    if (live.length < 2) return undefined;
+    return {
+      liveReviewClaims: live.length,
+      message: `Note: ${taskId} now holds ${live.length} live review claims. Heartbeat renewal cannot choose between them`
+        + ` (\`mapctx run event\` will report ambiguous-claim for every one of them), so renew yours explicitly with`
+        + ` \`mapctx task renew ${taskId} --claim ${mintedClaimId} --token <leaseToken>\`.`
+        + ` If you are retrying your own review lane, release the previous claim first and the ambiguity goes away.`
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 export function taskStartCommand(taskId: string, options: MapctxOptions): void {
   const cwd = process.cwd();
   const status = options.status ?? 'claimed';
   if (status !== 'claimed' && status !== 'running') throw new Error(`task start status must be claimed or running, got: ${status}`);
   const holder = options.holder ? JSON.parse(options.holder) : undefined;
+  const kind = laneKindOption(options, 'task start');
   const { handle } = openStoreOrFail(cwd);
   try {
     const result = startTask(handle, {
@@ -3059,10 +3227,15 @@ export function taskStartCommand(taskId: string, options: MapctxOptions): void {
       executorKind: options.executor,
       contextHash: options.contextHash,
       status,
+      kind,
       leaseDurationMs: leaseOverrideMs(options),
       coordination: resolveCoordination(cwd)
     });
     if (!result.ok) refuse(result, `Start refused: ${result.reason}${result.message ? ` -- ${result.message}` : ''}${activeClaimSuffix(result.activeClaim)}`);
+    const ambiguity = result.claim.role === 'review'
+      ? reviewLaneAmbiguityWarning(handle, taskId, result.claim.claimId)
+      : undefined;
+    if (ambiguity) console.error(ambiguity.message);
     print({
       ...result,
       taskId,
@@ -3074,10 +3247,19 @@ export function taskStartCommand(taskId: string, options: MapctxOptions): void {
       // handing over release authority, which is the whole point of D2.
       renewToken: result.claim.renewToken,
       expiresAt: result.claim.expiresAt,
+      // T-145: the lane, on the success path too -- an agent that passed
+      // `--kind review` should be able to confirm it got the review lane
+      // without re-reading the claim.
+      kind: result.dispatch.kind,
+      claimRole: result.claim.role,
+      claimExclusivity: result.claim.exclusivity,
       dispatchId: result.dispatch.dispatchId,
       attempt: result.dispatch.attempt,
       status: result.dispatch.status,
       executorKind: result.dispatch.executorKind,
+      // T-145 (N1): structured beside the stderr line, so a `--json` consumer
+      // learns it without scraping stderr.
+      ...(ambiguity ? { reviewLaneAmbiguity: ambiguity } : {}),
       next: `mapctx dispatch receipt ${result.dispatch.dispatchId} --receipt <path>`
     }, options.json);
   } finally { handle.close(); }
@@ -3120,7 +3302,11 @@ export function dispatchCreateCommand(taskId: string, options: MapctxOptions): v
         executorKind: options.executor ?? 'cli',
         attempt,
         contextHash,
-        status
+        status,
+        // T-145: on an existing chain `appendDispatchAttempt` inherits the
+        // lane when this is undefined and refuses a kind that contradicts it,
+        // so passing the flag through is all this command has to do.
+        kind: laneKindOption(options, 'dispatch create')
       }
     }, defaultActor(options.actor), true);
     if (!result.ok) refuse(result, `Dispatch refused: ${result.reason}`);
@@ -3130,6 +3316,7 @@ export function dispatchCreateCommand(taskId: string, options: MapctxOptions): v
       attempt,
       taskId,
       status,
+      kind: result.dispatch.kind,
       executorKind: options.executor ?? 'cli',
       next: `mapctx dispatch receipt ${dispatchId} --receipt <path>`
     }, options.json);

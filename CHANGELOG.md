@@ -67,6 +67,70 @@
 
 ## mapctx CLI — [0.4.0] (Unreleased)
 
+### Features: the review lane becomes usable, and never calibrates (T-145)
+
+* **feature:** `mapctx task start --kind implement|review` and `mapctx dispatch
+  create --kind implement|review`. This is the flag T-144 built the lane for
+  and deliberately withheld: operator decision D6 held it back until a review
+  receipt could no longer move the task's planning state, which is the rest of
+  this release. `--kind review` takes a shared claim and opens a review
+  dispatch; it is never refused because an implement claim is held, and never
+  blocks one. With `--dispatch-id` the lane comes from the named dispatch —
+  omitting `--kind` inherits it, a contradicting one is refused — and a typo
+  like `--kind reveiw` is refused by name rather than falling back to
+  `implement`, which would take an exclusive claim on somebody's work in
+  progress.
+* **feature:** a **review receipt records the review and nothing else.** It
+  advances its own dispatch attempt and lands its own row; it does not move
+  the task's `executionState` or `planningState`. So a completed review no
+  longer carries the task to `review`, a review arriving after a failed
+  implementation does not revive it, and promoting `review -> done` or sending
+  work back stays an explicit decision. Both arrival orders work, and a review
+  receipt is admissible whatever the task's planning state — a review is not
+  the work, so the planning state has no say in whether it can be recorded.
+  New surface, not changed surface: before T-144 no review dispatch existed.
+* **feature:** **review durations never calibrate the forecast.** Both
+  calibration entry points exclude any attempt whose lane is not `implement`,
+  through one shared helper beside the existing history-correction exclusion.
+  Review time and implementation time are different populations: a ten-minute
+  review receipt on a `Hard` task would otherwise teach the prior that `Hard`
+  tasks finish in ten minutes, and since the lease is derived from
+  `estimatedEffort` that corruption feeds back into how long an agent is given
+  to work. Deliberately NOT applied to display (`gantt`): a review that
+  happened should be visible, it just must not calibrate. Cost is also
+  unfiltered on purpose — a review's tokens are a real cost of the task.
+* **fix:** a claim refusal's human line now names the lane that refused:
+  `exclusive implement claim <id> held by …` rather than `claim <id> held by
+  …`. T-144 added the fields and justified them by what a refused caller
+  learns, but only `--json` consumers were learning it.
+* **fix:** the warning that fires when `detail.estimatedEffort` is edited
+  under a live claim now sees **every** live lane, not just the exclusive one.
+  Editing the estimate while a reviewer held the only live claim moved that
+  reviewer's renewal window with no word about it — and a review lease is
+  twice as long, so the window it silently reshaped was the bigger one.
+* **fix:** `--kind` is refused by every command that does not open a lane.
+  Because the flag is global to the parser and only `task start` and `dispatch
+  create` read it, `mapctx task claim <id> --kind review` used to take the
+  flag, ignore it, mint an **exclusive implement** claim and carry planning to
+  `in-progress` — taking an exclusive claim on somebody's work in progress,
+  which is the exact outcome the typo refusal exists to prevent, and leaving
+  the implementer refused by the "reviewer". The misspelling got through there
+  too. The refusal names the command and points at `task start --kind review`,
+  and carries a `kind-not-accepted` reason for `--json` consumers. The dispatch
+  gate's advice is lane-specific for the same reason: it used to say "task
+  claim followed by dispatch create" for both lanes, which for review sent the
+  reader down exactly that path. (The general case — any globally-known flag
+  accepted and ignored by a command that does not read it — is separate and
+  pre-existing; this is the one instance that mints the wrong lane.)
+* **fix:** `task start --kind review` warns — exit 0, a line on stderr and a
+  `reviewLaneAmbiguity` field under `--json` — when it creates a *second* live
+  review claim on a task. Shared claims are uncapped by design, but with two
+  live ones heartbeat renewal cannot choose between them and reports
+  `ambiguous-claim` for both until a lease lapses. The warning names the count
+  and the way out. It is a warning and not a refusal because a precise refusal
+  ("not a second claim for this dispatch") needs a claim↔dispatch edge the
+  design declined to persist; see D15.
+
 ### Features: review becomes a lane the store can see (T-144)
 
 * **feature:** a dispatch declares which lane it runs in — `kind` is
