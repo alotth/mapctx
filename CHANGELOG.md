@@ -261,12 +261,11 @@ filenames in NFD and Linux in NFC, so `café.ts` written on one host and
 
 Two consequences, and the first is the reason the second was accepted:
 
-* **`mapctx plan` serializes more, not less, for every disagreement a mixed
-  fleet produces.** Two tasks whose declared paths differ only in the normal
-  form of one combining sequence now collide, so they land in different waves
-  instead of running in parallel over one file, and nothing in that class that
-  used to be serialized becomes parallel. The exception is canonical
-  reordering, below.
+* **`mapctx plan` serializes more, not less.** Two tasks whose declared paths
+  differ only in the normal form of one combining sequence now collide, so they
+  land in different waves instead of running in parallel over one file, and
+  nothing that used to be serialized becomes parallel. Canonical reordering was
+  an exception to that until T-170 closed it in `staticPrefix`, below.
 * **The serialized-pair route stops recording a false `overbroad`.** Two
   receipts spelling one file NFC and NFD no longer read as proof that
   serializing the pair was unnecessary; guard G4 fires and the pair is skipped
@@ -284,19 +283,18 @@ prefix ended on, so under NFC `src/cafe*` stops matching the NFD spelling of
 file. Across 15 declared-path shapes against a `52c73af` build, NFD narrows 0
 and NFC narrows 4; tests pin each of those four shapes.
 
-**What no normal form fixes: canonical reordering.** Every form sorts combining
-marks by canonical combining class, so a glob whose static prefix is cut
-*between* two marks written out of canonical order does not survive the sort —
-`src/à*` against `src/à`+`◌̣`+`.ts` (grave first, dot-below second, which NFD
-swaps) serializes on `52c73af` and runs parallel here. That is a property of
-the truncation rather than of the form, and the fix belongs in `staticPrefix`,
-which must not cut inside a combining sequence: tracked as **T-170**. It needs
-a hand-typed `filesAffected` glob to reach, since macOS and Linux both report a
-single combining sequence already in canonical order, so no board state
-observed today exercises it. Note also that a prefix sweep with one mark per
-name — which is what shows NFD breaking none — has no boundary between two
-marks and therefore cannot see this class at all; over two marks, NFD breaks
-roughly a third of its probes.
+**What no normal form fixes, fixed in the truncation instead (T-170).** Every
+form sorts combining marks by canonical combining class, so a glob whose static
+prefix is cut *between* two marks written out of canonical order does not
+survive the sort — `src/à*` against `src/à`+`◌̣`+`.ts` (grave first, dot-below
+second, which NFD swaps) serialized on `52c73af` and ran parallel under T-166.
+No choice of normal form delivers that, because it is a property of the
+truncation: `staticPrefix` now drops trailing combining marks so a static
+prefix always ends on a base character, which closes the shape. Note also that
+a prefix sweep with one mark per name — which is what shows NFD breaking none —
+has no boundary between two marks and therefore cannot see this class at all;
+over two marks, NFD breaks roughly a third of its probes, and those breaks are
+now absorbed by the trim.
 
 The form is canonical on purpose: NFKC/NFKD map 215 code points onto
 characters this comparison treats as structure (`U+2025` → `..`, `U+FF0F` → `/`,
@@ -324,6 +322,41 @@ holding a non-ASCII path additionally carries its `\uXXXX`-escaped form in
 brackets, because the two spellings are otherwise indistinguishable in a
 terminal; callers matching those sentences verbatim should match on
 `INCOMPLETE` instead.
+
+### Behaviour change (scheduler): a glob's static prefix ends on a base character (T-170)
+
+`staticPrefix` in `@mapctx/planner` cuts a declared pattern at its first
+wildcard, and `pathOverlap` compares the pieces with `startsWith`. Cutting
+there can land in the middle of a combining sequence, and since every canonical
+form sorts such a run by canonical combining class, a prefix ending mid-run is
+not a reliable prefix of anything. Trailing combining marks are now dropped, so
+the prefix ends on a base character.
+
+This closes the last reordering hole left by T-166: `src/à*` against the
+canonically equivalent `src/ạ̀.ts` — dot-below (ccc 220) sorting ahead of grave
+(ccc 230) — now serializes again, as it did before the scheduler normalized at
+all. Across 18 declared-path shapes against an `a47024c` build, 8 go from
+parallel to serial, 10 are unchanged, and **0 narrow**.
+
+The class is `\p{M}`, not `\p{Mn}`: 27 of the combining marks that canonical
+ordering reorders are *spacing* marks (U+302E/U+302F Hangul tone marks, U+1B44
+Balinese adeg adeg, U+1715 Tagalog pamudpod), and a nonspacing-only trim leaves
+the bug reachable through every one of them — measured, both shapes stay broken
+under `\p{Mn}` and are fixed under `\p{M}`.
+
+It costs breadth, in the conservative direction: an accented glob now also
+matches its bare base letter, so `src/café*` collides with `src/cafe.ts` as
+well as with `src/café.ts`. That can serialize two tasks that touch genuinely
+different files, which is the error this comparison is required to prefer — and
+two named tests pin it so it is not rediscovered as a defect.
+
+`mapctx plan --json` on the reference board is byte-identical before and after,
+modulo the cwd-derived `tasksFilePath`. On that board the trim cannot run at
+all: none of the 173 derived claims carries a wildcard, so `staticPrefix`
+returns before reaching it.
+
+Migration: none unless a caller declares an accented glob and relies on it not
+matching the unaccented spelling.
 
 ### Public contract: `task acceptance approve --json` output shape
 

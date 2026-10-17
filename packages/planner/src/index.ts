@@ -240,12 +240,31 @@ function wildcardIndex(path: string): number {
  * Static head of a pattern, plus whether the wildcard truncated it mid-segment.
  * `src/**` ends on a `/` boundary (`src`, not partial); `src/foo*.ts` stops inside
  * the filename (`src/foo`, partial) and therefore cannot be compared on `/` alone.
+ *
+ * Trailing combining marks are dropped so the head ends on a base character
+ * (T-170). `normalizePath` hands this NFD, and every canonical form SORTS a run
+ * of combining marks by canonical combining class, so a head cut in the middle
+ * of such a run is not a reliable prefix of anything: `src/à*` has the head
+ * `src/a`+`◌̀`, while the canonically equivalent `src/ạ̀.ts` normalizes to
+ * `src/a`+`◌̣`+`◌̀` — dot-below (ccc 220) sorts ahead of grave (ccc 230) — and
+ * the `startsWith` in `pathOverlap` fails on two spellings of one filename.
+ * Receding to the base character only ever shortens the head, so it compares
+ * more broadly, never less: the direction this comparison is required to err in
+ * (T-166 review attempt 2, N1).
+ *
+ * `\p{M}` and not `\p{Mn}`: 27 of the combining marks that canonical ordering
+ * reorders are SPACING marks (Mc) rather than nonspacing — U+302E/U+302F Hangul
+ * tone marks, U+1B44 Balinese adeg adeg, U+1715 Tagalog pamudpod — and a
+ * nonspacing-only trim leaves the same bug reachable through every one of them.
+ * Me never reorders and is included only because "ends on a base character" is
+ * the property worth stating; the extra Mc/Me marks it trims cannot reorder, so
+ * trimming them costs a little breadth and no correctness.
  */
 function staticPrefix(value: string): { prefix: string; partial: boolean } {
   const normalized = normalizePath(value);
   const wildcard = wildcardIndex(normalized);
   if (wildcard < 0) return { prefix: normalized, partial: false };
-  const head = normalized.slice(0, wildcard);
+  const head = normalized.slice(0, wildcard).replace(/\p{M}+$/u, "");
   return { prefix: head.replace(/\/$/, ""), partial: head.length > 0 && !head.endsWith("/") };
 }
 
