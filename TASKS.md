@@ -2614,7 +2614,7 @@
   - status: backlog
   - type: epic
   - parent: null
-  - subIssueProgress: 28/35
+  - subIssueProgress: 30/36
   - priority: high
   - workload: null
   - tags: []
@@ -3067,7 +3067,7 @@
 ### [T-145] C6: receipt de revisão não move planning; forecast exclui kind != implement
 
   - id: T-145
-  - status: doing
+  - status: review
   - type: feature
   - parent: E-017
   - subIssueProgress: null
@@ -3504,7 +3504,7 @@
 ### [T-168] Protocol: schemas JSON gerados podem divergir do zod sem teste que pegue (EventLogEntry sem redactions)
 
   - id: T-168
-  - status: review
+  - status: done
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3515,7 +3515,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-17
   - externalId: null
   - updated: 2026-10-17
   - detail: ./tasks/T-168.md
@@ -3542,7 +3542,7 @@
 ### [T-170] Planner: staticPrefix nao pode cortar o prefixo no meio de uma sequencia de marcas combinantes (NFD, 2 marcas fora de ordem)
 
   - id: T-170
-  - status: review
+  - status: done
   - type: bug
   - parent: E-017
   - subIssueProgress: null
@@ -3553,7 +3553,7 @@
   - dependsOn: []
   - start: null
   - due: null
-  - completed: null
+  - completed: 2026-10-17
   - externalId: null
   - updated: 2026-10-17
   - detail: ./tasks/T-170.md
@@ -3595,6 +3595,25 @@
   - externalId: null
   - updated: 2026-10-17
   - detail: ./tasks/T-172.md
+
+### [T-173] CLI: flag conhecida passada a um comando que nao a le e aceita e ignorada (allowlist por comando)
+
+  - id: T-173
+  - status: backlog
+  - type: bug
+  - parent: E-017
+  - subIssueProgress: null
+  - priority: medium
+  - workload: Normal
+  - tags: []
+  - domains: [CLI, TEST]
+  - dependsOn: [T-145]
+  - start: null
+  - due: null
+  - completed: null
+  - externalId: null
+  - updated: 2026-10-17
+  - detail: ./tasks/T-173.md
 
 ## Notes
 

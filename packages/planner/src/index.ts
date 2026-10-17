@@ -240,13 +240,53 @@ function wildcardIndex(path: string): number {
  * Static head of a pattern, plus whether the wildcard truncated it mid-segment.
  * `src/**` ends on a `/` boundary (`src`, not partial); `src/foo*.ts` stops inside
  * the filename (`src/foo`, partial) and therefore cannot be compared on `/` alone.
+ *
+ * Trailing combining marks are dropped so the head ends on a base character
+ * (T-170). `normalizePath` hands this NFD, and every canonical form SORTS a run
+ * of combining marks by canonical combining class, so a head cut in the middle
+ * of such a run is not a reliable prefix of anything: `src/à*` has the head
+ * `src/a`+`◌̀`, while the canonically equivalent `src/ạ̀.ts` normalizes to
+ * `src/a`+`◌̣`+`◌̀` — dot-below (ccc 220) sorts ahead of grave (ccc 230) — and
+ * the `startsWith` in `pathOverlap` fails on two spellings of one filename.
+ *
+ * `partial` is read from the UNTRIMMED head, which is both the semantically
+ * right reading and the difference between widening and not. The wildcard
+ * truncated inside a segment; the head only *looks* like it ends on a boundary
+ * once the marks come off. Deriving `partial` from the trimmed head instead
+ * let `<dir>/`+marks expose its `/`, flip `partial` to false, and send
+ * `pathOverlap` down the strict `/`-boundary branch rather than the broad
+ * string-prefix one — so `src/`+`◌̀`+`*` stopped colliding with the literal
+ * `sr`. Eight ordered pairs narrowed that way, all of that one shape (T-170
+ * review attempt 1, MÉDIA-1). Trimming the PREFIX only ever shortens it, which
+ * compares more broadly; it was `partial` moving that could narrow.
+ *
+ * Only a TRAILING run comes off, which is what the `$` anchor is for. A mark
+ * further back in the head belongs to a real directory name rather than to the
+ * truncation, so eating it produces a prefix that fails to match the glob's own
+ * files: without the anchor, `src/à/b*` stops colliding with `src/à/bc.ts`.
+ *
+ * `\p{M}` and not `\p{Mn}`: 27 of the combining marks that canonical ordering
+ * reorders are SPACING marks (Mc) rather than nonspacing — U+302E/U+302F Hangul
+ * tone marks, U+1B44 Balinese adeg adeg, U+1715 Tagalog pamudpod — and a
+ * nonspacing-only trim leaves the same bug reachable through every one of them.
+ * Me never reorders and is included only because "ends on a base character" is
+ * the property worth stating; the extra Mc/Me marks it trims cannot reorder, so
+ * trimming them costs a little breadth and no correctness.
+ *
+ * The trim runs ONLY when there is a wildcard. A literal path is a complete
+ * name rather than a truncated head, so trimming it would drop a mark the
+ * filesystem has: `src/à` against `src/à/x.ts` is a real parent/child
+ * collision, and a trimmed literal `src/a` is no longer a boundary prefix of
+ * it. That is what the early return above protects, and a named test pins it
+ * (T-170 review attempt 1, MÉDIA-2).
  */
 function staticPrefix(value: string): { prefix: string; partial: boolean } {
   const normalized = normalizePath(value);
   const wildcard = wildcardIndex(normalized);
   if (wildcard < 0) return { prefix: normalized, partial: false };
-  const head = normalized.slice(0, wildcard);
-  return { prefix: head.replace(/\/$/, ""), partial: head.length > 0 && !head.endsWith("/") };
+  const raw = normalized.slice(0, wildcard);
+  const head = raw.replace(/\p{M}+$/u, "");
+  return { prefix: head.replace(/\/$/, ""), partial: raw.length > 0 && !raw.endsWith("/") };
 }
 
 /**
