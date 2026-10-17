@@ -101,11 +101,14 @@
  * read this one definition precisely so they cannot disagree about what one
  * filename is. With NFD the effect is to widen for every disagreement the
  * fleet actually produces: two paths differing only in the normal form of one
- * combining sequence become the same file, and no comparison that matched
- * before stops matching, so for that class a plan serializes more, never
- * less. The reordering case above was the one exception while it stood, and
- * T-170 closed it in `staticPrefix`, so the guarantee now holds for a prefix
- * cut anywhere as well. macOS reports NFD and Linux NFC,
+ * combining sequence become the same file. The intended direction is that no
+ * comparison which matched before stops matching, and the reordering case
+ * above was the known exception until T-170 closed it in `staticPrefix`. Treat
+ * that as measured rather than proved: it is an all-ordered-pairs A/B against
+ * the pre-change build (2601 pairs, 0 narrowing), and the two narrowings found
+ * so far — this one and T-170's own first attempt — were both invisible to a
+ * hand-picked shape list, so re-measure that way before widening the claim.
+ * macOS reports NFD and Linux NFC,
  * so on a mixed-OS fleet the alternative was a scheduler that ran two writers
  * of one file in parallel.
  */

@@ -261,11 +261,15 @@ filenames in NFD and Linux in NFC, so `café.ts` written on one host and
 
 Two consequences, and the first is the reason the second was accepted:
 
-* **`mapctx plan` serializes more, not less.** Two tasks whose declared paths
-  differ only in the normal form of one combining sequence now collide, so they
-  land in different waves instead of running in parallel over one file, and
-  nothing that used to be serialized becomes parallel. Canonical reordering was
-  an exception to that until T-170 closed it in `staticPrefix`, below.
+* **`mapctx plan` serializes more.** Two tasks whose declared paths differ only
+  in the normal form of one combining sequence now collide, so they land in
+  different waves instead of running in parallel over one file. The intended
+  direction is that nothing which used to be serialized becomes parallel; that
+  is a measured property rather than a proof, and the measurement is the
+  all-ordered-pairs sweep described under T-170 below (2601 pairs, 0 narrowing)
+  — twice now a narrowing has been found that a hand-picked shape list missed,
+  once in this normalization (canonical reordering, T-170) and once in T-170's
+  own first attempt.
 * **The serialized-pair route stops recording a false `overbroad`.** Two
   receipts spelling one file NFC and NFD no longer read as proof that
   serializing the pair was unnecessary; guard G4 fires and the pair is skipped
@@ -330,13 +334,20 @@ wildcard, and `pathOverlap` compares the pieces with `startsWith`. Cutting
 there can land in the middle of a combining sequence, and since every canonical
 form sorts such a run by canonical combining class, a prefix ending mid-run is
 not a reliable prefix of anything. Trailing combining marks are now dropped, so
-the prefix ends on a base character.
+the prefix ends on a base character — while `partial` keeps being read from the
+untrimmed head, since the wildcard did truncate inside a segment even when the
+trim makes the head look like it ends on a `/`.
 
 This closes the last reordering hole left by T-166: `src/à*` against the
 canonically equivalent `src/ạ̀.ts` — dot-below (ccc 220) sorting ahead of grave
 (ccc 230) — now serializes again, as it did before the scheduler normalized at
-all. Across 18 declared-path shapes against an `a47024c` build, 8 go from
-parallel to serial, 10 are unchanged, and **0 narrow**.
+all. Measured against an `a47024c` build over every ordered pair of a 51-shape
+set — 2601 pairs, including bare string-prefixes of a directory, dir-only
+marks, and literals ending in a mark — **568 pairs widen, 2033 are unchanged,
+and 0 narrow**. The pair set is a cross-product on purpose: the narrowing this
+entry's first version missed needed one side to be a short string-prefix of a
+directory (`sr` against `src/`+`◌̀`+`*`), which no curated shape list
+contained.
 
 The class is `\p{M}`, not `\p{Mn}`: 27 of the combining marks that canonical
 ordering reorders are *spacing* marks (U+302E/U+302F Hangul tone marks, U+1B44
@@ -350,12 +361,20 @@ well as with `src/café.ts`. That can serialize two tasks that touch genuinely
 different files, which is the error this comparison is required to prefer — and
 two named tests pin it so it is not rediscovered as a defect.
 
+The trim also runs only when there is a wildcard. A literal path is a complete
+name, not a truncated head, so trimming one would drop a mark the filesystem
+has and break a real parent/child collision (`src/à` against `src/à/x.ts`); a
+named test pins that.
+
 `mapctx plan --json` on the reference board is byte-identical before and after,
 modulo the cwd-derived `tasksFilePath`, measured on one pristine copy of the
-store per run. On that board the trim cannot run at all: of the 253 distinct
-declared paths behind its 173 derived claims, 0 carry a wildcard construct, so
-`staticPrefix` returns before reaching the trim. The equality is therefore
-structural rather than a coincidence of the current board.
+store per run. That holds structurally rather than by luck: **no declared path
+on that board contains a wildcard construct at all**, so `staticPrefix` returns
+before reaching the trim, and none contains a non-ASCII character either. Those
+two facts are what the conclusion rests on and both reproduce from `tasks/*.md`
+alone. (Absolute path and claim counts are deliberately not quoted here — they
+move with board state and a durable document cannot tell a later reader whether
+a changed count means the board advanced or something regressed.)
 
 Migration: none unless a caller declares an accented glob and relies on it not
 matching the unaccented spelling.
