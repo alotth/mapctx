@@ -806,7 +806,7 @@ test("T-170 review MÉDIA-1: `partial` must come from the UNTRIMMED head, or a d
   // running in parallel), not this specific pair's correctness. This is the
   // shape of all 8 pairs the reviewer's full ordered-pair sweep found
   // narrowed by the bug (T-170 review attempt 1, MÉDIA-1).
-  const grave = "̀"; // COMBINING GRAVE ACCENT
+  const grave = "\u0300"; // COMBINING GRAVE ACCENT
   const report = planExecution({
     tasks: [
       { id: "T-A", title: "dir-boundary glob ending in a combining mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}*`] },
@@ -815,6 +815,31 @@ test("T-170 review MÉDIA-1: `partial` must come from the UNTRIMMED head, or a d
   });
   assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
     "partial read from the trimmed head would flip this collision off -- it must come from the untrimmed head instead");
+  assert.equal(report.serializedPairs.length, 1);
+});
+
+test("T-170: a combining mark in the MIDDLE of the head must survive the trim -- only a trailing run is dropped", () => {
+  // The trim is `/\p{M}+$/u` -- anchored to the END of the head. A mark
+  // partway through the head is part of the real name of a directory the
+  // glob is inside, not a truncation artifact, and dropping it would produce
+  // a prefix that fails to match the glob's OWN declared files. Here the
+  // mark sits right after "a", well before the wildcard that truncates at
+  // "/b*": the head is `src/a`+GRAVE+`/b`, which has no trailing mark at all,
+  // so the trim must be a no-op and the collision must still be found.
+  //
+  // This is the mutation-killer for the `$` anchor specifically: without it,
+  // `.replace(/\p{M}+/u, "")` (no anchor) eats the FIRST run of marks found
+  // anywhere in the string -- here, the internal one -- turning the head into
+  // `src/a/b`, which does not match `src/a`+GRAVE+`/bc.ts` at all.
+  const grave = "a\u0300"; // "a" + COMBINING GRAVE ACCENT, in the MIDDLE of the head
+  const report = planExecution({
+    tasks: [
+      { id: "T-A", title: "glob with a mark mid-head, not at the end", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}/b*`] },
+      { id: "T-B", title: "file sharing the same mid-head mark", status: "ready", type: "task", domains: ["PLANNER"], filesAffected: [`src/${grave}/bc.ts`] }
+    ]
+  });
+  assert.deepEqual(report.waves.map(wave => wave.taskIds), [["T-A"], ["T-B"]],
+    "an unanchored trim would eat the mid-head mark and the glob would stop matching its own declared file");
   assert.equal(report.serializedPairs.length, 1);
 });
 
