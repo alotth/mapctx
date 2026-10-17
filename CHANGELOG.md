@@ -351,9 +351,11 @@ different files, which is the error this comparison is required to prefer — an
 two named tests pin it so it is not rediscovered as a defect.
 
 `mapctx plan --json` on the reference board is byte-identical before and after,
-modulo the cwd-derived `tasksFilePath`. On that board the trim cannot run at
-all: none of the 173 derived claims carries a wildcard, so `staticPrefix`
-returns before reaching it.
+modulo the cwd-derived `tasksFilePath`, measured on one pristine copy of the
+store per run. On that board the trim cannot run at all: of the 253 distinct
+declared paths behind its 173 derived claims, 0 carry a wildcard construct, so
+`staticPrefix` returns before reaching the trim. The equality is therefore
+structural rather than a coincidence of the current board.
 
 Migration: none unless a caller declares an accented glob and relies on it not
 matching the unaccented spelling.
